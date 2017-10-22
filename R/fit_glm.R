@@ -218,12 +218,14 @@ fastglm.default <- function(X, y,
     
     res     <- fastglmPure(X, y, family, weights, offset, method, tol, maxit)
     
-    wtdmu   <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
-    nulldev <- sum(family$dev.resids(y, wtdmu, weights))
+    res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
     
-    n.ok        <- nobs - sum(weights == 0)
-    nulldf      <- n.ok - as.integer(res$intercept)
-    res$df.null <- nulldf
+    wtdmu         <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
+    nulldev       <- sum(family$dev.resids(y, wtdmu, weights))
+    
+    n.ok          <- nobs - sum(weights == 0)
+    nulldf        <- n.ok - as.integer(res$intercept)
+    res$df.null   <- nulldf
     
     res$null.deviance <- nulldev
     
