@@ -78,6 +78,7 @@ protected:
         return numeric_limits<double>::epsilon() * nvars; 
     }
     
+    // from RcppEigen
     inline ArrayXd Dplus(const ArrayXd& d) 
     {
         ArrayXd   di(d.size());

@@ -1,9 +1,12 @@
 
 
-#' fast and memory efficient linear model fitting
+#' fast generalized linear model fitting
 #'
 #' @param X input model matrix. Must be a matrix object 
 #' @param y numeric response vector of length nobs.
+#' @param family a description of the error distribution and link function to be used in the model. 
+#' For \code{fastglmPure} this can only be the result of a call to a family function. 
+#' (See \code{\link[stats]{family}} for details of family functions.)
 #' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
 #' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 #' This should be a numeric vector of length equal to the number of cases
@@ -41,9 +44,9 @@
 #' max(abs(coef(gl1) - gf4$coef))
 #' 
 fastglmPure <- function(X, y, 
+                        family = gaussian(),
                         weights = rep(1, NROW(y)), 
                         offset = rep(0, NROW(y)), 
-                        family = gaussian(),
                         type = 0L,
                         tol = 1e-7,
                         maxit = 100L)
@@ -64,6 +67,93 @@ fastglmPure <- function(X, y,
               maxit[1] > 0              
               )
     
-    fit_glm(X, y, weights, offset, family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
-            as.integer(type[1]), as.double(tol[1]), as.integer(maxit[1]) )
+    if (type[1] > 3L)
+    {
+        stop("invalid decomposition type")
+    }
+    
+    cnames <- colnames(X)
+    if (is.null(cnames)) cnames <- paste0("X", 1:ncol(X))
+    
+    res <- fit_glm(X, y, weights, offset, 
+                   family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                   as.integer(type[1]), as.double(tol[1]), as.integer(maxit[1]) )
+    
+    names(res$coefficients) <- cnames
+    res
+}
+
+#' fast generalized linear model fitting
+#'
+#' @param X input model matrix. Must be a matrix object 
+#' @param y numeric response vector of length nobs.
+#' @param family a description of the error distribution and link function to be used in the model. 
+#' For \code{fastglm} this can be a character string naming a family function, a family function or the 
+#' result of a call to a family function. For \code{fastglmPure} only the third option is supported. 
+#' (See \code{\link[stats]{family}} for details of family functions.)
+#' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
+#' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
+#' This should be a numeric vector of length equal to the number of cases
+#' @param type an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
+#' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
+#' @param tol threshold tolerance for convergence. Should be a positive real number
+#' @param maxit maximum number of IRLS iterations. Should be an integer
+#' @return A list with the elements
+#' \item{coefficients}{a vector of coefficients}
+#' \item{se}{a vector of the standard errors of the coefficient estimates}
+#' \item{rank}{a scalar denoting the computed rank of the model matrix}
+#' \item{df.residual}{a scalar denoting the degrees of freedom in the model}
+#' \item{residuals}{the vector of residuals}
+#' \item{s}{a numeric scalar - the root mean square for residuals}
+#' \item{fitted.values}{the vector of fitted values}
+#' @export
+#' @examples
+#'
+#' x <- matrix(rnorm(10000 * 100), ncol = 100)
+#' y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
+#' 
+#' system.time(gl1 <- glm.fit(x, y, family = binomial()))
+#' 
+#' system.time(gf1 <- fastglm(x, y, family = binomial(), tol = 1e-8))
+#' 
+#' system.time(gf2 <- fastglm(x, y, family = binomial(), type = 1, tol = 1e-8))
+#' 
+#' system.time(gf3 <- fastglm(x, y, family = binomial(), type = 2, tol = 1e-8))
+#' 
+#' system.time(gf4 <- fastglm(x, y, family = binomial(), type = 3, tol = 1e-8))
+#' 
+#' max(abs(coef(gl1) - gf1$coef))
+#' max(abs(coef(gl1) - gf2$coef))
+#' max(abs(coef(gl1) - gf3$coef))
+#' max(abs(coef(gl1) - gf4$coef))
+#'
+#'
+fastglm <- function(X, ...) UseMethod("fastglm")
+
+
+#' bigLm default
+#'
+#' @param ... not used
+#' @rdname fastglm
+#' @method fastglm default
+#' @export
+fastglm.default <- function(X, y, 
+                            family = gaussian(),
+                            weights = NULL, 
+                            offset = NULL, 
+                            type = 0L, tol = 1e-8, maxit = 100L,
+                            ...) 
+{
+    
+    y             <- as.numeric(y)
+    
+    if (is.null(weights)) weights <- rep(1, NROW(y))
+    if (is.null(offset))  offset  <- rep(0, NROW(y))
+    
+    res           <- fastglmPure(X, y, weights, offset, family, type, tol, maxit)
+    res$call      <- match.call()
+    res$intercept <- any(colMax_dense(X) == colMin_dense(X))
+    
+    class(res)    <- "fastglm"
+    res
 }

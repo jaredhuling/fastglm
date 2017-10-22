@@ -6,6 +6,28 @@
 
 using namespace Rcpp;
 
+// colMax_dense
+Eigen::MatrixXd colMax_dense(const Eigen::Map<Eigen::MatrixXd>& A);
+RcppExport SEXP _fastglm_colMax_dense(SEXP ASEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd>& >::type A(ASEXP);
+    rcpp_result_gen = Rcpp::wrap(colMax_dense(A));
+    return rcpp_result_gen;
+END_RCPP
+}
+// colMin_dense
+Eigen::MatrixXd colMin_dense(const Eigen::Map<Eigen::MatrixXd>& A);
+RcppExport SEXP _fastglm_colMin_dense(SEXP ASEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd>& >::type A(ASEXP);
+    rcpp_result_gen = Rcpp::wrap(colMin_dense(A));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_glm
 List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Function var, Function mu_eta, Function linkinv, Function dev_resids, int type, double tol, int maxit);
 RcppExport SEXP _fastglm_fit_glm(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP) {
@@ -29,6 +51,8 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_fastglm_colMax_dense", (DL_FUNC) &_fastglm_colMax_dense, 1},
+    {"_fastglm_colMin_dense", (DL_FUNC) &_fastglm_colMin_dense, 1},
     {"_fastglm_fit_glm", (DL_FUNC) &_fastglm_fit_glm, 11},
     {NULL, NULL, 0}
 };
