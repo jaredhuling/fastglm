@@ -39,6 +39,8 @@ library(fastglm)
 ```
 
 ```{r gen_data, echo = TRUE}
+library(speedglm)
+
 set.seed(123)
 n.obs  <- 10000
 n.vars <- 100
@@ -56,9 +58,20 @@ system.time(gf3 <- fastglm(x, y, family = binomial(), method = 2))
 
 system.time(gf4 <- fastglm(x, y, family = binomial(), method = 3))
 
+system.time(sg1 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial()))
+
+system.time(sg2 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), method = "Chol"))
+
+system.time(sg3 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), method = "qr"))
+
 max(abs(coef(gl1) - gf1$coef))
 max(abs(coef(gl1) - gf2$coef))
 max(abs(coef(gl1) - gf3$coef))
 max(abs(coef(gl1) - gf4$coef))
+
+# now between glm and speedglm
+max(abs(coef(gl1) - sg1$coef))
+max(abs(coef(gl1) - sg2$coef))
+max(abs(coef(gl1) - sg3$coef))
 
 ```
