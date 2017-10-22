@@ -1,11 +1,17 @@
 Package: fastglm
 Type: Package
-Title: What the Package Does in One 'Title Case' Line
+Title: Fitting fast generalized linear models using 'RcppEigen'
 Version: 1.0
 Date: 2017-10-21
-Author: Your Name
-Maintainer: Your Name <your@email.com>
-Description: One paragraph description of what the package does as one or more full sentences.
+Authors@R: c(
+    person("Jared", "Huling", , "jaredhuling@gmail.com", c("aut", "cre")),
+    person("Douglas", "Bates", , , c("cph")),
+    person("Dirk", "Eddelbuettel", , , c("cph")),
+    person("Romain", "Francois", , , c("cph")),
+    person("Yixuan", "Qiu", , , c("cph"))
+    )
+Maintainer: Jared Huling <jaredhuling@gmail.com>
+Description: Fits generalized linear models efficiently using 'RcppEigen'.
 License: GPL (>= 2)
 Imports: 
     Rcpp (>= 0.12.13), 

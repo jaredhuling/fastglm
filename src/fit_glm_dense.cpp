@@ -13,9 +13,17 @@ using Eigen::Map;
 typedef MatrixXd::Index Index;
 
 
-List fastglm(Rcpp::NumericMatrix Xs, Rcpp::NumericVector ys, Rcpp::NumericVector weightss,
-                 Rcpp::NumericVector offsets, Function var, Function mu_eta, Function linkinv, Function dev_resids, 
-                 int type, double tol, int maxit) 
+List fastglm(Rcpp::NumericMatrix Xs, 
+             Rcpp::NumericVector ys, 
+             Rcpp::NumericVector weightss,
+             Rcpp::NumericVector offsets, 
+             Function var, 
+             Function mu_eta, 
+             Function linkinv, 
+             Function dev_resids, 
+             int type, 
+             double tol, 
+             int maxit) 
 {
     const Map<MatrixXd>  X(as<Map<MatrixXd> >(Xs));
     const Map<VectorXd>  y(as<Map<VectorXd> >(ys));
@@ -24,21 +32,25 @@ List fastglm(Rcpp::NumericMatrix Xs, Rcpp::NumericVector ys, Rcpp::NumericVector
     Index                n = X.rows();
     if ((Index)y.size() != n) throw invalid_argument("size mismatch");
     
-    
+    // instantiate fitting class
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
     
     glm_solver = new glm(X, y, weights, offset, var, mu_eta, linkinv, dev_resids, tol, maxit, type);
     
+    // initialize parameters
     glm_solver->init_parms();
     
+    // maximize likelihood
     int iters = glm_solver->solve(maxit);
     
     VectorXd beta = glm_solver->get_beta();
     VectorXd se   = glm_solver->get_se();
     
+    delete glm_solver;
+    
     return List::create(_["coefficients"]   = beta,
                         _["se"]             = se,
-                        _["niter"]          = iters);
+                        _["iter"]           = iters);
 }
 
 

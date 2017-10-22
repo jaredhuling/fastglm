@@ -20,6 +20,26 @@
 #' \item{s}{a numeric scalar - the root mean square for residuals}
 #' \item{fitted.values}{the vector of fitted values}
 #' @export
+#' @examples
+#' 
+#' x <- matrix(rnorm(10000 * 100), ncol = 100)
+#' y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
+#' 
+#' system.time(gl1 <- glm.fit(x, y, family = binomial()))
+#' 
+#' system.time(gf1 <- fastglmPure(x, y, family = binomial(), tol = 1e-8))
+#' 
+#' system.time(gf2 <- fastglmPure(x, y, family = binomial(), type = 1, tol = 1e-8))
+#' 
+#' system.time(gf3 <- fastglmPure(x, y, family = binomial(), type = 2, tol = 1e-8))
+#' 
+#' system.time(gf4 <- fastglmPure(x, y, family = binomial(), type = 3, tol = 1e-8))
+#' 
+#' max(abs(coef(gl1) - gf1$coef))
+#' max(abs(coef(gl1) - gf2$coef))
+#' max(abs(coef(gl1) - gf3$coef))
+#' max(abs(coef(gl1) - gf4$coef))
+#' 
 fastglmPure <- function(X, y, 
                         weights = rep(1, NROW(y)), 
                         offset = rep(0, NROW(y)), 

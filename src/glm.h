@@ -248,7 +248,7 @@ protected:
             se              = Ch.matrixL().solve(MatrixXd::Identity(nvars, nvars)).colwise().norm();
         } else if (type == 3)
         {
-            se              = Ch.solve(MatrixXd::Identity(nvars, nvars)).diagonal().array().sqrt();
+            se              = ChD.solve(MatrixXd::Identity(nvars, nvars)).diagonal().array().sqrt();
         }
         
     }
