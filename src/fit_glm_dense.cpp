@@ -43,14 +43,23 @@ List fastglm(Rcpp::NumericMatrix Xs,
     // maximize likelihood
     int iters = glm_solver->solve(maxit);
     
-    VectorXd beta = glm_solver->get_beta();
-    VectorXd se   = glm_solver->get_se();
+    VectorXd beta      = glm_solver->get_beta();
+    VectorXd se        = glm_solver->get_se();
+    VectorXd eta       = glm_solver->get_eta();
+    VectorXd wts       = glm_solver->get_w();
+    VectorXd pweights  = glm_solver->get_weights();
+    
+    double dev         = glm_solver->get_dev();
     
     delete glm_solver;
     
-    return List::create(_["coefficients"]   = beta,
-                        _["se"]             = se,
-                        _["iter"]           = iters);
+    return List::create(_["coefficients"]      = beta,
+                        _["se"]                = se,
+                        _["linear.predictors"] = eta,
+                        _["deviance"]          = dev,
+                        _["weights"]           = wts,
+                        _["prior.weights"]     = pweights,
+                        _["iter"]              = iters);
 }
 
 

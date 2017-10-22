@@ -27,7 +27,7 @@ protected:
     VecTypeX w;
     MatTypeX vcov;
     VecTypeX se;
-    double dev, devold;
+    double dev, devold, devnull;
     
     int maxit;            // max iterations
     double tol;           // tolerance for convergence
@@ -154,9 +154,13 @@ public:
         return std::min(i + 1, maxit);
     }
     
-    virtual VecTypeX get_beta() { return beta; }
-    virtual VecTypeX get_se()   { return se; }
-    virtual MatTypeX get_vcov() { return vcov; }
+    virtual VecTypeX get_beta()     { return beta; }
+    virtual VecTypeX get_eta()      { return eta; }
+    virtual VecTypeX get_se()       { return se; }
+    virtual VecTypeX get_weights()  { return w; }
+    virtual VecTypeX get_w()        { return w.array().square(); }
+    virtual double get_dev()        { return dev; }
+    virtual MatTypeX get_vcov()     { return vcov; }
     
 };
 

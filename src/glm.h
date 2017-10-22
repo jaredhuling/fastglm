@@ -308,9 +308,7 @@ public:
     }
     
     
-    virtual VectorXd get_beta() { return beta; }
-    virtual VectorXd get_se()   { return se; }
-    virtual MatrixXd get_vcov() { return vcov; }
+    virtual VectorXd get_weights() { return weights; }
 
 };
 

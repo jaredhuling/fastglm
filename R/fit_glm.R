@@ -67,6 +67,12 @@ fastglmPure <- function(X, y,
               maxit[1] > 0              
               )
     
+    if(is.null(family$family)) 
+    {
+        print(family)
+        stop("'family' not recognized")
+    }
+    
     if( any(weights < 0) ) stop("negative weights not allowed")
     
     if (type[1] > 3L)
@@ -75,13 +81,30 @@ fastglmPure <- function(X, y,
     }
     
     cnames <- colnames(X)
-    if (is.null(cnames)) cnames <- paste0("X", 1:ncol(X))
+    
     
     res <- fit_glm(X, y, weights, offset, 
                    family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
                    as.integer(type[1]), as.double(tol[1]), as.integer(maxit[1]) )
     
-    names(res$coefficients) <- cnames
+    res$intercept <- any(is.int <- colMax_dense(X) == colMin_dense(X))
+    
+    if (is.null(cnames))
+    {
+        if (res$intercept)
+        {
+            which.int <- which(is.int)
+            cnames    <- paste0("X", 1:(ncol(X) - 1) )
+            names(res$coefficients) <- 1:ncol(X)
+            names(res$coefficients)[-which.int] <- cnames
+            names(res$coefficients)[which.int]  <- "(Intercept)"
+        } else
+        {
+            names(res$coefficients) <- paste0("X", 1:ncol(X))
+        }
+    }
+    
+    res$family <- family
     res
 }
 
@@ -171,9 +194,14 @@ fastglm.default <- function(X, y,
     if (is.null(weights)) weights <- rep(1, NROW(y))
     if (is.null(offset))  offset  <- rep(0, NROW(y))
     
-    res           <- fastglmPure(X, y, weights, offset, family, type, tol, maxit)
+    res           <- fastglmPure(X, y, family, weights, offset, type, tol, maxit)
+    
+    wtdmu   <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
+    nulldev <- sum(family$dev.resids(y, wtdmu, weights))
+    
+    res$null.deviance <- nulldev
+    
     res$call      <- match.call()
-    res$intercept <- any(colMax_dense(X) == colMin_dense(X))
     
     class(res)    <- "fastglm"
     res
