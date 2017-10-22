@@ -89,6 +89,26 @@ fastglmPure <- function(X, y,
     
     res$intercept <- any(is.int <- colMax_dense(X) == colMin_dense(X))
     
+    conv <- res$iter < maxit[1]
+    res$conv <- conv
+    
+    if (!conv)
+    {
+        warning("glm.fit: algorithm did not converge", call. = FALSE)
+    }
+
+    eps <- 10*.Machine$double.eps
+    if (family$family == "binomial") 
+    {
+        if (any(res$fitted.values > 1 - eps) || any(res$fitted.values < eps))
+            warning("glm.fit: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
+    }
+    if (family$family == "poisson") 
+    {
+        if (any(res$fitted.values < eps))
+            warning("glm.fit: fitted rates numerically 0 occurred", call. = FALSE)
+    }
+    
     if (is.null(cnames))
     {
         if (res$intercept)
@@ -194,12 +214,21 @@ fastglm.default <- function(X, y,
     if (is.null(weights)) weights <- rep(1, NROW(y))
     if (is.null(offset))  offset  <- rep(0, NROW(y))
     
-    res           <- fastglmPure(X, y, family, weights, offset, type, tol, maxit)
+    res     <- fastglmPure(X, y, family, weights, offset, type, tol, maxit)
     
     wtdmu   <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
     nulldev <- sum(family$dev.resids(y, wtdmu, weights))
     
     res$null.deviance <- nulldev
+    
+    # will change later
+    boundary <- FALSE
+    
+    if (boundary)
+    {
+        warning("glm.fit: algorithm stopped at boundary value", call. = FALSE)
+    }
+    
     
     res$call      <- match.call()
     
