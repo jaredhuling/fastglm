@@ -46,7 +46,7 @@ n.obs  <- 10000
 n.vars <- 100
 x <- matrix(rnorm(n.obs * n.vars, sd = 3), n.obs, n.vars)
 
-y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
+y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(n.obs))
 
 system.time(gl1 <- glm.fit(x, y, family = binomial()))
 

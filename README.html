@@ -141,32 +141,32 @@ n.obs  &lt;- 10000
 n.vars &lt;- 100
 x &lt;- matrix(rnorm(n.obs * n.vars, sd = 3), n.obs, n.vars)
 
-y &lt;- 1 * (0.25 * x[,1] - 0.25 * x[,3] &gt; rnorm(10000))
+y &lt;- 1 * (0.25 * x[,1] - 0.25 * x[,3] &gt; rnorm(n.obs))
 
 system.time(gl1 &lt;- glm.fit(x, y, family = binomial()))</code></pre>
 <pre><code>##    user  system elapsed 
-##    1.14    0.03    1.22</code></pre>
+##    1.06    0.00    1.08</code></pre>
 <pre class="r"><code>system.time(gf1 &lt;- fastglm(x, y, family = binomial()))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.48    0.00    0.49</code></pre>
+##    0.49    0.00    0.49</code></pre>
 <pre class="r"><code>system.time(gf2 &lt;- fastglm(x, y, family = binomial(), method = 1))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.44    0.00    0.44</code></pre>
+##    0.42    0.02    0.44</code></pre>
 <pre class="r"><code>system.time(gf3 &lt;- fastglm(x, y, family = binomial(), method = 2))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.11    0.02    0.12</code></pre>
+##    0.13    0.00    0.13</code></pre>
 <pre class="r"><code>system.time(gf4 &lt;- fastglm(x, y, family = binomial(), method = 3))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.12    0.00    0.12</code></pre>
+##    0.12    0.00    0.13</code></pre>
 <pre class="r"><code>system.time(sg1 &lt;- speedglm.wfit(y, x, intercept = FALSE, family = binomial()))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.41    0.01    0.47</code></pre>
+##    0.40    0.00    0.44</code></pre>
 <pre class="r"><code>system.time(sg2 &lt;- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), method = &quot;Chol&quot;))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.63    0.00    0.66</code></pre>
+##    0.59    0.00    0.61</code></pre>
 <pre class="r"><code>system.time(sg3 &lt;- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), method = &quot;qr&quot;))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.41    0.02    0.44</code></pre>
+##    0.39    0.03    0.43</code></pre>
 <pre class="r"><code>max(abs(coef(gl1) - gf1$coef))</code></pre>
 <pre><code>## [1] 4.132162e-10</code></pre>
 <pre class="r"><code>max(abs(coef(gl1) - gf2$coef))</code></pre>

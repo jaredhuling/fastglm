@@ -40,14 +40,14 @@ n.obs  <- 10000
 n.vars <- 100
 x <- matrix(rnorm(n.obs * n.vars, sd = 3), n.obs, n.vars)
 
-y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
+y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(n.obs))
 
 system.time(gl1 <- glm.fit(x, y, family = binomial()))
 ```
 
 ```
 ##    user  system elapsed 
-##    1.14    0.03    1.22
+##    1.06    0.00    1.08
 ```
 
 ```r
@@ -56,7 +56,7 @@ system.time(gf1 <- fastglm(x, y, family = binomial()))
 
 ```
 ##    user  system elapsed 
-##    0.48    0.00    0.49
+##    0.49    0.00    0.49
 ```
 
 ```r
@@ -65,7 +65,7 @@ system.time(gf2 <- fastglm(x, y, family = binomial(), method = 1))
 
 ```
 ##    user  system elapsed 
-##    0.44    0.00    0.44
+##    0.42    0.02    0.44
 ```
 
 ```r
@@ -74,7 +74,7 @@ system.time(gf3 <- fastglm(x, y, family = binomial(), method = 2))
 
 ```
 ##    user  system elapsed 
-##    0.11    0.02    0.12
+##    0.13    0.00    0.13
 ```
 
 ```r
@@ -83,7 +83,7 @@ system.time(gf4 <- fastglm(x, y, family = binomial(), method = 3))
 
 ```
 ##    user  system elapsed 
-##    0.12    0.00    0.12
+##    0.12    0.00    0.13
 ```
 
 ```r
@@ -92,7 +92,7 @@ system.time(sg1 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial()))
 
 ```
 ##    user  system elapsed 
-##    0.41    0.01    0.47
+##    0.40    0.00    0.44
 ```
 
 ```r
@@ -101,7 +101,7 @@ system.time(sg2 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), m
 
 ```
 ##    user  system elapsed 
-##    0.63    0.00    0.66
+##    0.59    0.00    0.61
 ```
 
 ```r
@@ -110,7 +110,7 @@ system.time(sg3 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), m
 
 ```
 ##    user  system elapsed 
-##    0.41    0.02    0.44
+##    0.39    0.03    0.43
 ```
 
 ```r
