@@ -174,7 +174,7 @@ fastglmPure <- function(x, y,
 #' max(abs(coef(gl1) - gf4$coef))
 #'
 #'
-fastglm <- function(X, ...) UseMethod("fastglm")
+fastglm <- function(x, ...) UseMethod("fastglm")
 
 
 #' bigLm default
