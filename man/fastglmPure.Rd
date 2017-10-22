@@ -4,13 +4,17 @@
 \alias{fastglmPure}
 \title{fast generalized linear model fitting}
 \usage{
-fastglmPure(X, y, weights = rep(1, NROW(y)), offset = rep(0, NROW(y)),
-  family = gaussian(), type = 0L, tol = 1e-07, maxit = 100L)
+fastglmPure(X, y, family = gaussian(), weights = rep(1, NROW(y)),
+  offset = rep(0, NROW(y)), type = 0L, tol = 1e-07, maxit = 100L)
 }
 \arguments{
 \item{X}{input model matrix. Must be a matrix object}
 
 \item{y}{numeric response vector of length nobs.}
+
+\item{family}{a description of the error distribution and link function to be used in the model. 
+For \code{fastglmPure} this can only be the result of a call to a family function. 
+(See \code{\link[stats]{family}} for details of family functions.)}
 
 \item{weights}{an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.}
 

@@ -67,6 +67,8 @@ fastglmPure <- function(X, y,
               maxit[1] > 0              
               )
     
+    if( any(weights < 0) ) stop("negative weights not allowed")
+    
     if (type[1] > 3L)
     {
         stop("invalid decomposition type")
@@ -144,8 +146,27 @@ fastglm.default <- function(X, y,
                             type = 0L, tol = 1e-8, maxit = 100L,
                             ...) 
 {
+    ## family
+    if(is.character(family))
+    {
+        family <- get(family, mode = "function", envir = parent.frame())
+    }
+    if(is.function(family)) family <- family()
+    if(is.null(family$family)) 
+    {
+        print(family)
+        stop("'family' not recognized")
+    }
     
     y             <- as.numeric(y)
+    
+    ## avoid problems with 1D arrays, but keep names
+    if(length(dim(y)) == 1L) 
+    {
+        nm <- rownames(y)
+        dim(y) <- NULL
+        if(!is.null(nm)) names(y) <- nm
+    }
     
     if (is.null(weights)) weights <- rep(1, NROW(y))
     if (is.null(offset))  offset  <- rep(0, NROW(y))

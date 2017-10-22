@@ -7,8 +7,8 @@
 \usage{
 fastglm(X, ...)
 
-\method{fastglm}{default}(X, y, weights = NULL, offset = NULL,
-  family = gaussian(), type = 0L, tol = 1e-08, maxit = 100L, ...)
+\method{fastglm}{default}(X, y, family = gaussian(), weights = NULL,
+  offset = NULL, type = 0L, tol = 1e-08, maxit = 100L, ...)
 }
 \arguments{
 \item{X}{input model matrix. Must be a matrix object}
@@ -16,6 +16,11 @@ fastglm(X, ...)
 \item{...}{not used}
 
 \item{y}{numeric response vector of length nobs.}
+
+\item{family}{a description of the error distribution and link function to be used in the model. 
+For \code{fastglm} this can be a character string naming a family function, a family function or the 
+result of a call to a family function. For \code{fastglmPure} only the third option is supported. 
+(See \code{\link[stats]{family}} for details of family functions.)}
 
 \item{weights}{an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.}
 
