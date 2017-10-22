@@ -6,6 +6,11 @@
 \usage{
 \method{print}{fastglm}(x, ...)
 }
+\arguments{
+\item{x}{object to print}
+
+\item{...}{not used}
+}
 \description{
 print method for fastglm objects
 }

@@ -1,6 +1,8 @@
 
 #' print method for fastglm objects
 #'
+#' @param x object to print
+#' @param ... not used
 #' @rdname print
 #' @method print fastglm
 #' @export
