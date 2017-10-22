@@ -51,6 +51,9 @@ List fastglm(Rcpp::NumericMatrix Xs,
     VectorXd pweights  = glm_solver->get_weights();
     
     double dev         = glm_solver->get_dev();
+    int rank           = glm_solver->get_rank();
+    
+    int df = X.rows() - rank;
     
     delete glm_solver;
     
@@ -61,6 +64,8 @@ List fastglm(Rcpp::NumericMatrix Xs,
                         _["deviance"]          = dev,
                         _["weights"]           = wts,
                         _["prior.weights"]     = pweights,
+                        _["rank"]              = rank,
+                        _["df.residual"]       = df,
                         _["iter"]              = iters);
 }
 

@@ -305,10 +305,13 @@ public:
         update_z();
         
         update_w();
+        
+        rank = nvars;
     }
     
     
-    virtual VectorXd get_weights() { return weights; }
+    virtual VectorXd get_weights()  { return weights; }
+    virtual int get_rank()          { return rank; }
 
 };
 

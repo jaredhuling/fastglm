@@ -211,13 +211,19 @@ fastglm.default <- function(X, y,
         if(!is.null(nm)) names(y) <- nm
     }
     
-    if (is.null(weights)) weights <- rep(1, NROW(y))
-    if (is.null(offset))  offset  <- rep(0, NROW(y))
+    nobs <- NROW(y)
+    
+    if (is.null(weights)) weights <- rep(1, nobs)
+    if (is.null(offset))  offset  <- rep(0, nobs)
     
     res     <- fastglmPure(X, y, family, weights, offset, type, tol, maxit)
     
     wtdmu   <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
     nulldev <- sum(family$dev.resids(y, wtdmu, weights))
+    
+    n.ok        <- nobs - sum(weights == 0)
+    nulldf      <- n.ok - as.integer(res$intercept)
+    res$df.null <- nulldf
     
     res$null.deviance <- nulldev
     

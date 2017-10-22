@@ -161,6 +161,7 @@ public:
     virtual VecTypeX get_weights()  { return w; }
     virtual VecTypeX get_w()        { return w.array().square(); }
     virtual double get_dev()        { return dev; }
+    virtual int get_rank()          { return nvars; }
     virtual MatTypeX get_vcov()     { return vcov; }
     
 };
