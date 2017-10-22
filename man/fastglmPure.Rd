@@ -4,11 +4,11 @@
 \alias{fastglmPure}
 \title{fast generalized linear model fitting}
 \usage{
-fastglmPure(X, y, family = gaussian(), weights = rep(1, NROW(y)),
+fastglmPure(x, y, family = gaussian(), weights = rep(1, NROW(y)),
   offset = rep(0, NROW(y)), method = 0L, tol = 1e-07, maxit = 100L)
 }
 \arguments{
-\item{X}{input model matrix. Must be a matrix object}
+\item{x}{input model matrix. Must be a matrix object}
 
 \item{y}{numeric response vector of length nobs.}
 

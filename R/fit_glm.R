@@ -2,7 +2,7 @@
 
 #' fast generalized linear model fitting
 #'
-#' @param X input model matrix. Must be a matrix object 
+#' @param x input model matrix. Must be a matrix object 
 #' @param y numeric response vector of length nobs.
 #' @param family a description of the error distribution and link function to be used in the model. 
 #' For \code{fastglmPure} this can only be the result of a call to a family function. 
@@ -43,7 +43,7 @@
 #' max(abs(coef(gl1) - gf3$coef))
 #' max(abs(coef(gl1) - gf4$coef))
 #' 
-fastglmPure <- function(X, y, 
+fastglmPure <- function(x, y, 
                         family = gaussian(),
                         weights = rep(1, NROW(y)), 
                         offset = rep(0, NROW(y)), 
@@ -53,11 +53,11 @@ fastglmPure <- function(X, y,
 {
     weights <- as.vector(weights)
     offset  <- as.vector(offset)
-    stopifnot(is.matrix(X), 
+    stopifnot(is.matrix(x), 
               is.numeric(y), 
               is.numeric(weights),
               is.numeric(offset),
-              NROW(y) == nrow(X),
+              NROW(y) == nrow(x),
               NROW(y) == NROW(weights),
               NROW(y) == NROW(offset),
               is.numeric(method),
@@ -80,14 +80,14 @@ fastglmPure <- function(X, y,
         stop("Invalid decomposition method specified. Choose from 0, 1, 2, or 3.")
     }
     
-    cnames <- colnames(X)
+    cnames <- colnames(x)
     
     
-    res <- fit_glm(X, y, weights, offset, 
+    res <- fit_glm(x, y, weights, offset, 
                    family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
                    as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
     
-    res$intercept <- any(is.int <- colMax_dense(X) == colMin_dense(X))
+    res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     
     conv <- res$iter < maxit[1]
     res$conv <- conv
@@ -111,16 +111,17 @@ fastglmPure <- function(X, y,
     
     if (is.null(cnames))
     {
+        ncx <- ncol(x)
         if (res$intercept)
         {
             which.int <- which(is.int)
-            cnames    <- paste0("X", 1:(ncol(X) - 1) )
-            names(res$coefficients) <- 1:ncol(X)
+            cnames    <- paste0("X", 1:(ncx - 1) )
+            names(res$coefficients) <- 1:ncx
             names(res$coefficients)[-which.int] <- cnames
             names(res$coefficients)[which.int]  <- "(Intercept)"
         } else
         {
-            names(res$coefficients) <- paste0("X", 1:ncol(X))
+            names(res$coefficients) <- paste0("X", 1:ncx)
         }
     }
     
@@ -130,7 +131,7 @@ fastglmPure <- function(X, y,
 
 #' fast generalized linear model fitting
 #'
-#' @param X input model matrix. Must be a matrix object 
+#' @param x input model matrix. Must be a matrix object 
 #' @param y numeric response vector of length nobs.
 #' @param family a description of the error distribution and link function to be used in the model. 
 #' For \code{fastglm} this can be a character string naming a family function, a family function or the 
@@ -182,7 +183,7 @@ fastglm <- function(X, ...) UseMethod("fastglm")
 #' @rdname fastglm
 #' @method fastglm default
 #' @export
-fastglm.default <- function(X, y, 
+fastglm.default <- function(x, y, 
                             family = gaussian(),
                             weights = NULL, 
                             offset = NULL, 
@@ -216,7 +217,7 @@ fastglm.default <- function(X, y,
     if (is.null(weights)) weights <- rep(1, nobs)
     if (is.null(offset))  offset  <- rep(0, nobs)
     
-    res     <- fastglmPure(X, y, family, weights, offset, method, tol, maxit)
+    res     <- fastglmPure(x, y, family, weights, offset, method, tol, maxit)
     
     res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
     res$y         <- y

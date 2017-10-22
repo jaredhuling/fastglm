@@ -7,13 +7,13 @@
 \usage{
 fastglm(X, ...)
 
-\method{fastglm}{default}(X, y, family = gaussian(), weights = NULL,
+\method{fastglm}{default}(x, y, family = gaussian(), weights = NULL,
   offset = NULL, method = 0L, tol = 1e-08, maxit = 100L, ...)
 }
 \arguments{
-\item{X}{input model matrix. Must be a matrix object}
-
 \item{...}{not used}
+
+\item{x}{input model matrix. Must be a matrix object}
 
 \item{y}{numeric response vector of length nobs.}
 
