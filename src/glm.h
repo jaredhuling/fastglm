@@ -44,10 +44,10 @@ protected:
     typedef ColPivHouseholderQR<MatrixXd>::PermutationType  Permutation;
     typedef Permutation::IndicesType                        Indices;
     
-    const MatrixXd X;
-    const VectorXd Y;
-    const VectorXd weights;
-    const VectorXd offset;
+    const Map<MatrixXd> X;
+    const Map<VectorXd> Y;
+    const Map<VectorXd> weights;
+    const Map<VectorXd> offset;
     
     Function variance_fun;
     Function mu_eta_fun;
@@ -59,6 +59,39 @@ protected:
     int type;
     int rank;
     
+    
+    ColPivHouseholderQR<MatrixXd> PQR;
+    HouseholderQR<MatrixXd> QR;
+    LLT<MatrixXd>  Ch;
+    LDLT<MatrixXd> ChD;
+    JacobiSVD<MatrixXd>  UDV;
+    
+    SelfAdjointEigenSolver<MatrixXd> eig;
+    
+    Permutation                  Pmat;
+    MatrixXd                     Rinv;
+    
+    RealScalar threshold() const 
+    {
+        //return m_usePrescribedThreshold ? m_prescribedThreshold
+        //: numeric_limits<double>::epsilon() * nvars; 
+        return numeric_limits<double>::epsilon() * nvars; 
+    }
+    
+    inline ArrayXd Dplus(const ArrayXd& d) 
+    {
+        ArrayXd   di(d.size());
+        double  comp(d.maxCoeff() * threshold());
+        for (int j = 0; j < d.size(); ++j) di[j] = (d[j] < comp) ? 0. : 1./d[j];
+        rank          = (di != 0.).count();
+        return di;
+    }
+    
+    MatrixXd XtWX() const 
+    {
+        return MatrixXd(nvars, nvars).setZero().selfadjointView<Lower>().
+        rankUpdate( (w.asDiagonal() * X).adjoint());
+    }
 
     virtual void update_mu_eta()
     {
@@ -107,40 +140,117 @@ protected:
         dev = sum(dev_resids);
     }
     
+    // much of solve_wls() comes directly
+    // from the source code of the RcppEigen package
     virtual void solve_wls()
     {
         //lm ans(do_lm(X, Y, w, type));
         //wls ans(ColPivQR(X, z, w));
         
+        //enum {ColPivQR_t = 0, QR_t, LLT_t, LDLT_t, SVD_t, SymmEigen_t, GESDD_t};
         
-        ColPivHouseholderQR<MatrixXd> PQR(w.asDiagonal() * X); // decompose the model matrix
-        Permutation                  Pmat(PQR.colsPermutation());
-        rank                               = PQR.rank();
-        if (rank == nvars) 
-        {	// full rank case
-            beta     = PQR.solve( (z.array() * w.array()).matrix() );
-            // m_fitted   = X * m_coef;
-            //m_se       = Pmat * PQR.matrixQR().topRows(m_p).
-            //triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
-            return;
-        } else 
+        
+        if (type == 0)
         {
-            MatrixXd                     Rinv(PQR.matrixQR().topLeftCorner(rank, rank).
-                                                  triangularView<Upper>().
-                                                  solve(MatrixXd::Identity(rank, rank)));
-            VectorXd                  effects(PQR.householderQ().adjoint() * (z.array() * w.array()).matrix());
-            beta.head(rank)                 = Rinv * effects.head(rank);
-            beta                            = Pmat * beta;
+            PQR.compute(w.asDiagonal() * X); // decompose the model matrix
+            Pmat = (PQR.colsPermutation());
+            rank                               = PQR.rank();
+            if (rank == nvars) 
+            {	// full rank case
+                beta     = PQR.solve( (z.array() * w.array()).matrix() );
+                // m_fitted   = X * m_coef;
+                //m_se       = Pmat * PQR.matrixQR().topRows(m_p).
+                //triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
+            } else 
+            {
+                Rinv = (PQR.matrixQR().topLeftCorner(rank, rank).
+                                                      triangularView<Upper>().
+                                                      solve(MatrixXd::Identity(rank, rank)));
+                VectorXd                  effects(PQR.householderQ().adjoint() * (z.array() * w.array()).matrix());
+                beta.head(rank)                 = Rinv * effects.head(rank);
+                beta                            = Pmat * beta;
+                
+                // create fitted values from effects
+                // (can't use X*m_coef if X is rank-deficient)
+                //effects.tail(m_n - rank).setZero();
+                //m_fitted                          = PQR.householderQ() * effects;
+                //m_se.head(m_r)                    = Rinv.rowwise().norm();
+                //m_se                              = Pmat * m_se;
+            }
+        } else if (type == 1)
+        {
+            QR.compute(w.asDiagonal() * X);
+            beta                     = QR.solve((z.array() * w.array()).matrix());
+            //m_fitted                   = X * m_coef;
+            //m_se                       = QR.matrixQR().topRows(m_p).
+            //triangularView<Upper>().solve(I_p()).rowwise().norm();
+        } else if (type == 2)
+        {
+            Ch.compute(XtWX().selfadjointView<Lower>());
+            beta            = Ch.solve((w.asDiagonal() * X).adjoint() * (z.array() * w.array()).matrix());
+            //m_fitted          = X * m_coef;
+            //m_se              = Ch.matrixL().solve(I_p()).colwise().norm();
+        } else if (type == 3)
+        {
+            ChD.compute(XtWX().selfadjointView<Lower>());
+            Dplus(ChD.vectorD());	// to set the rank
+            //FIXME: Check on the permutation in the LDLT and incorporate it in
+            //the coefficients and the standard error computation.
+            //	m_coef            = Ch.matrixL().adjoint().
+            //	    solve(Dplus(D) * Ch.matrixL().solve(X.adjoint() * y));
+            beta            = ChD.solve((w.asDiagonal() * X).adjoint() * (z.array() * w.array()).matrix());
+            //m_fitted          = X * m_coef;
+            //m_se              = Ch.solve(I_p()).diagonal().array().sqrt();
         }
-
-        // create fitted values from effects
-        // (can't use X*m_coef if X is rank-deficient)
-        //effects.tail(m_n - rank).setZero();
-        //m_fitted                          = PQR.householderQ() * effects;
-        //m_se.head(m_r)                    = Rinv.rowwise().norm();
-        //m_se                              = Pmat * m_se;
+        // } else if (type == 4)
+        // {
+        // //     UDV.compute((w.asDiagonal() * X).jacobiSvd(ComputeThinU|ComputeThinV));
+        // //     MatrixXd             VDi(UDV.matrixV() *
+        // //         Dplus(UDV.singularValues().array()).matrix().asDiagonal());
+        // //     beta                   = VDi * UDV.matrixU().adjoint() * (z.array() * w.array()).matrix();
+        // //     //m_fitted                 = X * m_coef;
+        // //     //m_se                     = VDi.rowwise().norm();
+        // // } else if (type == 5)
+        // // {
+        //     eig.compute(XtWX().selfadjointView<Lower>());
+        //     MatrixXd   VDi(eig.eigenvectors() *
+        //         Dplus(eig.eigenvalues().array()).sqrt().matrix().asDiagonal());
+        //     beta         = VDi * VDi.adjoint() * X.adjoint() * (z.array() * w.array()).matrix();
+        //     //m_fitted       = X * m_coef;
+        //     //m_se           = VDi.rowwise().norm();
+        // }
         
-        //beta = ans.coef();
+    }
+    
+    virtual void save_se()
+    {
+        
+        if (type == 0)
+        {
+            if (rank == nvars) 
+            {	// full rank case
+                se       = Pmat * PQR.matrixQR().topRows(nvars).
+                    triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
+                return;
+            } else 
+            {
+                // create fitted values from effects
+                // (can't use X*m_coef if X is rank-deficient)
+                se.head(rank)                    = Rinv.rowwise().norm();
+                se                               = Pmat * se;
+            }
+        } else if (type == 1)
+        {
+            se                       = QR.matrixQR().topRows(nvars).
+                triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
+        } else if (type == 2)
+        {
+            se              = Ch.matrixL().solve(MatrixXd::Identity(nvars, nvars)).colwise().norm();
+        } else if (type == 3)
+        {
+            se              = Ch.solve(MatrixXd::Identity(nvars, nvars)).diagonal().array().sqrt();
+        }
+        
     }
     
     /*
@@ -350,10 +460,10 @@ protected:
 
 
 public:
-    glm(const MatrixXd &X_,
-        const VectorXd &Y_,
-        const VectorXd &weights_,
-        const VectorXd &offset_,
+    glm(const Map<MatrixXd> &X_,
+        const Map<VectorXd> &Y_,
+        const Map<VectorXd> &weights_,
+        const Map<VectorXd> &offset_,
         Function &variance_fun_,
         Function &mu_eta_fun_,
         Function &linkinv_,
@@ -402,6 +512,7 @@ public:
     
     
     virtual VectorXd get_beta() { return beta; }
+    virtual VectorXd get_se()   { return se; }
     virtual MatrixXd get_vcov() { return vcov; }
 
 };

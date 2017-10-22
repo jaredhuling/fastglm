@@ -34,9 +34,11 @@ List fastglm(Rcpp::NumericMatrix Xs, Rcpp::NumericVector ys, Rcpp::NumericVector
     int iters = glm_solver->solve(maxit);
     
     VectorXd beta = glm_solver->get_beta();
+    VectorXd se   = glm_solver->get_se();
     
-    return List::create(_["beta"]   = beta,
-                        _["niter"]  = iters);
+    return List::create(_["coefficients"]   = beta,
+                        _["se"]             = se,
+                        _["niter"]          = iters);
 }
 
 
@@ -47,3 +49,5 @@ List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector w
 {
     return fastglm(x, y, weights, offset, var, mu_eta, linkinv, dev_resids, type, tol, maxit);
 }
+
+

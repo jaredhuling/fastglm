@@ -26,6 +26,7 @@ protected:
     VecTypeX z;
     VecTypeX w;
     MatTypeX vcov;
+    VecTypeX se;
     double dev, devold;
     
     int maxit;            // max iterations
@@ -83,6 +84,11 @@ protected:
     {
         
     }
+    
+    virtual void save_se()
+    {
+        
+    }
 
     
 public:
@@ -99,6 +105,7 @@ public:
     z(n_),
     w(n_),
     vcov(p_, p_),
+    se(p_),
     maxit(maxit_),
     tol(tol_)
     {}
@@ -142,10 +149,13 @@ public:
             
         }
         
+        save_se();
+        
         return std::min(i + 1, maxit);
     }
     
     virtual VecTypeX get_beta() { return beta; }
+    virtual VecTypeX get_se()   { return se; }
     virtual MatTypeX get_vcov() { return vcov; }
     
 };
