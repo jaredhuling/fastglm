@@ -1,2 +1,13 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^.*\.Rhistory$
+^cran-comments.md$
+^NEWS.md$
+README.Rmd
+README.html
+^\.travis\.yml$
+^/\.gitattributes$
+^.*\docs$
+^\_pkgdown\.yml$
+docs
+^_pkgdown\.yml$

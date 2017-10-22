@@ -1,0 +1,63 @@
+---
+output:
+  html_document:
+    keep_md: yes
+    self_contained: true
+---
+
+
+
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE, warning=FALSE)
+```
+
+
+# Overview of 'fastglm'
+
+The 'fastglm' package is a re-write of `glm()` using `RcppEigen` designed to be computationally efficient.
+
+
+
+# Installing the 'fastglm' package
+
+
+Install the development version using the **devtools** package:
+```{r, eval = FALSE}
+devtools::install_github("jaredhuling/fastglm")
+```
+
+or by cloning and building using `R CMD INSTALL`
+
+# Quick Usage Overview
+
+Load the package:
+```{r, message = FALSE, warning = FALSE}
+library(fastglm)
+```
+
+```{r gen_data, echo = TRUE}
+set.seed(123)
+n.obs  <- 10000
+n.vars <- 100
+x <- matrix(rnorm(n.obs * n.vars, sd = 3), n.obs, n.vars)
+
+y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
+
+system.time(gl1 <- glm.fit(x, y, family = binomial()))
+
+system.time(gf1 <- fastglm(x, y, family = binomial()))
+
+system.time(gf2 <- fastglm(x, y, family = binomial(), method = 1))
+
+system.time(gf3 <- fastglm(x, y, family = binomial(), method = 2))
+
+system.time(gf4 <- fastglm(x, y, family = binomial(), method = 3))
+
+max(abs(coef(gl1) - gf1$coef))
+max(abs(coef(gl1) - gf2$coef))
+max(abs(coef(gl1) - gf3$coef))
+max(abs(coef(gl1) - gf4$coef))
+
+```

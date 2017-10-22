@@ -10,7 +10,7 @@
 #' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
 #' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 #' This should be a numeric vector of length equal to the number of cases
-#' @param type an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
+#' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
 #' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
@@ -32,11 +32,11 @@
 #' 
 #' system.time(gf1 <- fastglmPure(x, y, family = binomial(), tol = 1e-8))
 #' 
-#' system.time(gf2 <- fastglmPure(x, y, family = binomial(), type = 1, tol = 1e-8))
+#' system.time(gf2 <- fastglmPure(x, y, family = binomial(), method = 1, tol = 1e-8))
 #' 
-#' system.time(gf3 <- fastglmPure(x, y, family = binomial(), type = 2, tol = 1e-8))
+#' system.time(gf3 <- fastglmPure(x, y, family = binomial(), method = 2, tol = 1e-8))
 #' 
-#' system.time(gf4 <- fastglmPure(x, y, family = binomial(), type = 3, tol = 1e-8))
+#' system.time(gf4 <- fastglmPure(x, y, family = binomial(), method = 3, tol = 1e-8))
 #' 
 #' max(abs(coef(gl1) - gf1$coef))
 #' max(abs(coef(gl1) - gf2$coef))
@@ -47,7 +47,7 @@ fastglmPure <- function(X, y,
                         family = gaussian(),
                         weights = rep(1, NROW(y)), 
                         offset = rep(0, NROW(y)), 
-                        type = 0L,
+                        method = 0L,
                         tol = 1e-7,
                         maxit = 100L)
 {
@@ -60,7 +60,7 @@ fastglmPure <- function(X, y,
               NROW(y) == nrow(X),
               NROW(y) == NROW(weights),
               NROW(y) == NROW(offset),
-              is.numeric(type),
+              is.numeric(method),
               is.numeric(tol),
               is.numeric(maxit),
               tol[1] > 0,
@@ -75,9 +75,9 @@ fastglmPure <- function(X, y,
     
     if( any(weights < 0) ) stop("negative weights not allowed")
     
-    if (type[1] > 3L)
+    if (method[1] > 3L)
     {
-        stop("invalid decomposition type")
+        stop("Invalid decomposition method specified. Choose from 0, 1, 2, or 3.")
     }
     
     cnames <- colnames(X)
@@ -85,7 +85,7 @@ fastglmPure <- function(X, y,
     
     res <- fit_glm(X, y, weights, offset, 
                    family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
-                   as.integer(type[1]), as.double(tol[1]), as.integer(maxit[1]) )
+                   as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
     
     res$intercept <- any(is.int <- colMax_dense(X) == colMin_dense(X))
     
@@ -139,7 +139,7 @@ fastglmPure <- function(X, y,
 #' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
 #' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 #' This should be a numeric vector of length equal to the number of cases
-#' @param type an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
+#' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
 #' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
@@ -159,13 +159,13 @@ fastglmPure <- function(X, y,
 #' 
 #' system.time(gl1 <- glm.fit(x, y, family = binomial()))
 #' 
-#' system.time(gf1 <- fastglm(x, y, family = binomial(), tol = 1e-8))
+#' system.time(gf1 <- fastglm(x, y, family = binomial()))
 #' 
-#' system.time(gf2 <- fastglm(x, y, family = binomial(), type = 1, tol = 1e-8))
+#' system.time(gf2 <- fastglm(x, y, family = binomial(), method = 1))
 #' 
-#' system.time(gf3 <- fastglm(x, y, family = binomial(), type = 2, tol = 1e-8))
+#' system.time(gf3 <- fastglm(x, y, family = binomial(), method = 2))
 #' 
-#' system.time(gf4 <- fastglm(x, y, family = binomial(), type = 3, tol = 1e-8))
+#' system.time(gf4 <- fastglm(x, y, family = binomial(), method = 3))
 #' 
 #' max(abs(coef(gl1) - gf1$coef))
 #' max(abs(coef(gl1) - gf2$coef))
@@ -186,7 +186,7 @@ fastglm.default <- function(X, y,
                             family = gaussian(),
                             weights = NULL, 
                             offset = NULL, 
-                            type = 0L, tol = 1e-8, maxit = 100L,
+                            method = 0L, tol = 1e-8, maxit = 100L,
                             ...) 
 {
     ## family
@@ -216,7 +216,7 @@ fastglm.default <- function(X, y,
     if (is.null(weights)) weights <- rep(1, nobs)
     if (is.null(offset))  offset  <- rep(0, nobs)
     
-    res     <- fastglmPure(X, y, family, weights, offset, type, tol, maxit)
+    res     <- fastglmPure(X, y, family, weights, offset, method, tol, maxit)
     
     wtdmu   <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
     nulldev <- sum(family$dev.resids(y, wtdmu, weights))

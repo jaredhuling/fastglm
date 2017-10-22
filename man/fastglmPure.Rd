@@ -5,7 +5,7 @@
 \title{fast generalized linear model fitting}
 \usage{
 fastglmPure(X, y, family = gaussian(), weights = rep(1, NROW(y)),
-  offset = rep(0, NROW(y)), type = 0L, tol = 1e-07, maxit = 100L)
+  offset = rep(0, NROW(y)), method = 0L, tol = 1e-07, maxit = 100L)
 }
 \arguments{
 \item{X}{input model matrix. Must be a matrix object}
@@ -21,7 +21,7 @@ For \code{fastglmPure} this can only be the result of a call to a family functio
 \item{offset}{this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 This should be a numeric vector of length equal to the number of cases}
 
-\item{type}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
+\item{method}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 2 for the LLT Cholesky, or 3 for the LDLT Cholesky}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
@@ -50,11 +50,11 @@ system.time(gl1 <- glm.fit(x, y, family = binomial()))
 
 system.time(gf1 <- fastglmPure(x, y, family = binomial(), tol = 1e-8))
 
-system.time(gf2 <- fastglmPure(x, y, family = binomial(), type = 1, tol = 1e-8))
+system.time(gf2 <- fastglmPure(x, y, family = binomial(), method = 1, tol = 1e-8))
 
-system.time(gf3 <- fastglmPure(x, y, family = binomial(), type = 2, tol = 1e-8))
+system.time(gf3 <- fastglmPure(x, y, family = binomial(), method = 2, tol = 1e-8))
 
-system.time(gf4 <- fastglmPure(x, y, family = binomial(), type = 3, tol = 1e-8))
+system.time(gf4 <- fastglmPure(x, y, family = binomial(), method = 3, tol = 1e-8))
 
 max(abs(coef(gl1) - gf1$coef))
 max(abs(coef(gl1) - gf2$coef))

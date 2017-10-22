@@ -8,7 +8,7 @@
 fastglm(X, ...)
 
 \method{fastglm}{default}(X, y, family = gaussian(), weights = NULL,
-  offset = NULL, type = 0L, tol = 1e-08, maxit = 100L, ...)
+  offset = NULL, method = 0L, tol = 1e-08, maxit = 100L, ...)
 }
 \arguments{
 \item{X}{input model matrix. Must be a matrix object}
@@ -27,7 +27,7 @@ result of a call to a family function. For \code{fastglmPure} only the third opt
 \item{offset}{this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 This should be a numeric vector of length equal to the number of cases}
 
-\item{type}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
+\item{method}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 2 for the LLT Cholesky, or 3 for the LDLT Cholesky}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
@@ -56,13 +56,13 @@ y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
 
 system.time(gl1 <- glm.fit(x, y, family = binomial()))
 
-system.time(gf1 <- fastglm(x, y, family = binomial(), tol = 1e-8))
+system.time(gf1 <- fastglm(x, y, family = binomial()))
 
-system.time(gf2 <- fastglm(x, y, family = binomial(), type = 1, tol = 1e-8))
+system.time(gf2 <- fastglm(x, y, family = binomial(), method = 1))
 
-system.time(gf3 <- fastglm(x, y, family = binomial(), type = 2, tol = 1e-8))
+system.time(gf3 <- fastglm(x, y, family = binomial(), method = 2))
 
-system.time(gf4 <- fastglm(x, y, family = binomial(), type = 3, tol = 1e-8))
+system.time(gf4 <- fastglm(x, y, family = binomial(), method = 3))
 
 max(abs(coef(gl1) - gf1$coef))
 max(abs(coef(gl1) - gf2$coef))
