@@ -4,6 +4,7 @@
 
 
 
+[![Build Status](https://travis-ci.org/jaredhuling/fastglm.svg?branch=master)](https://travis-ci.org/jaredhuling/fastglm)
 
 # Overview of 'fastglm'
 
@@ -44,7 +45,7 @@ system.time(gl1 <- glm.fit(x, y, family = binomial()))
 
 ```
 ##    user  system elapsed 
-##    0.89    0.00    0.93
+##    0.93    0.05    1.00
 ```
 
 ```r
@@ -53,7 +54,7 @@ system.time(gf1 <- fastglm(x, y, family = binomial()))
 
 ```
 ##    user  system elapsed 
-##    0.43    0.00    0.45
+##    0.51    0.00    0.53
 ```
 
 ```r
@@ -62,7 +63,7 @@ system.time(gf2 <- fastglm(x, y, family = binomial(), method = 1))
 
 ```
 ##    user  system elapsed 
-##    0.40    0.00    0.42
+##    0.52    0.00    0.54
 ```
 
 ```r
@@ -71,7 +72,7 @@ system.time(gf3 <- fastglm(x, y, family = binomial(), method = 2))
 
 ```
 ##    user  system elapsed 
-##    0.09    0.04    0.13
+##    0.11    0.02    0.12
 ```
 
 ```r
@@ -80,7 +81,7 @@ system.time(gf4 <- fastglm(x, y, family = binomial(), method = 3))
 
 ```
 ##    user  system elapsed 
-##    0.12    0.00    0.13
+##    0.11    0.01    0.13
 ```
 
 ```r

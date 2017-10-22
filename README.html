@@ -119,6 +119,7 @@ $(document).ready(function () {
 </div>
 
 
+<p><a href="https://travis-ci.org/jaredhuling/fastglm"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MCIgaGVpZ2h0PSIyMCI+PGxpbmVhckdyYWRpZW50IGlkPSJhIiB4Mj0iMCIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2JiYiIgc3RvcC1vcGFjaXR5PSIuMSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1vcGFjaXR5PSIuMSIvPjwvbGluZWFyR3JhZGllbnQ+PHJlY3Qgcng9IjMiIHdpZHRoPSI5MCIgaGVpZ2h0PSIyMCIgZmlsbD0iIzU1NSIvPjxyZWN0IHJ4PSIzIiB4PSIzNyIgd2lkdGg9IjUzIiBoZWlnaHQ9IjIwIiBmaWxsPSIjNGMxIi8+PHBhdGggZmlsbD0iIzRjMSIgZD0iTTM3IDBoNHYyMGgtNHoiLz48cmVjdCByeD0iMyIgd2lkdGg9IjkwIiBoZWlnaHQ9IjIwIiBmaWxsPSJ1cmwoI2EpIi8+PGcgZmlsbD0iI2ZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkRlamFWdSBTYW5zLFZlcmRhbmEsR2VuZXZhLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTEiPjx0ZXh0IHg9IjE5LjUiIHk9IjE1IiBmaWxsPSIjMDEwMTAxIiBmaWxsLW9wYWNpdHk9Ii4zIj5idWlsZDwvdGV4dD48dGV4dCB4PSIxOS41IiB5PSIxNCI+YnVpbGQ8L3RleHQ+PHRleHQgeD0iNjIuNSIgeT0iMTUiIGZpbGw9IiMwMTAxMDEiIGZpbGwtb3BhY2l0eT0iLjMiPnBhc3Npbmc8L3RleHQ+PHRleHQgeD0iNjIuNSIgeT0iMTQiPnBhc3Npbmc8L3RleHQ+PC9nPjwvc3ZnPg==" alt="Build Status" /></a></p>
 <div id="overview-of-fastglm" class="section level1">
 <h1>Overview of ‘fastglm’</h1>
 <p>The ‘fastglm’ package is a re-write of <code>glm()</code> using <code>RcppEigen</code> designed to be computationally efficient.</p>
@@ -142,19 +143,19 @@ y &lt;- 1 * (0.25 * x[,1] - 0.25 * x[,3] &gt; rnorm(10000))
 
 system.time(gl1 &lt;- glm.fit(x, y, family = binomial()))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.89    0.00    0.93</code></pre>
+##    0.93    0.05    1.00</code></pre>
 <pre class="r"><code>system.time(gf1 &lt;- fastglm(x, y, family = binomial()))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.43    0.00    0.45</code></pre>
+##    0.51    0.00    0.53</code></pre>
 <pre class="r"><code>system.time(gf2 &lt;- fastglm(x, y, family = binomial(), method = 1))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.40    0.00    0.42</code></pre>
+##    0.52    0.00    0.54</code></pre>
 <pre class="r"><code>system.time(gf3 &lt;- fastglm(x, y, family = binomial(), method = 2))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.09    0.04    0.13</code></pre>
+##    0.11    0.02    0.12</code></pre>
 <pre class="r"><code>system.time(gf4 &lt;- fastglm(x, y, family = binomial(), method = 3))</code></pre>
 <pre><code>##    user  system elapsed 
-##    0.12    0.00    0.13</code></pre>
+##    0.11    0.01    0.13</code></pre>
 <pre class="r"><code>max(abs(coef(gl1) - gf1$coef))</code></pre>
 <pre><code>## [1] 4.132162e-10</code></pre>
 <pre class="r"><code>max(abs(coef(gl1) - gf2$coef))</code></pre>
