@@ -222,6 +222,25 @@ fastglm.default <- function(x, y,
     res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
     res$y         <- y
     
+    # from summary.glm()
+    dispersion <-
+        if(family$family %in% c("poisson", "binomial"))  1
+        else if(res$df.residual > 0) 
+        {
+            est.disp <- TRUE
+            if(any(weights == 0))
+                warning("observations with zero weight not used for calculating dispersion")
+            sum((object$weights*object$residuals^2)[weights > 0])/ res$df.residual
+        } else 
+        {
+            est.disp <- TRUE
+            NaN
+        }
+    
+    res$dispersion <- dispersion
+    
+    if (!is.nan(dispersion)) res$se <- res$se * sqrt(dispersion)
+    
     wtdmu         <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
     nulldev       <- sum(family$dev.resids(y, wtdmu, weights))
     
