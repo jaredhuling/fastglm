@@ -1,4 +1,4 @@
 #' @importFrom Rcpp evalCpp
-#' @importFrom stats family gaussian binomial
+#' @import stats
 #' @useDynLib fastglm, .registration = TRUE
 NULL
