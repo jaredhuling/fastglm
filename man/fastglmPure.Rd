@@ -24,16 +24,16 @@ This should be a numeric vector of length equal to the number of cases}
 
 \item{start}{starting values for the parameters in the linear predictor.}
 
+\item{etastart}{starting values for the linear predictor.}
+
+\item{mustart}{values for the vector of means.}
+
 \item{method}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 2 for the LLT Cholesky, or 3 for the LDLT Cholesky}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
 
 \item{maxit}{maximum number of IRLS iterations. Should be an integer}
-
-\item{starting}{values for the linear predictor.}
-
-\item{starting}{values for the vector of means.}
 }
 \value{
 A list with the elements
