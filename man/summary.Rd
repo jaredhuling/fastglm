@@ -27,7 +27,7 @@ y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
 
 fit <- fastglm(x, y, family = binomial())
 
-summary(fit)
+#summary(fit)
 
 
 }
