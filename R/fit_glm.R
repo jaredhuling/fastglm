@@ -10,6 +10,9 @@
 #' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
 #' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 #' This should be a numeric vector of length equal to the number of cases
+#' @param start starting values for the parameters in the linear predictor.
+#' @param starting values for the linear predictor.
+#' @param starting values for the vector of means.
 #' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
 #' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
 #' @param tol threshold tolerance for convergence. Should be a positive real number
@@ -190,6 +193,9 @@ fastglmPure <- function(x, y,
 #' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
 #' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 #' This should be a numeric vector of length equal to the number of cases
+#' @param start starting values for the parameters in the linear predictor.
+#' @param starting values for the linear predictor.
+#' @param starting values for the vector of means.
 #' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
 #' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
 #' @param tol threshold tolerance for convergence. Should be a positive real number
