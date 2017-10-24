@@ -165,5 +165,8 @@ predict.fastglm <- function(object,
 
 
 predict_fastglm_lm <- function(object, se.fit, scale = 1, type, terms, na.action)
+{
+    
+}
 
 
