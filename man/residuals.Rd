@@ -10,7 +10,7 @@
 \arguments{
 \item{object}{fastglm fitted object}
 
-\item{type}{}
+\item{type}{type of residual to be returned}
 
 \item{...}{not used}
 }

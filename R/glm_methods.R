@@ -118,7 +118,7 @@ summary.fastglm <- function(object, dispersion = NULL, ...)
 #' residuals method for fastglm fitted objects
 #'
 #' @param object fastglm fitted object
-#' @param type 
+#' @param type type of residual to be returned
 #' @param ... not used
 #' @return a vector of residuals
 #' @rdname residuals
