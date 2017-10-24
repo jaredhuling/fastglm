@@ -44,12 +44,15 @@
 #' max(abs(coef(gl1) - gf4$coef))
 #' 
 fastglmPure <- function(x, y, 
-                        family = gaussian(),
-                        weights = rep(1, NROW(y)), 
-                        offset = rep(0, NROW(y)), 
-                        method = 0L,
-                        tol = 1e-7,
-                        maxit = 100L)
+                        family   = gaussian(),
+                        weights  = rep(1, NROW(y)), 
+                        offset   = rep(0, NROW(y)), 
+                        start    = NULL,
+                        etastart = NULL,
+                        mustart  = NULL,
+                        method   = 0L,
+                        tol      = 1e-7,
+                        maxit    = 100L)
 {
     weights <- as.vector(weights)
     offset  <- as.vector(offset)
@@ -67,6 +70,8 @@ fastglmPure <- function(x, y,
               maxit[1] > 0              
               )
     
+    nobs  <- NROW(y)
+    nvars <- NCOL(x)
     if(is.null(family$family)) 
     {
         print(family)
@@ -82,8 +87,53 @@ fastglmPure <- function(x, y,
     
     cnames <- colnames(x)
     
+    # from glm
+    variance   <- family$variance
+    dev.resids <- family$dev.resids
+    aic        <- family$aic
+    linkinv    <- family$linkinv
+    mu.eta     <- family$mu.eta 
     
-    res <- fit_glm(x, y, weights, offset, 
+    unless.null <- function(x, if.null) if(is.null(x)) if.null else x
+    valideta    <- unless.null(family$valideta, function(eta) TRUE)
+    validmu     <- unless.null(family$validmu,  function(mu)  TRUE)
+    
+    
+    if(is.null(mustart)) 
+    {
+        ## calculates mustart and may change y and weights and set n (!)
+        eval(family$initialize)
+    } else {
+        mukeep <- mustart
+        eval(family$initialize)
+        mustart <- mukeep
+    }
+    
+    coefold <- NULL
+    eta <-
+        if(!is.null(etastart)) {
+            etastart
+        } else if(!is.null(start))
+            {    
+                if (length(start) != nvars)
+                {
+                    stop(gettextf("length of 'start' should equal %d", nvars),
+                         domain = NA)
+                } else 
+                {
+                    coefold <- start
+                    offset + as.vector(if (NCOL(x) == 1L) x * start else x %*% start)
+                }
+            } else family$linkfun(mustart)
+    mu <- linkinv(eta)
+    
+    if (!(validmu(mu) && valideta(eta)))
+        stop("cannot find valid starting values: please specify some", call. = FALSE)
+    
+    if (is.null(start)) start <- rep(0, nvars)
+    
+    res <- fit_glm(x, drop(y), drop(weights), drop(offset), 
+                   drop(start), drop(mu), drop(eta),
                    family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
                    as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
     
@@ -187,6 +237,9 @@ fastglm.default <- function(x, y,
                             family = gaussian(),
                             weights = NULL, 
                             offset = NULL, 
+                            start    = NULL,
+                            etastart = NULL,
+                            mustart  = NULL,
                             method = 0L, tol = 1e-8, maxit = 100L,
                             ...) 
 {
@@ -217,7 +270,9 @@ fastglm.default <- function(x, y,
     if (is.null(weights)) weights <- rep(1, nobs)
     if (is.null(offset))  offset  <- rep(0, nobs)
     
-    res     <- fastglmPure(x, y, family, weights, offset, method, tol, maxit)
+    res     <- fastglmPure(x, y, family, weights, offset, 
+                           start, etastart, mustart,
+                           method, tol, maxit)
     
     res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
     res$y         <- y

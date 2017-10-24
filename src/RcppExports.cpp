@@ -29,8 +29,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_glm
-List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Function var, Function mu_eta, Function linkinv, Function dev_resids, int type, double tol, int maxit);
-RcppExport SEXP _fastglm_fit_glm(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP) {
+List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, int type, double tol, int maxit);
+RcppExport SEXP _fastglm_fit_glm(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -38,6 +38,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type start(startSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta(etaSEXP);
     Rcpp::traits::input_parameter< Function >::type var(varSEXP);
     Rcpp::traits::input_parameter< Function >::type mu_eta(mu_etaSEXP);
     Rcpp::traits::input_parameter< Function >::type linkinv(linkinvSEXP);
@@ -45,7 +48,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type type(typeSEXP);
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_glm(x, y, weights, offset, var, mu_eta, linkinv, dev_resids, type, tol, maxit));
+    rcpp_result_gen = Rcpp::wrap(fit_glm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, type, tol, maxit));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -53,7 +56,7 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_colMax_dense", (DL_FUNC) &_fastglm_colMax_dense, 1},
     {"_fastglm_colMin_dense", (DL_FUNC) &_fastglm_colMin_dense, 1},
-    {"_fastglm_fit_glm", (DL_FUNC) &_fastglm_fit_glm, 11},
+    {"_fastglm_fit_glm", (DL_FUNC) &_fastglm_fit_glm, 14},
     {NULL, NULL, 0}
 };
 

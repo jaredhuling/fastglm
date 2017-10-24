@@ -7,6 +7,8 @@
 using namespace Rcpp;
 using namespace std;
 
+using Eigen::Map;
+
 
 template<typename VecTypeX, typename MatTypeX>
 class GlmBase
@@ -112,7 +114,9 @@ public:
     
     virtual ~GlmBase() {}
     
-    virtual void init_parms() {}
+    virtual void init_parms(const Map<VecTypeX> & start_, 
+                            const Map<VecTypeX> & mu_,
+                            const Map<VecTypeX> & eta_) {}
     
     void update_beta()
     {
@@ -127,25 +131,26 @@ public:
         
         for(i = 0; i < maxit; ++i)
         {
-            
+
             update_var_mu();
-            
+
             update_mu_eta();
-            
+
             update_z();
-            
+
             update_w();
-            
+
             solve_wls();
-            
+
             update_eta();
-            
+
             update_mu();
-            
+
             update_dev_resids();
             
             if(converged())
                 break;
+
             
         }
         

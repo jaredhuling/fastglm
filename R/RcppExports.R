@@ -9,7 +9,7 @@ colMin_dense <- function(A) {
     .Call(`_fastglm_colMin_dense`, A)
 }
 
-fit_glm <- function(x, y, weights, offset, var, mu_eta, linkinv, dev_resids, type, tol, maxit) {
-    .Call(`_fastglm_fit_glm`, x, y, weights, offset, var, mu_eta, linkinv, dev_resids, type, tol, maxit)
+fit_glm <- function(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, type, tol, maxit) {
+    .Call(`_fastglm_fit_glm`, x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, type, tol, maxit)
 }
 

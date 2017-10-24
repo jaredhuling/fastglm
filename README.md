@@ -44,20 +44,20 @@ n.obs  <- 10000
 n.vars <- 100
 x <- matrix(rnorm(n.obs * n.vars, sd = 3), n.obs, n.vars)
 
-y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(n.obs))
+y <- 1 * ( drop(x[,1:25] %*% runif(25, min = -0.1, max = 0.10)) > rnorm(n.obs))
 
 ct <- microbenchmark(
     glm.fit = {gl1 <- glm.fit(x, y, family = binomial())},
-    speedglm.eigen = {sg1 <- speedglm.wfit(y, x, intercept = FALSE,
-                                           family = binomial())},
-    speedglm.chol = {sg2 <- speedglm.wfit(y, x, intercept = FALSE, 
-                                          family = binomial(), method = "Chol")},
-    speedglm.qr = {sg3 <- speedglm.wfit(y, x, intercept = FALSE,
-                                        family = binomial(), method = "qr")},
+    speedglm.eigen  = {sg1 <- speedglm.wfit(y, x, intercept = FALSE,
+                                            family = binomial())},
+    speedglm.chol   = {sg2 <- speedglm.wfit(y, x, intercept = FALSE, 
+                                            family = binomial(), method = "Chol")},
+    speedglm.qr     = {sg3 <- speedglm.wfit(y, x, intercept = FALSE,
+                                            family = binomial(), method = "qr")},
     fastglm.qr.cpiv = {gf1 <- fastglm(x, y, family = binomial())},
-    fastglm.qr = {gf2 <- fastglm(x, y, family = binomial(), method = 1)},
-    fastglm.LLT = {gf3 <- fastglm(x, y, family = binomial(), method = 2)},
-    fastglm.LDLT = {gf4 <- fastglm(x, y, family = binomial(), method = 3)},
+    fastglm.qr      = {gf2 <- fastglm(x, y, family = binomial(), method = 1)},
+    fastglm.LLT     = {gf3 <- fastglm(x, y, family = binomial(), method = 2)},
+    fastglm.LDLT    = {gf4 <- fastglm(x, y, family = binomial(), method = 3)},
     times = 25L
 )
 
@@ -72,7 +72,7 @@ max(abs(coef(gl1) - gf1$coef))
 ```
 
 ```
-## [1] 4.132162e-10
+## [1] 9.436896e-16
 ```
 
 ```r
@@ -80,7 +80,7 @@ max(abs(coef(gl1) - gf2$coef))
 ```
 
 ```
-## [1] 4.132166e-10
+## [1] 9.436896e-16
 ```
 
 ```r
@@ -88,7 +88,7 @@ max(abs(coef(gl1) - gf3$coef))
 ```
 
 ```
-## [1] 4.132164e-10
+## [1] 8.326673e-16
 ```
 
 ```r
@@ -96,7 +96,7 @@ max(abs(coef(gl1) - gf4$coef))
 ```
 
 ```
-## [1] 4.132162e-10
+## [1] 9.15934e-16
 ```
 
 ```r
@@ -105,7 +105,7 @@ max(abs(coef(gl1) - sg1$coef))
 ```
 
 ```
-## [1] 2.164935e-15
+## [1] 1.387779e-15
 ```
 
 ```r
@@ -113,7 +113,7 @@ max(abs(coef(gl1) - sg2$coef))
 ```
 
 ```
-## [1] 2.164935e-15
+## [1] 1.387779e-15
 ```
 
 ```r
@@ -121,5 +121,5 @@ max(abs(coef(gl1) - sg3$coef))
 ```
 
 ```
-## [1] 2.220446e-15
+## [1] 1.471046e-15
 ```

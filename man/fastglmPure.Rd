@@ -5,7 +5,8 @@
 \title{fast generalized linear model fitting}
 \usage{
 fastglmPure(x, y, family = gaussian(), weights = rep(1, NROW(y)),
-  offset = rep(0, NROW(y)), method = 0L, tol = 1e-07, maxit = 100L)
+  offset = rep(0, NROW(y)), start = NULL, etastart = NULL,
+  mustart = NULL, method = 0L, tol = 1e-07, maxit = 100L)
 }
 \arguments{
 \item{x}{input model matrix. Must be a matrix object}

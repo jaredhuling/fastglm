@@ -17,6 +17,9 @@ List fastglm(Rcpp::NumericMatrix Xs,
              Rcpp::NumericVector ys, 
              Rcpp::NumericVector weightss,
              Rcpp::NumericVector offsets, 
+             Rcpp::NumericVector starts, 
+             Rcpp::NumericVector mus, 
+             Rcpp::NumericVector etas, 
              Function var, 
              Function mu_eta, 
              Function linkinv, 
@@ -29,16 +32,23 @@ List fastglm(Rcpp::NumericMatrix Xs,
     const Map<VectorXd>  y(as<Map<VectorXd> >(ys));
     const Map<VectorXd>  weights(as<Map<VectorXd> >(weightss));
     const Map<VectorXd>  offset(as<Map<VectorXd> >(offsets));
+    const Map<VectorXd>  beta_init(as<Map<VectorXd> >(starts));
+    const Map<VectorXd>  mu_init(as<Map<VectorXd> >(mus));
+    const Map<VectorXd>  eta_init(as<Map<VectorXd> >(etas));
     Index                n = X.rows();
     if ((Index)y.size() != n) throw invalid_argument("size mismatch");
     
     // instantiate fitting class
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
     
-    glm_solver = new glm(X, y, weights, offset, var, mu_eta, linkinv, dev_resids, tol, maxit, type);
+    glm_solver = new glm(X, y, weights, offset, 
+                         var, mu_eta, linkinv, dev_resids, 
+                         tol, maxit, type);
+    
     
     // initialize parameters
-    glm_solver->init_parms();
+    glm_solver->init_parms(beta_init, mu_init, eta_init);
+
     
     // maximize likelihood
     int iters = glm_solver->solve(maxit);
@@ -72,10 +82,11 @@ List fastglm(Rcpp::NumericMatrix Xs,
 
 
 // [[Rcpp::export]]
-List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, 
+List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset,
+             Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta,
              Function var, Function mu_eta, Function linkinv, Function dev_resids, int type, double tol, int maxit) 
 {
-    return fastglm(x, y, weights, offset, var, mu_eta, linkinv, dev_resids, type, tol, maxit);
+    return fastglm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, type, tol, maxit);
 }
 
 
