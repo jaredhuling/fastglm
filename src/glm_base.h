@@ -75,7 +75,22 @@ protected:
         
     }
     
+    virtual void step_halve()
+    {
+        
+    }
+    
+    virtual void run_step_halving(int &iterr)
+    {
+        
+    }
+    
     virtual void update_dev_resids()
+    {
+        
+    }
+    
+    virtual void update_dev_resids_dont_update_old()
     {
         
     }
@@ -143,6 +158,13 @@ public:
             update_mu();
             
             update_dev_resids();
+            
+            run_step_halving(i);
+            
+            if (std::isinf(dev) && i == 0)
+            {
+                stop("cannot find valid starting values: please specify some");
+            }
             
             if(converged())
                 break;

@@ -21,6 +21,8 @@ List fastglm(Rcpp::NumericMatrix Xs,
              Function mu_eta, 
              Function linkinv, 
              Function dev_resids, 
+             Function valideta, 
+             Function validmu, 
              int type, 
              double tol, 
              int maxit) 
@@ -35,7 +37,7 @@ List fastglm(Rcpp::NumericMatrix Xs,
     // instantiate fitting class
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
     
-    glm_solver = new glm(X, y, weights, offset, var, mu_eta, linkinv, dev_resids, tol, maxit, type);
+    glm_solver = new glm(X, y, weights, offset, var, mu_eta, linkinv, dev_resids, valideta, validmu, tol, maxit, type);
     
     // initialize parameters
     glm_solver->init_parms();
@@ -73,9 +75,11 @@ List fastglm(Rcpp::NumericMatrix Xs,
 
 // [[Rcpp::export]]
 List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, 
-             Function var, Function mu_eta, Function linkinv, Function dev_resids, int type, double tol, int maxit) 
+             Function var, Function mu_eta, Function linkinv, Function dev_resids, 
+             Function valideta, Function validmu,  
+             int type, double tol, int maxit) 
 {
-    return fastglm(x, y, weights, offset, var, mu_eta, linkinv, dev_resids, type, tol, maxit);
+    return fastglm(x, y, weights, offset, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit);
 }
 
 

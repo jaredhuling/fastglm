@@ -53,6 +53,8 @@ protected:
     Function mu_eta_fun;
     Function linkinv;
     Function dev_resids_fun;
+    Function valideta;
+    Function validmu;
     
     double tol;
     int maxit;
@@ -141,6 +143,93 @@ protected:
         dev = sum(dev_resids);
     }
     
+    virtual void update_dev_resids_dont_update_old()
+    {
+        NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
+        dev = sum(dev_resids);
+    }
+    
+    virtual void step_halve()
+    {
+        // take half step
+        beta = 0.5 * (beta.array() + beta_prev.array());
+        
+        update_eta();
+        
+        update_mu();
+    }
+    
+    virtual void run_step_halving(int &iterr)
+    {
+        // check for infinite deviance
+        if (std::isinf(dev))
+        {
+            int itrr = 0;
+            while(std::isinf(dev))
+            {
+                ++itrr;
+                if (itrr > maxit)
+                {
+                    break;
+                }
+                
+                //std::cout << "half step (infinite)!" << itrr << std::endl;
+                
+                step_halve();
+                
+                // update deviance
+                update_dev_resids_dont_update_old();
+            }
+        }
+        
+        // check for boundary violations
+        if (!(valideta(eta) && validmu(mu)))
+        {
+            int itrr = 0;
+            while(!(valideta(eta) && validmu(mu)))
+            {
+                ++itrr;
+                if (itrr > maxit)
+                {
+                    break;
+                }
+                
+                //std::cout << "half step (boundary)!" << itrr << std::endl;
+                
+                step_halve();
+                
+            }
+            
+            update_dev_resids_dont_update_old();
+        }
+        
+        
+        // check for increasing deviance
+        //std::abs(deviance - deviance_prev) / (0.1 + std::abs(deviance)) < tol_irls
+        if ((dev - devold) / (0.1 + std::abs(dev)) >= tol && iterr > 0)
+        {
+            int itrr = 0;
+            
+            //std::cout << "dev:" << deviance << "dev prev:" << deviance_prev << std::endl;
+            
+            while((dev - devold) / (0.1 + std::abs(dev)) >= -tol)
+            {
+                ++itrr;
+                if (itrr > maxit)
+                {
+                    break;
+                }
+                
+                //std::cout << "half step (increasing dev)!" << itrr << std::endl;
+                
+                step_halve();
+                
+                
+                update_dev_resids_dont_update_old();
+            }
+        }
+    }
+    
     // much of solve_wls() comes directly
     // from the source code of the RcppEigen package
     virtual void solve_wls()
@@ -150,6 +239,7 @@ protected:
         
         //enum {ColPivQR_t = 0, QR_t, LLT_t, LDLT_t, SVD_t, SymmEigen_t, GESDD_t};
         
+        beta_prev = beta;
         
         if (type == 0)
         {
@@ -265,6 +355,8 @@ public:
         Function &mu_eta_fun_,
         Function &linkinv_,
         Function &dev_resids_fun_,
+        Function &valideta_,
+        Function &validmu_,
         double tol_ = 1e-6,
         int maxit_ = 100,
         int type_ = 1) :
@@ -280,6 +372,8 @@ public:
                                                      mu_eta_fun(mu_eta_fun_),
                                                      linkinv(linkinv_),
                                                      dev_resids_fun(dev_resids_fun_),
+                                                     valideta(valideta_),
+                                                     validmu(validmu_),
                                                      tol(tol_),
                                                      maxit(maxit_),
                                                      type(type_)

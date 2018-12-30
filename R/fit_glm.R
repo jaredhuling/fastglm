@@ -26,8 +26,13 @@
 #' @examples
 #' 
 #' x <- matrix(rnorm(10000 * 100), ncol = 100)
-#' y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
+#' eta <- 0.25 * x[,1] - 0.25 * x[,3]
+#' y <- 1 * (eta > rnorm(10000))
 #' 
+#' yp <- rpois(10000, (0.25 * x[,1] - 0.25 * x[,3]) ^ 2)
+#' yg <- rgamma(10000, exp(0.25 * x[,1] - 0.25 * x[,3]) * 0.75, 0.75)
+#' 
+#' # binomial
 #' system.time(gl1 <- glm.fit(x, y, family = binomial()))
 #' 
 #' system.time(gf1 <- fastglmPure(x, y, family = binomial(), tol = 1e-8))
@@ -37,6 +42,38 @@
 #' system.time(gf3 <- fastglmPure(x, y, family = binomial(), method = 2, tol = 1e-8))
 #' 
 #' system.time(gf4 <- fastglmPure(x, y, family = binomial(), method = 3, tol = 1e-8))
+#' 
+#' max(abs(coef(gl1) - gf1$coef))
+#' max(abs(coef(gl1) - gf2$coef))
+#' max(abs(coef(gl1) - gf3$coef))
+#' max(abs(coef(gl1) - gf4$coef))
+#' 
+#' # poisson
+#' system.time(gl1 <- glm.fit(x, yp, family = poisson(link = "log")))
+#' 
+#' system.time(gf1 <- fastglmPure(x, yp, family = poisson(link = "log"), tol = 1e-8))
+#' 
+#' system.time(gf2 <- fastglmPure(x, yp, family = poisson(link = "log"), method = 1, tol = 1e-8))
+#' 
+#' system.time(gf3 <- fastglmPure(x, yp, family = poisson(link = "log"), method = 2, tol = 1e-8))
+#' 
+#' system.time(gf4 <- fastglmPure(x, yp, family = poisson(link = "log"), method = 3, tol = 1e-8))
+#' 
+#' max(abs(coef(gl1) - gf1$coef))
+#' max(abs(coef(gl1) - gf2$coef))
+#' max(abs(coef(gl1) - gf3$coef))
+#' max(abs(coef(gl1) - gf4$coef))
+#' 
+#' # gamma
+#' system.time(gl1 <- glm.fit(x, yg, family = Gamma(link = "log")))
+#' 
+#' system.time(gf1 <- fastglmPure(x, yg, family = Gamma(link = "log"), tol = 1e-8))
+#' 
+#' system.time(gf2 <- fastglmPure(x, yg, family = Gamma(link = "log"), method = 1, tol = 1e-8))
+#' 
+#' system.time(gf3 <- fastglmPure(x, yg, family = Gamma(link = "log"), method = 2, tol = 1e-8))
+#' 
+#' system.time(gf4 <- fastglmPure(x, yg, family = Gamma(link = "log"), method = 3, tol = 1e-8))
 #' 
 #' max(abs(coef(gl1) - gf1$coef))
 #' max(abs(coef(gl1) - gf2$coef))
@@ -85,6 +122,7 @@ fastglmPure <- function(x, y,
     
     res <- fit_glm(x, y, weights, offset, 
                    family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                   family$valideta, family$validmu,
                    as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
     
     res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))

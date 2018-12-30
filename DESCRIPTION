@@ -13,10 +13,11 @@ Authors@R: c(
 Maintainer: Jared Huling <jaredhuling@gmail.com>
 Description: Fits generalized linear models efficiently using 'RcppEigen'.
 License: GPL (>= 2)
+Encoding: UTF-8
 Imports: 
     Rcpp (>= 0.12.13), 
     RcppEigen
 LinkingTo: 
     Rcpp, 
     RcppEigen
-RoxygenNote: 6.0.1
+RoxygenNote: 6.1.0
