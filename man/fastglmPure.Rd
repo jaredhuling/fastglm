@@ -5,7 +5,8 @@
 \title{fast generalized linear model fitting}
 \usage{
 fastglmPure(x, y, family = gaussian(), weights = rep(1, NROW(y)),
-  offset = rep(0, NROW(y)), method = 0L, tol = 1e-07, maxit = 100L)
+  offset = rep(0, NROW(y)), start = NULL, etastart = NULL,
+  mustart = NULL, method = 0L, tol = 1e-07, maxit = 100L)
 }
 \arguments{
 \item{x}{input model matrix. Must be a matrix object}
@@ -20,6 +21,12 @@ For \code{fastglmPure} this can only be the result of a call to a family functio
 
 \item{offset}{this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
 This should be a numeric vector of length equal to the number of cases}
+
+\item{start}{starting values for the parameters in the linear predictor.}
+
+\item{etastart}{starting values for the linear predictor.}
+
+\item{mustart}{values for the vector of means.}
 
 \item{method}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 2 for the LLT Cholesky, or 3 for the LDLT Cholesky}

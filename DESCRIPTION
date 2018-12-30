@@ -2,7 +2,6 @@ Package: fastglm
 Type: Package
 Title: Fitting fast generalized linear models using 'RcppEigen'
 Version: 1.0
-Date: 2017-10-21
 Authors@R: c(
     person("Jared", "Huling", , "jaredhuling@gmail.com", c("aut", "cre")),
     person("Douglas", "Bates", , , c("cph")),
@@ -17,7 +16,10 @@ Encoding: UTF-8
 Imports: 
     Rcpp (>= 0.12.13), 
     RcppEigen
-LinkingTo: 
+LinkingTo:
     Rcpp, 
     RcppEigen
 RoxygenNote: 6.1.0
+Suggests: knitr,
+    rmarkdown
+VignetteBuilder: knitr

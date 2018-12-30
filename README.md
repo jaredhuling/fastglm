@@ -31,94 +31,48 @@ Load the package:
 library(fastglm)
 ```
 
+A (not comprehensive) comparison with `glm.fit()` and `speedglm.wfit()`:
+
 
 ```r
 library(speedglm)
+library(microbenchmark)
+library(ggplot2)
 
 set.seed(123)
 n.obs  <- 10000
 n.vars <- 100
 x <- matrix(rnorm(n.obs * n.vars, sd = 3), n.obs, n.vars)
 
-y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
+y <- 1 * ( drop(x[,1:25] %*% runif(25, min = -0.1, max = 0.10)) > rnorm(n.obs))
 
-system.time(gl1 <- glm.fit(x, y, family = binomial()))
-```
+ct <- microbenchmark(
+    glm.fit = {gl1 <- glm.fit(x, y, family = binomial())},
+    speedglm.eigen  = {sg1 <- speedglm.wfit(y, x, intercept = FALSE,
+                                            family = binomial())},
+    speedglm.chol   = {sg2 <- speedglm.wfit(y, x, intercept = FALSE, 
+                                            family = binomial(), method = "Chol")},
+    speedglm.qr     = {sg3 <- speedglm.wfit(y, x, intercept = FALSE,
+                                            family = binomial(), method = "qr")},
+    fastglm.qr.cpiv = {gf1 <- fastglm(x, y, family = binomial())},
+    fastglm.qr      = {gf2 <- fastglm(x, y, family = binomial(), method = 1)},
+    fastglm.LLT     = {gf3 <- fastglm(x, y, family = binomial(), method = 2)},
+    fastglm.LDLT    = {gf4 <- fastglm(x, y, family = binomial(), method = 3)},
+    times = 25L
+)
 
-```
-##    user  system elapsed 
-##    1.14    0.03    1.22
-```
-
-```r
-system.time(gf1 <- fastglm(x, y, family = binomial()))
-```
-
-```
-##    user  system elapsed 
-##    0.48    0.00    0.49
-```
-
-```r
-system.time(gf2 <- fastglm(x, y, family = binomial(), method = 1))
+autoplot(ct) + stat_summary(fun.y = median, geom = 'point', size = 2)
 ```
 
-```
-##    user  system elapsed 
-##    0.44    0.00    0.44
-```
+<img src="vignettes/gen_data-1.png" width="100%" />
 
 ```r
-system.time(gf3 <- fastglm(x, y, family = binomial(), method = 2))
-```
-
-```
-##    user  system elapsed 
-##    0.11    0.02    0.12
-```
-
-```r
-system.time(gf4 <- fastglm(x, y, family = binomial(), method = 3))
-```
-
-```
-##    user  system elapsed 
-##    0.12    0.00    0.12
-```
-
-```r
-system.time(sg1 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial()))
-```
-
-```
-##    user  system elapsed 
-##    0.41    0.01    0.47
-```
-
-```r
-system.time(sg2 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), method = "Chol"))
-```
-
-```
-##    user  system elapsed 
-##    0.63    0.00    0.66
-```
-
-```r
-system.time(sg3 <- speedglm.wfit(y, x, intercept = FALSE, family = binomial(), method = "qr"))
-```
-
-```
-##    user  system elapsed 
-##    0.41    0.02    0.44
-```
-
-```r
+# comparison of estimates
 max(abs(coef(gl1) - gf1$coef))
 ```
 
 ```
-## [1] 4.132162e-10
+## [1] 9.436896e-16
 ```
 
 ```r
@@ -126,7 +80,7 @@ max(abs(coef(gl1) - gf2$coef))
 ```
 
 ```
-## [1] 4.132166e-10
+## [1] 9.436896e-16
 ```
 
 ```r
@@ -134,7 +88,7 @@ max(abs(coef(gl1) - gf3$coef))
 ```
 
 ```
-## [1] 4.132164e-10
+## [1] 8.326673e-16
 ```
 
 ```r
@@ -142,7 +96,7 @@ max(abs(coef(gl1) - gf4$coef))
 ```
 
 ```
-## [1] 4.132162e-10
+## [1] 9.15934e-16
 ```
 
 ```r
@@ -151,7 +105,7 @@ max(abs(coef(gl1) - sg1$coef))
 ```
 
 ```
-## [1] 2.164935e-15
+## [1] 1.387779e-15
 ```
 
 ```r
@@ -159,7 +113,7 @@ max(abs(coef(gl1) - sg2$coef))
 ```
 
 ```
-## [1] 2.164935e-15
+## [1] 1.387779e-15
 ```
 
 ```r
@@ -167,5 +121,5 @@ max(abs(coef(gl1) - sg3$coef))
 ```
 
 ```
-## [1] 2.220446e-15
+## [1] 1.471046e-15
 ```

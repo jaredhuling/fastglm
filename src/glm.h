@@ -381,24 +381,26 @@ public:
     
     
     // must set params to starting vals
-    void init_parms()
+    void init_parms(const Map<VectorXd> & start_, 
+                    const Map<VectorXd> & mu_,
+                    const Map<VectorXd> & eta_)
     {
-        beta.setZero();
-        eta.setZero();
-        eta.array() += offset.array();
+        beta = start_;
+        eta = eta_;
+        mu = mu_;
+        //eta.array() += offset.array();
         
-        update_var_mu();
+        //update_var_mu();
         
-        update_mu_eta();
+        //update_mu_eta();
         
-        update_mu();
+        //update_mu();
         
-        NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
-        dev = sum(dev_resids);
+        update_dev_resids();
         
-        update_z();
+        //update_z();
         
-        update_w();
+        //update_w();
         
         rank = nvars;
     }
