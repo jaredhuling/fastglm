@@ -63,6 +63,7 @@ List fastglm(Rcpp::NumericMatrix Xs,
     
     double dev         = glm_solver->get_dev();
     int rank           = glm_solver->get_rank();
+    bool converged     = glm_solver->get_converged();
     
     int df = X.rows() - rank;
     
@@ -77,7 +78,8 @@ List fastglm(Rcpp::NumericMatrix Xs,
                         _["prior.weights"]     = pweights,
                         _["rank"]              = rank,
                         _["df.residual"]       = df,
-                        _["iter"]              = iters);
+                        _["iter"]              = iters,
+                        _["converged"]         = converged);
 }
 
 

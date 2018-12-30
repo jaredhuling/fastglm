@@ -54,8 +54,8 @@ x <- matrix(rnorm(10000 * 100), ncol = 100)
 eta <- 0.25 * x[,1] - 0.25 * x[,3]
 y <- 1 * (eta > rnorm(10000))
 
-yp <- rpois(10000, (1 + 0.25 * x[,1] - 0.25 * x[,3]) ^ 2)
-yg <- rgamma(10000, exp(1 + 0.25 * x[,1] - 0.25 * x[,3]) * 1.75, 1.75)
+yp <- rpois(10000, (0.1 + 0.25 * x[,1] - 0.25 * x[,3]) ^ 2)
+yg <- rgamma(10000, exp(0.1 + 0.25 * x[,1] - 0.25 * x[,3]) * 1.75, 1.75)
 
 # binomial
 system.time(gl1 <- glm.fit(x, y, family = binomial()))

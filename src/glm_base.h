@@ -33,6 +33,7 @@ protected:
     
     int maxit;            // max iterations
     double tol;           // tolerance for convergence
+    bool conv;
     
     
     virtual bool converged()
@@ -144,6 +145,8 @@ public:
     {
         int i;
         
+        conv = false;
+        
         for(i = 0; i < maxit; ++i)
         {
 
@@ -171,7 +174,10 @@ public:
             }
             
             if(converged())
+            {
+                conv = true;
                 break;
+            }
 
             
         }
@@ -190,6 +196,7 @@ public:
     virtual double get_dev()        { return dev; }
     virtual int get_rank()          { return nvars; }
     virtual MatTypeX get_vcov()     { return vcov; }
+    virtual bool get_converged()    { return conv; }
     
 };
 

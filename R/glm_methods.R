@@ -47,6 +47,8 @@ summary.fastglm <- function(object, dispersion = NULL, ...)
         dispersion <- object$dispersion
     }
     
+    aliased <- is.na(coef(object))  # used in print method
+
     if (p > 0)
     {
         coef   <- object$coefficients
@@ -78,7 +80,7 @@ summary.fastglm <- function(object, dispersion = NULL, ...)
                                          c(dn, "t value","Pr(>|t|)"))
         }
     
-        
+        df.f <- length(aliased)
     } else 
     {
         coef.table <- matrix(0, 0L, 4L)
@@ -110,7 +112,7 @@ summary.fastglm <- function(object, dispersion = NULL, ...)
     #         covmat.unscaled/outer(dd,dd)
     #     ans$symbolic.cor <- symbolic.cor
     # }
-    class(ans) <- "summary.fastglm"
+    class(ans) <- "summary.glm"
     return(ans)
 }
 

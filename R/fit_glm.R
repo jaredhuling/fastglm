@@ -32,8 +32,8 @@
 #' eta <- 0.25 * x[,1] - 0.25 * x[,3]
 #' y <- 1 * (eta > rnorm(10000))
 #' 
-#' yp <- rpois(10000, (1 + 0.25 * x[,1] - 0.25 * x[,3]) ^ 2)
-#' yg <- rgamma(10000, exp(1 + 0.25 * x[,1] - 0.25 * x[,3]) * 1.75, 1.75)
+#' yp <- rpois(10000, (0.1 + 0.25 * x[,1] - 0.25 * x[,3]) ^ 2)
+#' yg <- rgamma(10000, exp(0.1 + 0.25 * x[,1] - 0.25 * x[,3]) * 1.75, 1.75)
 #' 
 #' # binomial
 #' system.time(gl1 <- glm.fit(x, y, family = binomial()))
@@ -180,24 +180,21 @@ fastglmPure <- function(x, y,
     
     res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     
-    conv <- res$iter < maxit[1]
-    res$conv <- conv
-    
-    if (!conv)
+    if (!res$converged)
     {
-        warning("glm.fit: algorithm did not converge", call. = FALSE)
+        warning("fit_glm: algorithm did not converge", call. = FALSE)
     }
 
     eps <- 10*.Machine$double.eps
     if (family$family == "binomial") 
     {
         if (any(res$fitted.values > 1 - eps) || any(res$fitted.values < eps))
-            warning("glm.fit: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
+            warning("fit_glm: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
     }
     if (family$family == "poisson") 
     {
         if (any(res$fitted.values < eps))
-            warning("glm.fit: fitted rates numerically 0 occurred", call. = FALSE)
+            warning("fit_glm: fitted rates numerically 0 occurred", call. = FALSE)
     }
     
     if (is.null(cnames))
@@ -329,7 +326,7 @@ fastglm.default <- function(x, y,
             est.disp <- TRUE
             if(any(weights == 0))
                 warning("observations with zero weight not used for calculating dispersion")
-            sum((object$weights*object$residuals^2)[weights > 0])/ res$df.residual
+            sum((res$weights*res$residuals ^ 2)[weights > 0]) / res$df.residual
         } else 
         {
             est.disp <- TRUE
@@ -354,7 +351,7 @@ fastglm.default <- function(x, y,
     
     if (boundary)
     {
-        warning("glm.fit: algorithm stopped at boundary value", call. = FALSE)
+        warning("fit_glm: algorithm stopped at boundary value", call. = FALSE)
     }
     
     
