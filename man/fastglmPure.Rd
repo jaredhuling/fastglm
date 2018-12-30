@@ -50,12 +50,13 @@ fast generalized linear model fitting
 }
 \examples{
 
+set.seed(1)
 x <- matrix(rnorm(10000 * 100), ncol = 100)
-eta <- 0.25 * x[,1] - 0.25 * x[,3]
+eta <- 0.1 + 0.25 * x[,1] - 0.25 * x[,3] + 0.75 * x[,5] -0.35 * x[,6] #0.25 * x[,1] - 0.25 * x[,3]
 y <- 1 * (eta > rnorm(10000))
 
-yp <- rpois(10000, (0.1 + 0.25 * x[,1] - 0.25 * x[,3]) ^ 2)
-yg <- rgamma(10000, exp(0.1 + 0.25 * x[,1] - 0.25 * x[,3]) * 1.75, 1.75)
+yp <- rpois(10000, eta ^ 2)
+yg <- rgamma(10000, exp(eta) * 1.75, 1.75)
 
 # binomial
 system.time(gl1 <- glm.fit(x, y, family = binomial()))
