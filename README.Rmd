@@ -1,10 +1,6 @@
 ---
-output:
-  html_document:
-    keep_md: yes
-    self_contained: true
+output: github_document
 ---
-
 
 
 
@@ -67,7 +63,7 @@ ct <- microbenchmark(
     times = 25L
 )
 
-autoplot(ct) + stat_summary(fun.y = median, geom = 'point', size = 2)
+autoplot(ct, log = FALSE) + stat_summary(fun.y = median, geom = 'point', size = 2)
 
 # comparison of estimates
 max(abs(coef(gl1) - gf1$coef))

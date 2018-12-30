@@ -1,23 +1,17 @@
 
+[![Build
+Status](https://travis-ci.org/jaredhuling/fastglm.svg?branch=master)](https://travis-ci.org/jaredhuling/fastglm)
 
+# Overview of ‘fastglm’
 
+The ‘fastglm’ package is a re-write of `glm()` using `RcppEigen`
+designed to be computationally efficient.
 
-
-
-[![Build Status](https://travis-ci.org/jaredhuling/fastglm.svg?branch=master)](https://travis-ci.org/jaredhuling/fastglm)
-
-# Overview of 'fastglm'
-
-The 'fastglm' package is a re-write of `glm()` using `RcppEigen` designed to be computationally efficient.
-
-
-
-# Installing the 'fastglm' package
-
+# Installing the ‘fastglm’ package
 
 Install the development version using the **devtools** package:
 
-```r
+``` r
 devtools::install_github("jaredhuling/fastglm")
 ```
 
@@ -27,14 +21,13 @@ or by cloning and building using `R CMD INSTALL`
 
 Load the package:
 
-```r
+``` r
 library(fastglm)
 ```
 
 A (not comprehensive) comparison with `glm.fit()` and `speedglm.wfit()`:
 
-
-```r
+``` r
 library(speedglm)
 library(microbenchmark)
 library(ggplot2)
@@ -61,65 +54,51 @@ ct <- microbenchmark(
     times = 25L
 )
 
-autoplot(ct) + stat_summary(fun.y = median, geom = 'point', size = 2)
+autoplot(ct, log = FALSE) + stat_summary(fun.y = median, geom = 'point', size = 2)
 ```
 
 <img src="vignettes/gen_data-1.png" width="100%" />
 
-```r
+``` r
 # comparison of estimates
 max(abs(coef(gl1) - gf1$coef))
 ```
 
-```
-## [1] 9.436896e-16
-```
+    ## [1] 9.992007e-16
 
-```r
+``` r
 max(abs(coef(gl1) - gf2$coef))
 ```
 
-```
-## [1] 9.436896e-16
-```
+    ## [1] 1.054712e-15
 
-```r
+``` r
 max(abs(coef(gl1) - gf3$coef))
 ```
 
-```
-## [1] 8.326673e-16
-```
+    ## [1] 1.082467e-15
 
-```r
+``` r
 max(abs(coef(gl1) - gf4$coef))
 ```
 
-```
-## [1] 9.15934e-16
-```
+    ## [1] 1.137979e-15
 
-```r
+``` r
 # now between glm and speedglm
 max(abs(coef(gl1) - sg1$coef))
 ```
 
-```
-## [1] 1.387779e-15
-```
+    ## [1] 1.554312e-15
 
-```r
+``` r
 max(abs(coef(gl1) - sg2$coef))
 ```
 
-```
-## [1] 1.387779e-15
-```
+    ## [1] 1.554312e-15
 
-```r
+``` r
 max(abs(coef(gl1) - sg3$coef))
 ```
 
-```
-## [1] 1.471046e-15
-```
+    ## [1] 1.387779e-15
