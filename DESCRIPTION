@@ -10,7 +10,9 @@ Authors@R: c(
     person("Yixuan", "Qiu", , , c("cph"))
     )
 Maintainer: Jared Huling <jaredhuling@gmail.com>
-Description: Fits generalized linear models efficiently using 'RcppEigen'.
+Description: Fits generalized linear models efficiently using 'RcppEigen'. The iteratively reweighted least squares 
+    implementation utilizes the step-halving approach of Marschner (2011) <10.32614/RJ-2011-012> to help safeguard
+    against convergence issues.
 License: GPL (>= 2)
 Encoding: UTF-8
 Imports: 

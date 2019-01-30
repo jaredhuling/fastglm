@@ -6,7 +6,8 @@
 #' @rdname print
 #' @method print fastglm
 #' @export
-print.fastglm <- function(x, ...) {
+print.fastglm <- function(x, ...) 
+{
     cat("\nCall:\n")
     print(x$call)
     cat("\nCoefficients:\n")
@@ -133,42 +134,43 @@ residuals.fastglm <- function(object,
     residuals.glm(object, type, ...)
 }
 
-#' Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
-#' @param object a fitted object of class inheriting from "\code{fastglm}".
-#' @param newdata optionally, a data frame in which to look for variables with which to predict. 
-#' If omitted, the fitted linear predictors are used.
-#' @param type the type of prediction required. The default is on the scale of the linear predictors; 
-#' the alternative "\code{response}" is on the scale of the response variable. Thus for a default binomial 
-#' model the default predictions are of log-odds (probabilities on logit scale) and \code{type = "response"}
-#'  gives the predicted probabilities. The "\code{terms}" option returns a matrix giving the fitted values of each 
-#'  term in the model formula on the linear predictor scale.
-#'  
-#' The value of this argument can be abbreviated.
-#' @param se.fit logical switch indicating if standard errors are required.
-#' @param dispersion the dispersion of the GLM fit to be assumed in computing the standard errors. 
-#' If omitted, that returned by \code{summary} applied to the object is used.
-#' @param terms with \code{type = "terms"} by default all terms are returned. A character vector specifies 
-#' which terms are to be returned
-#' @param na.action function determining what should be done with missing values in \code{newdata}. 
-#' The default is to predict \code{NA}.
-#' @param ... further arguments passed to or from other methods.
-#' @export
-predict.fastglm <- function(object, 
-                            newdata = NULL, 
-                            type = c("link", "response", "terms"),
-                            se.fit = FALSE, 
-                            dispersion = NULL, 
-                            terms = NULL,
-                            na.action = na.pass, ...)
-{
-    #class(object) <- c("glm", "lm")
-    #predict.glm(object, newdata, type, se.fit, dispersion, terms, na.action, ...)
-}
 
-
-predict_fastglm_lm <- function(object, se.fit, scale = 1, type, terms, na.action)
-{
-    
-}
-
-
+#' #' Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
+#' #' @param object a fitted object of class inheriting from "\code{fastglm}".
+#' #' @param newdata optionally, a data frame in which to look for variables with which to predict. 
+#' #' If omitted, the fitted linear predictors are used.
+#' #' @param type the type of prediction required. The default is on the scale of the linear predictors; 
+#' #' the alternative "\code{response}" is on the scale of the response variable. Thus for a default binomial 
+#' #' model the default predictions are of log-odds (probabilities on logit scale) and \code{type = "response"}
+#' #'  gives the predicted probabilities. The "\code{terms}" option returns a matrix giving the fitted values of each 
+#' #'  term in the model formula on the linear predictor scale.
+#' #'  
+#' #' The value of this argument can be abbreviated.
+#' #' @param se.fit logical switch indicating if standard errors are required.
+#' #' @param dispersion the dispersion of the GLM fit to be assumed in computing the standard errors. 
+#' #' If omitted, that returned by \code{summary} applied to the object is used.
+#' #' @param terms with \code{type = "terms"} by default all terms are returned. A character vector specifies 
+#' #' which terms are to be returned
+#' #' @param na.action function determining what should be done with missing values in \code{newdata}. 
+#' #' The default is to predict \code{NA}.
+#' #' @param ... further arguments passed to or from other methods.
+#' #' @export
+#' predict.fastglm <- function(object, 
+#'                             newdata = NULL, 
+#'                             type = c("link", "response", "terms"),
+#'                             se.fit = FALSE, 
+#'                             dispersion = NULL, 
+#'                             terms = NULL,
+#'                             na.action = na.pass, ...)
+#' {
+#'     class(object) <- c("glm", "lm")
+#'     predict.glm(object, newdata, type, se.fit, dispersion, terms, na.action, ...)
+#' }
+#' 
+#' 
+#' predict_fastglm_lm <- function(object, se.fit, scale = 1, type, terms, na.action)
+#' {
+#'     
+#' }
+#' 
+#' 
