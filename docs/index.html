@@ -31,7 +31,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="index.html">fastglm</a>
-        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">1.0</span>
+        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">0.0.1</span>
       </span>
     </div>
 
@@ -54,9 +54,6 @@
   </a>
   <ul class="dropdown-menu" role="menu">
 <li>
-      <a href="articles/Using-the-fastglm-Package.html">Using the fastglm Package</a>
-    </li>
-    <li>
       <a href="articles/quick-usage-guide-to-the-fastglm-package.html">Quick Usage Guide to the 'fastglm' Package</a>
     </li>
   </ul>
@@ -153,13 +150,13 @@
 <a class="sourceLine" id="cb18-5" data-line-number="5"></a>
 <a class="sourceLine" id="cb18-6" data-line-number="6"><span class="kw">system.time</span>(gfit1 &lt;-<span class="st"> </span><span class="kw"><a href="reference/fastglm.html">fastglm</a></span>(<span class="kw">cbind</span>(<span class="dv">1</span>, x), y, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>)))</a></code></pre></div>
 <pre><code>##    user  system elapsed 
-##   1.117   0.032   1.170</code></pre>
+##   1.323   0.032   1.367</code></pre>
 <div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" data-line-number="1"><span class="kw">system.time</span>(gfit2 &lt;-<span class="st"> </span><span class="kw">glm</span>(y<span class="op">~</span>x, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>)) )</a></code></pre></div>
 <pre><code>##    user  system elapsed 
-##   4.183   0.147   4.355</code></pre>
+##   4.153   0.162   4.394</code></pre>
 <div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb22-1" data-line-number="1"><span class="kw">system.time</span>(gfit3 &lt;-<span class="st"> </span>glm2<span class="op">::</span><span class="kw"><a href="http://www.rdocumentation.org/packages/glm2/topics/glm2">glm2</a></span>(y<span class="op">~</span>x, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>)) )</a></code></pre></div>
 <pre><code>##    user  system elapsed 
-##   3.365   0.117   3.536</code></pre>
+##   3.143   0.136   3.353</code></pre>
 <div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb24-1" data-line-number="1"><span class="co">## Note that fastglm() returns estimates with the</span></a>
 <a class="sourceLine" id="cb24-2" data-line-number="2"><span class="co">## largest likelihood</span></a>
 <a class="sourceLine" id="cb24-3" data-line-number="3"><span class="kw">logLik</span>(gfit1)</a></code></pre></div>
@@ -196,7 +193,7 @@
 <div class="sourceCode" id="cb48"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb48-1" data-line-number="1"><span class="co">## increasing number of IRLS iterations for glm() does not help</span></a>
 <a class="sourceLine" id="cb48-2" data-line-number="2"><span class="kw">system.time</span>(gfit2 &lt;-<span class="st"> </span><span class="kw">glm</span>(y<span class="op">~</span>x, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>), <span class="dt">control =</span> <span class="kw">list</span>(<span class="dt">maxit =</span> <span class="dv">100</span>)) )</a></code></pre></div>
 <pre><code>##    user  system elapsed 
-##  16.325   0.538  17.020</code></pre>
+##  16.354   0.592  17.193</code></pre>
 <div class="sourceCode" id="cb50"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb50-1" data-line-number="1">gfit2<span class="op">$</span>converged</a></code></pre></div>
 <pre><code>## [1] FALSE</code></pre>
 <div class="sourceCode" id="cb52"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb52-1" data-line-number="1">gfit2<span class="op">$</span>iter</a></code></pre></div>

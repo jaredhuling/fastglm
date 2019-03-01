@@ -62,7 +62,7 @@ bigLm default" />
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">1.0</span>
+        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">0.0.1</span>
       </span>
     </div>
 
@@ -84,9 +84,6 @@ bigLm default" />
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu">
-    <li>
-      <a href="../articles/Using-the-fastglm-Package.html">Using the fastglm Package</a>
-    </li>
     <li>
       <a href="../articles/quick-usage-guide-to-the-fastglm-package.html">Quick Usage Guide to the 'fastglm' Package</a>
     </li>
@@ -204,15 +201,15 @@ This should be a numeric vector of length equal to the number of cases</p></td>
 <span class='no'>y</span> <span class='kw'>&lt;-</span> <span class='fl'>1</span> * (<span class='fl'>0.25</span> * <span class='no'>x</span>[,<span class='fl'>1</span>] - <span class='fl'>0.25</span> * <span class='no'>x</span>[,<span class='fl'>3</span>] <span class='kw'>&gt;</span> <span class='fu'>rnorm</span>(<span class='fl'>10000</span>))
 
 <span class='fu'>system.time</span>(<span class='no'>gl1</span> <span class='kw'>&lt;-</span> <span class='fu'>glm.fit</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>()))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.634   0.031   0.678 </div><div class='input'>
+#&gt;   0.608   0.025   0.637 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf1</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>()))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.280   0.007   0.290 </div><div class='input'>
+#&gt;   0.305   0.006   0.313 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf2</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>(), <span class='kw'>method</span> <span class='kw'>=</span> <span class='fl'>1</span>))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.351   0.006   0.365 </div><div class='input'>
+#&gt;   0.248   0.003   0.252 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf3</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>(), <span class='kw'>method</span> <span class='kw'>=</span> <span class='fl'>2</span>))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.064   0.008   0.073 </div><div class='input'>
+#&gt;   0.058   0.008   0.066 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf4</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>(), <span class='kw'>method</span> <span class='kw'>=</span> <span class='fl'>3</span>))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.083   0.010   0.094 </div><div class='input'>
+#&gt;   0.068   0.010   0.079 </div><div class='input'>
 <span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf1</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 1.054712e-15</div><div class='input'><span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf2</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 1.609823e-15</div><div class='input'><span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf3</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 1.165734e-15</div><div class='input'><span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf4</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 9.992007e-16</div><div class='input'>
 
 </div></pre>
