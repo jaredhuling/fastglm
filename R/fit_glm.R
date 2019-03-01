@@ -111,7 +111,7 @@ fastglmPure <- function(x, y,
               maxit[1] > 0              
               )
     
-    nobs  <- NROW(y)
+    nobs  <- n <- NROW(y)
     nvars <- NCOL(x)
     if(is.null(family$family)) 
     {

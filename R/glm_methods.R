@@ -197,7 +197,7 @@ deviance.fastglm <- function(object, ...)
 #' @export
 family.fastglm <- function(object, ...)
 {
-    stats:::family.glm(object, ...)
+    family.glm(object, ...)
 }
 
 

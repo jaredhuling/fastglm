@@ -45,7 +45,7 @@ summary(gfit1)
 ```
 
 
-## Stability 
+## Computational stability 
 
 The `fastglm` package does not compromise computational stability for speed. In fact, for many situations where `glm()` and even `glm2()` do not converge, `fastglm()` does converge.
 

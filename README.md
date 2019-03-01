@@ -102,3 +102,157 @@ max(abs(coef(gl1) - sg3$coef))
 ```
 
     ## [1] 1.387779e-15
+
+# Stability
+
+The `fastglm` package does not compromise computational stability for
+speed. In fact, for many situations where `glm()` and even `glm2()` do
+not converge, `fastglm()` does converge.
+
+As an example, consider the following data scenario, where the response
+distribution is (mildly) misspecified, but the link function is quite
+badly misspecified. In such scenarios, the standard IRLS algorithm tends
+to have convergence issues. The `glm2()` package was designed to handle
+such cases, however, it still can have convergence issues. The
+`fastglm()` package uses a similar step-halving technique as `glm2()`,
+but it starts at better initialized values and thus tends to have better
+convergence properties in practice.
+
+``` r
+set.seed(1)
+x <- matrix(rnorm(10000 * 100), ncol = 100)
+y <- (exp(0.25 * x[,1] - 0.25 * x[,3] + 0.5 * x[,4] - 0.5 * x[,5] + rnorm(10000)) ) + 0.1
+
+
+system.time(gfit1 <- fastglm(cbind(1, x), y, family = Gamma(link = "sqrt")))
+```
+
+    ##    user  system elapsed 
+    ##   1.077   0.026   1.116
+
+``` r
+system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt")) )
+```
+
+    ##    user  system elapsed 
+    ##   3.447   0.137   3.603
+
+``` r
+system.time(gfit3 <- glm2::glm2(y~x, family = Gamma(link = "sqrt")) )
+```
+
+    ##    user  system elapsed 
+    ##   2.555   0.109   2.708
+
+``` r
+## Note that fastglm() returns estimates with the
+## largest likelihood
+logLik(gfit1)
+```
+
+    ## 'log Lik.' -16030.81 (df=102)
+
+``` r
+logLik(gfit2)
+```
+
+    ## 'log Lik.' -16704.05 (df=102)
+
+``` r
+logLik(gfit3)
+```
+
+    ## 'log Lik.' -16046.66 (df=102)
+
+``` r
+coef(gfit1)[1:5]
+```
+
+    ##  (Intercept)           X1           X2           X3           X4 
+    ##  1.429256009  0.125873599  0.005321164 -0.129389740  0.238937255
+
+``` r
+coef(gfit2)[1:5]
+```
+
+    ##   (Intercept)            x1            x2            x3            x4 
+    ##  1.431168e+00  1.251936e-01 -6.896739e-05 -1.281857e-01  2.366473e-01
+
+``` r
+coef(gfit3)[1:5]
+```
+
+    ##   (Intercept)            x1            x2            x3            x4 
+    ##  1.426864e+00  1.242616e-01 -9.860241e-05 -1.254873e-01  2.361301e-01
+
+``` r
+## check convergence of fastglm
+gfit1$converged
+```
+
+    ## [1] TRUE
+
+``` r
+## number of IRLS iterations
+gfit1$iter
+```
+
+    ## [1] 17
+
+``` r
+## now check convergence for glm()
+gfit2$converged
+```
+
+    ## [1] FALSE
+
+``` r
+gfit2$iter
+```
+
+    ## [1] 25
+
+``` r
+## check convergence for glm2()
+gfit3$converged
+```
+
+    ## [1] TRUE
+
+``` r
+gfit3$iter
+```
+
+    ## [1] 19
+
+``` r
+## increasing number of IRLS iterations for glm() does not help
+system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxit = 100)) )
+```
+
+    ##    user  system elapsed 
+    ##  15.570   0.595  16.356
+
+``` r
+gfit2$converged
+```
+
+    ## [1] FALSE
+
+``` r
+gfit2$iter
+```
+
+    ## [1] 100
+
+``` r
+logLik(gfit1)
+```
+
+    ## 'log Lik.' -16030.81 (df=102)
+
+``` r
+logLik(gfit2)
+```
+
+    ## 'log Lik.' -16054.15 (df=102)
