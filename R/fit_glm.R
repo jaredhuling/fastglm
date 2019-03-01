@@ -151,6 +151,8 @@ fastglmPure <- function(x, y,
         mustart <- mukeep
     }
     
+    y <- as.numeric(y)
+    
     coefold <- NULL
     eta <-
         if(!is.null(etastart)) {
@@ -216,6 +218,8 @@ fastglmPure <- function(x, y,
     }
     
     res$family <- family
+    res$prior.weights <- weights
+    res$y <- y
     res
 }
 
@@ -298,7 +302,7 @@ fastglm.default <- function(x, y,
         stop("'family' not recognized")
     }
     
-    y             <- as.numeric(y)
+    #y             <- as.numeric(y)
     
     ## avoid problems with 1D arrays, but keep names
     if(length(dim(y)) == 1L) 
@@ -318,9 +322,10 @@ fastglm.default <- function(x, y,
     res     <- fastglmPure(x, y, family, weights, offset, 
                            start, etastart, mustart,
                            method, tol, maxit)
+    y <- res$y
     
     res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
-    res$y         <- y
+    #res$y         <- y
     
     # from summary.glm()
     dispersion <-
@@ -353,7 +358,7 @@ fastglm.default <- function(x, y,
     rank <- res$rank
     dev  <- res$deviance
     
-    aic.model <- aic(y, nobs, res$fitted.values, weights, dev) + 2 * rank
+    aic.model <- aic(y, nobs, res$fitted.values, res$prior.weights, dev) + 2 * rank
     
     res$aic <- aic.model
     

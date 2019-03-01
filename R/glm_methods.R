@@ -135,6 +135,61 @@ residuals.fastglm <- function(object,
 }
 
 
+
+#' logLik method for fastglm fitted objects
+#'
+#' @param object fastglm fitted object
+#' @param ... not used
+#' @return Returns an object of class \code{logLik}
+#' @rdname logLik
+#' @method logLik fastglm
+#' @export
+logLik.fastglm <- function(object, ...)
+{
+    stats:::logLik.glm(object, ...)
+}
+
+#' logLik method for fastglm fitted objects
+#'
+#' @param object fastglm fitted object
+#' @param ... not used
+#' @return Returns an object of class \code{logLik}
+#' @rdname logLik
+#' @method logLik fastglm
+#' @export
+logLik.fastglm <- function(object, ...)
+{
+    stats:::logLik.glm(object, ...)
+}
+
+
+#' deviance method for fastglm fitted objects
+#'
+#' @param object fastglm fitted object
+#' @param ... not used
+#' @return The value of the deviance extracted from the object
+#' @rdname deviance
+#' @method deviance fastglm
+#' @export
+deviance.fastglm <- function(object, ...)
+{
+    stats:::deviance.glm(object, ...)
+}
+
+#' family method for fastglm fitted objects
+#'
+#' @param object fastglm fitted object
+#' @param ... not used
+#' @return returns the family of the fitted object
+#' @rdname family
+#' @method family fastglm
+#' @export
+family.fastglm <- function(object, ...)
+{
+    stats:::family.glm(object, ...)
+}
+
+
 #' #' Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
 #' #' @param object a fitted object of class inheriting from "\code{fastglm}".
 #' #' @param newdata optionally, a data frame in which to look for variables with which to predict. 
