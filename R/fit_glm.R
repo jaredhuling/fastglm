@@ -220,6 +220,7 @@ fastglmPure <- function(x, y,
     res$family <- family
     res$prior.weights <- weights
     res$y <- y
+    res$n <- n
     res
 }
 
@@ -358,7 +359,7 @@ fastglm.default <- function(x, y,
     rank <- res$rank
     dev  <- res$deviance
     
-    aic.model <- aic(y, nobs, res$fitted.values, res$prior.weights, dev) + 2 * rank
+    aic.model <- aic(y, res$n, res$fitted.values, res$prior.weights, dev) + 2 * rank
     
     res$aic <- aic.model
     

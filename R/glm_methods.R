@@ -14,6 +14,30 @@ print.fastglm <- function(x, ...)
     print(x$coefficients, digits=5)
 }
 
+logLik.glm <- function (object, ...) 
+{
+    if (!missing(...)) 
+        warning("extra arguments discarded")
+    fam <- family(object)$family
+    p <- object$rank
+    if (fam %in% c("gaussian", "Gamma", "inverse.gaussian")) 
+        p <- p + 1
+    val <- p - object$aic/2
+    attr(val, "nobs") <- sum(!is.na(object$residuals))
+    attr(val, "df") <- p
+    class(val) <- "logLik"
+    val
+}
+
+deviance.glm <- function (object, ...) 
+{
+    object$deviance
+}
+
+family.glm <- function (object, ...) 
+{
+    object$family
+}
 
 #' summary method for fastglm fitted objects
 #'
@@ -146,20 +170,7 @@ residuals.fastglm <- function(object,
 #' @export
 logLik.fastglm <- function(object, ...)
 {
-    stats:::logLik.glm(object, ...)
-}
-
-#' logLik method for fastglm fitted objects
-#'
-#' @param object fastglm fitted object
-#' @param ... not used
-#' @return Returns an object of class \code{logLik}
-#' @rdname logLik
-#' @method logLik fastglm
-#' @export
-logLik.fastglm <- function(object, ...)
-{
-    stats:::logLik.glm(object, ...)
+    logLik.glm(object, ...)
 }
 
 
@@ -173,7 +184,7 @@ logLik.fastglm <- function(object, ...)
 #' @export
 deviance.fastglm <- function(object, ...)
 {
-    stats:::deviance.glm(object, ...)
+    deviance.glm(object, ...)
 }
 
 #' family method for fastglm fitted objects

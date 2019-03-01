@@ -5,25 +5,15 @@
 \title{logLik method for fastglm fitted objects}
 \usage{
 \method{logLik}{fastglm}(object, ...)
-
-\method{logLik}{fastglm}(object, ...)
 }
 \arguments{
-\item{object}{fastglm fitted object}
-
-\item{...}{not used}
-
 \item{object}{fastglm fitted object}
 
 \item{...}{not used}
 }
 \value{
 Returns an object of class \code{logLik}
-
-Returns an object of class \code{logLik}
 }
 \description{
-logLik method for fastglm fitted objects
-
 logLik method for fastglm fitted objects
 }
