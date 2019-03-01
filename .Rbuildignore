@@ -12,3 +12,4 @@ README.html
 ^\_pkgdown\.yml$
 docs
 ^_pkgdown\.yml$
+^paper$
