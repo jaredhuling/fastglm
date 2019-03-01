@@ -1,0 +1,7 @@
+pandoc: 2.2.3.2
+pkgdown: 1.1.0.9000
+pkgdown_sha: b2798656f04ce282edea3e12734ba5588c6acd6e
+articles:
+  Using-the-fastglm-Package: Using-the-fastglm-Package.html
+  quick-usage-guide-to-the-fastglm-package: quick-usage-guide-to-the-fastglm-package.html
+
