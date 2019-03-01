@@ -215,6 +215,9 @@ fastglmPure <- function(x, y,
         {
             names(res$coefficients) <- paste0("X", 1:ncx)
         }
+    } else
+    {
+        names(res$coefficients) <- cnames
     }
     
     res$family <- family
