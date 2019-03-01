@@ -1,0 +1,101 @@
+---
+title: "Quick Usage Guide to the 'fastglm' Package"
+author: "Jared Huling"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The `fastglm` package is intended to be a **fast** *and* **stable** alternative to the `glm()` and `glm2()` functions for fitting generalized lienar models. The The `fastglm` package is compatible with `R`'s `family` objects (see `?family`). The package can be installed via
+
+```{r, eval = FALSE, echo=TRUE}
+devtools::install_github("jaredhuling/fastglm")
+```
+
+and loaded via:
+
+```{r, echo=TRUE}
+library(fastglm)
+```
+
+
+## Example
+
+Currently, the `fastglm` package does not allow for formula-based data input and is restricted to matrices. We use the following example to demonstrate the usage of `fastglm`:
+
+```{r, echo = TRUE}
+data(esoph)
+x <- model.matrix(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp)
+                                         + unclass(alcgp), data = esoph)
+y <- cbind(esoph$ncases, esoph$ncontrols)
+
+gfit1 <- fastglm(x = x, y = y, family = binomial(link = "cloglog"))
+
+summary(gfit1)
+```
+
+
+## Stability 
+
+The `fastglm` package does not compromise computational stability for speed. In fact, for many situations where `glm()` and even `glm2()` do not converge, `fastglm()` does converge.
+
+As an example, consider the following data scenario, where the response distribution is (mildly) misspecified, but the link function is quite badly misspecified. In such scenarios, the standard IRLS algorithm tends to have convergence issues. The `glm2()` package was designed to handle such cases, however, it still can have convergence issues. The `fastglm()` package uses a similar step-halving technique as `glm2()`, but it starts at better initialized values and thus tends to have better convergence properties in practice. 
+
+```{r, fig.show='hold'}
+set.seed(1)
+x <- matrix(rnorm(10000 * 100), ncol = 100)
+y <- (exp(0.25 * x[,1] - 0.25 * x[,3] + 0.5 * x[,4] - 0.5 * x[,5] + rnorm(10000)) ) + 0.1
+
+
+system.time(gfit1 <- fastglm(cbind(1, x), y, family = Gamma(link = "sqrt")))
+
+system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt")) )
+
+system.time(gfit3 <- glm2::glm2(y~x, family = Gamma(link = "sqrt")) )
+
+## Note that fastglm() returns estimates with the
+## largest likelihood
+logLik(gfit1)
+logLik(gfit2)
+logLik(gfit3)
+
+coef(gfit1)[1:5]
+coef(gfit2)[1:5]
+coef(gfit3)[1:5]
+
+## check convergence of fastglm
+gfit1$converged
+## number of IRLS iterations
+gfit1$iter
+
+## now check convergence for glm()
+gfit2$converged
+gfit2$iter
+
+## check convergence for glm2()
+gfit3$converged
+gfit3$iter
+
+
+## increasing number of IRLS iterations for glm() does not help
+system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxit = 100)) )
+
+gfit2$converged
+gfit2$iter
+
+logLik(gfit1)
+logLik(gfit2)
+
+```
+
+
