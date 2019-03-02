@@ -98,7 +98,7 @@ protected:
         
     }
     
-    virtual void solve_wls()
+    virtual void solve_wls(int iter)
     {
         
     }
@@ -158,7 +158,7 @@ public:
 
             update_w();
 
-            solve_wls();
+            solve_wls(i);
 
             update_eta();
 

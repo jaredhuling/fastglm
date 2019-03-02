@@ -36,6 +36,8 @@ set.seed(123)
 n.obs  <- 10000
 n.vars <- 100
 x <- matrix(rnorm(n.obs * n.vars, sd = 3), n.obs, n.vars)
+Sigma <- 0.99 ^ abs(outer(1:n.vars, 1:n.vars, FUN = "-"))
+x <- MASS::mvrnorm(n.obs, mu = runif(n.vars, min = -1), Sigma = Sigma)
 
 y <- 1 * ( drop(x[,1:25] %*% runif(25, min = -0.1, max = 0.10)) > rnorm(n.obs))
 
@@ -51,6 +53,7 @@ ct <- microbenchmark(
     fastglm.qr      = {gf2 <- fastglm(x, y, family = binomial(), method = 1)},
     fastglm.LLT     = {gf3 <- fastglm(x, y, family = binomial(), method = 2)},
     fastglm.LDLT    = {gf4 <- fastglm(x, y, family = binomial(), method = 3)},
+    fastglm.qr.fpiv = {gf5 <- fastglm(x, y, family = binomial(), method = 4)},
     times = 25L
 )
 
@@ -64,44 +67,50 @@ autoplot(ct, log = FALSE) + stat_summary(fun.y = median, geom = 'point', size = 
 max(abs(coef(gl1) - gf1$coef))
 ```
 
-    ## [1] 9.992007e-16
+    ## [1] 2.590289e-14
 
 ``` r
 max(abs(coef(gl1) - gf2$coef))
 ```
 
-    ## [1] 1.054712e-15
+    ## [1] 2.546921e-14
 
 ``` r
 max(abs(coef(gl1) - gf3$coef))
 ```
 
-    ## [1] 1.082467e-15
+    ## [1] 1.140078e-13
 
 ``` r
 max(abs(coef(gl1) - gf4$coef))
 ```
 
-    ## [1] 1.137979e-15
+    ## [1] 1.094264e-13
+
+``` r
+max(abs(coef(gl1) - gf5$coef))
+```
+
+    ## [1] 2.776945e-14
 
 ``` r
 # now between glm and speedglm
 max(abs(coef(gl1) - sg1$coef))
 ```
 
-    ## [1] 1.554312e-15
+    ## [1] 1.359413e-12
 
 ``` r
 max(abs(coef(gl1) - sg2$coef))
 ```
 
-    ## [1] 1.554312e-15
+    ## [1] 1.359413e-12
 
 ``` r
 max(abs(coef(gl1) - sg3$coef))
 ```
 
-    ## [1] 1.387779e-15
+    ## [1] 1.191977e-12
 
 # Stability
 
@@ -128,21 +137,21 @@ system.time(gfit1 <- fastglm(cbind(1, x), y, family = Gamma(link = "sqrt")))
 ```
 
     ##    user  system elapsed 
-    ##   1.077   0.026   1.116
+    ##   1.081   0.028   1.111
 
 ``` r
 system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt")) )
 ```
 
     ##    user  system elapsed 
-    ##   3.447   0.137   3.603
+    ##   4.196   0.166   4.380
 
 ``` r
 system.time(gfit3 <- glm2::glm2(y~x, family = Gamma(link = "sqrt")) )
 ```
 
     ##    user  system elapsed 
-    ##   2.555   0.109   2.708
+    ##   2.767   0.106   2.894
 
 ``` r
 ## Note that fastglm() returns estimates with the
@@ -231,7 +240,7 @@ system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxi
 ```
 
     ##    user  system elapsed 
-    ##  15.570   0.595  16.356
+    ##  14.285   0.602  15.133
 
 ``` r
 gfit2$converged

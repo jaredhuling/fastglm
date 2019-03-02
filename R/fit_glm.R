@@ -121,9 +121,9 @@ fastglmPure <- function(x, y,
     
     if( any(weights < 0) ) stop("negative weights not allowed")
     
-    if (method[1] > 3L)
+    if (method[1] > 5L || method[1] < 0)
     {
-        stop("Invalid decomposition method specified. Choose from 0, 1, 2, or 3.")
+        stop("Invalid decomposition method specified. Choose from 0, 1, 2, 3, or 4.")
     }
     
     cnames <- colnames(x)

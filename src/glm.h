@@ -4,11 +4,13 @@
 #include "glm_base.h"
 
 using Eigen::ArrayXd;
+using Eigen::FullPivHouseholderQR;
 using Eigen::ColPivHouseholderQR;
 using Eigen::ComputeThinU;
 using Eigen::ComputeThinV;
 using Eigen::HouseholderQR;
 using Eigen::JacobiSVD;
+using Eigen::BDCSVD;
 using Eigen::LDLT;
 using Eigen::LLT;
 using Eigen::Lower;
@@ -62,7 +64,9 @@ protected:
     int rank;
     
     
+    FullPivHouseholderQR<MatrixXd> FPQR;
     ColPivHouseholderQR<MatrixXd> PQR;
+    BDCSVD<MatrixXd> bSVD;
     HouseholderQR<MatrixXd> QR;
     LLT<MatrixXd>  Ch;
     LDLT<MatrixXd> ChD;
@@ -72,6 +76,7 @@ protected:
     
     Permutation                  Pmat;
     MatrixXd                     Rinv;
+    VectorXd                     effects;
     
     RealScalar threshold() const 
     {
@@ -121,7 +126,42 @@ protected:
     virtual void update_eta()
     {
         // eta <- drop(x %*% start)
-        eta = X * beta + offset;
+
+        if (type == 0)
+        {
+            //VectorXd effects(PQR.householderQ().adjoint() * y);
+            if (rank == nvars) 
+            {
+                eta = X * beta + offset;
+            } else
+            {
+                //eta = PQR.householderQ() * effects + offset;
+                eta = X * beta + offset;
+            }
+        } else if (type == 1)
+        {
+            eta = X * beta + offset;
+        } else if (type == 2)
+        {
+            eta = X * beta + offset;
+        } else if (type == 3)
+        {
+            eta = X * beta + offset;
+        } else if (type == 4)
+        {
+            if (rank == nvars)
+            {
+                eta = X * beta + offset;
+            } else
+            {
+                //std::cout << FPQR.matrixQ().cols() << " " << effects.size() << std::endl;
+                //eta = FPQR.matrixQ() * effects + offset;
+                eta = X * beta + offset;
+            }
+        } else
+        {
+            eta = X * beta + offset;
+        }
     }
     
     virtual void update_z()
@@ -232,7 +272,7 @@ protected:
     
     // much of solve_wls() comes directly
     // from the source code of the RcppEigen package
-    virtual void solve_wls()
+    virtual void solve_wls(int iter)
     {
         //lm ans(do_lm(X, Y, w, type));
         //wls ans(ColPivQR(X, z, w));
@@ -257,13 +297,13 @@ protected:
                 Rinv = (PQR.matrixQR().topLeftCorner(rank, rank).
                                                       triangularView<Upper>().
                                                       solve(MatrixXd::Identity(rank, rank)));
-                VectorXd                  effects(PQR.householderQ().adjoint() * (z.array() * w.array()).matrix());
+                effects = PQR.householderQ().adjoint() * (z.array() * w.array()).matrix();
                 beta.head(rank)                 = Rinv * effects.head(rank);
                 beta                            = Pmat * beta;
                 
                 // create fitted values from effects
                 // (can't use X*m_coef if X is rank-deficient)
-                //effects.tail(m_n - rank).setZero();
+                effects.tail(nobs - rank).setZero();
                 //m_fitted                          = PQR.householderQ() * effects;
                 //m_se.head(m_r)                    = Rinv.rowwise().norm();
                 //m_se                              = Pmat * m_se;
@@ -292,7 +332,57 @@ protected:
             beta            = ChD.solve((w.asDiagonal() * X).adjoint() * (z.array() * w.array()).matrix());
             //m_fitted          = X * m_coef;
             //m_se              = Ch.solve(I_p()).diagonal().array().sqrt();
-        }
+        } else if (type == 4)
+        {
+            FPQR.compute(w.asDiagonal() * X); // decompose the model matrix
+            Pmat = (FPQR.colsPermutation());
+            rank                               = FPQR.rank();
+            if (rank == nvars) 
+            {	// full rank case
+                beta     = FPQR.solve( (z.array() * w.array()).matrix() );
+                // m_fitted   = X * m_coef;
+                //m_se       = Pmat * PQR.matrixQR().topRows(m_p).
+                //triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
+            } else 
+            {
+                Rinv = (FPQR.matrixQR().topLeftCorner(rank, rank).
+                            triangularView<Upper>().
+                            solve(MatrixXd::Identity(rank, rank)));
+                effects = FPQR.matrixQ().adjoint() * (z.array() * w.array()).matrix();
+                //std::cout << effects.transpose() << std::endl;
+                beta.head(rank)                 = Rinv * effects.head(rank);
+                beta                            = Pmat * beta;
+                
+                // create fitted values from effects
+                // (can't use X*m_coef if X is rank-deficient)
+                effects.tail(nobs - rank).setZero(); 
+                //m_fitted                          = PQR.householderQ() * effects;
+                //m_se.head(m_r)                    = Rinv.rowwise().norm();
+                //m_se                              = Pmat * m_se;
+            }
+        } else if (type == 5)
+        {
+            bSVD.compute(w.asDiagonal() * X, ComputeThinU | ComputeThinV);
+            
+            rank                               = bSVD.rank();
+            
+            // if (rank == nvars) 
+            // {	// full rank case
+            //     beta                     = bSVD.solve((z.array() * w.array()).matrix());
+            // } else
+            // {
+            //     
+            // }
+            
+            beta                     = bSVD.solve((z.array() * w.array()).matrix());
+            
+            //FIXME: Check on the permutation in the LDLT and incorporate it in
+            //the coefficients and the standard error computation.
+            //	m_coef            = Ch.matrixL().adjoint().
+            //	    solve(Dplus(D) * Ch.matrixL().solve(X.adjoint() * y));
+            //m_fitted          = X * m_coef;
+            //m_se              = Ch.solve(I_p()).diagonal().array().sqrt();
+        } 
         // } else if (type == 4)
         // {
         // //     UDV.compute((w.asDiagonal() * X).jacobiSvd(ComputeThinU|ComputeThinV));
@@ -340,6 +430,24 @@ protected:
         } else if (type == 3)
         {
             se              = ChD.solve(MatrixXd::Identity(nvars, nvars)).diagonal().array().sqrt();
+        } else if (type == 4)
+        {
+            if (rank == nvars) 
+            {	// full rank case
+                se       = Pmat * FPQR.matrixQR().topRows(nvars).
+                triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
+                return;
+            } else 
+            {
+                // create fitted values from effects
+                // (can't use X*m_coef if X is rank-deficient)
+                se.head(rank)                    = Rinv.rowwise().norm();
+                se                               = Pmat * se;
+            }
+        } else if (type == 5)
+        {
+            Rinv = (bSVD.solve(MatrixXd::Identity(nvars, nvars)));
+            se                    = Rinv.rowwise().norm();
         }
         
     }
@@ -405,6 +513,19 @@ public:
         rank = nvars;
     }
     
+    virtual VectorXd get_beta()
+    {
+        if (type == 0 || type == 4)
+        {
+            if (rank != nvars)
+            {
+                //beta.head(rank)                 = Rinv * effects.head(rank);
+                //beta = Pmat * beta;
+            }
+        }
+        
+        return beta;
+    }
     
     virtual VectorXd get_weights()  { return weights; }
     virtual int get_rank()          { return rank; }
