@@ -29,7 +29,8 @@ This should be a numeric vector of length equal to the number of cases}
 \item{mustart}{values for the vector of means.}
 
 \item{method}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
-2 for the LLT Cholesky, or 3 for the LDLT Cholesky}
+2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and 
+Conquer SVD}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
 

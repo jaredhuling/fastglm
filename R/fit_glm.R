@@ -14,7 +14,8 @@
 #' @param etastart starting values for the linear predictor.
 #' @param mustart values for the vector of means.
 #' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
-#' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
+#' 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and 
+#' Conquer SVD
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
 #' @return A list with the elements
@@ -123,7 +124,7 @@ fastglmPure <- function(x, y,
     
     if (method[1] > 5L || method[1] < 0)
     {
-        stop("Invalid decomposition method specified. Choose from 0, 1, 2, 3, or 4.")
+        stop("Invalid decomposition method specified. Choose from 0, 1, 2, 3, 4, or 5.")
     }
     
     cnames <- colnames(x)
