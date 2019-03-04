@@ -201,95 +201,56 @@ family.fastglm <- function(object, ...)
 }
 
 
-#' #' Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
-#' #' @param object a fitted object of class inheriting from "\code{fastglm}".
-#' #' @param newdata optionally, a data frame in which to look for variables with which to predict. 
-#' #' If omitted, the fitted linear predictors are used.
-#' #' @param type the type of prediction required. The default is on the scale of the linear predictors; 
-#' #' the alternative "\code{response}" is on the scale of the response variable. Thus for a default binomial 
-#' #' model the default predictions are of log-odds (probabilities on logit scale) and \code{type = "response"}
-#' #'  gives the predicted probabilities. The "\code{terms}" option returns a matrix giving the fitted values of each 
-#' #'  term in the model formula on the linear predictor scale.
-#' #'  
-#' #' The value of this argument can be abbreviated.
-#' #' @param se.fit logical switch indicating if standard errors are required.
-#' #' @param dispersion the dispersion of the GLM fit to be assumed in computing the standard errors. 
-#' #' If omitted, that returned by \code{summary} applied to the object is used.
-#' #' @param terms with \code{type = "terms"} by default all terms are returned. A character vector specifies 
-#' #' which terms are to be returned
-#' #' @param na.action function determining what should be done with missing values in \code{newdata}. 
-#' #' The default is to predict \code{NA}.
-#' #' @param ... further arguments passed to or from other methods.
-#' #' @export
-#' predict.fastglm <- function(object, 
-#'                             newdata = NULL, 
-#'                             type = c("link", "response", "terms"),
-#'                             se.fit = FALSE, 
-#'                             dispersion = NULL, 
-#'                             terms = NULL,
-#'                             na.action = na.pass, ...)
-#' {
-#'     class(object) <- c("glm", "lm")
-#'     predict.glm(object, newdata, type, se.fit, dispersion, terms, na.action, ...)
-#' }
-#' 
-#' 
-#' predict_fastglm_lm <- function(object, se.fit, scale = 1, type, terms, na.action)
-#' {
-#'     
-#' }
-#' 
-#' 
+#' Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
+#' @param object a fitted object of class inheriting from "\code{fastglm}".
+#' @param newdata a matrix to be used for prediction
+#' @param type the type of prediction required. The default is on the scale of the linear predictors;
+#' the alternative "\code{response}" is on the scale of the response variable. Thus for a default binomial
+#' model the default predictions are of log-odds (probabilities on logit scale) and \code{type = "response"}
+#'  gives the predicted probabilities. The "\code{terms}" option returns a matrix giving the fitted values of each
+#'  term in the model formula on the linear predictor scale.
+#'
+#' The value of this argument can be abbreviated.
+#' @param se.fit logical switch indicating if standard errors are required.
+#' @param dispersion the dispersion of the GLM fit to be assumed in computing the standard errors.
+#' If omitted, that returned by \code{summary} applied to the object is used.
+#' @param ... further arguments passed to or from other methods.
+#' @export
+predict.fastglm <- function(object,
+                            newdata = NULL,
+                            type = c("link", "response"),
+                            se.fit = FALSE,
+                            dispersion = NULL, ...)
+{
+    type <- match.arg(type)
+    
+    eta <- predict_fastglm_lm(object, newdata, se.fit, scale = 1, ...)
+    if (type == "response")
+    {
+        eta <- family(object)$linkinv(eta)
+    }
+    eta
+}
 
-## from base R
-# predict_glm <- function (object, newdata = NULL, 
-#                          type = c("link", "response", "terms"), 
-#                          se.fit = FALSE, 
-#                          dispersion = NULL, 
-#                          terms = NULL, 
-#                          na.action = na.pass, ...) 
-# {
-#     type <- match.arg(type)
-#     na.act <- object$na.action
-#     object$na.action <- NULL
-#     if (!se.fit) {
-#         if (missing(newdata)) {
-#             pred <- switch(type, link = object$linear.predictors, 
-#                            response = object$fitted.values, terms = predict.lm(object, 
-#                                                                                se.fit = se.fit, scale = 1, type = "terms", 
-#                                                                                terms = terms))
-#             if (!is.null(na.act)) 
-#                 pred <- napredict(na.act, pred)
-#         }
-#         else {
-#             pred <- predict.lm(object, newdata, se.fit, scale = 1, 
-#                                type = ifelse(type == "link", "response", type), 
-#                                terms = terms, na.action = na.action)
-#             switch(type, response = {
-#                 pred <- family(object)$linkinv(pred)
-#             }, link = , terms = )
-#         }
-#     }
-#     else {
-#         if (inherits(object, "survreg")) 
-#             dispersion <- 1
-#         if (is.null(dispersion) || dispersion == 0) 
-#             dispersion <- summary(object, dispersion = dispersion)$dispersion
-#         residual.scale <- as.vector(sqrt(dispersion))
-#         pred <- predict.lm(object, newdata, se.fit, scale = residual.scale, 
-#                            type = ifelse(type == "link", "response", type), 
-#                            terms = terms, na.action = na.action)
-#         fit <- pred$fit
-#         se.fit <- pred$se.fit
-#         switch(type, response = {
-#             se.fit <- se.fit * abs(family(object)$mu.eta(fit))
-#             fit <- family(object)$linkinv(fit)
-#         }, link = , terms = )
-#         if (missing(newdata) && !is.null(na.act)) {
-#             fit <- napredict(na.act, fit)
-#             se.fit <- napredict(na.act, se.fit)
-#         }
-#         pred <- list(fit = fit, se.fit = se.fit, residual.scale = residual.scale)
-#     }
-#     pred
-# }
+
+predict_fastglm_lm <- function(object, newdata, se.fit = FALSE, scale = 1)
+{
+    if (se.fit)
+    {
+        stop("confidence/prediction intervals not available yet")
+    }
+    dims <- dim(newdata)
+    if (is.null(dims))
+    {
+        newdata <- as.matrix(newdata)
+        dims <- dim(newdata)
+    }
+    beta <- object$coefficients
+    
+    if (dims[2] != length(beta))
+    {
+        stop("newdata provided does not match fitted model 'object'")
+    }
+    eta <- drop(newdata %*% beta)
+    eta
+}
