@@ -137,21 +137,21 @@ system.time(gfit1 <- fastglm(cbind(1, x), y, family = Gamma(link = "sqrt")))
 ```
 
     ##    user  system elapsed 
-    ##   1.081   0.028   1.111
+    ##   0.823   0.027   0.851
 
 ``` r
 system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt")) )
 ```
 
     ##    user  system elapsed 
-    ##   4.196   0.166   4.380
+    ##   2.976   0.120   3.103
 
 ``` r
 system.time(gfit3 <- glm2::glm2(y~x, family = Gamma(link = "sqrt")) )
 ```
 
     ##    user  system elapsed 
-    ##   2.767   0.106   2.894
+    ##   2.070   0.088   2.166
 
 ``` r
 ## Note that fastglm() returns estimates with the
@@ -235,12 +235,12 @@ gfit3$iter
     ## [1] 19
 
 ``` r
-## increasing number of IRLS iterations for glm() does not help
+## increasing number of IRLS iterations for glm() does not help that much
 system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxit = 100)) )
 ```
 
     ##    user  system elapsed 
-    ##  14.285   0.602  15.133
+    ##  11.118   0.427  11.567
 
 ``` r
 gfit2$converged

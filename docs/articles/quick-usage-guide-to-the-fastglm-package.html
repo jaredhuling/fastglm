@@ -72,7 +72,7 @@
       <h1>Quick Usage Guide to the ‘fastglm’ Package</h1>
                         <h4 class="author">Jared Huling</h4>
             
-            <h4 class="date">2019-03-01</h4>
+            <h4 class="date">2019-03-04</h4>
       
       
       <div class="hidden name"><code>quick-usage-guide-to-the-fastglm-package.Rmd</code></div>
@@ -138,7 +138,7 @@
 <a class="sourceLine" id="cb4-5" data-line-number="5"></a>
 <a class="sourceLine" id="cb4-6" data-line-number="6"><span class="kw">system.time</span>(gfit1 &lt;-<span class="st"> </span><span class="kw"><a href="../reference/fastglm.html">fastglm</a></span>(<span class="kw">cbind</span>(<span class="dv">1</span>, x), y, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>)))</a>
 <a class="sourceLine" id="cb4-7" data-line-number="7"><span class="co">#&gt;    user  system elapsed </span></a>
-<a class="sourceLine" id="cb4-8" data-line-number="8"><span class="co">#&gt;   1.093   0.035   1.134</span></a>
+<a class="sourceLine" id="cb4-8" data-line-number="8"><span class="co">#&gt;   0.743   0.028   0.773</span></a>
 <a class="sourceLine" id="cb4-9" data-line-number="9"></a>
 <a class="sourceLine" id="cb4-10" data-line-number="10"><span class="kw">system.time</span>(gfit2 &lt;-<span class="st"> </span><span class="kw">glm</span>(y<span class="op">~</span>x, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>)) )</a>
 <a class="sourceLine" id="cb4-11" data-line-number="11"><span class="co">#&gt; Warning: step size truncated: out of bounds</span></a>
@@ -174,7 +174,7 @@
 <a class="sourceLine" id="cb4-41" data-line-number="41"><span class="co">#&gt; Warning: step size truncated: out of bounds</span></a>
 <a class="sourceLine" id="cb4-42" data-line-number="42"><span class="co">#&gt; Warning: glm.fit: algorithm did not converge</span></a>
 <a class="sourceLine" id="cb4-43" data-line-number="43"><span class="co">#&gt;    user  system elapsed </span></a>
-<a class="sourceLine" id="cb4-44" data-line-number="44"><span class="co">#&gt;   3.846   0.109   3.977</span></a>
+<a class="sourceLine" id="cb4-44" data-line-number="44"><span class="co">#&gt;   2.857   0.091   2.952</span></a>
 <a class="sourceLine" id="cb4-45" data-line-number="45"></a>
 <a class="sourceLine" id="cb4-46" data-line-number="46"><span class="kw">system.time</span>(gfit3 &lt;-<span class="st"> </span>glm2<span class="op">::</span><span class="kw"><a href="http://www.rdocumentation.org/packages/glm2/topics/glm2">glm2</a></span>(y<span class="op">~</span>x, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>)) )</a>
 <a class="sourceLine" id="cb4-47" data-line-number="47"><span class="co">#&gt; Warning: step size truncated: out of bounds</span></a>
@@ -205,7 +205,7 @@
 <a class="sourceLine" id="cb4-72" data-line-number="72"></a>
 <a class="sourceLine" id="cb4-73" data-line-number="73"><span class="co">#&gt; Warning: step size truncated due to increasing deviance</span></a>
 <a class="sourceLine" id="cb4-74" data-line-number="74"><span class="co">#&gt;    user  system elapsed </span></a>
-<a class="sourceLine" id="cb4-75" data-line-number="75"><span class="co">#&gt;   2.997   0.088   3.106</span></a>
+<a class="sourceLine" id="cb4-75" data-line-number="75"><span class="co">#&gt;   2.107   0.069   2.181</span></a>
 <a class="sourceLine" id="cb4-76" data-line-number="76"></a>
 <a class="sourceLine" id="cb4-77" data-line-number="77"><span class="co">## Note that fastglm() returns estimates with the</span></a>
 <a class="sourceLine" id="cb4-78" data-line-number="78"><span class="co">## largest likelihood</span></a>
@@ -246,7 +246,7 @@
 <a class="sourceLine" id="cb4-113" data-line-number="113"><span class="co">#&gt; [1] 19</span></a>
 <a class="sourceLine" id="cb4-114" data-line-number="114"></a>
 <a class="sourceLine" id="cb4-115" data-line-number="115"></a>
-<a class="sourceLine" id="cb4-116" data-line-number="116"><span class="co">## increasing number of IRLS iterations for glm() does not help</span></a>
+<a class="sourceLine" id="cb4-116" data-line-number="116"><span class="co">## increasing number of IRLS iterations for glm() does not help that much</span></a>
 <a class="sourceLine" id="cb4-117" data-line-number="117"><span class="kw">system.time</span>(gfit2 &lt;-<span class="st"> </span><span class="kw">glm</span>(y<span class="op">~</span>x, <span class="dt">family =</span> <span class="kw">Gamma</span>(<span class="dt">link =</span> <span class="st">"sqrt"</span>), <span class="dt">control =</span> <span class="kw">list</span>(<span class="dt">maxit =</span> <span class="dv">100</span>)) )</a>
 <a class="sourceLine" id="cb4-118" data-line-number="118"><span class="co">#&gt; Warning: step size truncated: out of bounds</span></a>
 <a class="sourceLine" id="cb4-119" data-line-number="119"><span class="co">#&gt; Warning: step size truncated: out of bounds</span></a>
@@ -379,7 +379,7 @@
 <a class="sourceLine" id="cb4-246" data-line-number="246"><span class="co">#&gt; Warning: glm.fit: algorithm did not converge</span></a>
 <a class="sourceLine" id="cb4-247" data-line-number="247"><span class="co">#&gt; Warning: glm.fit: algorithm stopped at boundary value</span></a>
 <a class="sourceLine" id="cb4-248" data-line-number="248"><span class="co">#&gt;    user  system elapsed </span></a>
-<a class="sourceLine" id="cb4-249" data-line-number="249"><span class="co">#&gt;  15.285   0.457  15.831</span></a>
+<a class="sourceLine" id="cb4-249" data-line-number="249"><span class="co">#&gt;  10.944   0.376  11.344</span></a>
 <a class="sourceLine" id="cb4-250" data-line-number="250"></a>
 <a class="sourceLine" id="cb4-251" data-line-number="251">gfit2<span class="op">$</span>converged</a>
 <a class="sourceLine" id="cb4-252" data-line-number="252"><span class="co">#&gt; [1] FALSE</span></a>

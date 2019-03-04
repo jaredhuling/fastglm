@@ -124,7 +124,7 @@ gfit3$converged
 gfit3$iter
 
 
-## increasing number of IRLS iterations for glm() does not help
+## increasing number of IRLS iterations for glm() does not help that much
 system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxit = 100)) )
 
 gfit2$converged
