@@ -6,9 +6,9 @@
 ## Test environments
 
 * Windows Server 2008 R2 SP1 - x86_64-w64-mingw32 (64-bit) - (unstable) (2019-02-24 r76155)
-* Debian Linux, (R-devel)
+* Debian Linux - x86_64-pc-linux-gnu (64-bit) - (unstable) (2019-03-05 r76199)
 * local Mac OSX Sierra (R 3.5.2)
-* Ubuntu Ubuntu 14.04.5 LTS (on travis-ci), (R 3.5.2)
+* Ubuntu 14.04.5 LTS (on travis-ci), (R 3.5.2)
 
 ## R CMD check results
 
