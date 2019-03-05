@@ -12,12 +12,10 @@
 
 ## R CMD check results
 
-* DONE
-Status: OK
 
+  ── R CMD check results ────────────────────────────────────── fastglm 0.0.1 ────
+Duration: 3m 7.5s
 
-
-R CMD check results
 0 errors | 0 warnings | 0 notes
 
 R CMD check succeeded
