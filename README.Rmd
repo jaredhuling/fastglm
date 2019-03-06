@@ -13,7 +13,7 @@ opts_chunk$set(message = FALSE, warning=FALSE)
 
 # Overview of 'fastglm'
 
-The 'fastglm' package is a re-write of `glm()` using `RcppEigen` designed to be computationally efficient.
+The 'fastglm' package is a re-write of `glm()` using `RcppEigen` designed to be computationally efficient and algorithmically stable.
 
 
 
@@ -69,16 +69,17 @@ ct <- microbenchmark(
 autoplot(ct, log = FALSE) + stat_summary(fun.y = median, geom = 'point', size = 2)
 
 # comparison of estimates
-max(abs(coef(gl1) - gf1$coef))
-max(abs(coef(gl1) - gf2$coef))
-max(abs(coef(gl1) - gf3$coef))
-max(abs(coef(gl1) - gf4$coef))
-max(abs(coef(gl1) - gf5$coef))
+c(glm_vs_fastglm_qrcpiv = max(abs(coef(gl1) - gf1$coef)),
+  glm_vs_fastglm_qr     = max(abs(coef(gl1) - gf2$coef)),
+  glm_vs_fastglm_qrfpiv = max(abs(coef(gl1) - gf5$coef)),
+  glm_vs_fastglm_LLT    = max(abs(coef(gl1) - gf3$coef)),
+  glm_vs_fastglm_LDLT   = max(abs(coef(gl1) - gf4$coef)))
+
 
 # now between glm and speedglm
-max(abs(coef(gl1) - sg1$coef))
-max(abs(coef(gl1) - sg2$coef))
-max(abs(coef(gl1) - sg3$coef))
+c(glm_vs_speedglm_eigen = max(abs(coef(gl1) - sg1$coef)),
+  glm_vs_speedglm_Chol  = max(abs(coef(gl1) - sg2$coef)),
+  glm_vs_speedglm_qr    = max(abs(coef(gl1) - sg3$coef)))
 
 ```
 
@@ -100,32 +101,38 @@ system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt")) )
 
 system.time(gfit3 <- glm2::glm2(y~x, family = Gamma(link = "sqrt")) )
 
+system.time(gfit4 <- speedglm(y~x, family = Gamma(link = "sqrt")))
+
+## speedglm appears to diverge
+system.time(gfit5 <- speedglm(y~x, family = Gamma(link = "sqrt"), maxit = 500))
+
 ## Note that fastglm() returns estimates with the
 ## largest likelihood
-logLik(gfit1)
-logLik(gfit2)
-logLik(gfit3)
 
-coef(gfit1)[1:5]
-coef(gfit2)[1:5]
-coef(gfit3)[1:5]
+c(fastglm = logLik(gfit1), glm = logLik(gfit2), glm2 = logLik(gfit3),
+  speedglm = logLik(gfit4), speedglm500 = logLik(gfit5))
 
-## check convergence of fastglm
-gfit1$converged
-## number of IRLS iterations
-gfit1$iter
+rbind(fastglm     = coef(gfit1)[1:5],
+      glm         = coef(gfit2)[1:5],
+      glm2        = coef(gfit3)[1:5],
+      speedglm    = coef(gfit4)[1:5],
+      speedglm500 = coef(gfit5)[1:5])
+
+## check convergence of fastglm and #iterations
+# 1 means converged, 0 means not converged
+c(gfit1$converged, gfit1$iter)
 
 ## now check convergence for glm()
-gfit2$converged
-gfit2$iter
+c(gfit2$converged, gfit2$iter)
 
 ## check convergence for glm2()
-gfit3$converged
-gfit3$iter
+c(gfit3$converged, gfit3$iter)
 
+## check convergence for speedglm()
+c(gfit4$convergence, gfit4$iter, gfit5$convergence, gfit5$iter)
 
 ## increasing number of IRLS iterations for glm() does not help that much
-system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxit = 100)) )
+system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxit = 1000)) )
 
 gfit2$converged
 gfit2$iter
