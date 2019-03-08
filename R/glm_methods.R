@@ -56,7 +56,7 @@ family.glm <- function (object, ...)
 #' 
 #' fit <- fastglm(x, y, family = binomial())
 #' 
-#' #summary(fit)
+#' summary(fit)
 #'
 #'
 summary.fastglm <- function(object, dispersion = NULL, ...)
