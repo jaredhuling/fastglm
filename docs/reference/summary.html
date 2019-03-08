@@ -148,7 +148,39 @@ Either a single numerical value or <code>NULL</code> (the default), when it is i
 
 <span class='no'>fit</span> <span class='kw'>&lt;-</span> <span class='fu'><a href='fastglm.html'>fastglm</a></span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>())
 
-<span class='co'>#summary(fit)</span></div></pre>
+<span class='fu'>summary</span>(<span class='no'>fit</span>)</div><div class='output co'>#&gt; 
+#&gt; Call:
+#&gt; fastglm.default(x = x, y = y, family = binomial())
+#&gt; 
+#&gt; Deviance Residuals: 
+#&gt;     Min       1Q   Median       3Q      Max  
+#&gt; -2.0129  -1.1218  -0.6275   1.1112   2.0918  
+#&gt; 
+#&gt; Coefficients:
+#&gt;      Estimate Std. Error z value Pr(&gt;|z|)    
+#&gt; X1   0.424298   0.021406  19.821   &lt;2e-16 ***
+#&gt; X2  -0.029000   0.020471  -1.417    0.157    
+#&gt; X3  -0.364584   0.021316 -17.103   &lt;2e-16 ***
+#&gt; X4   0.007105   0.020891   0.340    0.734    
+#&gt; X5  -0.003902   0.020628  -0.189    0.850    
+#&gt; X6   0.026920   0.020796   1.295    0.195    
+#&gt; X7  -0.009822   0.020591  -0.477    0.633    
+#&gt; X8   0.006501   0.020869   0.311    0.755    
+#&gt; X9   0.000051   0.020562   0.002    0.998    
+#&gt; X10  0.022796   0.020788   1.097    0.273    
+#&gt; ---
+#&gt; Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+#&gt; 
+#&gt; (Dispersion parameter for binomial family taken to be 1)
+#&gt; 
+#&gt;     Null deviance: 13863  on 10000  degrees of freedom
+#&gt; Residual deviance: 13150  on  9990  degrees of freedom
+#&gt; AIC: 13170
+#&gt; 
+#&gt; Number of Fisher Scoring iterations: 4
+#&gt; </div><div class='input'>
+
+</div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
     <h2>Contents</h2>

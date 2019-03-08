@@ -1,4 +1,5 @@
 
+[![version](http://www.r-pkg.org/badges/version/fastglm)](https://cran.r-project.org/package=fastglm)
 [![Build
 Status](https://travis-ci.org/jaredhuling/fastglm.svg?branch=master)](https://travis-ci.org/jaredhuling/fastglm)
 
@@ -111,28 +112,28 @@ system.time(gfit1 <- fastglm(cbind(1, x), y, family = Gamma(link = "sqrt")))
 ```
 
     ##    user  system elapsed 
-    ##   0.811   0.021   0.839
+    ##   0.783   0.022   0.807
 
 ``` r
 system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt")) )
 ```
 
     ##    user  system elapsed 
-    ##   2.937   0.134   3.115
+    ##   3.035   0.121   3.166
 
 ``` r
 system.time(gfit3 <- glm2::glm2(y~x, family = Gamma(link = "sqrt")) )
 ```
 
     ##    user  system elapsed 
-    ##   2.087   0.100   2.220
+    ##   2.117   0.084   2.205
 
 ``` r
 system.time(gfit4 <- speedglm(y~x, family = Gamma(link = "sqrt")))
 ```
 
     ##    user  system elapsed 
-    ##   1.686   0.050   1.740
+    ##   1.757   0.048   1.807
 
 ``` r
 ## speedglm appears to diverge
@@ -140,7 +141,7 @@ system.time(gfit5 <- speedglm(y~x, family = Gamma(link = "sqrt"), maxit = 500))
 ```
 
     ##    user  system elapsed 
-    ##  34.142   1.065  35.385
+    ##  37.776   1.205  39.272
 
 ``` r
 ## Note that fastglm() returns estimates with the
@@ -203,7 +204,7 @@ system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxi
 ```
 
     ##    user  system elapsed 
-    ## 108.178   4.134 113.147
+    ## 116.122   4.148 120.833
 
 ``` r
 gfit2$converged

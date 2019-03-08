@@ -201,15 +201,15 @@ This should be a numeric vector of length equal to the number of cases</p></td>
 <span class='no'>y</span> <span class='kw'>&lt;-</span> <span class='fl'>1</span> * (<span class='fl'>0.25</span> * <span class='no'>x</span>[,<span class='fl'>1</span>] - <span class='fl'>0.25</span> * <span class='no'>x</span>[,<span class='fl'>3</span>] <span class='kw'>&gt;</span> <span class='fu'>rnorm</span>(<span class='fl'>10000</span>))
 
 <span class='fu'>system.time</span>(<span class='no'>gl1</span> <span class='kw'>&lt;-</span> <span class='fu'>glm.fit</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>()))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.418   0.015   0.434 </div><div class='input'>
+#&gt;   0.452   0.019   0.474 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf1</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>()))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.168   0.005   0.184 </div><div class='input'>
+#&gt;   0.210   0.006   0.223 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf2</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>(), <span class='kw'>method</span> <span class='kw'>=</span> <span class='fl'>1</span>))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.208   0.003   0.217 </div><div class='input'>
+#&gt;   0.250   0.005   0.265 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf3</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>(), <span class='kw'>method</span> <span class='kw'>=</span> <span class='fl'>2</span>))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.060   0.008   0.068 </div><div class='input'>
+#&gt;   0.065   0.009   0.074 </div><div class='input'>
 <span class='fu'>system.time</span>(<span class='no'>gf4</span> <span class='kw'>&lt;-</span> <span class='fu'>fastglm</span>(<span class='no'>x</span>, <span class='no'>y</span>, <span class='kw'>family</span> <span class='kw'>=</span> <span class='fu'>binomial</span>(), <span class='kw'>method</span> <span class='kw'>=</span> <span class='fl'>3</span>))</div><div class='output co'>#&gt;    user  system elapsed 
-#&gt;   0.057   0.008   0.065 </div><div class='input'>
+#&gt;   0.065   0.008   0.073 </div><div class='input'>
 <span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf1</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 1.054712e-15</div><div class='input'><span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf2</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 1.609823e-15</div><div class='input'><span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf3</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 1.165734e-15</div><div class='input'><span class='fu'>max</span>(<span class='fu'>abs</span>(<span class='fu'>coef</span>(<span class='no'>gl1</span>) - <span class='no'>gf4</span>$<span class='no'>coef</span>))</div><div class='output co'>#&gt; [1] 9.992007e-16</div><div class='input'>
 
 </div></pre>
