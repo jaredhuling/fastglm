@@ -17,7 +17,8 @@ BugReports: https://github.com/jaredhuling/fastglm/issues
 License: GPL (>= 2)
 Encoding: UTF-8
 Imports: 
-    Rcpp (>= 0.12.13)
+    Rcpp (>= 0.12.13),
+    methods
 Depends:
     bigmemory
 LinkingTo:
