@@ -13,3 +13,5 @@ README.html
 docs
 ^_pkgdown\.yml$
 ^paper$
+^.*\.*.bk$
+^.*\.*.desc$

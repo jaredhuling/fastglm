@@ -5,7 +5,8 @@
 src/*.o
 src/*.so
 src/*.dll
-fastglm.Rproj
 inst/doc
 .DS_Store
 
+*.bk
+*.desc
