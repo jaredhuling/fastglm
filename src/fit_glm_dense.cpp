@@ -47,9 +47,12 @@ List fastglm(Rcpp::NumericMatrix Xs,
     // instantiate fitting class
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
     
+    bool is_big_matrix = false;
+    
     glm_solver = new glm(X, y, weights, offset, 
                          var, mu_eta, linkinv, dev_resids, 
-                         valideta, validmu, tol, maxit, type);
+                         valideta, validmu, tol, maxit, type,
+                         is_big_matrix);
     
     // initialize parameters
     glm_solver->init_parms(beta_init, mu_init, eta_init);
@@ -149,9 +152,12 @@ List bigfastglm(XPtr<BigMatrix> Xs,
     // instantiate fitting class
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
     
+    bool is_big_matrix = true;
+    
     glm_solver = new glm(X, y, weights, offset, 
                          var, mu_eta, linkinv, dev_resids, 
-                         valideta, validmu, tol, maxit, type);
+                         valideta, validmu, tol, maxit, type,
+                         is_big_matrix);
     
     // initialize parameters
     glm_solver->init_parms(beta_init, mu_init, eta_init);

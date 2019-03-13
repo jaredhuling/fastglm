@@ -303,7 +303,22 @@ fastglmPure <- function(x, y,
 #' max(abs(coef(gl1) - gf2$coef))
 #' max(abs(coef(gl1) - gf3$coef))
 #' max(abs(coef(gl1) - gf4$coef))
-#'
+#' 
+#' 
+#' \dontrun{
+#' nrows <- 50000
+#' ncols <- 50
+#' bkFile <- "bigmat2.bk"
+#' descFile <- "bigmatk2.desc"
+#' bigmat <- filebacked.big.matrix(nrow=nrows, ncol=ncols, type="double",
+#'                                 backingfile=bkFile, backingpath=".",
+#'                                 descriptorfile=descFile,
+#'                                 dimnames=c(NULL,NULL))
+#' for (i in 1:ncols) bigmat[,i] = rnorm(nrows)*i
+#' y <- 1*(rnorm(nrows) + bigmat[,1] > 0)
+#' 
+#' system.time(gfb1 <- fastglm(bigmat, y, family = binomial(), method = 3))
+#' }
 #'
 fastglm <- function(x, ...) UseMethod("fastglm")
 

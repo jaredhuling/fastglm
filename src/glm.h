@@ -61,6 +61,7 @@ protected:
     double tol;
     int maxit;
     int type;
+    bool is_big_matrix;
     int rank;
     
     
@@ -97,8 +98,27 @@ protected:
     
     MatrixXd XtWX() const 
     {
-        return MatrixXd(nvars, nvars).setZero().selfadjointView<Lower>().
-        rankUpdate( (w.asDiagonal() * X).adjoint());
+        if (!is_big_matrix || true)
+        {
+            return MatrixXd(nvars, nvars).setZero().selfadjointView<Lower>().
+            rankUpdate( (w.asDiagonal() * X).adjoint());
+        } else
+        {
+            MatrixXd retmat(MatrixXd::Zero(nvars, nvars));
+            VectorXd wsquare = w.array().square();
+            for (int j = 0; j < nvars; ++j)
+            {
+                for (int k = j; k < nvars; ++k)
+                {
+                    for (int i = 0; i < nobs; ++i)
+                    {
+                        retmat(j, k) += X(i,j) * X(i,k) * wsquare(i);
+                    }
+                    retmat(k, j) = retmat(j, k);
+                }
+            }
+            return retmat;
+        }
     }
 
     virtual void update_mu_eta()
@@ -467,7 +487,8 @@ public:
         Function &validmu_,
         double tol_ = 1e-6,
         int maxit_ = 100,
-        int type_ = 1) :
+        int type_ = 1,
+        bool is_big_matrix_ = false) :
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd>(X_.rows(), X_.cols(),
                                                      tol_, maxit_),
                                                      X(X_),
@@ -484,7 +505,8 @@ public:
                                                      validmu(validmu_),
                                                      tol(tol_),
                                                      maxit(maxit_),
-                                                     type(type_)
+                                                     type(type_),
+                                                     is_big_matrix(is_big_matrix_)
                                                      {}
     
     
