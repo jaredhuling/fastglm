@@ -40,6 +40,7 @@ big.colMin <- function(x)
 #' @param x big.matrix
 #' @param y numeric vector
 #' @docType methods
+#' @import methods
 #' @importFrom methods new
 #' @importFrom bigmemory as.big.matrix is.big.matrix
 #' @rdname extract-methods
