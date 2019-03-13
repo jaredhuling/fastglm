@@ -98,8 +98,25 @@ fastglmPure <- function(x, y,
 {
     weights <- as.vector(weights)
     offset  <- as.vector(offset)
-    stopifnot(is.matrix(x), 
-              is.numeric(y), 
+    
+    if (is.big.matrix(x))
+    {
+        is_big_matrix <- TRUE
+        if (method != 2 & method != 3)
+        {
+            method <- 3
+            warning("for big.matrix objects, 'method' must either be 2 (for LLT) or 3 (for LDLT) -- 'method' changed to 3.")
+        }
+    } else if (is.matrix(x))
+    {
+        is_big_matrix <- FALSE
+    } else
+    {
+        stop("x must be either a matrix or a big.matrix object")
+    }
+    
+    
+    stopifnot(is.numeric(y), 
               is.numeric(weights),
               is.numeric(offset),
               NROW(y) == nrow(x),
@@ -130,11 +147,11 @@ fastglmPure <- function(x, y,
     cnames <- colnames(x)
     
     # from glm
-    variance   <- family$variance
-    dev.resids <- family$dev.resids
-    aic        <- family$aic
-    linkinv    <- family$linkinv
-    mu.eta     <- family$mu.eta 
+    variance    <- family$variance
+    dev.resids  <- family$dev.resids
+    aic         <- family$aic
+    linkinv     <- family$linkinv
+    mu.eta      <- family$mu.eta 
     
     unless.null <- function(x, if.null) if(is.null(x)) if.null else x
     valideta    <- unless.null(family$valideta, function(eta) TRUE)
@@ -167,7 +184,7 @@ fastglmPure <- function(x, y,
                 } else 
                 {
                     coefold <- start
-                    offset + as.vector(if (NCOL(x) == 1L) x * start else x %*% start)
+                    offset + as.vector(x %*% start)
                 }
             } else family$linkfun(mustart)
     mu <- linkinv(eta)
@@ -177,13 +194,25 @@ fastglmPure <- function(x, y,
     
     if (is.null(start)) start <- rep(0, nvars)
     
-    res <- fit_glm(x, drop(y), drop(weights), drop(offset), 
-                   drop(start), drop(mu), drop(eta),
-                   family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
-                   family$valideta, family$validmu,
-                   as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
-    
-    res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
+    if (!is_big_matrix)
+    {
+        res <- fit_glm(x, drop(y), drop(weights), drop(offset), 
+                       drop(start), drop(mu), drop(eta),
+                       family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                       family$valideta, family$validmu,
+                       as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
+        
+        res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
+    } else
+    {
+        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset), 
+                           drop(start), drop(mu), drop(eta),
+                           family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                           family$valideta, family$validmu,
+                           as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
+        
+        res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
+    }
     
     if (!res$converged)
     {

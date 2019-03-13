@@ -18,9 +18,13 @@ License: GPL (>= 2)
 Encoding: UTF-8
 Imports: 
     Rcpp (>= 0.12.13)
+Depends:
+    bigmemory
 LinkingTo:
     Rcpp, 
-    RcppEigen
+    RcppEigen,
+    BH,
+    bigmemory
 RoxygenNote: 6.1.0
 Suggests: knitr,
     rmarkdown,
