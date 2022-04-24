@@ -7,9 +7,20 @@
 \usage{
 fastglm(x, ...)
 
-\method{fastglm}{default}(x, y, family = gaussian(), weights = NULL,
-  offset = NULL, start = NULL, etastart = NULL, mustart = NULL,
-  method = 0L, tol = 1e-08, maxit = 100L, ...)
+\method{fastglm}{default}(
+  x,
+  y,
+  family = gaussian(),
+  weights = NULL,
+  offset = NULL,
+  start = NULL,
+  etastart = NULL,
+  mustart = NULL,
+  method = 0L,
+  tol = 1e-08,
+  maxit = 100L,
+  ...
+)
 }
 \arguments{
 \item{x}{input model matrix. Must be a matrix object}

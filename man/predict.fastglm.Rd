@@ -4,8 +4,14 @@
 \alias{predict.fastglm}
 \title{Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.}
 \usage{
-\method{predict}{fastglm}(object, newdata = NULL, type = c("link",
-  "response"), se.fit = FALSE, dispersion = NULL, ...)
+\method{predict}{fastglm}(
+  object,
+  newdata = NULL,
+  type = c("link", "response"),
+  se.fit = FALSE,
+  dispersion = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{a fitted object of class inheriting from "\code{fastglm}".}

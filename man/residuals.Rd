@@ -4,8 +4,11 @@
 \alias{residuals.fastglm}
 \title{residuals method for fastglm fitted objects}
 \usage{
-\method{residuals}{fastglm}(object, type = c("deviance", "pearson",
-  "working", "response", "partial"), ...)
+\method{residuals}{fastglm}(
+  object,
+  type = c("deviance", "pearson", "working", "response", "partial"),
+  ...
+)
 }
 \arguments{
 \item{object}{fastglm fitted object}

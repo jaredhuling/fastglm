@@ -6,6 +6,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // colMax_dense
 Eigen::MatrixXd colMax_dense(const Eigen::Map<Eigen::MatrixXd>& A);
 RcppExport SEXP _fastglm_colMax_dense(SEXP ASEXP) {
