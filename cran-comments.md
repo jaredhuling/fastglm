@@ -13,7 +13,7 @@
 
 
   ── R CMD check results ────────────────────────────────────── fastglm 0.0.1 ────
-Duration: 3m 7.5s
+Duration: 1m 37.7s
 
 0 errors | 0 warnings | 0 notes
 
