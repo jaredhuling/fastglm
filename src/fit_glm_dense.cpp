@@ -5,7 +5,7 @@
 #include <bigmemory/BigMatrix.h>
 
 #include <Rcpp.h>
-#include "glm.h"
+#include "../inst/include/glm.h"
 #include <RcppEigen.h>
 
 using namespace Rcpp;

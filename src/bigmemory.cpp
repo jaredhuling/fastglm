@@ -1,6 +1,6 @@
 #include <iostream>
 #include "math.h"
-#include "bigmemory.h"
+#include "../inst/include/bigmemory.h"
 #include <bigmemory/MatrixAccessor.hpp>
 #include <bigmemory/BigMatrix.h>
 
