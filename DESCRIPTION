@@ -26,7 +26,7 @@ LinkingTo:
     RcppEigen,
     BH,
     bigmemory
-RoxygenNote: 7.2.0
+RoxygenNote: 7.3.3
 Suggests: knitr,
     rmarkdown,
     glm2
