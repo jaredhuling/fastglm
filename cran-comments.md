@@ -1,7 +1,7 @@
 
 ## CRAN submission for 'fastglm'
 
-* Moves c++ header files to inst/install so source c++ code can be used externally
+* fixes cxxflags
 
 ## Test environments
 
