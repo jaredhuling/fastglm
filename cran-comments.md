@@ -1,5 +1,5 @@
 
-## First CRAN submission for 'fastglm'
+## CRAN submission for 'fastglm'
 
 * Moves c++ header files to inst/install so source c++ code can be used externally
 
