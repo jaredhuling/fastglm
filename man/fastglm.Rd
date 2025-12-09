@@ -3,7 +3,7 @@
 \name{fastglm}
 \alias{fastglm}
 \alias{fastglm.default}
-\title{fast generalized linear model fitting}
+\title{Fast generalized linear model fitting}
 \usage{
 fastglm(x, ...)
 
@@ -63,7 +63,7 @@ A list with the elements
 \item{fitted.values}{the vector of fitted values}
 }
 \description{
-fast generalized linear model fitting
+Fast generalized linear model fitting
 
 bigLm default
 }
@@ -103,4 +103,7 @@ y <- 1*(rnorm(nrows) + bigmat[,1] > 0)
 system.time(gfb1 <- fastglm(bigmat, y, family = binomial(), method = 3))
 }
 
+}
+\seealso{
+[fastglm.fit()]
 }
