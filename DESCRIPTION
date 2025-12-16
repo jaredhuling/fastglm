@@ -1,33 +1,42 @@
 Package: fastglm
 Type: Package
 Title: Fast and Stable Fitting of Generalized Linear Models using 'RcppEigen'
+<<<<<<< HEAD
 Version: 0.0.5
+=======
+Version: 0.0.4.9000
+>>>>>>> 504b58619c3c35f655e63dcccc07e7ada505007b
 Authors@R: c(
-    person("Jared", "Huling", , "jaredhuling@gmail.com", c("aut", "cre")),
+    person("Jared", "Huling", , email = "jaredhuling@gmail.com", c("aut", "cre")),
     person("Douglas", "Bates", , , c("cph")),
     person("Dirk", "Eddelbuettel", , , c("cph")),
     person("Romain", "Francois", , , c("cph")),
-    person("Yixuan", "Qiu", , , c("cph"))
+    person("Yixuan", "Qiu", , , c("cph")),
+    person("Noah", "Greifer", role=c("ctb"), 
+           email = "noah.greifer@gmail.com",
+	       comment=c(ORCID="0000-0003-3067-7154"))
     )
-Maintainer: Jared Huling <jaredhuling@gmail.com>
 Description: Fits generalized linear models efficiently using 'RcppEigen'. The iteratively reweighted least squares 
     implementation utilizes the step-halving approach of Marschner (2011) <doi:10.32614/RJ-2011-012> to help safeguard
     against convergence issues.
 BugReports: https://github.com/jaredhuling/fastglm/issues
+URL: https://github.com/jaredhuling/fastglm, https://jaredhuling.org/fastglm/
 License: GPL (>= 2)
 Encoding: UTF-8
+Depends:
+    R (>= 4.0.0)
 Imports: 
     Rcpp (>= 0.12.13),
+    bigmemory,
     methods
-Depends:
-    bigmemory
 LinkingTo:
     Rcpp, 
     RcppEigen,
     BH,
     bigmemory
+Suggests:
+    glm2,
+    knitr,
+    rmarkdown
 RoxygenNote: 7.3.3
-Suggests: knitr,
-    rmarkdown,
-    glm2
 VignetteBuilder: knitr

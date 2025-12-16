@@ -1,6 +1,4 @@
-
-
-#' fast generalized linear model fitting
+#' Fast generalized linear model fitting
 #'
 #' @param x input model matrix. Must be a matrix object 
 #' @param y numeric response vector of length nobs.
@@ -13,7 +11,7 @@
 #' @param start starting values for the parameters in the linear predictor.
 #' @param etastart starting values for the linear predictor.
 #' @param mustart values for the vector of means.
-#' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
+#' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 #' 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and 
 #' Conquer SVD
 #' @param tol threshold tolerance for convergence. Should be a positive real number
@@ -26,6 +24,7 @@
 #' \item{residuals}{the vector of residuals}
 #' \item{s}{a numeric scalar - the root mean square for residuals}
 #' \item{fitted.values}{the vector of fitted values}
+#' @seealso [fastglm.fit()]
 #' @export
 #' @examples
 #' 
@@ -257,7 +256,7 @@ fastglmPure <- function(x, y,
     res
 }
 
-#' fast generalized linear model fitting
+#' Fast generalized linear model fitting
 #'
 #' @param x input model matrix. Must be a matrix object 
 #' @param y numeric response vector of length nobs.
@@ -283,6 +282,7 @@ fastglmPure <- function(x, y,
 #' \item{residuals}{the vector of residuals}
 #' \item{s}{a numeric scalar - the root mean square for residuals}
 #' \item{fitted.values}{the vector of fitted values}
+#' @seealso [fastglm.fit()]
 #' @export
 #' @examples
 #'
@@ -320,7 +320,10 @@ fastglmPure <- function(x, y,
 #' system.time(gfb1 <- fastglm(bigmat, y, family = binomial(), method = 3))
 #' }
 #'
-fastglm <- function(x, ...) UseMethod("fastglm")
+fastglm <- function(x, ...)
+{
+    UseMethod("fastglm")
+}
 
 
 #' bigLm default
@@ -328,7 +331,7 @@ fastglm <- function(x, ...) UseMethod("fastglm")
 #' @param ... not used
 #' @rdname fastglm
 #' @method fastglm default
-#' @export
+#' @exportS3Method fastglm default
 fastglm.default <- function(x, y, 
                             family = gaussian(),
                             weights = NULL, 

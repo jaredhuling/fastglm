@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_glm.R
 \name{fastglmPure}
 \alias{fastglmPure}
-\title{fast generalized linear model fitting}
+\title{Fast generalized linear model fitting}
 \usage{
 fastglmPure(
   x,
@@ -57,7 +57,7 @@ A list with the elements
 \item{fitted.values}{the vector of fitted values}
 }
 \description{
-fast generalized linear model fitting
+Fast generalized linear model fitting
 }
 \examples{
 
@@ -117,4 +117,7 @@ max(abs(coef(gl1) - gf2$coef))
 max(abs(coef(gl1) - gf3$coef))
 max(abs(coef(gl1) - gf4$coef))
 
+}
+\seealso{
+[fastglm.fit()]
 }
