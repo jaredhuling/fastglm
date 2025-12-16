@@ -1,11 +1,7 @@
 Package: fastglm
 Type: Package
 Title: Fast and Stable Fitting of Generalized Linear Models using 'RcppEigen'
-<<<<<<< HEAD
 Version: 0.0.5
-=======
-Version: 0.0.4.9000
->>>>>>> 504b58619c3c35f655e63dcccc07e7ada505007b
 Authors@R: c(
     person("Jared", "Huling", , email = "jaredhuling@gmail.com", c("aut", "cre")),
     person("Douglas", "Bates", , , c("cph")),
