@@ -1,20 +1,23 @@
 
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
 [![version](http://www.r-pkg.org/badges/version/fastglm)](https://cran.r-project.org/package=fastglm)
 
-# Overview of ‘fastglm’
+# Overview of *fastglm*
 
-The ‘fastglm’ package is a re-write of `glm()` using `RcppEigen`
+The *fastglm* package is a re-write of `glm()` using *RcppEigen*
 designed to be computationally efficient and algorithmically stable.
 
-# Installing the ‘fastglm’ package
+# Installing the *fastglm* package
 
-Install the development version using the **devtools** package:
+*fastglm* can be installed using *pak*:
 
 ``` r
-devtools::install_github("jaredhuling/fastglm")
+pak::pak("fastglm")
+# pak::pak("jaredhuling/fastglm") #development version
 ```
 
-or by cloning and building using `R CMD INSTALL`
+or by cloning and building using `R CMD INSTALL`.
 
 # Quick Usage Overview
 
@@ -41,7 +44,7 @@ x <- MASS::mvrnorm(n.obs, mu = runif(n.vars, min = -1), Sigma = Sigma)
 y <- 1 * ( drop(x[,1:25] %*% runif(25, min = -0.1, max = 0.10)) > rnorm(n.obs))
 
 ct <- microbenchmark(
-    glm.fit = {gl1 <- glm.fit(x, y, family = binomial())},
+    glm.fit =         {gl1 <- glm.fit(x, y, family = binomial())},
     speedglm.eigen  = {sg1 <- speedglm.wfit(y, x, intercept = FALSE,
                                             family = binomial())},
     speedglm.chol   = {sg2 <- speedglm.wfit(y, x, intercept = FALSE, 
@@ -56,10 +59,11 @@ ct <- microbenchmark(
     times = 25L
 )
 
-autoplot(ct, log = FALSE) + stat_summary(fun.y = median, geom = 'point', size = 2)
+autoplot(ct, log = FALSE) +
+    stat_summary(fun.y = median, geom = 'point', size = 2)
 ```
 
-<img src="vignettes/gen_data-1.png" width="100%" />
+<img src="man/figures/README-gen_data-1.png" width="100%" style="display: block; margin: auto;" />
 
 ``` r
 # comparison of estimates
@@ -71,9 +75,9 @@ c(glm_vs_fastglm_qrcpiv = max(abs(coef(gl1) - gf1$coef)),
 ```
 
     ## glm_vs_fastglm_qrcpiv     glm_vs_fastglm_qr glm_vs_fastglm_qrfpiv 
-    ##          2.590289e-14          2.546921e-14          2.776945e-14 
+    ##          8.881784e-15          9.936496e-15          1.204592e-14 
     ##    glm_vs_fastglm_LLT   glm_vs_fastglm_LDLT 
-    ##          1.140078e-13          1.094264e-13
+    ##          1.202649e-13          2.076672e-13
 
 ``` r
 # now between glm and speedglm
@@ -83,13 +87,13 @@ c(glm_vs_speedglm_eigen = max(abs(coef(gl1) - sg1$coef)),
 ```
 
     ## glm_vs_speedglm_eigen  glm_vs_speedglm_Chol    glm_vs_speedglm_qr 
-    ##          1.359413e-12          1.359413e-12          1.191977e-12
+    ##          1.259048e-12          1.259048e-12          1.320777e-12
 
 # Stability
 
-The `fastglm` package does not compromise computational stability for
-speed. In fact, for many situations where `glm()` and even `glm2()` do
-not converge, `fastglm()` does converge.
+The *fastglm* package does not compromise computational stability for
+speed. In fact, for many situations where `glm()` and even
+`glm2::glm2()` do not converge, `fastglm()` does converge.
 
 As an example, consider the following data scenario, where the response
 distribution is (mildly) misspecified, but the link function is quite
@@ -106,51 +110,56 @@ x <- matrix(rnorm(10000 * 100), ncol = 100)
 y <- (exp(0.25 * x[,1] - 0.25 * x[,3] + 0.5 * x[,4] - 0.5 * x[,5] + rnorm(10000)) ) + 0.1
 
 
-system.time(gfit1 <- fastglm(cbind(1, x), y, family = Gamma(link = "sqrt")))
+system.time(gfit1 <- glm(y ~ x, family = Gamma(link = "sqrt"),
+                         method = fastglm.fit))
 ```
 
     ##    user  system elapsed 
-    ##   0.783   0.022   0.807
+    ##   0.261   0.005   0.267
 
 ``` r
-system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt")) )
+system.time(gfit2 <- glm(y ~ x, family = Gamma(link = "sqrt")))
 ```
 
     ##    user  system elapsed 
-    ##   3.035   0.121   3.166
+    ##   0.387   0.025   0.412
 
 ``` r
-system.time(gfit3 <- glm2::glm2(y~x, family = Gamma(link = "sqrt")) )
+system.time(gfit3 <- glm2::glm2(y ~ x, family = Gamma(link = "sqrt")))
 ```
 
     ##    user  system elapsed 
-    ##   2.117   0.084   2.205
+    ##   0.267   0.019   0.288
 
 ``` r
-system.time(gfit4 <- speedglm(y~x, family = Gamma(link = "sqrt")))
+system.time(gfit4 <- speedglm(y ~ x, family = Gamma(link = "sqrt")))
 ```
 
     ##    user  system elapsed 
-    ##   1.757   0.048   1.807
+    ##   0.067   0.012   0.079
 
 ``` r
 ## speedglm appears to diverge
-system.time(gfit5 <- speedglm(y~x, family = Gamma(link = "sqrt"), maxit = 500))
+system.time(gfit5 <- speedglm(y ~ x, family = Gamma(link = "sqrt"),
+                              maxit = 500))
 ```
 
     ##    user  system elapsed 
-    ##  37.776   1.205  39.272
+    ##   1.215   0.195   1.411
 
 ``` r
 ## Note that fastglm() returns estimates with the
 ## largest likelihood
 
-c(fastglm = logLik(gfit1), glm = logLik(gfit2), glm2 = logLik(gfit3),
-  speedglm = logLik(gfit4), speedglm500 = logLik(gfit5))
+c(fastglm     = logLik(gfit1),
+  glm         = logLik(gfit2),
+  glm2        = logLik(gfit3),
+  speedglm    = logLik(gfit4),
+  speedglm500 = logLik(gfit5))
 ```
 
     ##     fastglm         glm        glm2    speedglm speedglm500 
-    ##   -16030.81   -16704.05   -16046.66   -47722.66   -57785.72
+    ##   -16030.81   -16704.05   -16046.66   -36423.35   -70953.78
 
 ``` r
 rbind(fastglm     = coef(gfit1)[1:5],
@@ -160,12 +169,12 @@ rbind(fastglm     = coef(gfit1)[1:5],
       speedglm500 = coef(gfit5)[1:5])
 ```
 
-    ##             (Intercept)          X1            X2         X3          X4
-    ## fastglm        1.429256   0.1258736  5.321164e-03 -0.1293897   0.2389373
-    ## glm            1.431168   0.1251936 -6.896739e-05 -0.1281857   0.2366473
-    ## glm2           1.426864   0.1242616 -9.860241e-05 -0.1254873   0.2361301
-    ## speedglm     -22.182477   3.1784570 -2.970111e+00 -4.9709797  14.0549438
-    ## speedglm500  -27.891929 -13.9080256 -9.690833e+00  2.7279219 -11.1458325
+    ##             (Intercept)        x1            x2         x3         x4
+    ## fastglm      1.42925957 0.1258714  5.311209e-03 -0.1293960  0.2389508
+    ## glm          1.43116799 0.1251936 -6.896739e-05 -0.1281857  0.2366473
+    ## glm2         1.42686381 0.1242616 -9.860241e-05 -0.1254873  0.2361301
+    ## speedglm    -4.56190855 5.0654671 -4.844225e+00 -0.9470766 -5.8183704
+    ## speedglm500 -0.00159227 1.3962876  8.377002e+00 -1.2283816  0.1281007
 
 ``` r
 ## check convergence of fastglm and #iterations
@@ -173,7 +182,7 @@ rbind(fastglm     = coef(gfit1)[1:5],
 c(gfit1$converged, gfit1$iter)
 ```
 
-    ## [1]  1 17
+    ## [1]  1 15
 
 ``` r
 ## now check convergence for glm()
@@ -198,11 +207,12 @@ c(gfit4$convergence, gfit4$iter, gfit5$convergence, gfit5$iter)
 
 ``` r
 ## increasing number of IRLS iterations for glm() does not help that much
-system.time(gfit2 <- glm(y~x, family = Gamma(link = "sqrt"), control = list(maxit = 1000)) )
+system.time(gfit2 <- glm(y ~ x, family = Gamma(link = "sqrt"),
+                         maxit = 1000))
 ```
 
     ##    user  system elapsed 
-    ## 116.122   4.148 120.833
+    ##  10.559   0.966  11.538
 
 ``` r
 gfit2$converged
@@ -226,4 +236,4 @@ logLik(gfit1)
 logLik(gfit2)
 ```
 
-    ## 'log Lik.' -16333.99 (df=102)
+    ## 'log Lik.' -26232.17 (df=102)
