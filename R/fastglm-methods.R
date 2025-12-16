@@ -1,64 +1,24 @@
-
-#' print method for fastglm objects
+#' `summary()` method for `fastglm` fitted objects
 #'
-#' @param x object to print
+#' @param object `fastglm` fitted object
+#' @param dispersion the dispersion parameter for the family used. Either a single numerical value or `NULL` (the default), when it is inferred from `object`.
 #' @param ... not used
-#' @rdname print
-#' @method print fastglm
-#' @export
-print.fastglm <- function(x, ...) 
-{
-    cat("\nCall:\n")
-    print(x$call)
-    cat("\nCoefficients:\n")
-    print(x$coefficients, digits=5)
-}
-
-logLik.glm <- function (object, ...) 
-{
-    if (!missing(...)) 
-        warning("extra arguments discarded")
-    fam <- family(object)$family
-    p <- object$rank
-    if (fam %in% c("gaussian", "Gamma", "inverse.gaussian")) 
-        p <- p + 1
-    val <- p - object$aic/2
-    attr(val, "nobs") <- sum(!is.na(object$residuals))
-    attr(val, "df") <- p
-    class(val) <- "logLik"
-    val
-}
-
-deviance.glm <- function (object, ...) 
-{
-    object$deviance
-}
-
-family.glm <- function (object, ...) 
-{
-    object$family
-}
-
-#' summary method for fastglm fitted objects
-#'
-#' @param object fastglm fitted object
-#' @param dispersion the dispersion parameter for the family used. 
-#' Either a single numerical value or \code{NULL} (the default), when it is inferred from \code{object}.
-#' @param ... not used
-#' @return a summary.fastglm object
-#' @rdname summary
-#' @method summary fastglm
-#' @export
-#' @examples
 #' 
+#' @returns A `summary.fastglm` object
+#' 
+#' @seealso [summary.glm()]
+#' 
+#' @method summary fastglm
+#' 
+#' @examples
 #' x <- matrix(rnorm(10000 * 10), ncol = 10)
 #' y <- 1 * (0.25 * x[,1] - 0.25 * x[,3] > rnorm(10000))
 #' 
 #' fit <- fastglm(x, y, family = binomial())
 #' 
 #' summary(fit)
-#'
-#'
+
+#' @exportS3Method summary fastglm
 summary.fastglm <- function(object, dispersion = NULL, ...)
 {
     p <- object$rank
@@ -141,69 +101,65 @@ summary.fastglm <- function(object, dispersion = NULL, ...)
     return(ans)
 }
 
+#' @exportS3Method print fastglm
+print.fastglm <- function(x, digits = max(3L, getOption("digits") - 3L), ...) 
+{
+    cat("\nCall:  ", paste(deparse(x$call), sep = "\n", collapse = "\n"), 
+        "\n\n", sep = "")
+    
+    if (length(coef(x)) > 0L) {
+        cat("Coefficients")
+        if (is.character(co <- x$contrasts)) {
+            cat("  [contrasts: ", apply(cbind(names(co), co), 1L, paste, collapse = "="), "]")
+        }
+        
+        cat(":\n")
+        print.default(format(x$coefficients, digits = digits), 
+                      print.gap = 2, quote = FALSE)
+    }
+    else {
+        cat("No coefficients\n\n")
+    }
+}
 
-#' residuals method for fastglm fitted objects
-#'
-#' @param object fastglm fitted object
-#' @param type type of residual to be returned
-#' @param ... not used
-#' @return a vector of residuals
-#' @rdname residuals
-#' @method residuals fastglm
-#' @export
+#' @exportS3Method residuals fastglm
 residuals.fastglm <- function(object, 
                               type = c("deviance", "pearson", "working", "response", "partial"), 
                               ...)
 {
-    residuals.glm(object, type, ...)
+    class(object) <- "glm"
+    
+    residuals(object, type = type, ...)
 }
 
-
-
-#' logLik method for fastglm fitted objects
-#'
-#' @param object fastglm fitted object
-#' @param ... not used
-#' @return Returns an object of class \code{logLik}
-#' @rdname logLik
-#' @method logLik fastglm
-#' @export
+#' @exportS3Method logLik fastglm
 logLik.fastglm <- function(object, ...)
 {
-    logLik.glm(object, ...)
+    class(object) <- "glm"
+    
+    logLik(object, ...)
 }
 
-
-#' deviance method for fastglm fitted objects
-#'
-#' @param object fastglm fitted object
-#' @param ... not used
-#' @return The value of the deviance extracted from the object
-#' @rdname deviance
-#' @method deviance fastglm
-#' @export
+#' @exportS3Method deviance fastglm
 deviance.fastglm <- function(object, ...)
 {
-    deviance.glm(object, ...)
+    class(object) <- "glm"
+    
+    deviance(object, ...)
 }
 
-#' family method for fastglm fitted objects
-#'
-#' @param object fastglm fitted object
-#' @param ... not used
-#' @return returns the family of the fitted object
-#' @rdname family
-#' @method family fastglm
-#' @export
+#' @exportS3Method family fastglm
 family.fastglm <- function(object, ...)
 {
-    family.glm(object, ...)
+    class(object) <- "glm"
+    
+    family(object, ...)
 }
 
 
 #' Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
-#' @param object a fitted object of class inheriting from "\code{fastglm}".
-#' @param newdata a matrix to be used for prediction
+#' @param object a fitted object of class inheriting from `"fastglm"`.
+#' @param newdata a matrix to be used for prediction.
 #' @param type the type of prediction required. The default is on the scale of the linear predictors;
 #' the alternative "\code{response}" is on the scale of the response variable. Thus for a default binomial
 #' model the default predictions are of log-odds (probabilities on logit scale) and \code{type = "response"}
@@ -247,7 +203,7 @@ predict_fastglm_lm <- function(object, newdata, se.fit = FALSE, scale = 1)
     }
     beta <- object$coefficients
     
-    if (dims[2] != length(beta))
+    if (dims[2L] != length(beta))
     {
         stop("newdata provided does not match fitted model 'object'")
     }
