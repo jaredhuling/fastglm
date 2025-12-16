@@ -1,0 +1,24 @@
+<urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
+<url><loc>/404.html</loc></url>
+<url><loc>/articles/Using-the-fastglm-Package.html</loc></url>
+<url><loc>/articles/fastglm.html</loc></url>
+<url><loc>/articles/index.html</loc></url>
+<url><loc>/articles/quick-usage-guide-to-the-fastglm-package.html</loc></url>
+<url><loc>/authors.html</loc></url>
+<url><loc>/index.html</loc></url>
+<url><loc>/news/index.html</loc></url>
+<url><loc>/reference/deviance.html</loc></url>
+<url><loc>/reference/extract-methods.html</loc></url>
+<url><loc>/reference/family.html</loc></url>
+<url><loc>/reference/fastglm.fit.html</loc></url>
+<url><loc>/reference/fastglm.html</loc></url>
+<url><loc>/reference/fastglmPure.html</loc></url>
+<url><loc>/reference/index.html</loc></url>
+<url><loc>/reference/logLik.html</loc></url>
+<url><loc>/reference/predict.fastglm.html</loc></url>
+<url><loc>/reference/print.html</loc></url>
+<url><loc>/reference/residuals.html</loc></url>
+<url><loc>/reference/summary.fastglm.html</loc></url>
+<url><loc>/reference/summary.html</loc></url>
+</urlset>
+
