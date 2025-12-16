@@ -1,7 +1,5 @@
 
 [![version](http://www.r-pkg.org/badges/version/fastglm)](https://cran.r-project.org/package=fastglm)
-[![Build
-Status](https://travis-ci.org/jaredhuling/fastglm.svg?branch=master)](https://travis-ci.org/jaredhuling/fastglm)
 
 # Overview of ‘fastglm’
 
