@@ -52,6 +52,11 @@ This should be a numeric vector of length equal to the number of cases}
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
 
 \item{maxit}{maximum number of IRLS iterations. Should be an integer}
+
+\item{firth}{logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
+to the score function. Currently supported only for
+`family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
+for the canonical reference implementation.}
 }
 \value{
 A list with the elements

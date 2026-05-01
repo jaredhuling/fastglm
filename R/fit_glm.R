@@ -146,8 +146,9 @@ tweedie_link_power <- function(family) {
 #'   to the score function. Currently supported only for
 #'   `family = binomial(link = "logit")` on dense `x`. The penalty modifies
 #'   the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where
-#'   `h_i` is the leverage; convergence is checked on `||\Delta\beta||_\infty`.
-#'   See `logistf::logistf()` for the canonical reference implementation.
+#'   `h_i` is the leverage; convergence is checked on the sup-norm of the
+#'   coefficient update. See `logistf::logistf()` for the canonical
+#'   reference implementation.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -459,6 +460,10 @@ fastglmPure <- function(x, y,
 #' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
+#' @param firth logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
+#'   to the score function. Currently supported only for
+#'   `family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
+#'   for the canonical reference implementation.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}

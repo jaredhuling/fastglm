@@ -16,3 +16,6 @@ docs
 ^.*\.*.bk$
 ^.*\.*.desc$
 .github
+^vignettes/_precompile\.R$
+^vignettes/.*\.Rmd\.orig$
+^vignettes/.*_files$

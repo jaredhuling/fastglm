@@ -45,8 +45,8 @@ the method-of-moments estimator from a Poisson pilot fit.}
 
 \item{outer.maxit}{maximum number of `(beta, theta)` outer iterations.}
 
-\item{outer.tol}{convergence tolerance for the outer loop on
-`||Δbeta||∞ + |Δtheta|/theta`.}
+\item{outer.tol}{convergence tolerance for the outer loop on the
+sup-norm of the beta update plus the relative change in `theta`.}
 
 \item{theta.tol}{Brent tolerance for the inner theta MLE.}
 

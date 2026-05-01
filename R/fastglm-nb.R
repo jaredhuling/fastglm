@@ -19,8 +19,8 @@
 #' @param tol convergence tolerance for the IRLS inner loop.
 #' @param maxit maximum number of inner-loop IRLS iterations.
 #' @param outer.maxit maximum number of `(beta, theta)` outer iterations.
-#' @param outer.tol convergence tolerance for the outer loop on
-#'   `||Δbeta||∞ + |Δtheta|/theta`.
+#' @param outer.tol convergence tolerance for the outer loop on the
+#'   sup-norm of the beta update plus the relative change in `theta`.
 #' @param theta.tol Brent tolerance for the inner theta MLE.
 #' @param theta.maxit max iterations for the inner theta MLE.
 #'

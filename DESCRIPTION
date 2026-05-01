@@ -1,7 +1,7 @@
 Package: fastglm
 Type: Package
 Title: Fast and Stable Fitting of Generalized Linear Models using 'RcppEigen'
-Version: 0.0.5
+Version: 0.1.0
 Authors@R: c(
     person("Jared", "Huling", , email = "jaredhuling@gmail.com", c("aut", "cre")),
     person("Douglas", "Bates", , , c("cph")),
@@ -42,7 +42,8 @@ Suggests:
     MASS,
     statmod,
     logistf,
-    pscl
+    pscl,
+    speedglm
 Config/testthat/edition: 3
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr

@@ -1,6 +1,61 @@
-# fastglm 0.0.5
+# fastglm 0.1.0
 
 ## New features
+
+* New top-level function `fastglm_nb()` for negative-binomial
+  regression with the dispersion `theta` estimated jointly with the
+  regression coefficients. Plays the same role as `MASS::glm.nb()`,
+  but the IRLS loop, the inner Brent root-find for `theta`, and the
+  outer `(beta, theta)` alternation all run entirely in C++.
+
+* New top-level function `fastglm_hurdle()` for two-part count models
+  with a binary zero / non-zero component and a zero-truncated Poisson
+  or NB count component. Same model as `pscl::hurdle()`; the joint fit
+  runs in a single C++ driver that calls the existing IRLS solver
+  twice and runs an inner Brent MLE for `theta` in the unknown-`theta`
+  NB case.
+
+* New top-level function `fastglm_zi()` for zero-inflated Poisson and
+  NB regression. Same model as `pscl::zeroinfl()`; the entire EM
+  driver runs in C++, including closed-form posterior responsibilities,
+  weighted IRLS for both M-steps, the inner Brent MLE for `theta`, and
+  the analytical observed-information `vcov`.
+
+* New `firth = TRUE` argument to `fastglm()` and `fastglm.fit()` for
+  Firth's bias-reducing penalty on the score. Currently supported for
+  `family = binomial(link = "logit")` on dense designs; converges in
+  finite steps under separation, where unpenalized IRLS would diverge.
+  Coefficients agree with `logistf::logistf()` to 1e-7 on the standard
+  Heinze-Schemper test cases.
+
+* New built-in `negbin(theta, link)` family for negative-binomial
+  regression with known dispersion, dispatched to a native C++ kernel
+  on the `log`, `sqrt`, and `identity` links. Drop-in for
+  `MASS::negative.binomial(theta, link)` without a hard dependency on
+  *MASS*.
+
+* Native fast paths for the `family$family == "Negative Binomial(K)"`
+  form produced by `MASS::negative.binomial()`, the
+  `quasibinomial()` / `quasipoisson()` families, and `statmod::tweedie()`.
+  Detection is automatic.
+
+## Documentation
+
+* New vignette `count-firth-fastglm` covering `fastglm_nb()`,
+  `fastglm_hurdle()`, `fastglm_zi()`, and the `firth = TRUE` flag, with
+  small inline accuracy and timing comparisons against `MASS::glm.nb`,
+  `pscl::hurdle`, `pscl::zeroinfl`, and `logistf::logistf`.
+
+* New vignette `benchmarks-fastglm` providing a more comprehensive
+  benchmark study at larger sample sizes, covering all six model
+  classes. Pre-compiled at maintainer build time so it does not run
+  during `R CMD check` / `R CMD build` and adds essentially zero time
+  to the package check budget.
+
+* `fastglm-overview` updated with a short section introducing the new
+  count-data and Firth entry points.
+
+## Other new features
 
 * Real `vcov()` for `"fastglm"` objects: the unscaled covariance is now
   computed in C++ from the IRLS factorisation directly and exposed as
