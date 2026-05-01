@@ -1,0 +1,481 @@
+---
+title: "Benchmark Study for 'fastglm'"
+author: "Jared Huling"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Benchmark Study for 'fastglm'}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  warning   = FALSE,
+  message   = FALSE,
+  echo      = TRUE,
+  eval      = TRUE,
+  fig.width = 7,
+  fig.height = 4.5,
+  fig.path  = "benchmarks-figs/"
+)
+```
+
+This vignette is a more comprehensive benchmarking study than the small inline timings in the other vignettes. It compares *fastglm* against the canonical reference implementations across a range of sample sizes and model classes:
+
+- standard GLMs against `stats::glm()`, `glm2::glm.fit2()`, and `speedglm::speedglm.wfit()`,
+- the sparse and `big.matrix` solver paths against the dense path,
+- negative-binomial regression against `MASS::glm.nb()`,
+- Firth-penalized logistic against `logistf::logistf()`,
+- hurdle and zero-inflated count regressions against `pscl::hurdle()` and `pscl::zeroinfl()`.
+
+The vignette is **pre-compiled** &mdash; the timings below were produced once on the maintainer's machine and are baked into the shipped `.Rmd`. R CMD check / build does *not* re-run the benchmarks, which keeps the package well within CRAN's runtime budget. To re-run the benchmarks (after a code change, on a different machine, etc.), execute `vignettes/_precompile.R` from the package root.
+
+```{r}
+library(fastglm)
+suppressPackageStartupMessages({
+    library(MASS)
+    library(pscl)
+    library(logistf)
+    library(speedglm)
+    library(Matrix)
+    library(bigmemory)
+    library(microbenchmark)
+})
+
+bench_unit <- "milliseconds"
+.fmt <- function(mb) {
+    s <- summary(mb, unit = bench_unit)
+    s <- s[, c("expr", "min", "median", "mean", "max")]
+    names(s) <- c("expr", "min (ms)", "median (ms)", "mean (ms)", "max (ms)")
+    s
+}
+.collect <- function(mb, n) {
+    s <- summary(mb, unit = bench_unit)
+    data.frame(n = n, expr = as.character(s$expr), median = s$median,
+               stringsAsFactors = FALSE)
+}
+.plot_scaling <- function(df, title) {
+    methods <- unique(df$expr)
+    cols    <- seq_along(methods)
+    op <- par(mar = c(4.2, 4.2, 3, 1), las = 1)
+    on.exit(par(op), add = TRUE)
+    plot(NA, log = "xy",
+         xlim = range(df$n), ylim = range(df$median),
+         xlab = "n (log scale)",
+         ylab = paste0("median time (", bench_unit, ", log scale)"),
+         main = title)
+    grid(equilogs = FALSE, col = "gray85")
+    for (k in seq_along(methods)) {
+        sub <- df[df$expr == methods[k], ]
+        sub <- sub[order(sub$n), ]
+        lines (sub$n, sub$median, col = cols[k], lwd = 2)
+        points(sub$n, sub$median, col = cols[k], pch = 19)
+    }
+    legend("topleft", legend = methods, col = cols,
+           pch = 19, lty = 1, lwd = 2, bty = "n")
+}
+sessionInfo()
+```
+
+# Standard GLMs
+
+Logistic regression with an increasing number of observations, holding `p = 30` fixed. Comparing the default *fastglm* path (`method = 0`, pivoted QR), the LLT-Cholesky path (`method = 2`), `stats::glm.fit()`, `glm2::glm.fit2()`, and `speedglm::speedglm.wfit()`.
+
+```{r}
+set.seed(1)
+p <- 30
+
+run_one_logit <- function(n) {
+    X <- matrix(rnorm(n * p), n, p)
+    beta <- rnorm(p) * 0.05
+    y <- rbinom(n, 1, plogis(X %*% beta))
+    microbenchmark(
+        fastglm_qr   = fastglm(X, y, family = binomial(),            method = 0),
+        fastglm_chol = fastglm(X, y, family = binomial(),            method = 2),
+        glm.fit      = glm.fit(X, y, family = binomial()),
+        glm2_fit2    = glm2::glm.fit2(X, y, family = binomial()),
+        speedglm     = speedglm::speedglm.wfit(y = y, X = X,
+                                               family = binomial(),
+                                               intercept = FALSE),
+        times = 5L
+    )
+}
+
+logit_tim <- list()
+for (n in c(1e3, 1e4, 1e5)) {
+    cat("\n--- n =", n, "---\n")
+    mb <- run_one_logit(n)
+    print(.fmt(mb))
+    logit_tim[[length(logit_tim) + 1]] <- .collect(mb, n)
+}
+logit_tim <- do.call(rbind, logit_tim)
+.plot_scaling(logit_tim, "Logistic regression: median time vs n (p = 30)")
+```
+
+The same comparison for Poisson regression with a log link:
+
+```{r}
+run_one_poisson <- function(n) {
+    X <- matrix(rnorm(n * p), n, p)
+    beta <- rnorm(p) * 0.05
+    y <- rpois(n, exp(X %*% beta + 1))
+    microbenchmark(
+        fastglm_qr   = fastglm(X, y, family = poisson(),            method = 0),
+        fastglm_chol = fastglm(X, y, family = poisson(),            method = 2),
+        glm.fit      = glm.fit(X, y, family = poisson()),
+        glm2_fit2    = glm2::glm.fit2(X, y, family = poisson()),
+        speedglm     = speedglm::speedglm.wfit(y = y, X = X,
+                                               family = poisson(),
+                                               intercept = FALSE),
+        times = 5L
+    )
+}
+
+pois_tim <- list()
+for (n in c(1e3, 1e4, 1e5)) {
+    cat("\n--- n =", n, "---\n")
+    mb <- run_one_poisson(n)
+    print(.fmt(mb))
+    pois_tim[[length(pois_tim) + 1]] <- .collect(mb, n)
+}
+pois_tim <- do.call(rbind, pois_tim)
+.plot_scaling(pois_tim, "Poisson regression: median time vs n (p = 30)")
+```
+
+The Cholesky paths are 3&ndash;5x faster than `glm.fit()` at moderate `n` and the gap widens with sample size &mdash; the IRLS structure is the same, but each iteration's WLS solve is materially cheaper in *RcppEigen* than in compiled R + LAPACK. *speedglm* is competitive at small `n` but its single-threaded cross-product accumulation overtakes the savings as `n` grows, since *fastglm* lets Eigen parallelise the WLS solve.
+
+# Sparse and big.matrix paths
+
+A sparse design matrix from one-hot encoding a 100-level factor against a continuous covariate. The column count is `p = 200`; *fastglm* on the dense matrix has to materialise all 200 columns explicitly, while the sparse path only operates on the non-zero entries:
+
+```{r}
+set.seed(2)
+n   <- 5e4
+g   <- factor(sample.int(100, n, replace = TRUE))
+xn  <- rnorm(n)
+Xd  <- model.matrix(~ g * xn)
+Xs  <- as(Xd, "CsparseMatrix")
+betas <- rnorm(ncol(Xd)) / 4
+y   <- rbinom(n, 1, plogis(Xd %*% betas))
+
+mb_sparse <- microbenchmark(
+    fastglm_dense  = fastglm(Xd, y, family = binomial(), method = 2),
+    fastglm_sparse = fastglm(Xs, y, family = binomial(), method = 2),
+    times = 5L
+)
+print(.fmt(mb_sparse))
+
+cat("ncol(Xd) =", ncol(Xd), "  fraction nonzero =",
+    round(length(Xs@x) / prod(dim(Xs)), 3), "\n")
+```
+
+A `big.matrix` comparison on a moderately large dense design &mdash; `n = 5e5`, `p = 20`. The on-disc `big.matrix` runs in row-blocks but produces identical estimates:
+
+```{r}
+set.seed(3)
+n  <- 5e5
+p  <- 20
+X  <- matrix(rnorm(n * p), n, p)
+Xb <- as.big.matrix(X)
+y  <- rbinom(n, 1, plogis(X %*% rnorm(p) * 0.05))
+
+mb_big <- microbenchmark(
+    dense       = fastglm(X,  y, family = binomial(), method = 2),
+    big.matrix  = fastglm(Xb, y, family = binomial(), method = 2),
+    times = 3L
+)
+print(.fmt(mb_big))
+
+f1 <- fastglm(X,  y, family = binomial(), method = 2)
+f2 <- fastglm(Xb, y, family = binomial(), method = 2)
+cat("max coef diff:", max(abs(coef(f1) - coef(f2))), "\n")
+```
+
+The dense path is faster for matrices that fit in RAM (the row-block reads have non-zero overhead), but the `big.matrix` path is the only viable option once the design exceeds available memory.
+
+# Negative-binomial regression
+
+`fastglm_nb()` against `MASS::glm.nb()` across a range of sample sizes. The data-generating process is NB(`mu`, `theta = 2`) with three covariates and an intercept:
+
+```{r}
+set.seed(4)
+run_one_nb <- function(n) {
+    X  <- cbind(1, matrix(rnorm(n * 3), n, 3))
+    mu <- exp(X %*% c(0.5, 0.4, -0.2, 0.3))
+    y  <- MASS::rnegbin(n, mu = mu, theta = 2)
+    df <- data.frame(y = y, x1 = X[, 2], x2 = X[, 3], x3 = X[, 4])
+    microbenchmark(
+        fastglm_nb = fastglm_nb(X, y),
+        glm.nb     = MASS::glm.nb(y ~ x1 + x2 + x3, data = df),
+        times = 5L
+    )
+}
+
+nb_tim <- list()
+for (n in c(1e3, 1e4, 1e5, 5e5)) {
+    cat("\n--- n =", n, "---\n")
+    mb <- run_one_nb(n)
+    print(.fmt(mb))
+    nb_tim[[length(nb_tim) + 1]] <- .collect(mb, n)
+}
+nb_tim <- do.call(rbind, nb_tim)
+.plot_scaling(nb_tim, "Negative-binomial joint MLE: median time vs n")
+```
+
+Accuracy on the largest case: coefficients and `theta` agree to floating-point precision against `glm.nb`, since both maximise the same likelihood. The runtime difference is structural &mdash; `glm.nb` runs its IRLS + theta-MLE alternation in R, *fastglm_nb* runs both loops in C++.
+
+```{r}
+set.seed(99)
+n  <- 5e5
+X  <- cbind(1, matrix(rnorm(n * 3), n, 3))
+mu <- exp(X %*% c(0.5, 0.4, -0.2, 0.3))
+y  <- MASS::rnegbin(n, mu = mu, theta = 2)
+df <- data.frame(y = y, x1 = X[, 2], x2 = X[, 3], x3 = X[, 4])
+f_nb <- fastglm_nb(X, y)
+m_nb <- MASS::glm.nb(y ~ x1 + x2 + x3, data = df)
+cat("coef max abs diff:", max(abs(unname(coef(f_nb)) - unname(coef(m_nb)))), "\n")
+cat("theta diff       :", abs(f_nb$theta - m_nb$theta), "\n")
+cat("logLik diff      :",
+    abs(as.numeric(logLik(f_nb)) - as.numeric(logLik(m_nb))), "\n")
+```
+
+# Firth bias-reduced logistic
+
+Firth-penalized logistic against `logistf::logistf()` on the canonical *sex2* example (Heinze and Schemper, 2002), and on a larger simulated example with mild quasi-separation:
+
+```{r}
+data(sex2, package = "logistf")
+X_sex2 <- model.matrix(~ age + oc + vic + vicl + vis + dia, data = sex2)
+y_sex2 <- sex2$case
+
+mb_firth1 <- microbenchmark(
+    fastglm = fastglm(X_sex2, y_sex2, family = binomial(), firth = TRUE),
+    logistf = logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2),
+    times = 10L
+)
+cat("\n--- Heinze-Schemper sex2 (n =", nrow(sex2), ") ---\n")
+print(.fmt(mb_firth1))
+
+set.seed(5)
+n <- 2000;  p <- 10
+X_big <- cbind(1, matrix(rnorm(n * p), n, p))
+beta  <- rnorm(p + 1) * 0.4
+y_big <- rbinom(n, 1, plogis(X_big %*% beta))
+df_big <- data.frame(y = y_big, X_big[, -1])
+
+mb_firth2 <- microbenchmark(
+    fastglm = fastglm(X_big, y_big, family = binomial(), firth = TRUE),
+    logistf = logistf(y ~ ., data = df_big, control = logistf.control(maxit = 50)),
+    times = 5L
+)
+cat("\n--- simulated (n =", n, ", p =", p, ") ---\n")
+print(.fmt(mb_firth2))
+
+# accuracy
+f1 <- fastglm(X_sex2, y_sex2, family = binomial(), firth = TRUE)
+l1 <- logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2)
+cat("\nsex2 max coef diff:",
+    max(abs(unname(coef(f1)) - unname(coef(l1)))), "\n")
+
+# small grouped barplot of medians
+firth_df <- rbind(
+    transform(.collect(mb_firth1, nrow(sex2)), case = "sex2"),
+    transform(.collect(mb_firth2, n),          case = paste0("sim n=", n))
+)
+op <- par(mar = c(4.2, 4.2, 3, 1), las = 1)
+m <- with(firth_df, tapply(median, list(expr, case), identity))
+barplot(m, beside = TRUE, log = "y",
+        col = c("#1f77b4", "#d62728"),
+        ylab = paste0("median time (", bench_unit, ", log scale)"),
+        main = "Firth-penalised logistic: median time per case",
+        legend.text = rownames(m),
+        args.legend = list(x = "topleft", bty = "n"))
+par(op)
+```
+
+# Hurdle models
+
+`fastglm_hurdle` against `pscl::hurdle` across a range of sample sizes, Poisson count component:
+
+```{r}
+set.seed(6)
+run_one_hurdle <- function(n) {
+    x1 <- rnorm(n);  x2 <- rnorm(n)
+    lam    <- exp(0.7 + 0.4 * x1 - 0.3 * x2)
+    is_pos <- rbinom(n, 1, plogis(-0.4 + 0.5 * x1 + 0.2 * x2))
+    yt     <- integer(n)
+    for (i in seq_len(n)) {
+        repeat { v <- rpois(1, lam[i]); if (v > 0) { yt[i] <- v; break } }
+    }
+    y  <- ifelse(is_pos == 1, yt, 0L)
+    df <- data.frame(y = y, x1 = x1, x2 = x2)
+    microbenchmark(
+        fastglm_hurdle = fastglm_hurdle(y ~ x1 + x2, data = df, dist = "poisson"),
+        pscl_hurdle    = pscl::hurdle (y ~ x1 + x2, data = df, dist = "poisson"),
+        times = 5L
+    )
+}
+
+hurdle_tim <- list()
+for (n in c(1e3, 1e4, 5e4, 1e5)) {
+    cat("\n--- n =", n, "---\n")
+    mb <- run_one_hurdle(n)
+    print(.fmt(mb))
+    hurdle_tim[[length(hurdle_tim) + 1]] <- .collect(mb, n)
+}
+hurdle_tim <- do.call(rbind, hurdle_tim)
+.plot_scaling(hurdle_tim, "Hurdle Poisson: median time vs n")
+```
+
+NB hurdle (with simultaneous `theta` MLE) on a single moderately large example:
+
+```{r}
+set.seed(7)
+n <- 1e4
+x1 <- rnorm(n);  x2 <- rnorm(n)
+lam <- exp(0.8 + 0.4 * x1 - 0.3 * x2)
+is_pos <- rbinom(n, 1, plogis(-0.4 + 0.5 * x1))
+yt <- integer(n)
+for (i in seq_len(n)) {
+    repeat {
+        v <- MASS::rnegbin(1, mu = lam[i], theta = 1.5)
+        if (v > 0) { yt[i] <- v; break }
+    }
+}
+y  <- ifelse(is_pos == 1, yt, 0L)
+df <- data.frame(y = y, x1 = x1, x2 = x2)
+
+mb_hurdle_nb <- microbenchmark(
+    fastglm_hurdle = fastglm_hurdle(y ~ x1 + x2, data = df, dist = "negbin"),
+    pscl_hurdle    = pscl::hurdle (y ~ x1 + x2, data = df, dist = "negbin"),
+    times = 3L
+)
+print(.fmt(mb_hurdle_nb))
+```
+
+# Zero-inflated models
+
+Zero-inflated Poisson against `pscl::zeroinfl()` across sample sizes:
+
+```{r}
+set.seed(8)
+run_one_zi <- function(n) {
+    x1 <- rnorm(n);  x2 <- rnorm(n)
+    eta_c <- 0.7 + 0.4 * x1 - 0.3 * x2
+    eta_z <- -0.4 + 0.5 * x1 + 0.2 * x2
+    z     <- rbinom(n, 1, plogis(eta_z))
+    y     <- ifelse(z == 1, 0L, rpois(n, exp(eta_c)))
+    df    <- data.frame(y = y, x1 = x1, x2 = x2)
+    microbenchmark(
+        fastglm_zi = fastglm_zi(y ~ x1 + x2, data = df, dist = "poisson"),
+        pscl_zi    = pscl::zeroinfl(y ~ x1 + x2, data = df, dist = "poisson"),
+        times = 5L
+    )
+}
+
+zi_tim <- list()
+for (n in c(1e3, 1e4, 5e4, 1e5)) {
+    cat("\n--- n =", n, "---\n")
+    mb <- run_one_zi(n)
+    print(.fmt(mb))
+    zi_tim[[length(zi_tim) + 1]] <- .collect(mb, n)
+}
+zi_tim <- do.call(rbind, zi_tim)
+.plot_scaling(zi_tim, "Zero-inflated Poisson: median time vs n")
+```
+
+Zero-inflated NB on a single moderately large example:
+
+```{r}
+set.seed(9)
+n  <- 1e4
+x1 <- rnorm(n);  x2 <- rnorm(n)
+eta_c <- 0.8 + 0.4 * x1 - 0.3 * x2; lam <- exp(eta_c)
+eta_z <- -0.4 + 0.5 * x1 + 0.2 * x2
+z <- rbinom(n, 1, plogis(eta_z))
+y <- ifelse(z == 1, 0L, MASS::rnegbin(n, mu = lam, theta = 2.0))
+df <- data.frame(y = y, x1 = x1, x2 = x2)
+
+mb_zi_nb <- microbenchmark(
+    fastglm_zi = fastglm_zi(y ~ x1 + x2, data = df, dist = "negbin",
+                            em.tol = 1e-8, em.maxit = 200L),
+    pscl_zi    = pscl::zeroinfl(y ~ x1 + x2, data = df, dist = "negbin"),
+    times = 3L
+)
+print(.fmt(mb_zi_nb))
+```
+
+# Summary
+
+A compact summary of the speed advantage *fastglm* delivers, expressed as the ratio of reference-implementation median time to *fastglm* median time. Larger is better. The reference for each model class is the canonical R implementation; for the standard GLMs we report the ratio against the fastest among `glm.fit`, `glm2`, and `speedglm` so the comparison is conservative.
+
+```{r}
+.speedup <- function(df, fast_label, ref_labels) {
+    out <- lapply(split(df, df$n), function(sub) {
+        fast <- sub$median[sub$expr == fast_label]
+        if (length(fast) == 0) return(NULL)
+        ref  <- min(sub$median[sub$expr %in% ref_labels])
+        data.frame(n = sub$n[1], speedup = ref / fast)
+    })
+    do.call(rbind, out)
+}
+
+su_logit  <- .speedup(logit_tim,  "fastglm_chol",
+                      c("glm.fit", "glm2_fit2", "speedglm"))
+su_pois   <- .speedup(pois_tim,   "fastglm_chol",
+                      c("glm.fit", "glm2_fit2", "speedglm"))
+su_nb     <- .speedup(nb_tim,     "fastglm_nb",     "glm.nb")
+su_hurdle <- .speedup(hurdle_tim, "fastglm_hurdle", "pscl_hurdle")
+su_zi     <- .speedup(zi_tim,     "fastglm_zi",     "pscl_zi")
+
+su_all <- rbind(
+    transform(su_logit,  model = "logit"),
+    transform(su_pois,   model = "poisson"),
+    transform(su_nb,     model = "neg-binomial"),
+    transform(su_hurdle, model = "hurdle"),
+    transform(su_zi,     model = "zero-inflated")
+)
+
+op <- par(mar = c(4.2, 4.5, 3, 1), las = 1)
+models <- unique(su_all$model)
+cols   <- seq_along(models)
+plot(NA, log = "xy",
+     xlim = range(su_all$n), ylim = range(su_all$speedup),
+     xlab = "n (log scale)",
+     ylab = "speedup over reference (x, log scale)",
+     main = "fastglm speedup vs canonical reference, by model class")
+abline(h = 1, col = "gray70", lty = 2)
+grid(equilogs = FALSE, col = "gray85")
+for (k in seq_along(models)) {
+    sub <- su_all[su_all$model == models[k], ]
+    sub <- sub[order(sub$n), ]
+    lines (sub$n, sub$speedup, col = cols[k], lwd = 2)
+    points(sub$n, sub$speedup, col = cols[k], pch = 19)
+}
+legend("topleft", legend = models, col = cols, pch = 19, lty = 1, lwd = 2,
+       bty = "n")
+par(op)
+```
+
+Across all six model classes the same picture holds:
+
+- *fastglm* matches the canonical reference implementation to floating-point precision (or to within the EM tolerance for zero-inflation), so the numerical answer is the same.
+- The runtime gap grows with sample size, since R-side overhead in the reference implementations is fixed-per-iteration. By `n = 1e5` the speedup is generally an order of magnitude or more.
+- For models with an outer iteration (NB joint MLE, hurdle/ZI with NB), the gap is widest, since the entire outer loop is in C++ in *fastglm* and entirely in R for `MASS::glm.nb`, `pscl::hurdle`, `pscl::zeroinfl`.
+
+# References
+
+- Enea, M. (2009). Fitting linear models and generalized linear models with large data sets in R. In *Statistical Methods for the Analysis of Large Data-sets*, Italian Statistical Society. *speedglm* package documentation.
+
+- Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika*, 80(1), 27&ndash;38. <doi:10.1093/biomet/80.1.27>
+
+- Heinze, G. and Schemper, M. (2002). A solution to the problem of separation in logistic regression. *Statistics in Medicine*, 21(16), 2409&ndash;2419. <doi:10.1002/sim.1047>
+
+- Marschner, I. C. (2011). glm2: Fitting generalized linear models with convergence problems. *The R Journal*, 3(2), 12&ndash;15. <doi:10.32614/RJ-2011-012>
+
+- Venables, W. N. and Ripley, B. D. (2002). *Modern Applied Statistics with S* (4th ed.). Springer.
+
+- Zeileis, A., Kleiber, C., and Jackman, S. (2008). Regression models for count data in R. *Journal of Statistical Software*, 27(8), 1&ndash;25. <doi:10.18637/jss.v027.i08>

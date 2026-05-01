@@ -10,3 +10,7 @@ inst/doc
 
 *.bk
 *.desc
+
+# R CMD check / build artifacts
+*.Rcheck/
+*.tar.gz

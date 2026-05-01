@@ -49,6 +49,11 @@
 
 \item{singular.ok, intercept}{See [glm.fit()].}
 
+\item{firth}{`logical`; if `TRUE` apply Firth's (1993) bias-reducing
+penalty to the score function. Currently supported only for
+`family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
+for the canonical reference implementation.}
+
 \item{fastmethod}{`integer`; the method used for fitting. Allowable values include 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition, 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, and 5 for the Bidiagonal Divide and Conquer SVD. Default is 0. Can also be supplied as `method` when not supplied directly as an argument from `glm()` (see Examples).}
 
 \item{tol}{`numeric`; threshold tolerance for convergence.}
