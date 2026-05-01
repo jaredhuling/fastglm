@@ -1,9 +1,38 @@
+# Map a family object to the integer FamilyCode enum understood by the C++
+# solver.  Returns -1L when the (family, link) pair has no native fast path,
+# in which case the solver falls back to the per-iteration R callbacks.
+family_code <- function(family) {
+    if (is.null(family) || is.null(family$family) || is.null(family$link))
+        return(-1L)
+    key <- paste0(family$family, ":", family$link)
+    code <- switch(key,
+        "gaussian:identity"          = 0L,
+        "gaussian:log"               = 1L,
+        "gaussian:inverse"           = 2L,
+        "binomial:logit"             = 3L,
+        "binomial:probit"            = 4L,
+        "binomial:cloglog"           = 5L,
+        "binomial:log"               = 6L,
+        "poisson:log"                = 7L,
+        "poisson:identity"           = 8L,
+        "poisson:sqrt"               = 9L,
+        "Gamma:log"                  = 10L,
+        "Gamma:inverse"              = 11L,
+        "Gamma:identity"             = 12L,
+        "inverse.gaussian:1/mu^2"    = 13L,
+        "inverse.gaussian:log"       = 14L,
+        "inverse.gaussian:identity"  = 15L,
+        "inverse.gaussian:inverse"   = 16L,
+        -1L)
+    code
+}
+
 #' Fast generalized linear model fitting
 #'
-#' @param x input model matrix. Must be a matrix object 
+#' @param x input model matrix. Must be a matrix object
 #' @param y numeric response vector of length nobs.
-#' @param family a description of the error distribution and link function to be used in the model. 
-#' For \code{fastglmPure} this can only be the result of a call to a family function. 
+#' @param family a description of the error distribution and link function to be used in the model.
+#' For \code{fastglmPure} this can only be the result of a call to a family function.
 #' (See \code{\link[stats]{family}} for details of family functions.)
 #' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
 #' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
@@ -98,20 +127,30 @@ fastglmPure <- function(x, y,
     weights <- as.vector(weights)
     offset  <- as.vector(offset)
     
-    if (is.big.matrix(x))
+    is_sparse_matrix <- inherits(x, "dgCMatrix")
+    if (is_sparse_matrix)
+    {
+        is_big_matrix <- FALSE
+        if (method != 2 & method != 3)
+        {
+            stop("for sparse (dgCMatrix) objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
+                 "QR / SVD on sparse matrices is not supported by this package.")
+        }
+    } else if (is.big.matrix(x))
     {
         is_big_matrix <- TRUE
         if (method != 2 & method != 3)
         {
-            method <- 3
-            warning("for big.matrix objects, 'method' must either be 2 (for LLT) or 3 (for LDLT) -- 'method' changed to 3.")
+            stop("for big.matrix objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
+                 "QR / SVD methods would force the matrix to be fully read into RAM, ",
+                 "defeating the purpose of bigmemory.")
         }
     } else if (is.matrix(x))
     {
         is_big_matrix <- FALSE
     } else
     {
-        stop("x must be either a matrix or a big.matrix object")
+        stop("x must be a matrix, a big.matrix object, or a Matrix::dgCMatrix")
     }
     
     
@@ -193,23 +232,39 @@ fastglmPure <- function(x, y,
     
     if (is.null(start)) start <- rep(0, nvars)
     
-    if (!is_big_matrix)
+    fc <- family_code(family)
+
+    if (is_sparse_matrix)
     {
-        res <- fit_glm(x, drop(y), drop(weights), drop(offset), 
+        res <- fit_sparse_glm(x, drop(y), drop(weights), drop(offset),
+                              drop(start), drop(mu), drop(eta),
+                              family$variance, family$mu.eta, family$linkinv, family$dev.resids,
+                              family$valideta, family$validmu,
+                              as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
+                              as.integer(fc))
+        # Detect intercept-like columns (all entries identical) by max == min.
+        col_max <- apply(x, 2, max)
+        col_min <- apply(x, 2, min)
+        res$intercept <- any(is.int <- (col_max == col_min))
+    } else if (!is_big_matrix)
+    {
+        res <- fit_glm(x, drop(y), drop(weights), drop(offset),
                        drop(start), drop(mu), drop(eta),
-                       family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                       family$variance, family$mu.eta, family$linkinv, family$dev.resids,
                        family$valideta, family$validmu,
-                       as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
-        
+                       as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
+                       as.integer(fc))
+
         res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else
     {
-        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset), 
+        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset),
                            drop(start), drop(mu), drop(eta),
-                           family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                           family$variance, family$mu.eta, family$linkinv, family$dev.resids,
                            family$valideta, family$validmu,
-                           as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
-        
+                           as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
+                           as.integer(fc))
+
         res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
     }
     
@@ -253,6 +308,7 @@ fastglmPure <- function(x, y,
     res$prior.weights <- weights
     res$y <- y
     res$n <- n
+    res$x <- x        # reference to the model matrix; used by vcovHC / vcovCL
     res
 }
 

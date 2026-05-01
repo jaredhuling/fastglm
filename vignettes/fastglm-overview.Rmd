@@ -1,0 +1,189 @@
+---
+title: "Overview of the 'fastglm' Package"
+author: "Jared Huling"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Overview of the 'fastglm' Package}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE,
+  echo = TRUE,
+  eval = TRUE
+)
+```
+
+The *fastglm* package is intended as a **fast** *and* **stable** alternative to `stats::glm()` for fitting generalized linear models. It is compatible with `R`'s `family` objects (see `?family`) and produces fitted objects whose downstream methods --- `summary()`, `vcov()`, `predict()`, `coef()`, `residuals()`, `logLik()` --- behave exactly like those for a `glm`. This vignette walks through the main functionality of the package at a higher level than the other vignettes; it is intended as a single entry point for a new user.
+
+```{r}
+library(fastglm)
+```
+
+# Fitting a GLM
+
+The main package function is `fastglm()`. It takes a numeric design matrix `x`, a response `y`, and an `R` `family` object:
+
+```{r}
+data(esoph)
+x <- model.matrix(~ agegp + unclass(tobgp) + unclass(alcgp),
+                  data = esoph)
+y <- cbind(esoph$ncases, esoph$ncontrols)
+
+fit <- fastglm(x, y, family = binomial(link = "cloglog"))
+summary(fit)
+```
+
+`fastglm()` does not accept a formula directly, it operates on a pre-built design matrix. To use a formula and a data frame, pass `fastglm.fit` as the fitting function to base `glm()`:
+
+```{r}
+fit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + unclass(alcgp),
+            data = esoph, family = binomial(link = "cloglog"),
+            method = fastglm.fit)
+```
+
+# Decomposition methods
+
+The IRLS algorithm reduces every iteration to a weighted least-squares problem. *fastglm* supports six different matrix decompositions for solving that WLS step, all from *RcppEigen* (Bates and Eddelbuettel, 2013); the choice trades off speed against numerical stability and rank-revealing behaviour:
+
+| `method` | decomposition |
+|---|---|
+| `0` | column-pivoted Householder QR (default; rank-revealing) |
+| `1` | unpivoted Householder QR |
+| `2` | LLT Cholesky |
+| `3` | LDLT Cholesky |
+| `4` | full-pivoted Householder QR |
+| `5` | bidiagonal divide-and-conquer SVD |
+
+The default (`method = 0`) is the safe choice: it is rank-revealing, so it handles aliased / collinear columns gracefully. The Cholesky methods (`2` and `3`) are roughly 3–4× faster but assume full column rank.
+
+```{r}
+set.seed(123)
+n <- 5000; p <- 30
+x <- matrix(rnorm(n * p), n, p)
+y <- rbinom(n, 1, plogis(x %*% rnorm(p) * 0.05))
+
+system.time(f0 <- fastglm(x, y, family = binomial()))                 # default
+system.time(f2 <- fastglm(x, y, family = binomial(), method = 2))     # LLT
+system.time(f3 <- fastglm(x, y, family = binomial(), method = 3))     # LDLT
+```
+
+# Stability
+
+*fastglm* does not compromise computational stability for speed. It uses a step-halving safeguard following Marschner (2011) and starts from better-initialised values than `glm()` or `glm2::glm2()`, so it tends to converge in cases where the standard IRLS algorithm fails. See `vignette("fastglm", package = "fastglm")` for a Gamma-with-`sqrt`-link example where `glm()` does not converge but `fastglm()` does.
+
+# Inference: `vcov()`, robust SE, predictions
+
+The fitted object stores the unscaled covariance directly (no refitting), and the standard `vcov()` / `summary()` machinery works as expected:
+
+```{r}
+fit <- fastglm(x, y, family = binomial(), method = 2)
+
+V    <- vcov(fit)
+dim(V)
+
+## standard errors agree with the diagonal of vcov()
+all.equal(sqrt(diag(V)), unname(coef(summary(fit))[, "Std. Error"]))
+```
+
+Heteroskedasticity-consistent and cluster-robust covariance matrices are available directly:
+
+```{r}
+V_hc <- vcovHC(fit, type = "HC0")
+V_hc[1:3, 1:3]
+
+cluster <- rep(seq_len(20), length.out = n)
+V_cl    <- vcovCL(fit, cluster = cluster, type = "HC1")
+V_cl[1:3, 1:3]
+```
+
+The `vcovHC` and `vcovCL` methods produce results numerically identical to `sandwich::vcovHC()` and `sandwich::vcovCL()` (Zeileis, Köll, and Graham, 2020) to floating-point precision. They work for sparse and `big.matrix` fits as well, since the full design matrix is preserved on the fitted object (as a reference, not copied).
+
+`predict()` supports `se.fit = TRUE`:
+
+```{r}
+xnew <- x[1:5, , drop = FALSE]
+predict(fit, newdata = xnew, type = "response", se.fit = TRUE)
+```
+
+# Sparse, big.matrix, and streaming designs
+
+For designs that are sparse, that live on disc, or that have to be built from a parquet / *arrow* / *DuckDB* source, *fastglm* provides three large-data paths that share a common streaming kernel and produce identical results:
+
+- `Matrix::dgCMatrix`: pass directly to `fastglm()`. Useful for one-hot encoded categoricals and high-dimensional sparse designs.
+- `bigmemory::big.matrix`: pass directly to `fastglm()`. The matrix is read in row-blocks and never fully materialised in memory.
+- `fastglm_streaming(chunk_callback, n_chunks, family)`: a user-supplied closure yields one row-block per call. The right path for fitting on a parquet dataset, *DuckDB* query, or any external columnar store.
+
+See `vignette("large-data-fastglm", package = "fastglm")` for a detailed walk through all three paths. A short example:
+
+```{r}
+n <- 4000
+X <- cbind(1, matrix(rnorm(n * 3), n, 3))
+y <- rbinom(n, 1, plogis(X %*% c(0.2, 0.4, -0.2, 0.3)))
+
+chunk_size <- 1000
+chunks <- function(k) {
+    idx <- ((k - 1) * chunk_size + 1):(k * chunk_size)
+    list(X = X[idx, , drop = FALSE], y = y[idx])
+}
+
+fit_stream <- fastglm_streaming(chunks, n_chunks = 4, family = binomial())
+fit_full   <- fastglm(X, y, family = binomial(), method = 2)
+
+max(abs(coef(fit_stream) - coef(fit_full)))
+```
+
+# Native families
+
+For the most commonly-used `family`/`link` combinations, *fastglm* dispatches `variance()`, `mu.eta()`, `linkinv()`, and `dev.resids()` to inline C++ implementations rather than calling back into `R` once per IRLS iteration. The covered combinations are:
+
+- gaussian (identity, log, inverse)
+- binomial (logit, probit, cloglog, log)
+- poisson (log, identity, sqrt)
+- Gamma (log, inverse, identity)
+- inverse.gaussian (1/mu^2, log, identity, inverse)
+
+Detection is automatic, if the `family` object matches one of the above, the native path is used; otherwise *fastglm* falls back to the `R`-callback path used in earlier versions. The native path is meaningfully faster on large `n` because it eliminates the per-iteration round-trip to `R` for each of the four family functions:
+
+```{r, eval = TRUE}
+library(microbenchmark)
+
+set.seed(7)
+n <- 50000; p <- 30
+x <- matrix(rnorm(n * p), n, p)
+y <- rpois(n, exp(x %*% rnorm(p) * 0.05 + 1))
+
+## force the R-callback path by giving the family object an unrecognised name
+disguise <- function(fam) { fam$family <- paste0(fam$family, "*"); fam }
+
+mb <- microbenchmark(
+    native   = fastglm(x, y, family = poisson(),            method = 2),
+    callback = fastglm(x, y, family = disguise(poisson()),  method = 2),
+    times = 5L
+)
+print(mb)
+```
+
+The *fastglm* package switches transparently between the two paths; user code does not change.
+
+# Three R entry points
+
+There are three `R`-side functions to fit a GLM with *fastglm*. They all call into the same C++ solver, but differ in how much of base R's machinery they wrap around it:
+
+- **`fastglm()`** is the top-level S3 function. It returns an object of class `"fastglm"` with deviance, AIC, null deviance, residuals, etc. populated --- the right entry point for interactive use.
+- **`fastglm.fit()`** is designed to be passed as `method = fastglm.fit` to base `glm()`. The returned object inherits from `"fastglmFit"` so that `glm()`'s formula/data handling, `update()`, `predict()`, etc. all work on top.
+- **`fastglmPure()`** is the lowest-level wrapper: no dispersion, no AIC, no null-deviance computation. Use this when calling *fastglm* from another package and you only need the coefficients.
+
+# References
+
+- Marschner, I. C. (2011). glm2: Fitting generalized linear models with convergence problems. *The R Journal*, 3(2), 12–15. <doi:10.32614/RJ-2011-012>
+
+- Bates, D. and Eddelbuettel, D. (2013). Fast and elegant numerical linear algebra using the RcppEigen package. *Journal of Statistical Software*, 52(5), 1–24. <doi:10.18637/jss.v052.i05>
+
+- Zeileis, A., Köll, S., and Graham, N. (2020). Various versatile variances: An object-oriented implementation of clustered covariances in R. *Journal of Statistical Software*, 95(1), 1–36. <doi:10.18637/jss.v095.i01>

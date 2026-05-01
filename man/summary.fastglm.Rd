@@ -4,12 +4,22 @@
 \alias{summary.fastglm}
 \title{`summary()` method for `fastglm` fitted objects}
 \usage{
-\method{summary}{fastglm}(object, dispersion = NULL, ...)
+\method{summary}{fastglm}(
+  object,
+  dispersion = NULL,
+  correlation = FALSE,
+  symbolic.cor = FALSE,
+  ...
+)
 }
 \arguments{
 \item{object}{`fastglm` fitted object}
 
 \item{dispersion}{the dispersion parameter for the family used. Either a single numerical value or `NULL` (the default), when it is inferred from `object`.}
+
+\item{correlation}{logical; if `TRUE`, the correlation matrix of the estimated parameters is returned.}
+
+\item{symbolic.cor}{logical; if `TRUE`, print the correlations in a symbolic form (see `symnum`) rather than as numbers.}
 
 \item{...}{not used}
 }

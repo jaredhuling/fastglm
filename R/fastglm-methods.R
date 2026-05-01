@@ -18,55 +18,70 @@
 #' 
 #' summary(fit)
 
+#' @param correlation logical; if `TRUE`, the correlation matrix of the estimated parameters is returned.
+#' @param symbolic.cor logical; if `TRUE`, print the correlations in a symbolic form (see `symnum`) rather than as numbers.
 #' @exportS3Method summary fastglm
-summary.fastglm <- function(object, dispersion = NULL, ...)
+summary.fastglm <- function(object, dispersion = NULL,
+                            correlation = FALSE, symbolic.cor = FALSE, ...)
 {
     p <- object$rank
-    
+
     est.disp <- FALSE
     df.r <- object$df.residual
-    
-    if(is.null(dispersion)) 
+
+    if (is.null(dispersion))
     {
         if (!(object$family$family %in% c("poisson", "binomial"))) est.disp <- TRUE
         dispersion <- object$dispersion
     }
-    
+
     aliased <- is.na(coef(object))  # used in print method
+
+    covmat.unscaled <- object$cov.unscaled
+    if (is.null(covmat.unscaled) && p > 0)
+    {
+        # Fallback for older fitted objects without cov.unscaled
+        covmat.unscaled <- diag(object$se ^ 2 / max(dispersion, .Machine$double.eps),
+                                nrow = length(object$coefficients))
+    }
+    if (!is.null(covmat.unscaled) && length(object$coefficients) > 0L)
+    {
+        nms <- names(object$coefficients)
+        rownames(covmat.unscaled) <- colnames(covmat.unscaled) <- nms
+        # Match base R summary.glm: drop aliased rows/cols (rank x rank)
+        if (any(aliased))
+            covmat.unscaled <- covmat.unscaled[!aliased, !aliased, drop = FALSE]
+    }
+    covmat <- if (!is.null(covmat.unscaled)) dispersion * covmat.unscaled else NULL
 
     if (p > 0)
     {
         coef   <- object$coefficients
         se     <- object$se
         tvalue <- coef / se
-        
-        #coef.table <- cbind(Estimate     = coef,
-        #                    "Std. Error" = se,
-        #                    "t value"    = tval,
-        #                    "Pr(>|t|)"   = 2*pt(-abs(tval), df = object$df))
-        
+
         dn <- c("Estimate", "Std. Error")
-        if(!est.disp) 
+        if (!est.disp)
         { # known dispersion
             pvalue <- 2 * pnorm(-abs(tvalue))
             coef.table <- cbind(coef, se, tvalue, pvalue)
             dimnames(coef.table) <- list(names(coef),
                                          c(dn, "z value","Pr(>|z|)"))
-        } else if(df.r > 0) 
+        } else if (df.r > 0)
         {
             pvalue <- 2 * pt(-abs(tvalue), df.r)
             coef.table <- cbind(coef, se, tvalue, pvalue)
             dimnames(coef.table) <- list(names(coef),
                                          c(dn, "t value","Pr(>|t|)"))
-        } else 
+        } else
         { # df.r == 0
             coef.table <- cbind(coef, NaN, NaN, NaN)
             dimnames(coef.table) <- list(names(coef),
                                          c(dn, "t value","Pr(>|t|)"))
         }
-    
+
         df.f <- length(aliased)
-    } else 
+    } else
     {
         coef.table <- matrix(0, 0L, 4L)
         dimnames(coef.table) <-
@@ -75,7 +90,7 @@ summary.fastglm <- function(object, dispersion = NULL, ...)
         df.f <- length(aliased)
     }
     df.int <- if (object$intercept) 1L else 0L
-    
+
     ## these need not all exist, e.g. na.action.
     keep <- match(c("call","terms","family","deviance", "aic",
                     "contrasts", "df.residual","null.deviance","df.null",
@@ -85,24 +100,231 @@ summary.fastglm <- function(object, dispersion = NULL, ...)
                   coefficients = coef.table,
                   aliased = aliased,
                   dispersion = dispersion,
-                  df = c(object$rank, df.r, df.f)))
-                  #cov.unscaled = covmat.unscaled,
-                  #cov.scaled = covmat))
-    
-    ## will do this later    
-    # if(correlation && p > 0) 
-    # {
-    #     dd <- sqrt(diag(covmat.unscaled))
-    #     ans$correlation <-
-    #         covmat.unscaled/outer(dd,dd)
-    #     ans$symbolic.cor <- symbolic.cor
-    # }
+                  df = c(object$rank, df.r, df.f),
+                  cov.unscaled = covmat.unscaled,
+                  cov.scaled = covmat))
+
+    if (correlation && p > 0 && !is.null(covmat.unscaled))
+    {
+        dd <- sqrt(diag(covmat.unscaled))
+        ans$correlation <- covmat.unscaled / outer(dd, dd)
+        ans$symbolic.cor <- symbolic.cor
+    }
     class(ans) <- "summary.glm"
     return(ans)
 }
 
+#' `vcov()` method for `fastglm` fitted objects
+#'
+#' @param object a fitted object of class inheriting from `"fastglm"`.
+#' @param ... additional arguments (currently unused).
+#'
+#' @returns The estimated variance-covariance matrix of the fitted coefficients.
+#' For rank-deficient fits, rows and columns corresponding to aliased
+#' coefficients are filled with `NA`.
+#'
+#' @method vcov fastglm
+#' @exportS3Method stats::vcov fastglm
+vcov.fastglm <- function(object, ...)
+{
+    cov.unscaled <- object$cov.unscaled
+    if (is.null(cov.unscaled))
+    {
+        v <- diag(object[["se"]]^2, nrow = length(object$coefficients))
+        rownames(v) <- colnames(v) <- names(coef(object))
+        return(v)
+    }
+    disp <- if (is.null(object$dispersion) || is.nan(object$dispersion)) 1 else object$dispersion
+    v <- disp * cov.unscaled
+    nms <- names(coef(object))
+    rownames(v) <- colnames(v) <- nms
+    v
+}
+
+#' Heteroskedasticity-consistent (HC) variance estimators for `fastglm` objects
+#'
+#' @param object a fitted object of class `"fastglm"` or `"fastglmFit"`.
+#' @param type one of `"HC0"`, `"HC1"`, `"HC2"`, `"HC3"`. Default `"HC3"` matches
+#'   `sandwich::vcovHC.glm`.
+#' @param ... not used.
+#'
+#' @returns A `p x p` heteroskedasticity-consistent variance-covariance matrix.
+#'
+#' @details
+#' Computes the Eicker-Huber-White sandwich estimator
+#' `bread %*% meat %*% bread`, where `bread = (X' W X)^{-1}` (already stored as
+#' `cov.unscaled`) and `meat = X' diag(omega_i) X`. With `s_i = w_i^2 * r_i`
+#' the score contribution from observation `i`, the omegas are:
+#' \describe{
+#'   \item{`HC0`}{`omega_i = s_i^2`}
+#'   \item{`HC1`}{`HC0` rescaled by `n / (n - p)`}
+#'   \item{`HC2`}{`omega_i = s_i^2 / (1 - h_i)`}
+#'   \item{`HC3`}{`omega_i = s_i^2 / (1 - h_i)^2`}
+#' }
+#' where `r_i` is the working residual `(y - mu) / mu.eta(eta)`,
+#' `w_i^2 = prior.weight * mu.eta(eta)^2 / variance(mu)` is the IRLS working
+#' weight, and `h_i = w_i^2 * x_i' (X' W X)^(-1) x_i` is the IRLS leverage.
+#' Equivalent to `sandwich::vcovHC.glm`.
+#'
+#' Requires the model matrix `x` stored on the fitted object (set automatically
+#' by `fastglm()`, `fastglmPure()`, and `fastglm.fit()` since version 0.0.6).
+#'
+#' @examples
+#' x <- cbind(1, matrix(rnorm(500 * 4), ncol = 4))
+#' y <- rbinom(500, 1, plogis(x %*% c(0.2, 0.3, -0.4, 0.1, 0.2)))
+#' fit <- fastglm(x, y, family = binomial())
+#' vcovHC(fit)
+#' vcovHC(fit, type = "HC0")
+#'
+#' @export
+vcovHC <- function(object, ...) UseMethod("vcovHC")
+
+#' @rdname vcovHC
+#' @exportS3Method vcovHC fastglm
+vcovHC.fastglm <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
+{
+    type <- match.arg(type)
+    .vcov_hc_fastglm(object, type)
+}
+
+#' @rdname vcovHC
+#' @exportS3Method vcovHC fastglmFit
+vcovHC.fastglmFit <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
+{
+    type <- match.arg(type)
+    .vcov_hc_fastglm(object, type)
+}
+
+#' Cluster-robust variance estimator for `fastglm` objects
+#'
+#' @param object a fitted object of class `"fastglm"` or `"fastglmFit"`.
+#' @param cluster a vector identifying the cluster for each observation. Length
+#'   must equal the number of rows of the design matrix.
+#' @param type one of `"HC0"`, `"HC1"`. `"HC1"` (the default) applies the small-sample
+#'   degrees-of-freedom adjustment `(G / (G - 1)) * ((n - 1) / (n - p))`, where
+#'   `G` is the number of clusters.
+#' @param ... not used.
+#'
+#' @returns A `p x p` cluster-robust variance-covariance matrix.
+#'
+#' @details
+#' The Liang-Zeger (1986) cluster-robust sandwich:
+#' `bread %*% (sum_g s_g s_g') %*% bread`, where `s_g = sum_{i in g} w_i r_i x_i`
+#' is the score contribution from cluster `g`.
+#'
+#' @export
+vcovCL <- function(object, ...) UseMethod("vcovCL")
+
+#' @rdname vcovCL
+#' @exportS3Method vcovCL fastglm
+vcovCL.fastglm <- function(object, cluster, type = c("HC1", "HC0"), ...)
+{
+    type <- match.arg(type)
+    .vcov_cl_fastglm(object, cluster, type)
+}
+
+#' @rdname vcovCL
+#' @exportS3Method vcovCL fastglmFit
+vcovCL.fastglmFit <- function(object, cluster, type = c("HC1", "HC0"), ...)
+{
+    type <- match.arg(type)
+    .vcov_cl_fastglm(object, cluster, type)
+}
+
+# Internal: pull (X, working residuals, working weights, bread) off a fitted
+# fastglm/fastglmFit object.  Returns a list with elements x, r, w, bread, p.
+.vcov_hc_meat_inputs <- function(object)
+{
+    x <- object$x
+    if (is.null(x))
+        stop("vcovHC/vcovCL require the design matrix to be stored on the fitted object. ",
+             "Refit with fastglm/fastglmPure/fastglm.fit (>= 0.0.6).", call. = FALSE)
+    if (inherits(x, "big.matrix"))
+        x <- x[]
+    if (inherits(x, "dgCMatrix"))
+        x <- as.matrix(x)
+
+    bread <- object$cov.unscaled
+    if (is.null(bread))
+        stop("'cov.unscaled' missing from fitted object; refit with current fastglm.", call. = FALSE)
+
+    fam <- object$family
+    eta <- object$linear.predictors
+    mu  <- object$fitted.values
+    pw  <- object$prior.weights
+    if (is.null(pw)) pw <- rep(1, length(eta))
+
+    mu_eta_vec <- fam$mu.eta(eta)
+    var_mu_vec <- fam$variance(mu)
+    y <- object$y
+    r <- (y - mu) / mu_eta_vec                              # working residual
+    w2 <- pw * mu_eta_vec^2 / var_mu_vec                    # working weight (W in (X'WX))
+
+    # GLM score scalar: s_i = w^2_i * r_i = pw_i * mu_eta_i * (y_i - mu_i) / V(mu_i).
+    # Note: do NOT divide by dispersion here. sandwich::estfun.glm divides by an
+    # internal dispersion estimate, but sandwich::bread.glm multiplies by the
+    # SAME dispersion, so the two cancel in the final sandwich formula.
+    s <- w2 * r
+
+    list(x = x, r = r, s = s, w2 = w2, bread = bread,
+         p = length(object$coefficients), n = length(y))
+}
+
+.vcov_hc_fastglm <- function(object, type)
+{
+    inp <- .vcov_hc_meat_inputs(object)
+    x <- inp$x; s <- inp$s; w2 <- inp$w2; bread <- inp$bread
+    n <- inp$n; p <- inp$p
+
+    omega <- s^2
+
+    if (type %in% c("HC2", "HC3"))
+    {
+        # IRLS leverage h_i = w_i^2 * x_i' (X'WX)^{-1} x_i
+        h <- w2 * rowSums((x %*% bread) * x)
+        h <- pmin(h, 1 - 1e-12)
+        if (type == "HC2") omega <- omega / (1 - h)
+        else               omega <- omega / (1 - h)^2
+    }
+
+    XtMX <- crossprod(x, omega * x)
+    V <- bread %*% XtMX %*% bread
+
+    if (type == "HC1")
+        V <- V * (n / max(n - p, 1))
+
+    nms <- names(object$coefficients)
+    rownames(V) <- colnames(V) <- nms
+    V
+}
+
+.vcov_cl_fastglm <- function(object, cluster, type)
+{
+    inp <- .vcov_hc_meat_inputs(object)
+    x <- inp$x; s <- inp$s; bread <- inp$bread
+    n <- inp$n; p <- inp$p
+
+    if (length(cluster) != n)
+        stop(sprintf("length(cluster) (%d) does not match number of observations (%d)",
+                     length(cluster), n), call. = FALSE)
+    cl <- as.factor(cluster)
+    G <- nlevels(cl)
+
+    estfun <- s * x                                          # n x p
+    s_g <- rowsum(estfun, cl, reorder = FALSE)               # G x p
+    meat <- crossprod(s_g)
+    V <- bread %*% meat %*% bread
+
+    if (type == "HC1")
+        V <- V * (G / max(G - 1, 1)) * ((n - 1) / max(n - p, 1))
+
+    nms <- names(object$coefficients)
+    rownames(V) <- colnames(V) <- nms
+    V
+}
+
 #' @exportS3Method print fastglm
-print.fastglm <- function(x, digits = max(3L, getOption("digits") - 3L), ...) 
+print.fastglm <- function(x, digits = max(3L, getOption("digits") - 3L), ...)
 {
     cat("\nCall:  ", paste(deparse(x$call), sep = "\n", collapse = "\n"), 
         "\n\n", sep = "")
@@ -179,22 +401,31 @@ predict.fastglm <- function(object,
                             dispersion = NULL, ...)
 {
     type <- match.arg(type)
-    
-    eta <- predict_fastglm_lm(object, newdata, se.fit, scale = 1, ...)
+
+    if (is.null(dispersion))
+        dispersion <- if (is.null(object$dispersion) || is.nan(object$dispersion)) 1 else object$dispersion
+
+    pred <- predict_fastglm_lm(object, newdata, se.fit, dispersion = dispersion, ...)
+
     if (type == "response")
     {
-        eta <- family(object)$linkinv(eta)
+        fam <- family(object)
+        if (se.fit)
+        {
+            mu_eta <- fam$mu.eta(pred$fit)
+            pred$fit    <- fam$linkinv(pred$fit)
+            pred$se.fit <- pred$se.fit * abs(mu_eta)
+        } else
+        {
+            pred <- fam$linkinv(pred)
+        }
     }
-    eta
+    pred
 }
 
 
-predict_fastglm_lm <- function(object, newdata, se.fit = FALSE, scale = 1)
+predict_fastglm_lm <- function(object, newdata, se.fit = FALSE, dispersion = 1)
 {
-    if (se.fit)
-    {
-        stop("confidence/prediction intervals not available yet")
-    }
     dims <- dim(newdata)
     if (is.null(dims))
     {
@@ -202,11 +433,20 @@ predict_fastglm_lm <- function(object, newdata, se.fit = FALSE, scale = 1)
         dims <- dim(newdata)
     }
     beta <- object$coefficients
-    
+
     if (dims[2L] != length(beta))
     {
         stop("newdata provided does not match fitted model 'object'")
     }
     eta <- drop(newdata %*% beta)
-    eta
+
+    if (!se.fit) return(eta)
+
+    cov.unscaled <- object$cov.unscaled
+    if (is.null(cov.unscaled))
+        stop("standard errors of predictions require 'cov.unscaled' from a refit; reinstall fastglm and refit")
+
+    cov.scaled <- dispersion * cov.unscaled
+    se <- sqrt(rowSums((newdata %*% cov.scaled) * newdata))
+    list(fit = eta, se.fit = se, residual.scale = sqrt(dispersion))
 }

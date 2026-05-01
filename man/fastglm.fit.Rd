@@ -23,9 +23,9 @@
 
 \method{fastglm}{control}(fastmethod = 0L, tol = 1e-07, maxit = 100L, ...)
 
-\method{vcov}{fastglmFit}(object, refit = TRUE, ...)
+\method{vcov}{fastglmFit}(object, ...)
 
-\method{summary}{fastglmFit}(object, refit = TRUE, ...)
+\method{summary}{fastglmFit}(object, ...)
 }
 \arguments{
 \item{x}{a design matrix of dimension `n * p`. Can also be a `big.matrix` object from \pkg{bigmemory}.}
@@ -54,17 +54,15 @@
 
 \item{maxit}{`integer`; the maximum number of IRLS iterations.}
 
-\item{\dots}{for `vcov()` and `summary()`, other arguments passed to [vcov.glm()] and [summary.glm()] when `refit = TRUE`.}
+\item{\dots}{for `vcov()` and `summary()`, other arguments passed downstream.}
 
 \item{object}{a `fastglmFit` object; the output of a call to `glm()` with `method = fastglm.fit`.}
-
-\item{refit}{`logical`; whether to refit the model using `glm()` with `method = "glm.fit"`. If `TRUE`, the model will be refit using the estimated coefficients as starting values for a single IRLS iteration in order to produce the usual coefficient covariance matrix. If `FALSE`, `vcov` will only produce the diagonal of the covariance matrix.}
 }
 \description{
 `fastglm.fit()` is a fitting method for [glm()]. It works like `glm.fit()`, i.e., by being supplied to the `method` argument of `glm()`.
 }
 \details{
-The purpose of the functions documented on this page is to facilitate integration with existing [glm()] utilities in base R. `fastglm.fit()` is just a wrapper for [fastglmPure()] with some additional quality-of-life features. The `vcov()` and `summary()` methods are quick hacks to use the existing architecture for these functions in base R. Because of this, they involve refitting the GLM with the estimated coefficients as starting values.
+The purpose of the functions documented on this page is to facilitate integration with existing [glm()] utilities in base R. `fastglm.fit()` is just a wrapper for [fastglmPure()] with some additional quality-of-life features. The `vcov()` and `summary()` methods use the unscaled coefficient covariance matrix returned directly from the C++ solver, so no refit is required.
 }
 \examples{
 set.seed(1234)

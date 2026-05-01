@@ -16,11 +16,10 @@
 #' @param tol `numeric`; threshold tolerance for convergence.
 #' @param maxit `integer`; the maximum number of IRLS iterations.
 #' @param object a `fastglmFit` object; the output of a call to `glm()` with `method = fastglm.fit`.
-#' @param refit `logical`; whether to refit the model using `glm()` with `method = "glm.fit"`. If `TRUE`, the model will be refit using the estimated coefficients as starting values for a single IRLS iteration in order to produce the usual coefficient covariance matrix. If `FALSE`, `vcov` will only produce the diagonal of the covariance matrix.
-#' @param \dots for `vcov()` and `summary()`, other arguments passed to [vcov.glm()] and [summary.glm()] when `refit = TRUE`.
-#' 
+#' @param \dots for `vcov()` and `summary()`, other arguments passed downstream.
+#'
 #' @details
-#' The purpose of the functions documented on this page is to facilitate integration with existing [glm()] utilities in base R. `fastglm.fit()` is just a wrapper for [fastglmPure()] with some additional quality-of-life features. The `vcov()` and `summary()` methods are quick hacks to use the existing architecture for these functions in base R. Because of this, they involve refitting the GLM with the estimated coefficients as starting values.
+#' The purpose of the functions documented on this page is to facilitate integration with existing [glm()] utilities in base R. `fastglm.fit()` is just a wrapper for [fastglmPure()] with some additional quality-of-life features. The `vcov()` and `summary()` methods use the unscaled coefficient covariance matrix returned directly from the C++ solver, so no refit is required.
 #' 
 #' @examples
 #' set.seed(1234)
@@ -123,20 +122,30 @@ fastglm.fit <- function(x, y,
 {
     control <- do.call("fastglm.control", control)
     
-    if (bigmemory::is.big.matrix(x))
+    is_sparse_matrix <- inherits(x, "dgCMatrix")
+    if (is_sparse_matrix)
+    {
+        is_big_matrix <- FALSE
+        if (!(control$method %in% c(2, 3)))
+        {
+            stop("for sparse (dgCMatrix) objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
+                 "QR / SVD on sparse matrices is not supported by this package.")
+        }
+    } else if (bigmemory::is.big.matrix(x))
     {
         is_big_matrix <- TRUE
         if (!(control$method %in% c(2, 3)))
         {
-            method <- 3L
-            warning("for big.matrix objects, 'method' must either be 2 (for LLT) or 3 (for LDLT) -- 'method' changed to 3.")
+            stop("for big.matrix objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
+                 "QR / SVD methods would force the matrix to be fully read into RAM, ",
+                 "defeating the purpose of bigmemory.")
         }
     } else if (is.matrix(x))
     {
         is_big_matrix <- FALSE
     } else
     {
-        stop("x must be either a matrix or a big.matrix object")
+        stop("x must be a matrix, a big.matrix object, or a Matrix::dgCMatrix")
     }
     
     xnames <- colnames(x)
@@ -226,23 +235,38 @@ fastglm.fit <- function(x, y,
     
     if (is.null(start)) start <- rep(0, nvars)
     
-    if (!is_big_matrix)
+    fc <- family_code(family)
+
+    if (is_sparse_matrix)
     {
-        res <- fit_glm(x, drop(y), drop(weights), drop(offset), 
+        res <- fit_sparse_glm(x, drop(y), drop(weights), drop(offset),
+                              drop(start), drop(mu), drop(eta),
+                              variance, mu.eta, linkinv, dev.resids,
+                              valideta, validmu,
+                              as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
+                              as.integer(fc))
+        col_max <- apply(x, 2, max)
+        col_min <- apply(x, 2, min)
+        res$intercept <- any(is.int <- (col_max == col_min))
+    } else if (!is_big_matrix)
+    {
+        res <- fit_glm(x, drop(y), drop(weights), drop(offset),
                        drop(start), drop(mu), drop(eta),
-                       variance, mu.eta, linkinv, dev.resids, 
+                       variance, mu.eta, linkinv, dev.resids,
                        valideta, validmu,
-                       as.integer(control$method), as.double(control$tol), as.integer(control$maxit))
-        
+                       as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
+                       as.integer(fc))
+
         res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else
     {
-        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset), 
+        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset),
                            drop(start), drop(mu), drop(eta),
-                           variance, mu.eta, linkinv, dev.resids, 
+                           variance, mu.eta, linkinv, dev.resids,
                            valideta, validmu,
-                           as.integer(control$method), as.double(control$tol), as.integer(control$maxit))
-        
+                           as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
+                           as.integer(fc))
+
         res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
     }
     
@@ -290,13 +314,26 @@ fastglm.fit <- function(x, y,
     res$null.deviance <- sum(family$dev.resids(y, wtdmu, weights))
     res$family <- family
     res$prior.weights <- weights
-    
+
     res$aic <- aic(y, nobs, res$fitted.values, res$prior.weights, res$deviance) + 2 * res$rank
-    
+
+    res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
+    res$dispersion <-
+        if (family$family %in% c("poisson", "binomial")) 1
+        else if (res$df.residual > 0)
+            sum((res$weights * res$residuals ^ 2)[weights > 0]) / res$df.residual
+        else NaN
+
     res$y <- y
     res$n <- nobs
+    res$x <- x        # reference to the model matrix; used by vcovHC / vcovCL
     res$class <- "fastglmFit"
-    
+
+    if (!is.null(res$cov.unscaled) && length(res$coefficients) > 0L) {
+        nms <- names(res$coefficients)
+        rownames(res$cov.unscaled) <- colnames(res$cov.unscaled) <- nms
+    }
+
     res
 }
 
@@ -325,35 +362,21 @@ fastglm.control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, ...) {
 
 #' @exportS3Method stats::vcov fastglmFit
 #' @rdname fastglm.fit
-vcov.fastglmFit <- function(object, refit = TRUE, ...) {
-    if (isTRUE(refit)) {
-        object <- do.call("update", list(object, start = coef(object),
-                                         method = "glm.fit",
-                                         control = list(maxit = 1L)))
-        
-        return(vcov(object, ...))
+vcov.fastglmFit <- function(object, ...) {
+    cov.unscaled <- object$cov.unscaled
+    if (is.null(cov.unscaled)) {
+        v <- diag(object[["se"]]^2, nrow = length(object$coefficients))
+        rownames(v) <- colnames(v) <- names(coef(object))
+        return(v)
     }
-    
-    v <- diag(object[["se"]]^2)
+    disp <- if (is.null(object$dispersion) || is.nan(object$dispersion)) 1 else object$dispersion
+    v <- disp * cov.unscaled
     rownames(v) <- colnames(v) <- names(coef(object))
-    
     v
 }
 
 #' @exportS3Method summary fastglmFit
 #' @rdname fastglm.fit
-summary.fastglmFit <- function(object, refit = TRUE, ...) {
-    if (isTRUE(refit)) {
-        call <- getCall(object)
-        
-        object <- do.call("update", list(object, start = coef(object),
-                                         method = "glm.fit",
-                                         control = list(maxit = 1L)))
-        
-        object$call <- call
-        
-        return(summary(object, ...))
-    }
-    
+summary.fastglmFit <- function(object, ...) {
     summary.fastglm(object, ...)
 }
