@@ -105,10 +105,15 @@ protected:
     
     virtual void save_se()
     {
-        
+
     }
 
-    
+    virtual void save_vcov()
+    {
+        // default: leave vcov untouched (caller treats absence as "not available")
+    }
+
+
 public:
     GlmBase(int n_, int p_,
             double tol_ = 1e-6,
@@ -183,7 +188,8 @@ public:
         }
         
         save_se();
-        
+        save_vcov();
+
         return std::min(i + 1, maxit);
     }
     

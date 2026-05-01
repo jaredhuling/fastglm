@@ -1,0 +1,181 @@
+---
+title: "Large-Data and Out-of-Core GLMs with 'fastglm'"
+author: "Jared Huling"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Large-Data and Out-of-Core GLMs with 'fastglm'}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE,
+  echo = TRUE,
+  eval = TRUE
+)
+```
+
+The *fastglm* package provides three different ways to fit GLMs on data that is too large to comfortably fit in RAM, or that lives in an external file format. All three paths use the same IRLS solver and step-halving safeguard as the in-memory fit, and produce a fitted object of the same shape. They differ only in how the design matrix is supplied to the solver:
+
+- a sparse `Matrix::dgCMatrix`, for designs with many zero entries (one-hot factors, text features, etc.);
+- a `bigmemory::big.matrix`, for filebacked numeric matrices that live on disc;
+- a user-supplied chunk callback, for streaming row-blocks from any external source — *arrow* datasets, parquet files, *DuckDB* queries, on-disc CSV streams.
+
+We load the package and a small helper:
+
+```{r}
+library(fastglm)
+set.seed(1)
+```
+
+# Sparse design matrices
+
+When the design matrix has many zero entries — for example after one-hot encoding a high-cardinality categorical variable, or constructing interactions between sparse indicators — passing a dense matrix to `fastglm()` is wasteful in both memory and time. Instead, build a `Matrix::dgCMatrix` and pass it directly:
+
+```{r}
+library(Matrix)
+n <- 5000
+
+## a 50-level factor that interacts with a continuous covariate.
+g    <- factor(sample.int(50, n, replace = TRUE))
+xnum <- rnorm(n)
+Xd   <- model.matrix(~ g * xnum)        # 5000 x 100, mostly zeros
+Xs   <- as(Xd, "CsparseMatrix")
+
+object.size(Xd)
+object.size(Xs)
+
+beta_true <- rnorm(ncol(Xd)) / 4
+y <- rbinom(n, 1, plogis(Xd %*% beta_true))
+
+## fit using the dense and sparse representations
+fit_dense  <- fastglm(Xd, y, family = binomial(), method = 2)
+fit_sparse <- fastglm(Xs, y, family = binomial(), method = 2)
+
+max(abs(coef(fit_sparse) - coef(fit_dense)))
+```
+
+The two paths return numerically identical estimates. Only the LLT (`method = 2`) and LDLT (`method = 3`) decompositions are supported for sparse `x`; QR / SVD methods are rejected with an error rather than silently coerced to dense, since silently densifying a large sparse matrix is exactly the wrong thing to do:
+
+```{r, error = TRUE}
+fastglm(Xs, y, family = binomial(), method = 0)
+```
+
+# Filebacked `big.matrix`
+
+The *bigmemory* package provides a numeric matrix class that lives on disc and is paged into RAM only as needed. *fastglm* reads this matrix in row-blocks, so a filebacked design matrix never has to be fully materialised in memory:
+
+```{r}
+library(bigmemory)
+n <- 20000
+p <- 20
+X  <- matrix(rnorm(n * p), n, p)
+Xb <- as.big.matrix(X)               # in-memory big.matrix; could equally be filebacked
+
+y  <- rbinom(n, 1, plogis(X %*% rnorm(p) * 0.05))
+
+fit_dense <- fastglm(X,  y, family = binomial(), method = 2)
+fit_big   <- fastglm(Xb, y, family = binomial(), method = 2)
+
+max(abs(coef(fit_big) - coef(fit_dense)))
+```
+
+For a `big.matrix`, *fastglm* iterates over the rows in blocks of `FASTGLM_CHUNK_ROWS` rows (default `16384`). The block size can be set via the environment variable of that name; smaller blocks reduce peak RAM at the cost of more outer-product calls:
+
+```{r}
+Sys.setenv(FASTGLM_CHUNK_ROWS = "2000")
+fit_big_small <- fastglm(Xb, y, family = binomial(), method = 2)
+Sys.unsetenv("FASTGLM_CHUNK_ROWS")
+
+max(abs(coef(fit_big_small) - coef(fit_big)))
+```
+
+The chunk size only affects how the matrix is paged into RAM; the converged estimates are identical to floating-point precision.
+
+As with sparse `x`, only LLT and LDLT are supported. The QR-style decompositions need the entire design matrix at once and would defeat the on-disc benefit, so they are rejected:
+
+```{r, error = TRUE}
+fastglm(Xb, y, family = binomial(), method = 0)
+```
+
+# Streaming from an external source
+
+The most general large-data front-end is `fastglm_streaming()`. It takes a closure `chunk_callback(k)` that returns the `k`-th block of the design matrix, and runs IRLS without ever holding more than one block in memory plus a `p x p` accumulator. The data source can be anything: *arrow* datasets, parquet files, *DuckDB*, CSV streamers, custom binary formats:
+
+```{r}
+n <- 10000
+p <- 5
+X <- cbind(1, matrix(rnorm(n * (p - 1)), n, p - 1))
+y <- rbinom(n, 1, plogis(X %*% c(0.2, 0.5, -0.3, 0.4, -0.2)))
+
+## simulate a "data source" that yields the design matrix in 5 row-blocks
+chunk_size <- 2000
+chunks <- function(k) {
+    idx <- ((k - 1) * chunk_size + 1):(k * chunk_size)
+    list(X = X[idx, , drop = FALSE], y = y[idx])
+}
+
+fit_stream <- fastglm_streaming(chunks, n_chunks = 5, family = binomial())
+fit_full   <- fastglm(X, y, family = binomial(), method = 2)
+
+max(abs(coef(fit_stream) - coef(fit_full)))
+```
+
+The closure must return a list with `X` (a numeric matrix of `n_k` rows) and `y` (a numeric vector of length `n_k`). Optional `weights` and `offset` are passed through:
+
+```{r}
+n <- 8000
+X <- cbind(1, matrix(rnorm(n * 3), n, 3))
+ofs <- runif(n, -0.1, 0.1)
+pw  <- runif(n,  0.5, 1.5)
+y   <- rpois(n, exp(X %*% c(0.2, 0.4, -0.2, 0.3) + ofs))
+
+chunk_size <- 1000
+chunks <- function(k) {
+    idx <- ((k - 1) * chunk_size + 1):(k * chunk_size)
+    list(X = X[idx, , drop = FALSE], y = y[idx],
+         offset = ofs[idx], weights = pw[idx])
+}
+
+fit_stream <- fastglm_streaming(chunks, n_chunks = 8, family = poisson())
+fit_full   <- fastglm(X, y, family = poisson(), offset = ofs, weights = pw, method = 2)
+
+max(abs(coef(fit_stream) - coef(fit_full)))
+```
+
+## *arrow* / *parquet* recipe
+
+To fit on a parquet dataset that is much larger than RAM, wrap an *arrow* scanner in a closure. Each `RecordBatch` becomes one chunk; *fastglm* never holds more than one batch at a time:
+
+```{r, eval = FALSE}
+library(arrow)
+ds      <- open_dataset("path/to/data.parquet")
+batches <- as.list(Scanner$create(ds)$ScanBatches())
+
+chunks <- function(k) {
+    tbl <- as.data.frame(batches[[k]])
+    list(X = model.matrix(~ x1 + x2 + x3, data = tbl),
+         y = tbl$y)
+}
+
+fit <- fastglm_streaming(chunks,
+                         n_chunks = length(batches),
+                         family   = binomial())
+```
+
+The same pattern works for *DuckDB* (one `dbReadTable` per chunk), for streaming CSV readers, and for custom column-store formats: build a closure that returns one row-block per call, and pass it to `fastglm_streaming()`. The IRLS loop walks the data source once per iteration, so the closure should be reasonably cheap, *arrow* scanners and *DuckDB* projections fit well; reading a fresh CSV from disc per iteration does not.
+
+# When to use which path
+
+The three paths above are not interchangeable in performance:
+
+- `dgCMatrix` is fastest when the design matrix has many zeros and the *number of columns* is large enough to make a dense representation impractical. For a small dense problem, sparse routines have higher constant-factor overhead and can be slower.
+- `big.matrix` is the right path when the design matrix is dense and *numerically generated*, but does not fit in RAM. The on-disc backing means the design lives on disc and only one chunk is in memory at a time.
+- `fastglm_streaming()` is the right path when the design matrix has to be *built from raw data* (a parquet file, a *DuckDB* query, a CSV stream). It does not need a *bigmemory* backing file and can pull from any source via a closure.
+
+All three return a fitted object of class `"fastglm"` and support the same downstream methods: `summary()`, `vcov()`, `predict()`, `vcovHC()`, `vcovCL()`. The dispersion, deviance, and AIC are all computed in the streaming pass; nothing about the fitted object distinguishes it from an in-memory fit.

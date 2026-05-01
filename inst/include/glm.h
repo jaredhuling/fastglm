@@ -2,6 +2,8 @@
 #define GLM_H
 
 #include "glm_base.h"
+#include "families.h"
+#include "chunk_source.h"
 
 using Eigen::ArrayXd;
 using Eigen::FullPivHouseholderQR;
@@ -63,6 +65,7 @@ protected:
     int type;
     bool is_big_matrix;
     int rank;
+    int fam_code;   // fglm::FamilyCode; -1 = unknown (use R callbacks)
     
     
     FullPivHouseholderQR<MatrixXd> FPQR;
@@ -78,6 +81,17 @@ protected:
     Permutation                  Pmat;
     MatrixXd                     Rinv;
     VectorXd                     effects;
+
+    // Pre-allocated solver workspace, reused across IRLS iterations.
+    // Avoids one n*p alloc and one n alloc per iteration in solve_wls().
+    // For big.matrix mode with method 2/3, WX is left empty -- we accumulate
+    // X'WX and X'Wz directly via row-block streaming kernels and never
+    // materialize the n*p product.
+    MatrixXd                     WX;     // w.asDiagonal() * X (dense path only)
+    VectorXd                     wz;     // w .* z
+    MatrixXd                     XtWX_buf;
+    VectorXd                     Xtwz_buf; // for streaming accumulation
+    bool                         use_streaming;
     
     RealScalar threshold() const 
     {
@@ -96,91 +110,59 @@ protected:
         return di;
     }
     
-    MatrixXd XtWX() const 
+    // X' W X using the rank-1 update on the pre-multiplied WX = w * X.
+    // Reuses the XtWX_buf member to avoid per-iteration allocation.
+    void update_XtWX()
     {
-        if (!is_big_matrix || true)
-        {
-            return MatrixXd(nvars, nvars).setZero().selfadjointView<Lower>().
-            rankUpdate( (w.asDiagonal() * X).adjoint());
-        } else
-        {
-            MatrixXd retmat(MatrixXd::Zero(nvars, nvars));
-            VectorXd wsquare = w.array().square();
-            for (int j = 0; j < nvars; ++j)
-            {
-                for (int k = j; k < nvars; ++k)
-                {
-                    for (int i = 0; i < nobs; ++i)
-                    {
-                        retmat(j, k) += X(i,j) * X(i,k) * wsquare(i);
-                    }
-                    retmat(k, j) = retmat(j, k);
-                }
-            }
-            return retmat;
-        }
+        XtWX_buf.setZero();
+        XtWX_buf.selfadjointView<Lower>().rankUpdate(WX.adjoint());
     }
 
     virtual void update_mu_eta()
     {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
+            Eigen::Map<Eigen::ArrayXd>       d(mu_eta.data(), mu_eta.size());
+            fglm::mu_eta(fam_code, e, d);
+            return;
+        }
         NumericVector mu_eta_nv = mu_eta_fun(eta);
-        
         std::copy(mu_eta_nv.begin(), mu_eta_nv.end(), mu_eta.data());
     }
-    
+
     virtual void update_var_mu()
     {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<Eigen::ArrayXd>       v(var_mu.data(), var_mu.size());
+            fglm::variance(fam_code, m, v);
+            return;
+        }
         NumericVector var_mu_nv = variance_fun(mu);
-        
         std::copy(var_mu_nv.begin(), var_mu_nv.end(), var_mu.data());
     }
-    
+
     virtual void update_mu()
     {
         // mu <- linkinv(eta <- eta + offset)
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
+            Eigen::Map<Eigen::ArrayXd>       m(mu.data(), mu.size());
+            fglm::linkinv(fam_code, e, m);
+            return;
+        }
         NumericVector mu_nv = linkinv(eta);
-        
         std::copy(mu_nv.begin(), mu_nv.end(), mu.data());
     }
     
     virtual void update_eta()
     {
-        // eta <- drop(x %*% start)
-
-        if (type == 0)
-        {
-            //VectorXd effects(PQR.householderQ().adjoint() * y);
-            if (rank == nvars) 
-            {
-                eta = X * beta + offset;
-            } else
-            {
-                //eta = PQR.householderQ() * effects + offset;
-                eta = X * beta + offset;
-            }
-        } else if (type == 1)
-        {
-            eta = X * beta + offset;
-        } else if (type == 2)
-        {
-            eta = X * beta + offset;
-        } else if (type == 3)
-        {
-            eta = X * beta + offset;
-        } else if (type == 4)
-        {
-            if (rank == nvars)
-            {
-                eta = X * beta + offset;
-            } else
-            {
-                //std::cout << FPQR.matrixQ().cols() << " " << effects.size() << std::endl;
-                //eta = FPQR.matrixQ() * effects + offset;
-                eta = X * beta + offset;
-            }
-        } else
-        {
-            eta = X * beta + offset;
+        // eta <- drop(x %*% beta) + offset
+        if (use_streaming) {
+            fglm::apply_X_streamed(X, beta, offset, eta);
+        } else {
+            eta.noalias() = X * beta;
+            eta += offset;
         }
     }
     
@@ -199,26 +181,58 @@ protected:
     virtual void update_dev_resids()
     {
         devold = dev;
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> w(weights.data(), weights.size());
+            dev = fglm::dev_resids_sum(fam_code, y, m, w);
+            return;
+        }
         NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
         dev = sum(dev_resids);
     }
-    
+
     virtual void update_dev_resids_dont_update_old()
     {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> w(weights.data(), weights.size());
+            dev = fglm::dev_resids_sum(fam_code, y, m, w);
+            return;
+        }
         NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
         dev = sum(dev_resids);
     }
-    
+
     virtual void step_halve()
     {
         // take half step
         beta = 0.5 * (beta.array() + beta_prev.array());
-        
+
         update_eta();
-        
+
         update_mu();
     }
-    
+
+    bool valideta_check()
+    {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
+            return fglm::valideta(fam_code, e);
+        }
+        return as<bool>(valideta(eta));
+    }
+
+    bool validmu_check()
+    {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            return fglm::validmu(fam_code, m);
+        }
+        return as<bool>(validmu(mu));
+    }
+
     virtual void run_step_halving(int &iterr)
     {
         // check for infinite deviance
@@ -232,21 +246,21 @@ protected:
                 {
                     break;
                 }
-                
+
                 //std::cout << "half step (infinite)!" << itrr << std::endl;
-                
+
                 step_halve();
-                
+
                 // update deviance
                 update_dev_resids_dont_update_old();
             }
         }
-        
+
         // check for boundary violations
-        if (!(valideta(eta) && validmu(mu)))
+        if (!(valideta_check() && validmu_check()))
         {
             int itrr = 0;
-            while(!(valideta(eta) && validmu(mu)))
+            while(!(valideta_check() && validmu_check()))
             {
                 ++itrr;
                 if (itrr > maxit)
@@ -294,115 +308,98 @@ protected:
     // from the source code of the RcppEigen package
     virtual void solve_wls(int iter)
     {
-        //lm ans(do_lm(X, Y, w, type));
-        //wls ans(ColPivQR(X, z, w));
-        
         //enum {ColPivQR_t = 0, QR_t, LLT_t, LDLT_t, SVD_t, SymmEigen_t, GESDD_t};
-        
+
         beta_prev = beta;
-        
+
+        // Streaming path for big.matrix + Cholesky-based methods (2 or 3):
+        // never materialize the n*p product W*X.  Instead accumulate
+        // X'W^2 X and X'W^2 z directly in row blocks.
+        if (use_streaming) {
+            fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
+            fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf);
+            if (type == 2) {
+                Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                beta = Ch.solve(Xtwz_buf);
+            } else if (type == 3) {
+                ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                Dplus(ChD.vectorD());  // sets rank
+                beta = ChD.solve(Xtwz_buf);
+            }
+            return;
+        }
+
+        // Pre-multiply once per iteration into pre-allocated buffers,
+        // then feed them to every decomposition.  noalias() avoids a
+        // temporary; both buffers are sized in the constructor.
+        WX.noalias() = w.asDiagonal() * X;
+        wz.noalias() = w.cwiseProduct(z);
+
         if (type == 0)
         {
-            PQR.compute(w.asDiagonal() * X); // decompose the model matrix
+            PQR.compute(WX); // decompose the model matrix
             Pmat = (PQR.colsPermutation());
             rank                               = PQR.rank();
-            if (rank == nvars) 
+            if (rank == nvars)
             {	// full rank case
-                beta     = PQR.solve( (z.array() * w.array()).matrix() );
-                // m_fitted   = X * m_coef;
-                //m_se       = Pmat * PQR.matrixQR().topRows(m_p).
-                //triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
-            } else 
+                beta     = PQR.solve(wz);
+            } else
             {
                 Rinv = (PQR.matrixQR().topLeftCorner(rank, rank).
                                                       triangularView<Upper>().
                                                       solve(MatrixXd::Identity(rank, rank)));
-                effects = PQR.householderQ().adjoint() * (z.array() * w.array()).matrix();
+                effects = PQR.householderQ().adjoint() * wz;
                 beta.head(rank)                 = Rinv * effects.head(rank);
                 beta                            = Pmat * beta;
-                
+
                 // create fitted values from effects
                 // (can't use X*m_coef if X is rank-deficient)
                 effects.tail(nobs - rank).setZero();
-                //m_fitted                          = PQR.householderQ() * effects;
-                //m_se.head(m_r)                    = Rinv.rowwise().norm();
-                //m_se                              = Pmat * m_se;
             }
         } else if (type == 1)
         {
-            QR.compute(w.asDiagonal() * X);
-            beta                     = QR.solve((z.array() * w.array()).matrix());
-            //m_fitted                   = X * m_coef;
-            //m_se                       = QR.matrixQR().topRows(m_p).
-            //triangularView<Upper>().solve(I_p()).rowwise().norm();
+            QR.compute(WX);
+            beta                     = QR.solve(wz);
         } else if (type == 2)
         {
-            Ch.compute(XtWX().selfadjointView<Lower>());
-            beta            = Ch.solve((w.asDiagonal() * X).adjoint() * (z.array() * w.array()).matrix());
-            //m_fitted          = X * m_coef;
-            //m_se              = Ch.matrixL().solve(I_p()).colwise().norm();
+            update_XtWX();
+            Ch.compute(XtWX_buf.selfadjointView<Lower>());
+            beta            = Ch.solve(WX.adjoint() * wz);
         } else if (type == 3)
         {
-            ChD.compute(XtWX().selfadjointView<Lower>());
+            update_XtWX();
+            ChD.compute(XtWX_buf.selfadjointView<Lower>());
             Dplus(ChD.vectorD());	// to set the rank
             //FIXME: Check on the permutation in the LDLT and incorporate it in
             //the coefficients and the standard error computation.
-            //	m_coef            = Ch.matrixL().adjoint().
-            //	    solve(Dplus(D) * Ch.matrixL().solve(X.adjoint() * y));
-            beta            = ChD.solve((w.asDiagonal() * X).adjoint() * (z.array() * w.array()).matrix());
-            //m_fitted          = X * m_coef;
-            //m_se              = Ch.solve(I_p()).diagonal().array().sqrt();
+            beta            = ChD.solve(WX.adjoint() * wz);
         } else if (type == 4)
         {
-            FPQR.compute(w.asDiagonal() * X); // decompose the model matrix
+            FPQR.compute(WX); // decompose the model matrix
             Pmat = (FPQR.colsPermutation());
             rank                               = FPQR.rank();
-            if (rank == nvars) 
+            if (rank == nvars)
             {	// full rank case
-                beta     = FPQR.solve( (z.array() * w.array()).matrix() );
-                // m_fitted   = X * m_coef;
-                //m_se       = Pmat * PQR.matrixQR().topRows(m_p).
-                //triangularView<Upper>().solve(MatrixXd::Identity(nvars, nvars)).rowwise().norm();
-            } else 
+                beta     = FPQR.solve(wz);
+            } else
             {
                 Rinv = (FPQR.matrixQR().topLeftCorner(rank, rank).
                             triangularView<Upper>().
                             solve(MatrixXd::Identity(rank, rank)));
-                effects = FPQR.matrixQ().adjoint() * (z.array() * w.array()).matrix();
-                //std::cout << effects.transpose() << std::endl;
+                effects = FPQR.matrixQ().adjoint() * wz;
                 beta.head(rank)                 = Rinv * effects.head(rank);
                 beta                            = Pmat * beta;
-                
-                // create fitted values from effects
-                // (can't use X*m_coef if X is rank-deficient)
-                effects.tail(nobs - rank).setZero(); 
-                //m_fitted                          = PQR.householderQ() * effects;
-                //m_se.head(m_r)                    = Rinv.rowwise().norm();
-                //m_se                              = Pmat * m_se;
+
+                effects.tail(nobs - rank).setZero();
             }
         } else if (type == 5)
         {
-            bSVD.compute(w.asDiagonal() * X, ComputeThinU | ComputeThinV);
-            
+            bSVD.compute(WX, ComputeThinU | ComputeThinV);
             rank                               = bSVD.rank();
-            
-            // if (rank == nvars) 
-            // {	// full rank case
-            //     beta                     = bSVD.solve((z.array() * w.array()).matrix());
-            // } else
-            // {
-            //     
-            // }
-            
-            beta                     = bSVD.solve((z.array() * w.array()).matrix());
-            
+            beta                               = bSVD.solve(wz);
             //FIXME: Check on the permutation in the LDLT and incorporate it in
             //the coefficients and the standard error computation.
-            //	m_coef            = Ch.matrixL().adjoint().
-            //	    solve(Dplus(D) * Ch.matrixL().solve(X.adjoint() * y));
-            //m_fitted          = X * m_coef;
-            //m_se              = Ch.solve(I_p()).diagonal().array().sqrt();
-        } 
+        }
         // } else if (type == 4)
         // {
         // //     UDV.compute((w.asDiagonal() * X).jacobiSvd(ComputeThinU|ComputeThinV));
@@ -423,9 +420,79 @@ protected:
         
     }
     
+    virtual void save_vcov()
+    {
+        const double NaN = std::numeric_limits<double>::quiet_NaN();
+        MatrixXd I_p = MatrixXd::Identity(nvars, nvars);
+
+        if (type == 0)
+        {
+            if (rank == nvars)
+            {
+                MatrixXd RfullInv = PQR.matrixQR().topRows(nvars).
+                    triangularView<Upper>().solve(I_p);
+                MatrixXd PRinv = Pmat * RfullInv;
+                vcov.noalias() = PRinv * PRinv.transpose();
+            } else
+            {
+                MatrixXd cov_red = Rinv * Rinv.transpose();
+                MatrixXd cov_padded = MatrixXd::Zero(nvars, nvars);
+                cov_padded.topLeftCorner(rank, rank) = cov_red;
+                vcov.noalias() = Pmat * cov_padded * Pmat.transpose();
+                for (int j = rank; j < nvars; ++j)
+                {
+                    int aliased = Pmat.indices()[j];
+                    vcov.row(aliased).setConstant(NaN);
+                    vcov.col(aliased).setConstant(NaN);
+                }
+            }
+        } else if (type == 1)
+        {
+            MatrixXd RfullInv = QR.matrixQR().topRows(nvars).
+                triangularView<Upper>().solve(I_p);
+            vcov.noalias() = RfullInv * RfullInv.transpose();
+        } else if (type == 2)
+        {
+            vcov = Ch.solve(I_p);
+        } else if (type == 3)
+        {
+            vcov = ChD.solve(I_p);
+        } else if (type == 4)
+        {
+            if (rank == nvars)
+            {
+                MatrixXd RfullInv = FPQR.matrixQR().topRows(nvars).
+                    triangularView<Upper>().solve(I_p);
+                MatrixXd PRinv = Pmat * RfullInv;
+                vcov.noalias() = PRinv * PRinv.transpose();
+            } else
+            {
+                MatrixXd cov_red = Rinv * Rinv.transpose();
+                MatrixXd cov_padded = MatrixXd::Zero(nvars, nvars);
+                cov_padded.topLeftCorner(rank, rank) = cov_red;
+                vcov.noalias() = Pmat * cov_padded * Pmat.transpose();
+                for (int j = rank; j < nvars; ++j)
+                {
+                    int aliased = Pmat.indices()[j];
+                    vcov.row(aliased).setConstant(NaN);
+                    vcov.col(aliased).setConstant(NaN);
+                }
+            }
+        } else if (type == 5)
+        {
+            // (X' W^2 X)^{-1} = V D^{-2} V'  where WX = U D V'
+            const MatrixXd &V = bSVD.matrixV();
+            ArrayXd s = bSVD.singularValues().array();
+            ArrayXd dinv2 = ArrayXd::Zero(s.size());
+            double comp = (s.size() > 0 ? s.maxCoeff() : 0.0) * threshold();
+            for (int j = 0; j < s.size(); ++j) dinv2[j] = (s[j] < comp) ? 0.0 : 1.0/(s[j]*s[j]);
+            vcov.noalias() = V * dinv2.matrix().asDiagonal() * V.adjoint();
+        }
+    }
+
     virtual void save_se()
     {
-        
+
         if (type == 0)
         {
             if (rank == nvars) 
@@ -466,10 +533,16 @@ protected:
             }
         } else if (type == 5)
         {
-            Rinv = (bSVD.solve(MatrixXd::Identity(nvars, nvars)));
-            se                    = Rinv.rowwise().norm();
+            // SE_i = sqrt((X' W^2 X)^{-1}_{ii}) = ||V_i row||_{D^{-1}}
+            const MatrixXd &V = bSVD.matrixV();
+            ArrayXd s = bSVD.singularValues().array();
+            ArrayXd dinv = ArrayXd::Zero(s.size());
+            double comp = (s.size() > 0 ? s.maxCoeff() : 0.0) * threshold();
+            for (int j = 0; j < s.size(); ++j) dinv[j] = (s[j] < comp) ? 0.0 : 1.0/s[j];
+            MatrixXd VDinv = V * dinv.matrix().asDiagonal();
+            se = VDinv.rowwise().norm();
         }
-        
+
     }
     
 
@@ -488,15 +561,14 @@ public:
         double tol_ = 1e-6,
         int maxit_ = 100,
         int type_ = 1,
-        bool is_big_matrix_ = false) :
+        bool is_big_matrix_ = false,
+        int fam_code_ = -1) :
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd>(X_.rows(), X_.cols(),
                                                      tol_, maxit_),
                                                      X(X_),
                                                      Y(Y_),
                                                      weights(weights_),
                                                      offset(offset_),
-                                                     //X(X_.data(), X_.rows(), X_.cols()),
-                                                     //Y(Y_.data(), Y_.size()),
                                                      variance_fun(variance_fun_),
                                                      mu_eta_fun(mu_eta_fun_),
                                                      linkinv(linkinv_),
@@ -506,7 +578,14 @@ public:
                                                      tol(tol_),
                                                      maxit(maxit_),
                                                      type(type_),
-                                                     is_big_matrix(is_big_matrix_)
+                                                     is_big_matrix(is_big_matrix_),
+                                                     fam_code(fam_code_),
+                                                     WX( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows(),
+                                                         (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.cols()),
+                                                     wz( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows()),
+                                                     XtWX_buf(X_.cols(), X_.cols()),
+                                                     Xtwz_buf(X_.cols()),
+                                                     use_streaming(is_big_matrix_ && (type_ == 2 || type_ == 3))
                                                      {}
     
     

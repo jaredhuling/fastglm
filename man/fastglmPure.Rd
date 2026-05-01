@@ -23,8 +23,8 @@ fastglmPure(
 
 \item{y}{numeric response vector of length nobs.}
 
-\item{family}{a description of the error distribution and link function to be used in the model. 
-For \code{fastglmPure} this can only be the result of a call to a family function. 
+\item{family}{a description of the error distribution and link function to be used in the model.
+For \code{fastglmPure} this can only be the result of a call to a family function.
 (See \code{\link[stats]{family}} for details of family functions.)}
 
 \item{weights}{an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.}
