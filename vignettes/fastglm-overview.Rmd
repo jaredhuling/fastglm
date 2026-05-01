@@ -172,6 +172,17 @@ print(mb)
 
 The *fastglm* package switches transparently between the two paths; user code does not change.
 
+# Negative binomial, hurdle, zero-inflation, and Firth logistic
+
+A handful of regressions that come up often in practice are not standard GLMs but build on the same IRLS machinery. *fastglm* provides dedicated entry points for these:
+
+- **`fastglm_nb()`** — negative-binomial regression with the dispersion `theta` estimated jointly with `beta`. Plays the same role as `MASS::glm.nb()` but runs the joint `(beta, theta)` MLE entirely in C++ (IRLS for `beta`, Brent for `theta`).
+- **`firth = TRUE`** — a flag on `fastglm()` / `fastglm.fit()` that activates Firth's bias-reducing penalty on the score. Useful for binary logistic regression under separation or in small samples; analogous to `logistf::logistf()`.
+- **`fastglm_hurdle()`** — a two-part count model: a binary regression for whether `y > 0`, plus a zero-truncated Poisson or NB regression on the positive subset. The two parts factorize, and both are fit by the same C++ IRLS solver. Same model as `pscl::hurdle()`.
+- **`fastglm_zi()`** — a zero-inflated Poisson or NB regression: a binary inflation component overlaid on the original count distribution, fit by an EM algorithm in C++ with closed-form posterior responsibilities and an analytical observed-information `vcov`. Same model as `pscl::zeroinfl()`.
+
+All four take the standard *fastglm* tuning options (`method`, `tol`, `maxit`) and return objects with the usual `coef()`, `vcov()`, `predict()`, `logLik()` methods. `fastglm_hurdle()` and `fastglm_zi()` use the `Formula` package's two-RHS syntax `y ~ x1 + x2 | z1 + z2` to specify different designs for the count and zero parts. See `vignette("count-firth-fastglm", package = "fastglm")` for examples and timing comparisons against the canonical reference packages.
+
 # Three R entry points
 
 There are three `R`-side functions to fit a GLM with *fastglm*. They all call into the same C++ solver, but differ in how much of base R's machinery they wrap around it:

@@ -1,0 +1,243 @@
+---
+title: "Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'"
+author: "Jared Huling"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE,
+  echo = TRUE,
+  eval = TRUE
+)
+```
+
+Beyond `family`-driven GLMs, *fastglm* has fitting functions for four model types/situations that arise often in practice but require model-specific machinery on top of the standard IRLS solver:
+
+- **`fastglm_nb()`** — negative-binomial regression with the dispersion `theta` estimated jointly with the regression coefficients, in the spirit of `MASS::glm.nb()`.
+- **`firth = TRUE`** — Firth's (1993) bias-reducing penalty for logistic regression, useful under separation or in small samples (the `logistf::logistf()` use case).
+- **`fastglm_hurdle()`** — a two-part count model with a binary zero / non-zero component and a zero-truncated Poisson or NB count component, the same model as `pscl::hurdle()`.
+- **`fastglm_zi()`** — a zero-inflated Poisson or NB regression, with a binary inflation component layered on the original (untruncated) count distribution, the same model as `pscl::zeroinfl()`.
+
+All four reuse the same C++ IRLS solver as `fastglm()` itself; the outer iteration (joint NB MLE, the EM loop in zero-inflation, the inner theta-Brent for unknown-`theta` NB hurdle / ZI) likewise lives in C++. Cameron and Trivedi (1998) is the standard textbook reference for the count-data theory underlying this vignette, and Zeileis, Kleiber, and Jackman (2008) gives the *pscl* implementation we benchmark against.
+
+```{r}
+library(fastglm)
+suppressPackageStartupMessages({
+    library(MASS)        # glm.nb, rnegbin, sex2-style separation data
+    library(pscl)        # hurdle, zeroinfl, bioChemists
+    library(logistf)     # canonical Firth implementation
+    library(microbenchmark)
+})
+```
+
+# Negative-binomial regression
+
+`fastglm_nb()` is a drop-in alternative to `MASS::glm.nb()` (Venables and Ripley, 2002) for the NB2 model with `Var(Y) = mu + mu^2 / theta`. Both `theta` and `beta` are estimated by maximum likelihood, alternating an IRLS update for `beta` at fixed `theta` with a 1-D Brent root-find for `theta` at fixed `beta`. Both loops run in C++.
+
+A small-sample comparison on `MASS::quine` (school absences):
+
+```{r}
+data(quine)
+X <- model.matrix(~ Eth + Sex + Age + Lrn, data = quine)
+y <- quine$Days
+
+fit_f <- fastglm_nb(X, y)
+fit_m <- MASS::glm.nb(Days ~ Eth + Sex + Age + Lrn, data = quine)
+
+c(theta_fastglm = fit_f$theta, theta_glm.nb = fit_m$theta)
+
+max(abs(unname(coef(fit_f)) - unname(coef(fit_m))))
+abs(as.numeric(logLik(fit_f)) - as.numeric(logLik(fit_m)))
+```
+
+Coefficients and `theta` agree to roughly 1e-8 on the same MLE.
+
+A timing comparison, on a moderately sized simulated NB(`theta = 2`) example:
+
+```{r}
+set.seed(1)
+n  <- 5e4
+X  <- cbind(1, matrix(rnorm(n * 3), n, 3))
+mu <- exp(X %*% c(0.5, 0.4, -0.2, 0.3))
+y  <- MASS::rnegbin(n, mu = mu, theta = 2)
+df <- data.frame(y = y, x1 = X[, 2], x2 = X[, 3], x3 = X[, 4])
+
+mb_nb <- microbenchmark(
+    fastglm_nb = fastglm_nb(X, y),
+    glm.nb     = MASS::glm.nb(y ~ x1 + x2 + x3, data = df),
+    times = 5L
+)
+print(mb_nb)
+```
+
+The native NB family kernel is also exposed directly through `negbin(theta, link)` for the case when `theta` is known (or estimated separately). Holding `theta` fixed at the joint MLE recovers the `fastglm_nb()` regression coefficients exactly, since `fastglm_nb()` is just IRLS at the converged `theta`:
+
+```{r}
+fit_joint <- fastglm_nb(X, y)
+fit_known <- fastglm(X, y, family = negbin(theta = fit_joint$theta, link = "log"))
+max(abs(unname(coef(fit_known)) - unname(coef(fit_joint))))
+```
+
+# Firth bias-reduced logistic regression
+
+Logistic regression breaks down under (quasi-) separation: the MLE is at infinity and the Wald standard errors blow up. Firth (1993) modifies the score by `(1/2) ∂ log|I(beta)| / ∂beta`, which both removes the leading `O(1/n)` bias and produces finite estimates under separation. *fastglm* exposes the penalty as a flag,
+
+```{r, eval = FALSE}
+fastglm(x, y, family = binomial(), firth = TRUE)
+```
+
+For binomial logit the penalty collapses to a per-iteration adjustment of the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where `h_i` is the leverage; no new family code is needed, and the cost per IRLS iteration is one extra streaming pass for the leverages.
+
+The canonical demonstration uses the `sex2` dataset shipped with *logistf* (Heinze and Schemper, 2002):
+
+```{r}
+data(sex2, package = "logistf")
+X <- model.matrix(~ age + oc + vic + vicl + vis + dia, data = sex2)
+y <- sex2$case
+
+fit_f <- fastglm(X, y, family = binomial(), firth = TRUE)
+fit_l <- logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2)
+
+cbind(fastglm = unname(coef(fit_f)), logistf = unname(coef(fit_l)))
+max(abs(unname(coef(fit_f)) - unname(coef(fit_l))))
+```
+
+The two implementations land on the same penalized MLE to about 2e-7. The difference in runtime is substantial because *fastglm*'s Firth-fitting code leverages our existing C++ solver:
+
+```{r}
+mb_firth <- microbenchmark(
+    fastglm = fastglm(X, y, family = binomial(), firth = TRUE),
+    logistf = logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2),
+    times = 10L
+)
+print(mb_firth)
+```
+
+`firth = TRUE` is currently restricted to `family = binomial(link = "logit")` on a dense matrix `x`; probit / cloglog use a different score correction and will be added separately.
+
+# Hurdle models
+
+Hurdle models, introduced by Mullahy (1986), factorize a count distribution into two independent pieces:
+
+- a binary regression for `1(y > 0)` over the full sample (the *zero* part);
+- a zero-truncated Poisson or NB regression for `y > 0` over the positive subset (the *count* part).
+
+Because the two parts share no parameters, the joint likelihood factorizes and they can be fit independently. *fastglm*'s C++ driver fits both parts using the same IRLS solver as `fastglm()`, with new `FAM_POIS_TRUNC_*` / `FAM_NB_TRUNC_*` family codes that handle the truncation correction stably (`expm1`, `log1p` near `mu = 0`).
+
+The formula uses the *Formula* package convention `y ~ x1 + x2 | z1 + z2`; the right-hand side after `|` specifies the zero-part design (it defaults to the count-part design if absent).
+
+```{r}
+data(bioChemists, package = "pscl")
+fit_f <- fastglm_hurdle(art ~ ., data = bioChemists, dist = "poisson")
+fit_p <- pscl::hurdle (art ~ ., data = bioChemists, dist = "poisson")
+
+max(abs(unname(coef(fit_f, "count")) - unname(fit_p$coefficients$count)))
+max(abs(unname(coef(fit_f, "zero"))  - unname(fit_p$coefficients$zero)))
+abs(as.numeric(logLik(fit_f)) - as.numeric(logLik(fit_p)))
+```
+
+`coef()` and `vcov()` accept a `model = c("full", "count", "zero")` argument so each part can be inspected separately:
+
+```{r}
+coef(fit_f, model = "count")
+coef(fit_f, model = "zero")
+```
+
+For NB count parts, the dispersion is estimated by an inner Brent MLE that runs *between* outer IRLS iterations; the outer-loop tolerance is controlled by `outer.tol` / `outer.maxit`.
+
+A timing comparison on a 4000-observation simulated example:
+
+```{r}
+set.seed(11)
+n  <- 4000
+x1 <- rnorm(n);  x2 <- rnorm(n)
+lam    <- exp(0.7 + 0.4 * x1 - 0.3 * x2)
+is_pos <- rbinom(n, 1, plogis(-0.4 + 0.5 * x1 + 0.2 * x2))
+yt     <- integer(n)
+for (i in seq_len(n)) {
+    repeat { v <- rpois(1, lam[i]); if (v > 0) { yt[i] <- v; break } }
+}
+y  <- ifelse(is_pos == 1, yt, 0L)
+df <- data.frame(y = y, x1 = x1, x2 = x2)
+
+mb_hurdle <- microbenchmark(
+    fastglm_hurdle = fastglm_hurdle(y ~ x1 + x2, data = df, dist = "poisson"),
+    pscl_hurdle    = pscl::hurdle (y ~ x1 + x2, data = df, dist = "poisson"),
+    times = 5L
+)
+print(mb_hurdle)
+```
+
+# Zero-inflated models
+
+Zero inflation, introduced by Lambert (1992), differs from a hurdle in that the two components share a latent variable: a `y = 0` outcome could come from the inflation component (with probability `pi_i`) *or* from the count component (with probability `1 - pi_i` and a count-side zero). The likelihood for `y = 0` is
+
+$$
+\Pr(Y_i = 0) = \pi_i + (1 - \pi_i) f(0; \mu_i)
+$$
+
+and for `y > 0` it is `(1 - pi_i) f(y; mu_i)`. The two-component mixture rules out a closed-form factorization, so *fastglm* uses an EM algorithm:
+
+- **E-step**: posterior `tau_i = P(Z_i = 1 | y_i)` for each observation, computed in log-space with `logsumexp` to avoid catastrophic cancellation when `pi_i` is near 0 or 1.
+- **M-step**: a binomial logit / probit / cloglog / log fit with response `tau` (continuous), weights 1; followed by a Poisson or NB fit on the *original* `y` with prior weights `1 - tau`. For NB, an inner Brent MLE re-estimates `theta` after each count-side step.
+
+The final observed-information `vcov` comes from a numerical Jacobian of the analytical observed score at the EM fixed point, which is stable and cheap (block-diagonal per `(gamma, beta, theta)`). The complete EM driver — E-step, both M-steps, the inner theta MLE, and the score Jacobian — runs in C++.
+
+The formula syntax matches `fastglm_hurdle()` exactly:
+
+```{r}
+fit_f <- fastglm_zi(art ~ ., data = bioChemists, dist = "poisson",
+                    em.tol = 1e-10, em.maxit = 300L)
+fit_p <- pscl::zeroinfl(art ~ ., data = bioChemists, dist = "poisson")
+
+max(abs(unname(coef(fit_f, "count")) - unname(fit_p$coefficients$count)))
+max(abs(unname(coef(fit_f, "zero"))  - unname(fit_p$coefficients$zero)))
+abs(as.numeric(logLik(fit_f)) - as.numeric(logLik(fit_p)))
+```
+
+EM is iterative, so the agreement is slightly looser than for hurdle (where the two parts are closed-form independent fits), but coefficients and the joint log-likelihood still match to about 1e-5.
+
+A timing comparison on a simulated zero-inflated Poisson:
+
+```{r}
+set.seed(21)
+n  <- 3000
+x1 <- rnorm(n);  x2 <- rnorm(n)
+eta_c <- 0.7 + 0.4 * x1 - 0.3 * x2
+eta_z <- -0.4 + 0.5 * x1 + 0.2 * x2
+z     <- rbinom(n, 1, plogis(eta_z))
+y     <- ifelse(z == 1, 0L, rpois(n, exp(eta_c)))
+df    <- data.frame(y = y, x1 = x1, x2 = x2)
+
+mb_zi <- microbenchmark(
+    fastglm_zi = fastglm_zi(y ~ x1 + x2, data = df, dist = "poisson"),
+    pscl_zi    = pscl::zeroinfl(y ~ x1 + x2, data = df, dist = "poisson"),
+    times = 5L
+)
+print(mb_zi)
+```
+
+# References
+
+- Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika*, 80(1), 27–38. <doi:10.1093/biomet/80.1.27>
+
+- Heinze, G. and Schemper, M. (2002). A solution to the problem of separation in logistic regression. *Statistics in Medicine*, 21(16), 2409–2419. <doi:10.1002/sim.1047>
+
+- Cameron, A. C. and Trivedi, P. K. (1998). *Regression Analysis of Count Data*. Cambridge University Press.
+
+- Mullahy, J. (1986). Specification and testing of some modified count data models. *Journal of Econometrics*, 33(3), 341–365. <doi:10.1016/0304-4076(86)90002-3>
+
+- Lambert, D. (1992). Zero-inflated Poisson regression, with an application to defects in manufacturing. *Technometrics*, 34(1), 1–14. <doi:10.2307/1269547>
+
+- Zeileis, A., Kleiber, C., and Jackman, S. (2008). Regression models for count data in R. *Journal of Statistical Software*, 27(8), 1–25. <doi:10.18637/jss.v027.i08>
+
+- Venables, W. N. and Ripley, B. D. (2002). *Modern Applied Statistics with S* (4th ed.). Springer.

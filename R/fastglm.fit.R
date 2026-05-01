@@ -109,18 +109,32 @@
 #'            control = list(method = 1))
 
 #' @export `fastglm.fit`
-fastglm.fit <- function(x, y, 
-                        weights  = rep(1, NROW(y)), 
+fastglm.fit <- function(x, y,
+                        weights  = rep(1, NROW(y)),
                         start    = NULL,
                         etastart = NULL,
                         mustart  = NULL,
-                        offset   = rep(0, NROW(y)), 
+                        offset   = rep(0, NROW(y)),
                         family   = gaussian(),
                         control  = list(),
                         intercept = TRUE,
-                        singular.ok = TRUE)
+                        singular.ok = TRUE,
+                        firth = FALSE)
 {
     control <- do.call("fastglm.control", control)
+    if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
+        stop("'firth' must be TRUE or FALSE.", call. = FALSE)
+    if (firth) {
+        if (is.null(family$family) || family$family != "binomial" ||
+            is.null(family$link) || family$link != "logit")
+            stop("'firth = TRUE' currently requires family = binomial(link = \"logit\").",
+                 call. = FALSE)
+        if (inherits(x, "dgCMatrix") || (requireNamespace("bigmemory", quietly = TRUE) &&
+                                          bigmemory::is.big.matrix(x)))
+            stop("'firth = TRUE' is not supported for sparse or big.matrix designs.",
+                 call. = FALSE)
+        control$method <- 2L
+    }
     
     is_sparse_matrix <- inherits(x, "dgCMatrix")
     if (is_sparse_matrix)
@@ -236,6 +250,7 @@ fastglm.fit <- function(x, y,
     if (is.null(start)) start <- rep(0, nvars)
     
     fc <- family_code(family)
+    fp <- family_params(family)
 
     if (is_sparse_matrix)
     {
@@ -244,10 +259,19 @@ fastglm.fit <- function(x, y,
                               variance, mu.eta, linkinv, dev.resids,
                               valideta, validmu,
                               as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                              as.integer(fc))
+                              as.integer(fc), fp)
         col_max <- apply(x, 2, max)
         col_min <- apply(x, 2, min)
         res$intercept <- any(is.int <- (col_max == col_min))
+    } else if (!is_big_matrix && firth)
+    {
+        res <- fit_glm_firth(x, drop(y), drop(weights), drop(offset),
+                             drop(start), drop(mu), drop(eta),
+                             variance, mu.eta, linkinv, dev.resids,
+                             valideta, validmu,
+                             as.double(control$tol), as.integer(control$maxit),
+                             as.integer(fc), fp)
+        res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else if (!is_big_matrix)
     {
         res <- fit_glm(x, drop(y), drop(weights), drop(offset),
@@ -255,7 +279,7 @@ fastglm.fit <- function(x, y,
                        variance, mu.eta, linkinv, dev.resids,
                        valideta, validmu,
                        as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                       as.integer(fc))
+                       as.integer(fc), fp)
 
         res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else
@@ -265,7 +289,7 @@ fastglm.fit <- function(x, y,
                            variance, mu.eta, linkinv, dev.resids,
                            valideta, validmu,
                            as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                           as.integer(fc))
+                           as.integer(fc), fp)
 
         res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
     }

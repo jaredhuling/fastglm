@@ -93,6 +93,7 @@ fastglm_streaming <- function(chunk_callback,
     if (is.null(family$family)) stop("'family' not recognized", call. = FALSE)
 
     fam_code <- family_code(family)
+    fam_par  <- family_params(family)
 
     # Pull one chunk to discover p and column names, and to do up-front
     # shape validation.  The C++ solver re-pulls all chunks (including this
@@ -139,16 +140,19 @@ fastglm_streaming <- function(chunk_callback,
         dev_resids     = family$dev.resids,
         valideta       = valideta,
         validmu        = validmu,
-        start          = start_vec
+        start          = start_vec,
+        fam_params     = fam_par
     )
 
-    # Override C++ dispersion = NaN with 1 when the family is binomial/poisson
-    # but a non-tier-1 link was used (so fam_code = -1 and the C++ side could
-    # not recognise it).
+    # C++ always reports Pearson-based dispersion; override to 1 for
+    # poisson / binomial.  Quasi-binomial / quasi-poisson share C++ family
+    # codes with binomial / poisson but keep the estimated dispersion.
+    # NB families also use the Pearson estimate (same convention as
+    # glm() + MASS::negative.binomial in summary()).
     dispersion <- res$dispersion
-    if (family$family %in% c("poisson", "binomial")) dispersion <- 1
+    is_fixed_disp <- family$family %in% c("poisson", "binomial")
+    if (is_fixed_disp) dispersion <- 1
     if (!identical(dispersion, res$dispersion)) {
-        # Rescale SE to use the user-implied dispersion.
         if (is.finite(res$dispersion) && res$dispersion > 0)
             res$se <- res$se / sqrt(res$dispersion)
         if (is.finite(dispersion) && dispersion > 0)

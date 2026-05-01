@@ -66,6 +66,9 @@ protected:
     bool is_big_matrix;
     int rank;
     int fam_code;   // fglm::FamilyCode; -1 = unknown (use R callbacks)
+    fglm::FamilyParams fam_params;  // theta / var_power / link_power for params-aware families
+    bool firth_;                    // true = Firth bias-reduced score (binomial logit only)
+    double log_det_XtWX_;           // log|X'WX| from most recent solve_wls (used by Firth)
     
     
     FullPivHouseholderQR<MatrixXd> FPQR;
@@ -123,7 +126,7 @@ protected:
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<Eigen::ArrayXd>       d(mu_eta.data(), mu_eta.size());
-            fglm::mu_eta(fam_code, e, d);
+            fglm::mu_eta(fam_code, fam_params, e, d);
             return;
         }
         NumericVector mu_eta_nv = mu_eta_fun(eta);
@@ -135,7 +138,7 @@ protected:
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<Eigen::ArrayXd>       v(var_mu.data(), var_mu.size());
-            fglm::variance(fam_code, m, v);
+            fglm::variance(fam_code, fam_params, m, v);
             return;
         }
         NumericVector var_mu_nv = variance_fun(mu);
@@ -148,7 +151,7 @@ protected:
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<Eigen::ArrayXd>       m(mu.data(), mu.size());
-            fglm::linkinv(fam_code, e, m);
+            fglm::linkinv(fam_code, fam_params, e, m);
             return;
         }
         NumericVector mu_nv = linkinv(eta);
@@ -181,28 +184,34 @@ protected:
     virtual void update_dev_resids()
     {
         devold = dev;
+        double std_dev;
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> w(weights.data(), weights.size());
-            dev = fglm::dev_resids_sum(fam_code, y, m, w);
-            return;
+            std_dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, w);
+        } else {
+            NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
+            std_dev = sum(dev_resids);
         }
-        NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
-        dev = sum(dev_resids);
+        // Firth penalized deviance: dev* = -2 * (l(beta) + 0.5 * log|I(beta)|)
+        //                                = std_dev - log|X'WX|.
+        dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
     virtual void update_dev_resids_dont_update_old()
     {
+        double std_dev;
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> w(weights.data(), weights.size());
-            dev = fglm::dev_resids_sum(fam_code, y, m, w);
-            return;
+            std_dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, w);
+        } else {
+            NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
+            std_dev = sum(dev_resids);
         }
-        NumericVector dev_resids = dev_resids_fun(Y, mu, weights);
-        dev = sum(dev_resids);
+        dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
     virtual void step_halve()
@@ -215,11 +224,25 @@ protected:
         update_mu();
     }
 
+    // For Firth, the convergence check on penalized deviance has a one-step
+    // lag in the log|X'WX| term (we form log|X'W_{k-1} X| inside solve_wls
+    // before updating beta to beta_k).  That lag can satisfy |Δdev| < tol
+    // before the penalized score reaches zero.  Override converged() to test
+    // the coefficient change ||Δβ||_∞ instead, which is the convergence
+    // criterion every reference Firth implementation (logistf, brglm) uses.
+    bool converged() override
+    {
+        if (firth_) {
+            return (beta - beta_prev).cwiseAbs().maxCoeff() < tol;
+        }
+        return std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol;
+    }
+
     bool valideta_check()
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
-            return fglm::valideta(fam_code, e);
+            return fglm::valideta(fam_code, fam_params, e);
         }
         return as<bool>(valideta(eta));
     }
@@ -228,13 +251,20 @@ protected:
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
-            return fglm::validmu(fam_code, m);
+            return fglm::validmu(fam_code, fam_params, m);
         }
         return as<bool>(validmu(mu));
     }
 
     virtual void run_step_halving(int &iterr)
     {
+        // Firth: penalized dev is std_dev - log|X'WX| where the log-det term
+        // is computed at the *previous* beta inside solve_wls_firth.  That
+        // one-step lag can briefly inflate the penalized dev and trigger
+        // spurious step halving that drags the iteration off the true MLE.
+        // Only halve to recover from infinite dev / invalid (eta, mu); skip
+        // the "increasing deviance" branch.
+        const bool firth_skip_dev_halving = firth_;
         // check for infinite deviance
         if (std::isinf(dev))
         {
@@ -280,7 +310,8 @@ protected:
         
         // check for increasing deviance
         //std::abs(deviance - deviance_prev) / (0.1 + std::abs(deviance)) < tol_irls
-        if ((dev - devold) / (0.1 + std::abs(dev)) >= tol && iterr > 0)
+        if (!firth_skip_dev_halving &&
+            (dev - devold) / (0.1 + std::abs(dev)) >= tol && iterr > 0)
         {
             int itrr = 0;
             
@@ -304,10 +335,53 @@ protected:
         }
     }
     
+    // Firth-augmented solve_wls.  Restricted to FAM_BINOMIAL_LOGIT and the
+    // dense path (no streaming / sparse / big.matrix).  The leverage h_i is
+    // computed from the LLT of X'WX and used to shift the working response:
+    //
+    //   z_i^* = z_i + h_i * (0.5 - mu_i) / (mu_i * (1 - mu_i))
+    //
+    // The Cholesky factor is reused both for h and for the WLS update.
+    // log|X'WX| is stored on the solver so update_dev_resids() can form
+    // the penalized deviance dev* = std_dev - log|X'WX|.
+    void solve_wls_firth()
+    {
+        beta_prev = beta;
+        // WX = w_sqrt * X.
+        WX.noalias() = w.asDiagonal() * X;
+        // X'WX = (WX)' (WX)
+        update_XtWX();
+        Ch.compute(XtWX_buf.selfadjointView<Lower>());
+
+        // h_i = ||L^{-1} (WX_i)'||^2 = w_i^2 * x_i' (X'WX)^{-1} x_i.
+        // Solve L V = (WX)', so V (p x n) has columns L^{-1} (w_i x_i),
+        // and h_i = sum of squares of the i-th column.
+        MatrixXd V = WX.transpose();
+        Ch.matrixL().solveInPlace(V);
+        VectorXd h_lev = V.colwise().squaredNorm();
+
+        // Firth-augmented working response.  Binomial logit:
+        //   mu_eta_i = mu_i (1 - mu_i) = var_mu_i.
+        const double eps = std::numeric_limits<double>::epsilon();
+        Eigen::ArrayXd denom = (mu.array() * (1.0 - mu.array())).max(eps);
+        VectorXd zstar = z + (h_lev.array() * (0.5 - mu.array()) / denom).matrix();
+
+        wz.noalias() = w.cwiseProduct(zstar);
+        beta = Ch.solve(WX.adjoint() * wz);
+
+        // log|X'WX| = 2 * sum(log(diag(L)))
+        const MatrixXd &Lstore = Ch.matrixLLT();
+        double ld = 0.0;
+        for (int j = 0; j < Lstore.cols(); ++j) ld += std::log(Lstore(j, j));
+        log_det_XtWX_ = 2.0 * ld;
+        rank = nvars;
+    }
+
     // much of solve_wls() comes directly
     // from the source code of the RcppEigen package
     virtual void solve_wls(int iter)
     {
+        if (firth_) { solve_wls_firth(); return; }
         //enum {ColPivQR_t = 0, QR_t, LLT_t, LDLT_t, SVD_t, SymmEigen_t, GESDD_t};
 
         beta_prev = beta;
@@ -562,7 +636,9 @@ public:
         int maxit_ = 100,
         int type_ = 1,
         bool is_big_matrix_ = false,
-        int fam_code_ = -1) :
+        int fam_code_ = -1,
+        const fglm::FamilyParams &fam_params_ = fglm::FamilyParams(),
+        bool firth_flag = false) :
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd>(X_.rows(), X_.cols(),
                                                      tol_, maxit_),
                                                      X(X_),
@@ -580,6 +656,9 @@ public:
                                                      type(type_),
                                                      is_big_matrix(is_big_matrix_),
                                                      fam_code(fam_code_),
+                                                     fam_params(fam_params_),
+                                                     firth_(firth_flag),
+                                                     log_det_XtWX_(0.0),
                                                      WX( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows(),
                                                          (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.cols()),
                                                      wz( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows()),
@@ -630,6 +709,16 @@ public:
     
     virtual VectorXd get_weights()  { return weights; }
     virtual int get_rank()          { return rank; }
+
+    // Allow the NB / hurdle / ZI drivers to update theta (and other
+    // params-aware fields) between successive IRLS passes, without
+    // reconstructing the solver.
+    void set_fam_params(const fglm::FamilyParams &p) { fam_params = p; }
+
+    // Penalized log-likelihood pieces, exposed so the Firth driver can
+    // report them back to R.
+    double get_log_det_XtWX() const { return log_det_XtWX_; }
+    bool   get_firth()        const { return firth_; }
 
 };
 

@@ -34,6 +34,7 @@ protected:
     int type;       // 2 = LLT, 3 = LDLT (only)
     int rank;
     int fam_code;
+    fglm::FamilyParams fam_params;
 
     // Sparse decompositions (analyzePattern done once, factorize per iter)
     SpLLT  Ch;
@@ -52,7 +53,7 @@ protected:
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<Eigen::ArrayXd>       d(mu_eta.data(), mu_eta.size());
-            fglm::mu_eta(fam_code, e, d);
+            fglm::mu_eta(fam_code, fam_params, e, d);
             return;
         }
         Rcpp::NumericVector v = mu_eta_fun(eta);
@@ -64,7 +65,7 @@ protected:
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<Eigen::ArrayXd>       v(var_mu.data(), var_mu.size());
-            fglm::variance(fam_code, m, v);
+            fglm::variance(fam_code, fam_params, m, v);
             return;
         }
         Rcpp::NumericVector v = variance_fun(mu);
@@ -76,7 +77,7 @@ protected:
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<Eigen::ArrayXd>       m(mu.data(), mu.size());
-            fglm::linkinv(fam_code, e, m);
+            fglm::linkinv(fam_code, fam_params, e, m);
             return;
         }
         Rcpp::NumericVector v = linkinv(eta);
@@ -106,7 +107,7 @@ protected:
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
-            dev = fglm::dev_resids_sum(fam_code, y, m, wt);
+            dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, wt);
             return;
         }
         Rcpp::NumericVector dr = dev_resids_fun(Y, mu, weights);
@@ -119,7 +120,7 @@ protected:
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
-            dev = fglm::dev_resids_sum(fam_code, y, m, wt);
+            dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, wt);
             return;
         }
         Rcpp::NumericVector dr = dev_resids_fun(Y, mu, weights);
@@ -137,7 +138,7 @@ protected:
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
-            return fglm::valideta(fam_code, e);
+            return fglm::valideta(fam_code, fam_params, e);
         }
         return Rcpp::as<bool>(valideta(eta));
     }
@@ -146,7 +147,7 @@ protected:
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
-            return fglm::validmu(fam_code, m);
+            return fglm::validmu(fam_code, fam_params, m);
         }
         return Rcpp::as<bool>(validmu(mu));
     }
@@ -232,13 +233,15 @@ public:
                Rcpp::Function &dev_resids_fun_,
                Rcpp::Function &valideta_,
                Rcpp::Function &validmu_,
-               double tol_, int maxit_, int type_, int fam_code_) :
+               double tol_, int maxit_, int type_, int fam_code_,
+               const fglm::FamilyParams &fam_params_ = fglm::FamilyParams()) :
         GlmBase<Eigen::VectorXd, Eigen::MatrixXd>(X_.rows(), X_.cols(), tol_, maxit_),
         X(X_), Y(Y_), weights(weights_), offset(offset_),
         variance_fun(variance_fun_), mu_eta_fun(mu_eta_fun_),
         linkinv(linkinv_), dev_resids_fun(dev_resids_fun_),
         valideta(valideta_), validmu(validmu_),
         tol(tol_), maxit(maxit_), type(type_), rank(X_.cols()), fam_code(fam_code_),
+        fam_params(fam_params_),
         pattern_analyzed(false), Xtwz(X_.cols())
     {}
 

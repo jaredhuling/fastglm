@@ -27,7 +27,26 @@ enum FamilyCode {
     FAM_INVGAUSS_INVMU2      = 13,
     FAM_INVGAUSS_LOG         = 14,
     FAM_INVGAUSS_IDENTITY    = 15,
-    FAM_INVGAUSS_INVERSE     = 16
+    FAM_INVGAUSS_INVERSE     = 16,
+    // Negative binomial (NB2: variance = mu + mu^2/theta).  theta is carried
+    // on FamilyParams.  Links match Poisson's set.
+    FAM_NB_LOG               = 17,
+    FAM_NB_SQRT              = 18,
+    FAM_NB_IDENTITY          = 19,
+    // Tweedie (variance = mu^var_power).  var_power on FamilyParams.
+    FAM_TWEEDIE_LOG          = 20,
+    FAM_TWEEDIE_IDENTITY     = 21,
+    FAM_TWEEDIE_INVERSE      = 22,
+    FAM_TWEEDIE_SQRT         = 23
+};
+
+// Parameters needed by some families (theta for NB, var_power for Tweedie,
+// link_power reserved for Tweedie generic power links).  Defaults are inert
+// for all params-free families.
+struct FamilyParams {
+    double theta      = 1.0;
+    double var_power  = 0.0;
+    double link_power = 0.0;
 };
 
 // Numerical floor used by R's family helpers.
@@ -43,6 +62,7 @@ static inline double y_log_y(double y, double mu) {
 // linkinv: mu = g^{-1}(eta)
 // ---------------------------------------------------------------------------
 inline void linkinv(int code,
+                    const FamilyParams& /*params*/,
                     const Eigen::Ref<const Eigen::ArrayXd>& eta,
                     Eigen::Ref<Eigen::ArrayXd> mu)
 {
@@ -51,16 +71,21 @@ inline void linkinv(int code,
     case FAM_POISSON_IDENTITY:
     case FAM_GAMMA_IDENTITY:
     case FAM_INVGAUSS_IDENTITY:
+    case FAM_NB_IDENTITY:
+    case FAM_TWEEDIE_IDENTITY:
         mu = eta; break;
     case FAM_GAUSSIAN_LOG:
     case FAM_POISSON_LOG:
     case FAM_GAMMA_LOG:
     case FAM_INVGAUSS_LOG:
     case FAM_BINOMIAL_LOG:
+    case FAM_NB_LOG:
+    case FAM_TWEEDIE_LOG:
         mu = eta.exp(); break;
     case FAM_GAUSSIAN_INVERSE:
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
+    case FAM_TWEEDIE_INVERSE:
         mu = 1.0 / eta; break;
     case FAM_BINOMIAL_LOGIT: {
         // Numerically stable: pmax(pmin(eta, large), -large) then plogis
@@ -92,6 +117,8 @@ inline void linkinv(int code,
     case FAM_INVGAUSS_INVMU2:
         mu = 1.0 / eta.sqrt(); break;
     case FAM_POISSON_SQRT:
+    case FAM_NB_SQRT:
+    case FAM_TWEEDIE_SQRT:
         mu = eta.square(); break;
     default:
         // Should not be called for FAM_UNKNOWN
@@ -104,6 +131,7 @@ inline void linkinv(int code,
 // mu_eta: dmu / deta
 // ---------------------------------------------------------------------------
 inline void mu_eta(int code,
+                   const FamilyParams& /*params*/,
                    const Eigen::Ref<const Eigen::ArrayXd>& eta,
                    Eigen::Ref<Eigen::ArrayXd> dmu)
 {
@@ -112,16 +140,21 @@ inline void mu_eta(int code,
     case FAM_POISSON_IDENTITY:
     case FAM_GAMMA_IDENTITY:
     case FAM_INVGAUSS_IDENTITY:
+    case FAM_NB_IDENTITY:
+    case FAM_TWEEDIE_IDENTITY:
         dmu.setOnes(); break;
     case FAM_GAUSSIAN_LOG:
     case FAM_POISSON_LOG:
     case FAM_GAMMA_LOG:
     case FAM_INVGAUSS_LOG:
     case FAM_BINOMIAL_LOG:
+    case FAM_NB_LOG:
+    case FAM_TWEEDIE_LOG:
         dmu = eta.exp().max(thresh_eps()); break;
     case FAM_GAUSSIAN_INVERSE:
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
+    case FAM_TWEEDIE_INVERSE:
         dmu = -1.0 / eta.square(); break;
     case FAM_BINOMIAL_LOGIT: {
         Eigen::ArrayXd ee = (-eta.abs()).exp();
@@ -149,6 +182,8 @@ inline void mu_eta(int code,
     case FAM_INVGAUSS_INVMU2:
         dmu = -1.0 / (2.0 * eta.pow(1.5)); break;
     case FAM_POISSON_SQRT:
+    case FAM_NB_SQRT:
+    case FAM_TWEEDIE_SQRT:
         dmu = 2.0 * eta; break;
     default:
         dmu.setOnes();
@@ -160,6 +195,7 @@ inline void mu_eta(int code,
 // variance: V(mu)
 // ---------------------------------------------------------------------------
 inline void variance(int code,
+                     const FamilyParams& params,
                      const Eigen::Ref<const Eigen::ArrayXd>& mu,
                      Eigen::Ref<Eigen::ArrayXd> v)
 {
@@ -186,6 +222,20 @@ inline void variance(int code,
     case FAM_INVGAUSS_IDENTITY:
     case FAM_INVGAUSS_INVERSE:
         v = mu.pow(3); break;
+    case FAM_NB_LOG:
+    case FAM_NB_SQRT:
+    case FAM_NB_IDENTITY: {
+        // V(mu) = mu + mu^2 / theta; for theta -> Inf this reduces to Poisson.
+        const double inv_theta = (params.theta > 0.0) ? 1.0 / params.theta : 0.0;
+        v = mu + mu.square() * inv_theta;
+        break;
+    }
+    case FAM_TWEEDIE_LOG:
+    case FAM_TWEEDIE_IDENTITY:
+    case FAM_TWEEDIE_INVERSE:
+    case FAM_TWEEDIE_SQRT:
+        // V(mu) = mu^p
+        v = mu.pow(params.var_power); break;
     default:
         v.setOnes();
         break;
@@ -199,6 +249,7 @@ inline void variance(int code,
 // y is taken as a proportion (the standard glm convention after $initialize).
 // ---------------------------------------------------------------------------
 inline double dev_resids_sum(int code,
+                             const FamilyParams& params,
                              const Eigen::Ref<const Eigen::ArrayXd>& y,
                              const Eigen::Ref<const Eigen::ArrayXd>& mu,
                              const Eigen::Ref<const Eigen::ArrayXd>& wt)
@@ -260,6 +311,68 @@ inline double dev_resids_sum(int code,
         }
         break;
 
+    case FAM_NB_LOG:
+    case FAM_NB_SQRT:
+    case FAM_NB_IDENTITY: {
+        // d_i = 2 * [ y * log(y/mu) - (y + theta) * log((y + theta)/(mu + theta)) ]
+        // y = 0 limit: d_i = 2 * theta * log((mu + theta)/theta) = 2*theta*log1p(mu/theta).
+        const double theta = params.theta;
+        for (Eigen::Index i = 0; i < n; ++i) {
+            double yi = y[i], mi = mu[i];
+            double a = (yi > 0.0) ? yi * std::log(yi / mi) : 0.0;
+            // (y + theta) * log((y + theta)/(mu + theta)) computed in stable form.
+            // log((y + theta)/(mu + theta)) = log1p((y - mu)/(mu + theta))
+            double yt = yi + theta;
+            double mt = mi + theta;
+            double b  = yt * std::log(yt / mt);
+            s += 2.0 * wt[i] * (a - b);
+        }
+        break;
+    }
+
+    case FAM_TWEEDIE_LOG:
+    case FAM_TWEEDIE_IDENTITY:
+    case FAM_TWEEDIE_INVERSE:
+    case FAM_TWEEDIE_SQRT: {
+        // d(y, mu) = 2 * [ y * (y^{1-p} - mu^{1-p})/(1-p)
+        //               - (y^{2-p} - mu^{2-p})/(2-p) ]
+        // y = 0 limit:  d(0, mu) = 2 * mu^{2-p}/(2-p).
+        // p = 1 limit (Poisson):  y*log(y/mu) - (y - mu)
+        //   - via L'Hopital on the first term.
+        // p = 2 limit (Gamma):   -log(y/mu) + (y - mu)/mu
+        //   - via L'Hopital on the second term.
+        // Tolerance for the limit branches; statmod uses 1e-6.
+        const double p   = params.var_power;
+        const double a1  = 1.0 - p;
+        const double a2  = 2.0 - p;
+        const double tol = 1e-6;
+        const bool near_one = std::fabs(a1) < tol;     // p ≈ 1
+        const bool near_two = std::fabs(a2) < tol;     // p ≈ 2
+        for (Eigen::Index i = 0; i < n; ++i) {
+            double yi = y[i], mi = mu[i];
+            double term1, term2;
+            if (near_one) {
+                // Poisson limit
+                term1 = (yi > 0.0) ? yi * std::log(yi / mi) : 0.0;
+                term2 = yi - mi;
+            } else if (near_two) {
+                // Gamma limit
+                term1 = (yi > 0.0)
+                          ? yi * (std::pow(yi, a1) - std::pow(mi, a1)) / a1
+                          : 0.0;
+                term2 = (yi > 0.0) ? std::log(yi / mi) : 0.0;
+            } else if (yi > 0.0) {
+                term1 = yi * (std::pow(yi, a1) - std::pow(mi, a1)) / a1;
+                term2 = (std::pow(yi, a2) - std::pow(mi, a2)) / a2;
+            } else {
+                term1 = 0.0;
+                term2 = -std::pow(mi, a2) / a2;
+            }
+            s += 2.0 * wt[i] * (term1 - term2);
+        }
+        break;
+    }
+
     default:
         // Should not be reached.
         break;
@@ -271,22 +384,33 @@ inline double dev_resids_sum(int code,
 // ---------------------------------------------------------------------------
 // valideta / validmu (boolean predicates)
 // ---------------------------------------------------------------------------
-inline bool valideta(int code, const Eigen::Ref<const Eigen::ArrayXd>& eta)
+inline bool valideta(int code,
+                     const FamilyParams& /*params*/,
+                     const Eigen::Ref<const Eigen::ArrayXd>& eta)
 {
     switch (code) {
     case FAM_GAUSSIAN_INVERSE:
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
+    case FAM_TWEEDIE_INVERSE:
         return eta.allFinite() && (eta != 0.0).all();
     case FAM_INVGAUSS_INVMU2:
     case FAM_POISSON_SQRT:
+    case FAM_NB_SQRT:
         return eta.allFinite() && (eta > 0.0).all();
+    case FAM_TWEEDIE_SQRT:
+        // statmod::tweedie() does not constrain eta > 0 for the power-0.5
+        // link -- mu = eta^2 is valid for any real eta.  Match glm() so
+        // step-halving doesn't reject perfectly good iterates.
+        return eta.allFinite();
     default:
         return eta.allFinite();
     }
 }
 
-inline bool validmu(int code, const Eigen::Ref<const Eigen::ArrayXd>& mu)
+inline bool validmu(int code,
+                    const FamilyParams& /*params*/,
+                    const Eigen::Ref<const Eigen::ArrayXd>& mu)
 {
     switch (code) {
     case FAM_BINOMIAL_LOGIT:
@@ -304,6 +428,13 @@ inline bool validmu(int code, const Eigen::Ref<const Eigen::ArrayXd>& mu)
     case FAM_INVGAUSS_LOG:
     case FAM_INVGAUSS_IDENTITY:
     case FAM_INVGAUSS_INVERSE:
+    case FAM_NB_LOG:
+    case FAM_NB_SQRT:
+    case FAM_NB_IDENTITY:
+    case FAM_TWEEDIE_LOG:
+    case FAM_TWEEDIE_IDENTITY:
+    case FAM_TWEEDIE_INVERSE:
+    case FAM_TWEEDIE_SQRT:
         return mu.allFinite() && (mu > 0.0).all();
     default:
         return mu.allFinite();

@@ -20,6 +20,7 @@ namespace {
 struct FamilyOps {
     int code;
     bool native;
+    fglm::FamilyParams params;
     // Only used when !native
     Function var_fn;
     Function mueta_fn;
@@ -29,6 +30,7 @@ struct FamilyOps {
     Function validmu_fn;
 
     FamilyOps(int code_,
+              const fglm::FamilyParams& params_,
               Function var_,
               Function mueta_,
               Function linkinv_,
@@ -37,6 +39,7 @@ struct FamilyOps {
               Function validmu_)
         : code(code_),
           native(code_ != fglm::FAM_UNKNOWN),
+          params(params_),
           var_fn(var_),
           mueta_fn(mueta_),
           linkinv_fn(linkinv_),
@@ -48,7 +51,7 @@ struct FamilyOps {
     void linkinv(const ArrayXd& eta, ArrayXd& mu) const {
         if (native) {
             mu.resize(eta.size());
-            fglm::linkinv(code, eta, mu);
+            fglm::linkinv(code, params, eta, mu);
         } else {
             NumericVector r = linkinv_fn(NumericVector(eta.data(), eta.data() + eta.size()));
             mu = Map<const ArrayXd>(r.begin(), r.size());
@@ -57,7 +60,7 @@ struct FamilyOps {
     void mu_eta(const ArrayXd& eta, ArrayXd& dmu) const {
         if (native) {
             dmu.resize(eta.size());
-            fglm::mu_eta(code, eta, dmu);
+            fglm::mu_eta(code, params, eta, dmu);
         } else {
             NumericVector r = mueta_fn(NumericVector(eta.data(), eta.data() + eta.size()));
             dmu = Map<const ArrayXd>(r.begin(), r.size());
@@ -66,7 +69,7 @@ struct FamilyOps {
     void variance(const ArrayXd& mu, ArrayXd& v) const {
         if (native) {
             v.resize(mu.size());
-            fglm::variance(code, mu, v);
+            fglm::variance(code, params, mu, v);
         } else {
             NumericVector r = var_fn(NumericVector(mu.data(), mu.data() + mu.size()));
             v = Map<const ArrayXd>(r.begin(), r.size());
@@ -74,7 +77,7 @@ struct FamilyOps {
     }
     double dev_resids_sum(const ArrayXd& y, const ArrayXd& mu, const ArrayXd& w) const {
         if (native) {
-            return fglm::dev_resids_sum(code, y, mu, w);
+            return fglm::dev_resids_sum(code, params, y, mu, w);
         } else {
             NumericVector r = devresids_fn(
                 NumericVector(y.data(),  y.data()  + y.size()),
@@ -86,12 +89,12 @@ struct FamilyOps {
         }
     }
     bool valideta(const ArrayXd& eta) const {
-        if (native) return fglm::valideta(code, eta);
+        if (native) return fglm::valideta(code, params, eta);
         SEXP r = valideta_fn(NumericVector(eta.data(), eta.data() + eta.size()));
         return Rf_asLogical(r) == TRUE;
     }
     bool validmu(const ArrayXd& mu) const {
-        if (native) return fglm::validmu(code, mu);
+        if (native) return fglm::validmu(code, params, mu);
         SEXP r = validmu_fn(NumericVector(mu.data(), mu.data() + mu.size()));
         return Rf_asLogical(r) == TRUE;
     }
@@ -258,13 +261,22 @@ List fit_streaming_glm(Function chunk_callback,
                        Function dev_resids,
                        Function valideta,
                        Function validmu,
-                       Nullable<NumericVector> start = R_NilValue)
+                       Nullable<NumericVector> start = R_NilValue,
+                       Nullable<NumericVector> fam_params = R_NilValue)
 {
     if (n_chunks < 1) Rcpp::stop("n_chunks must be >= 1");
     if (type != 2 && type != 3)
         Rcpp::stop("for streaming fits, 'method' must be 2 (LLT) or 3 (LDLT).");
 
-    FamilyOps fam(fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu);
+    fglm::FamilyParams fp;
+    if (fam_params.isNotNull()) {
+        NumericVector fpv(fam_params.get());
+        if (fpv.size() >= 1) fp.theta      = fpv[0];
+        if (fpv.size() >= 2) fp.var_power  = fpv[1];
+        if (fpv.size() >= 3) fp.link_power = fpv[2];
+    }
+
+    FamilyOps fam(fam_code, fp, var, mu_eta, linkinv, dev_resids, valideta, validmu);
 
     VectorXd beta(p);
     if (start.isNotNull()) {
@@ -420,22 +432,12 @@ List fit_streaming_glm(Function chunk_callback,
     }
 
     int    df_residual = n_total - p;
-    double dispersion;
-    if (fam_code == fglm::FAM_BINOMIAL_LOGIT  ||
-        fam_code == fglm::FAM_BINOMIAL_PROBIT ||
-        fam_code == fglm::FAM_BINOMIAL_CLOGLOG||
-        fam_code == fglm::FAM_BINOMIAL_LOG    ||
-        fam_code == fglm::FAM_POISSON_LOG     ||
-        fam_code == fglm::FAM_POISSON_IDENTITY||
-        fam_code == fglm::FAM_POISSON_SQRT) {
-        dispersion = 1.0;
-    } else {
-        // For unknown families, fall back to inspecting the family$family slot
-        // via the R wrapper.  The wrapper handles the binomial/poisson
-        // detection there too; here we just compute the Pearson form.
-        dispersion = (df_residual > 0) ? pearson / (double)df_residual
-                                       : std::numeric_limits<double>::quiet_NaN();
-    }
+    // Always return Pearson-based dispersion; the R wrapper overrides this to
+    // 1 for fixed-dispersion families (binomial / poisson / negative binomial)
+    // so that quasi-binomial / quasi-poisson (which share C++ family codes
+    // with binomial / poisson) still get an estimated dispersion.
+    double dispersion = (df_residual > 0) ? pearson / (double)df_residual
+                                          : std::numeric_limits<double>::quiet_NaN();
 
     int df_null = n_ok - (has_intercept ? 1 : 0);
 

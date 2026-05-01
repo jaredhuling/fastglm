@@ -18,7 +18,8 @@
   family = gaussian(),
   control = list(),
   intercept = TRUE,
-  singular.ok = TRUE
+  singular.ok = TRUE,
+  firth = FALSE
 )
 
 \method{fastglm}{control}(fastmethod = 0L, tol = 1e-07, maxit = 100L, ...)

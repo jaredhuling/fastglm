@@ -19,6 +19,7 @@ fastglm(x, ...)
   method = 0L,
   tol = 1e-08,
   maxit = 100L,
+  firth = FALSE,
   ...
 )
 }

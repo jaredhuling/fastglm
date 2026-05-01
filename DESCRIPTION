@@ -25,7 +25,8 @@ Imports:
     Rcpp (>= 0.12.13),
     bigmemory,
     methods,
-    Matrix
+    Matrix,
+    Formula
 LinkingTo:
     Rcpp, 
     RcppEigen,
@@ -37,7 +38,11 @@ Suggests:
     rmarkdown,
     testthat (>= 3.0.0),
     sandwich,
-    microbenchmark
+    microbenchmark,
+    MASS,
+    statmod,
+    logistf,
+    pscl
 Config/testthat/edition: 3
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
