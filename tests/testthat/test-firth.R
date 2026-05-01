@@ -11,7 +11,7 @@ skip_if_not_installed("logistf")
 }
 
 test_that("Firth coefs match logistf on simulated logistic data", {
-    set.seed(42)
+    set.seed(123)
     n <- 300
     x <- cbind(1, matrix(rnorm(n * 3), n, 3))
     eta <- x %*% c(0.2, 0.5, -0.4, 0.3)
