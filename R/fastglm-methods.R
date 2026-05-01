@@ -201,45 +201,72 @@ vcovHC.fastglmFit <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
     .vcov_hc_fastglm(object, type)
 }
 
-#' Cluster-robust variance estimator for `fastglm` objects
+#' Empirical estimating-function and bread methods for `fastglm` objects
 #'
-#' Methods for `sandwich::vcovCL()` on objects of class `"fastglm"` and
-#' `"fastglmFit"`. Load `sandwich` (`library(sandwich)`) before calling
-#' `vcovCL(fit, cluster)`; otherwise no `vcovCL` generic is in scope.
+#' Methods for `sandwich::estfun()` and `sandwich::bread()`, which let
+#' `sandwich::vcovCL()`, `sandwich::vcovBS()`, and the rest of the *sandwich*
+#' machinery work directly on `fastglm` and `fastglmFit` objects.  Load
+#' `sandwich` (`library(sandwich)`) before calling them.
 #'
-#' @param object a fitted object of class `"fastglm"` or `"fastglmFit"`.
-#' @param cluster a vector identifying the cluster for each observation. Length
-#'   must equal the number of rows of the design matrix.
-#' @param type one of `"HC0"`, `"HC1"`. `"HC1"` (the default) applies the small-sample
-#'   degrees-of-freedom adjustment `(G / (G - 1)) * ((n - 1) / (n - p))`, where
-#'   `G` is the number of clusters.
+#' @param x a fitted object of class `"fastglm"` or `"fastglmFit"`.
 #' @param ... not used.
 #'
-#' @returns A `p x p` cluster-robust variance-covariance matrix.
-#'
 #' @details
-#' The Liang-Zeger (1986) cluster-robust sandwich:
-#' `bread %*% (sum_g s_g s_g') %*% bread`, where `s_g = sum_{i in g} w_i r_i x_i`
-#' is the score contribution from cluster `g`.
+#' `estfun(x)` returns the per-observation empirical estimating-function
+#' contributions, an `n x p` matrix whose `i`-th row is
+#' `(y_i - mu_i) * mu.eta_i / variance(mu_i) * x_i / dispersion`. `bread(x)`
+#' returns `(X' W X)^(-1) * n * dispersion` (the *sandwich* convention).
+#' For poisson, binomial, and negative-binomial families the dispersion is
+#' fixed at 1, exactly matching `sandwich::estfun.glm()` /
+#' `sandwich::bread.glm()`.
 #'
-#' @name vcovCL.fastglm
+#' @returns `estfun()` returns an `n x p` matrix; `bread()` returns a
+#'   `p x p` matrix.
+#'
+#' @name fastglm-sandwich
 NULL
 
-#' @rdname vcovCL.fastglm
-#' @exportS3Method sandwich::vcovCL fastglm
-vcovCL.fastglm <- function(object, cluster, type = c("HC1", "HC0"), ...)
+# Internal: dispersion used by sandwich's GLM bread/estfun convention.
+.sandwich_dispersion <- function(object, inp)
 {
-    type <- match.arg(type)
-    .vcov_cl_fastglm(object, cluster, type)
+    fam <- object$family$family
+    if (substr(fam, 1L, 17L) %in% c("poisson", "binomial", "Negative Binomial"))
+        return(1)
+    sum_w2 <- sum(inp$w2, na.rm = TRUE)
+    if (sum_w2 <= 0) return(1)
+    sum(inp$s^2, na.rm = TRUE) / sum_w2
 }
 
-#' @rdname vcovCL.fastglm
-#' @exportS3Method sandwich::vcovCL fastglmFit
-vcovCL.fastglmFit <- function(object, cluster, type = c("HC1", "HC0"), ...)
+#' @rdname fastglm-sandwich
+#' @exportS3Method sandwich::estfun fastglm
+estfun.fastglm <- function(x, ...)
 {
-    type <- match.arg(type)
-    .vcov_cl_fastglm(object, cluster, type)
+    inp  <- .vcov_hc_meat_inputs(x)
+    disp <- .sandwich_dispersion(x, inp)
+    rval <- (inp$s / disp) * inp$x
+    colnames(rval) <- names(x$coefficients)
+    rval
 }
+
+#' @rdname fastglm-sandwich
+#' @exportS3Method sandwich::estfun fastglmFit
+estfun.fastglmFit <- estfun.fastglm
+
+#' @rdname fastglm-sandwich
+#' @exportS3Method sandwich::bread fastglm
+bread.fastglm <- function(x, ...)
+{
+    inp  <- .vcov_hc_meat_inputs(x)
+    disp <- .sandwich_dispersion(x, inp)
+    nms  <- names(x$coefficients)
+    out  <- inp$bread * inp$n * disp
+    rownames(out) <- colnames(out) <- nms
+    out
+}
+
+#' @rdname fastglm-sandwich
+#' @exportS3Method sandwich::bread fastglmFit
+bread.fastglmFit <- bread.fastglm
 
 # Internal: pull (X, working residuals, working weights, bread) off a fitted
 # fastglm/fastglmFit object.  Returns a list with elements x, r, w, bread, p.
@@ -302,31 +329,6 @@ vcovCL.fastglmFit <- function(object, cluster, type = c("HC1", "HC0"), ...)
 
     if (type == "HC1")
         V <- V * (n / max(n - p, 1))
-
-    nms <- names(object$coefficients)
-    rownames(V) <- colnames(V) <- nms
-    V
-}
-
-.vcov_cl_fastglm <- function(object, cluster, type)
-{
-    inp <- .vcov_hc_meat_inputs(object)
-    x <- inp$x; s <- inp$s; bread <- inp$bread
-    n <- inp$n; p <- inp$p
-
-    if (length(cluster) != n)
-        stop(sprintf("length(cluster) (%d) does not match number of observations (%d)",
-                     length(cluster), n), call. = FALSE)
-    cl <- as.factor(cluster)
-    G <- nlevels(cl)
-
-    estfun <- s * x                                          # n x p
-    s_g <- rowsum(estfun, cl, reorder = FALSE)               # G x p
-    meat <- crossprod(s_g)
-    V <- bread %*% meat %*% bread
-
-    if (type == "HC1")
-        V <- V * (G / max(G - 1, 1)) * ((n - 1) / max(n - p, 1))
 
     nms <- names(object$coefficients)
     rownames(V) <- colnames(V) <- nms
