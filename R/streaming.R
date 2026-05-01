@@ -30,7 +30,7 @@
 #' @returns A list with class `"fastglm"` containing the same elements as
 #'   [fastglm()], including `coefficients`, `cov.unscaled`, `deviance`,
 #'   `iter`, `converged`, etc. The design matrix is *not* attached, so
-#'   `vcovHC()` / `vcovCL()` will require re-streaming.
+#'   `sandwich::vcovHC()` / `sandwich::vcovCL()` will require re-streaming.
 #'
 #' @details
 #' The IRLS loop and step-halving (Marschner 2011) run entirely in C++; the

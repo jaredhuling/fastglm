@@ -6,7 +6,7 @@ test_that("vcovHC matches sandwich::vcovHC for binomial logit", {
     gf <- fastglm(d$X, d$y, family = binomial(), method = 2, tol = 1e-12)
 
     for (tp in c("HC0", "HC1", "HC2", "HC3")) {
-        v_fast <- vcovHC(gf, type = tp)
+        v_fast <- sandwich::vcovHC(gf, type = tp)
         v_sw   <- sandwich::vcovHC(gl, type = tp)
         expect_equal(unname(v_fast), unname(v_sw), tolerance = 1e-6,
                      info = paste0("binomial ", tp))
@@ -22,7 +22,7 @@ test_that("vcovHC matches sandwich for gaussian and poisson", {
                   control = list(epsilon = 1e-12))
         gf <- fastglm(d$X, d$y, family = family_for(resp), method = 2, tol = 1e-12)
         for (tp in c("HC0", "HC2", "HC3")) {
-            v_fast <- vcovHC(gf, type = tp)
+            v_fast <- sandwich::vcovHC(gf, type = tp)
             v_sw   <- sandwich::vcovHC(gl, type = tp)
             expect_equal(unname(v_fast), unname(v_sw), tolerance = 1e-6,
                          info = paste0(resp, " ", tp))
@@ -38,7 +38,7 @@ test_that("vcovCL matches sandwich::vcovCL", {
     gf <- fastglm(d$X, d$y, family = binomial(), method = 2, tol = 1e-12)
     cluster <- rep(seq_len(25), length.out = d$n)
 
-    v_fast <- vcovCL(gf, cluster = cluster, type = "HC1")
+    v_fast <- sandwich::vcovCL(gf, cluster = cluster, type = "HC1")
     v_sw   <- sandwich::vcovCL(gl, cluster = cluster, type = "HC1")
     # Use absolute-error comparison: scale by overall matrix norm so a single
     # near-zero off-diagonal entry doesn't dominate the relative tolerance.
@@ -58,8 +58,8 @@ test_that("vcovHC works on sparse and big.matrix fits", {
     f_big    <- fastglm(bigmemory::as.big.matrix(d$X), d$y,
                         family = binomial(), method = 2)
     v_sw <- sandwich::vcovHC(gl, type = "HC0")
-    expect_equal(unname(vcovHC(f_sparse, type = "HC0")), unname(v_sw),
+    expect_equal(unname(sandwich::vcovHC(f_sparse, type = "HC0")), unname(v_sw),
                  tolerance = 1e-6)
-    expect_equal(unname(vcovHC(f_big,    type = "HC0")), unname(v_sw),
+    expect_equal(unname(sandwich::vcovHC(f_big,    type = "HC0")), unname(v_sw),
                  tolerance = 1e-6)
 })

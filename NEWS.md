@@ -63,11 +63,14 @@
   `predict.fastglm(se.fit = TRUE)` now all work without a refit hack;
   `vcov.fastglmFit()` no longer re-runs `glm.fit` to recover a `qr` slot.
 
-* New methods `vcovHC.fastglm()` and `vcovCL.fastglm()` for
-  heteroskedasticity-consistent (HC0–HC3) and cluster-robust covariance
-  matrices. Results match `sandwich::vcovHC()` / `sandwich::vcovCL()` to
+* `S3` methods registered on `sandwich::vcovHC()` and `sandwich::vcovCL()`
+  for heteroskedasticity-consistent (HC0–HC3) and cluster-robust covariance
+  matrices. After `library(sandwich)`, `vcovHC(fit)` and `vcovCL(fit, ...)`
+  match `sandwich::vcovHC.glm()` / `sandwich::vcovCL.glm()` to
   floating-point precision and work for sparse, `big.matrix`, and
-  in-memory fits.
+  in-memory fits. (Earlier development versions shipped local
+  `vcovHC()` / `vcovCL()` generics; those have been removed in favour of
+  registering on the canonical *sandwich* generics.)
 
 * Sparse design matrices (`Matrix::dgCMatrix`) are now supported directly
   by `fastglm()` and `fastglm.fit()` for the LLT (`method = 2`) and LDLT

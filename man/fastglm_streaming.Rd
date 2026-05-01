@@ -45,7 +45,7 @@ Cholesky. QR / SVD methods are not supported in streaming mode.}
 A list with class `"fastglm"` containing the same elements as
   [fastglm()], including `coefficients`, `cov.unscaled`, `deviance`,
   `iter`, `converged`, etc. The design matrix is *not* attached, so
-  `vcovHC()` / `vcovCL()` will require re-streaming.
+  `sandwich::vcovHC()` / `sandwich::vcovCL()` will require re-streaming.
 }
 \description{
 `fastglm_streaming()` runs an IRLS GLM fit where the design matrix is

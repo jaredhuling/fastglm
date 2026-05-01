@@ -143,6 +143,10 @@ vcov.fastglm <- function(object, ...)
 
 #' Heteroskedasticity-consistent (HC) variance estimators for `fastglm` objects
 #'
+#' Methods for `sandwich::vcovHC()` on objects of class `"fastglm"` and
+#' `"fastglmFit"`. Load `sandwich` (`library(sandwich)`) before calling
+#' `vcovHC(fit)`; otherwise no `vcovHC` generic is in scope.
+#'
 #' @param object a fitted object of class `"fastglm"` or `"fastglmFit"`.
 #' @param type one of `"HC0"`, `"HC1"`, `"HC2"`, `"HC3"`. Default `"HC3"` matches
 #'   `sandwich::vcovHC.glm`.
@@ -170,25 +174,27 @@ vcov.fastglm <- function(object, ...)
 #' by `fastglm()`, `fastglmPure()`, and `fastglm.fit()` since version 0.0.6).
 #'
 #' @examples
-#' x <- cbind(1, matrix(rnorm(500 * 4), ncol = 4))
-#' y <- rbinom(500, 1, plogis(x %*% c(0.2, 0.3, -0.4, 0.1, 0.2)))
-#' fit <- fastglm(x, y, family = binomial())
-#' vcovHC(fit)
-#' vcovHC(fit, type = "HC0")
+#' if (requireNamespace("sandwich", quietly = TRUE)) {
+#'   x <- cbind(1, matrix(rnorm(500 * 4), ncol = 4))
+#'   y <- rbinom(500, 1, plogis(x %*% c(0.2, 0.3, -0.4, 0.1, 0.2)))
+#'   fit <- fastglm(x, y, family = binomial())
+#'   sandwich::vcovHC(fit)
+#'   sandwich::vcovHC(fit, type = "HC0")
+#' }
 #'
-#' @export
-vcovHC <- function(object, ...) UseMethod("vcovHC")
+#' @name vcovHC.fastglm
+NULL
 
-#' @rdname vcovHC
-#' @exportS3Method vcovHC fastglm
+#' @rdname vcovHC.fastglm
+#' @exportS3Method sandwich::vcovHC fastglm
 vcovHC.fastglm <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 {
     type <- match.arg(type)
     .vcov_hc_fastglm(object, type)
 }
 
-#' @rdname vcovHC
-#' @exportS3Method vcovHC fastglmFit
+#' @rdname vcovHC.fastglm
+#' @exportS3Method sandwich::vcovHC fastglmFit
 vcovHC.fastglmFit <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 {
     type <- match.arg(type)
@@ -196,6 +202,10 @@ vcovHC.fastglmFit <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 }
 
 #' Cluster-robust variance estimator for `fastglm` objects
+#'
+#' Methods for `sandwich::vcovCL()` on objects of class `"fastglm"` and
+#' `"fastglmFit"`. Load `sandwich` (`library(sandwich)`) before calling
+#' `vcovCL(fit, cluster)`; otherwise no `vcovCL` generic is in scope.
 #'
 #' @param object a fitted object of class `"fastglm"` or `"fastglmFit"`.
 #' @param cluster a vector identifying the cluster for each observation. Length
@@ -212,19 +222,19 @@ vcovHC.fastglmFit <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 #' `bread %*% (sum_g s_g s_g') %*% bread`, where `s_g = sum_{i in g} w_i r_i x_i`
 #' is the score contribution from cluster `g`.
 #'
-#' @export
-vcovCL <- function(object, ...) UseMethod("vcovCL")
+#' @name vcovCL.fastglm
+NULL
 
-#' @rdname vcovCL
-#' @exportS3Method vcovCL fastglm
+#' @rdname vcovCL.fastglm
+#' @exportS3Method sandwich::vcovCL fastglm
 vcovCL.fastglm <- function(object, cluster, type = c("HC1", "HC0"), ...)
 {
     type <- match.arg(type)
     .vcov_cl_fastglm(object, cluster, type)
 }
 
-#' @rdname vcovCL
-#' @exportS3Method vcovCL fastglmFit
+#' @rdname vcovCL.fastglm
+#' @exportS3Method sandwich::vcovCL fastglmFit
 vcovCL.fastglmFit <- function(object, cluster, type = c("HC1", "HC0"), ...)
 {
     type <- match.arg(type)
