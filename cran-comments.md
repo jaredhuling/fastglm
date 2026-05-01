@@ -6,7 +6,7 @@ This release adds:
 * Real `vcov()` / `predict(se.fit = TRUE)` for `"fastglm"` objects
   (no more refit hack on `vcov.fastglmFit()`).
 * HC and cluster-robust covariance methods (`vcovHC()`, `vcovCL()`).
-* Native (inline-C++) family/link dispatch for tier-1 GLMs
+* Native (inline-C++) family/link dispatch for standard GLMs
   (gaussian / binomial / poisson / Gamma / inverse.gaussian on their
   common links); roughly 1.5×-2× faster than 0.0.4 on large `n`.
 * Sparse design matrix support via `Matrix::dgCMatrix`.
