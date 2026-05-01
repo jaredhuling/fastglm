@@ -34,7 +34,8 @@ List fastglm(Rcpp::NumericMatrix Xs,
              int type,
              double tol,
              int maxit,
-             int fam_code)
+             int fam_code,
+             const fglm::FamilyParams& fam_params)
 {
     const Map<MatrixXd>  X(as<Map<MatrixXd> >(Xs));
     const Map<VectorXd>  y(as<Map<VectorXd> >(ys));
@@ -45,16 +46,16 @@ List fastglm(Rcpp::NumericMatrix Xs,
     const Map<VectorXd>  eta_init(as<Map<VectorXd> >(etas));
     Index                n = X.rows();
     if ((Index)y.size() != n) throw invalid_argument("size mismatch");
-    
+
     // instantiate fitting class
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
-    
+
     bool is_big_matrix = false;
-    
+
     glm_solver = new glm(X, y, weights, offset,
                          var, mu_eta, linkinv, dev_resids,
                          valideta, validmu, tol, maxit, type,
-                         is_big_matrix, fam_code);
+                         is_big_matrix, fam_code, fam_params);
 
     // initialize parameters
     glm_solver->init_parms(beta_init, mu_init, eta_init);
@@ -94,14 +95,28 @@ List fastglm(Rcpp::NumericMatrix Xs,
 }
 
 
+// Build a FamilyParams from a Nullable<NumericVector> (length 0..3).  Missing
+// entries default to 1.0 (theta), 0.0 (var_power), 0.0 (link_power).
+static fglm::FamilyParams parse_fam_params(Rcpp::Nullable<Rcpp::NumericVector> fam_params) {
+    fglm::FamilyParams fp;
+    if (fam_params.isNull()) return fp;
+    Rcpp::NumericVector fpv(fam_params.get());
+    if (fpv.size() >= 1) fp.theta      = fpv[0];
+    if (fpv.size() >= 2) fp.var_power  = fpv[1];
+    if (fpv.size() >= 3) fp.link_power = fpv[2];
+    return fp;
+}
+
 // [[Rcpp::export]]
 List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset,
              Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta,
              Function var, Function mu_eta, Function linkinv, Function dev_resids,
              Function valideta, Function validmu,
-             int type, double tol, int maxit, int fam_code = -1)
+             int type, double tol, int maxit, int fam_code = -1,
+             Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
 {
-    return fastglm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code);
+    fglm::FamilyParams fp = parse_fam_params(fam_params);
+    return fastglm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp);
 }
 
 
@@ -124,7 +139,8 @@ List bigfastglm(XPtr<BigMatrix> Xs,
                 int type,
                 double tol,
                 int maxit,
-                int fam_code)
+                int fam_code,
+                const fglm::FamilyParams& fam_params)
 {
     //const Map<MatrixXd>  X(as<Map<MatrixXd> >(Xs));
     //XPtr<BigMatrix> bMPtr(Xs);
@@ -162,7 +178,7 @@ List bigfastglm(XPtr<BigMatrix> Xs,
     glm_solver = new glm(X, y, weights, offset,
                          var, mu_eta, linkinv, dev_resids,
                          valideta, validmu, tol, maxit, type,
-                         is_big_matrix, fam_code);
+                         is_big_matrix, fam_code, fam_params);
 
     // initialize parameters
     glm_solver->init_parms(beta_init, mu_init, eta_init);
@@ -170,7 +186,7 @@ List bigfastglm(XPtr<BigMatrix> Xs,
 
     // maximize likelihood
     int iters = glm_solver->solve(maxit);
-    
+
     VectorXd beta      = glm_solver->get_beta();
     VectorXd se        = glm_solver->get_se();
     VectorXd mu        = glm_solver->get_mu();
@@ -207,11 +223,12 @@ List fit_big_glm(SEXP x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcp
                  Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta,
                  Function var, Function mu_eta, Function linkinv, Function dev_resids,
                  Function valideta, Function validmu,
-                 int type, double tol, int maxit, int fam_code = -1)
+                 int type, double tol, int maxit, int fam_code = -1,
+                 Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
 {
     XPtr<BigMatrix> xpMat(x);
-
-    return bigfastglm(xpMat, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code);
+    fglm::FamilyParams fp = parse_fam_params(fam_params);
+    return bigfastglm(xpMat, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp);
 }
 
 
@@ -224,11 +241,14 @@ List fit_sparse_glm(SEXP x_sparse,
                     Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta,
                     Function var, Function mu_eta, Function linkinv, Function dev_resids,
                     Function valideta, Function validmu,
-                    int type, double tol, int maxit, int fam_code = -1)
+                    int type, double tol, int maxit, int fam_code = -1,
+                    Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
 {
     if (type != 2 && type != 3) {
         throw std::invalid_argument("for dgCMatrix objects, 'method' must be 2 (LLT) or 3 (LDLT).");
     }
+
+    fglm::FamilyParams fp = parse_fam_params(fam_params);
 
     typedef Eigen::SparseMatrix<double> SpMat;
     // Use MappedSparseMatrix which RcppEigen knows how to convert dgCMatrix into.
@@ -250,7 +270,7 @@ List fit_sparse_glm(SEXP x_sparse,
     glm_sparse solver(X, Y, wts, off,
                       var, mu_eta, linkinv, dev_resids,
                       valideta, validmu,
-                      tol, maxit, type, fam_code);
+                      tol, maxit, type, fam_code, fp);
     solver.init_parms(beta_init, mu_init, eta_init);
     int iters = solver.solve(maxit);
 

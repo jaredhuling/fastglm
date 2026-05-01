@@ -34,8 +34,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_glm
-List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, int type, double tol, int maxit, int fam_code);
-RcppExport SEXP _fastglm_fit_glm(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP) {
+List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, int type, double tol, int maxit, int fam_code, Rcpp::Nullable<Rcpp::NumericVector> fam_params);
+RcppExport SEXP _fastglm_fit_glm(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP fam_paramsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -56,13 +56,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
     Rcpp::traits::input_parameter< int >::type fam_code(fam_codeSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_glm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type fam_params(fam_paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_glm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_big_glm
-List fit_big_glm(SEXP x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, int type, double tol, int maxit, int fam_code);
-RcppExport SEXP _fastglm_fit_big_glm(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP) {
+List fit_big_glm(SEXP x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, int type, double tol, int maxit, int fam_code, Rcpp::Nullable<Rcpp::NumericVector> fam_params);
+RcppExport SEXP _fastglm_fit_big_glm(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP fam_paramsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -83,13 +84,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
     Rcpp::traits::input_parameter< int >::type fam_code(fam_codeSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_big_glm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type fam_params(fam_paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_big_glm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_sparse_glm
-List fit_sparse_glm(SEXP x_sparse, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, int type, double tol, int maxit, int fam_code);
-RcppExport SEXP _fastglm_fit_sparse_glm(SEXP x_sparseSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP) {
+List fit_sparse_glm(SEXP x_sparse, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, int type, double tol, int maxit, int fam_code, Rcpp::Nullable<Rcpp::NumericVector> fam_params);
+RcppExport SEXP _fastglm_fit_sparse_glm(SEXP x_sparseSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP fam_paramsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -110,13 +112,141 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
     Rcpp::traits::input_parameter< int >::type fam_code(fam_codeSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_sparse_glm(x_sparse, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type fam_params(fam_paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_sparse_glm(x_sparse, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_glm_firth
+List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, double tol, int maxit, int fam_code, Rcpp::Nullable<Rcpp::NumericVector> fam_params);
+RcppExport SEXP _fastglm_fit_glm_firth(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP muSEXP, SEXP etaSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP fam_paramsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type start(startSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< Function >::type var(varSEXP);
+    Rcpp::traits::input_parameter< Function >::type mu_eta(mu_etaSEXP);
+    Rcpp::traits::input_parameter< Function >::type linkinv(linkinvSEXP);
+    Rcpp::traits::input_parameter< Function >::type dev_resids(dev_residsSEXP);
+    Rcpp::traits::input_parameter< Function >::type valideta(validetaSEXP);
+    Rcpp::traits::input_parameter< Function >::type validmu(validmuSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type fam_code(fam_codeSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type fam_params(fam_paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_glm_firth(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, tol, maxit, fam_code, fam_params));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_glm_hurdle
+List fit_glm_hurdle(Rcpp::NumericMatrix x_count, Rcpp::NumericMatrix z_zero, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset_count, Rcpp::NumericVector offset_zero, int dist_code, int zero_fam_code, double init_theta, double tol, int maxit, double outer_tol, int outer_maxit, double theta_tol, int theta_maxit, Rcpp::Function var_fun_zero, Rcpp::Function mu_eta_fun_zero, Rcpp::Function linkinv_fun_zero, Rcpp::Function dev_resids_fun_zero, Rcpp::Function valideta_fun_zero, Rcpp::Function validmu_fun_zero);
+RcppExport SEXP _fastglm_fit_glm_hurdle(SEXP x_countSEXP, SEXP z_zeroSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offset_countSEXP, SEXP offset_zeroSEXP, SEXP dist_codeSEXP, SEXP zero_fam_codeSEXP, SEXP init_thetaSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP outer_tolSEXP, SEXP outer_maxitSEXP, SEXP theta_tolSEXP, SEXP theta_maxitSEXP, SEXP var_fun_zeroSEXP, SEXP mu_eta_fun_zeroSEXP, SEXP linkinv_fun_zeroSEXP, SEXP dev_resids_fun_zeroSEXP, SEXP valideta_fun_zeroSEXP, SEXP validmu_fun_zeroSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type x_count(x_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type z_zero(z_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset_count(offset_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset_zero(offset_zeroSEXP);
+    Rcpp::traits::input_parameter< int >::type dist_code(dist_codeSEXP);
+    Rcpp::traits::input_parameter< int >::type zero_fam_code(zero_fam_codeSEXP);
+    Rcpp::traits::input_parameter< double >::type init_theta(init_thetaSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< double >::type outer_tol(outer_tolSEXP);
+    Rcpp::traits::input_parameter< int >::type outer_maxit(outer_maxitSEXP);
+    Rcpp::traits::input_parameter< double >::type theta_tol(theta_tolSEXP);
+    Rcpp::traits::input_parameter< int >::type theta_maxit(theta_maxitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type var_fun_zero(var_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type mu_eta_fun_zero(mu_eta_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type linkinv_fun_zero(linkinv_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type dev_resids_fun_zero(dev_resids_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type valideta_fun_zero(valideta_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type validmu_fun_zero(validmu_fun_zeroSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_glm_hurdle(x_count, z_zero, y, weights, offset_count, offset_zero, dist_code, zero_fam_code, init_theta, tol, maxit, outer_tol, outer_maxit, theta_tol, theta_maxit, var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero, dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_glm_nb
+List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector start, Rcpp::NumericVector mu_init, Rcpp::NumericVector eta_init, Rcpp::Function var_fun, Rcpp::Function mu_eta_fun, Rcpp::Function linkinv_fun, Rcpp::Function dev_resids_fun, Rcpp::Function valideta_fun, Rcpp::Function validmu_fun, int type, double tol, int maxit, int fam_code, double init_theta, double theta_tol, int theta_maxit, int outer_maxit, double outer_tol);
+RcppExport SEXP _fastglm_fit_glm_nb(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP startSEXP, SEXP mu_initSEXP, SEXP eta_initSEXP, SEXP var_funSEXP, SEXP mu_eta_funSEXP, SEXP linkinv_funSEXP, SEXP dev_resids_funSEXP, SEXP valideta_funSEXP, SEXP validmu_funSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP init_thetaSEXP, SEXP theta_tolSEXP, SEXP theta_maxitSEXP, SEXP outer_maxitSEXP, SEXP outer_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type start(startSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mu_init(mu_initSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta_init(eta_initSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type var_fun(var_funSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type mu_eta_fun(mu_eta_funSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type linkinv_fun(linkinv_funSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type dev_resids_fun(dev_resids_funSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type valideta_fun(valideta_funSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type validmu_fun(validmu_funSEXP);
+    Rcpp::traits::input_parameter< int >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type fam_code(fam_codeSEXP);
+    Rcpp::traits::input_parameter< double >::type init_theta(init_thetaSEXP);
+    Rcpp::traits::input_parameter< double >::type theta_tol(theta_tolSEXP);
+    Rcpp::traits::input_parameter< int >::type theta_maxit(theta_maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type outer_maxit(outer_maxitSEXP);
+    Rcpp::traits::input_parameter< double >::type outer_tol(outer_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_glm_nb(x, y, weights, offset, start, mu_init, eta_init, var_fun, mu_eta_fun, linkinv_fun, dev_resids_fun, valideta_fun, validmu_fun, type, tol, maxit, fam_code, init_theta, theta_tol, theta_maxit, outer_maxit, outer_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_glm_zi
+List fit_glm_zi(Rcpp::NumericMatrix x_count, Rcpp::NumericMatrix z_zero, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset_count, Rcpp::NumericVector offset_zero, int dist_code, int zero_fam_code, double init_theta, double tol, int maxit, double em_tol, int em_maxit, double theta_tol, int theta_maxit, Rcpp::Function var_fun_zero, Rcpp::Function mu_eta_fun_zero, Rcpp::Function linkinv_fun_zero, Rcpp::Function dev_resids_fun_zero, Rcpp::Function valideta_fun_zero, Rcpp::Function validmu_fun_zero, Rcpp::Function var_fun_count, Rcpp::Function mu_eta_fun_count, Rcpp::Function linkinv_fun_count, Rcpp::Function dev_resids_fun_count, Rcpp::Function valideta_fun_count, Rcpp::Function validmu_fun_count);
+RcppExport SEXP _fastglm_fit_glm_zi(SEXP x_countSEXP, SEXP z_zeroSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offset_countSEXP, SEXP offset_zeroSEXP, SEXP dist_codeSEXP, SEXP zero_fam_codeSEXP, SEXP init_thetaSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP em_tolSEXP, SEXP em_maxitSEXP, SEXP theta_tolSEXP, SEXP theta_maxitSEXP, SEXP var_fun_zeroSEXP, SEXP mu_eta_fun_zeroSEXP, SEXP linkinv_fun_zeroSEXP, SEXP dev_resids_fun_zeroSEXP, SEXP valideta_fun_zeroSEXP, SEXP validmu_fun_zeroSEXP, SEXP var_fun_countSEXP, SEXP mu_eta_fun_countSEXP, SEXP linkinv_fun_countSEXP, SEXP dev_resids_fun_countSEXP, SEXP valideta_fun_countSEXP, SEXP validmu_fun_countSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type x_count(x_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type z_zero(z_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset_count(offset_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset_zero(offset_zeroSEXP);
+    Rcpp::traits::input_parameter< int >::type dist_code(dist_codeSEXP);
+    Rcpp::traits::input_parameter< int >::type zero_fam_code(zero_fam_codeSEXP);
+    Rcpp::traits::input_parameter< double >::type init_theta(init_thetaSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< double >::type em_tol(em_tolSEXP);
+    Rcpp::traits::input_parameter< int >::type em_maxit(em_maxitSEXP);
+    Rcpp::traits::input_parameter< double >::type theta_tol(theta_tolSEXP);
+    Rcpp::traits::input_parameter< int >::type theta_maxit(theta_maxitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type var_fun_zero(var_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type mu_eta_fun_zero(mu_eta_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type linkinv_fun_zero(linkinv_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type dev_resids_fun_zero(dev_resids_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type valideta_fun_zero(valideta_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type validmu_fun_zero(validmu_fun_zeroSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type var_fun_count(var_fun_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type mu_eta_fun_count(mu_eta_fun_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type linkinv_fun_count(linkinv_fun_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type dev_resids_fun_count(dev_resids_fun_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type valideta_fun_count(valideta_fun_countSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type validmu_fun_count(validmu_fun_countSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_glm_zi(x_count, z_zero, y, weights, offset_count, offset_zero, dist_code, zero_fam_code, init_theta, tol, maxit, em_tol, em_maxit, theta_tol, theta_maxit, var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero, dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero, var_fun_count, mu_eta_fun_count, linkinv_fun_count, dev_resids_fun_count, valideta_fun_count, validmu_fun_count));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_streaming_glm
-List fit_streaming_glm(Function chunk_callback, int n_chunks, int p, int type, double tol, int maxit, int fam_code, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, Nullable<NumericVector> start);
-RcppExport SEXP _fastglm_fit_streaming_glm(SEXP chunk_callbackSEXP, SEXP n_chunksSEXP, SEXP pSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP startSEXP) {
+List fit_streaming_glm(Function chunk_callback, int n_chunks, int p, int type, double tol, int maxit, int fam_code, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, Nullable<NumericVector> start, Nullable<NumericVector> fam_params);
+RcppExport SEXP _fastglm_fit_streaming_glm(SEXP chunk_callbackSEXP, SEXP n_chunksSEXP, SEXP pSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP startSEXP, SEXP fam_paramsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -134,7 +264,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Function >::type valideta(validetaSEXP);
     Rcpp::traits::input_parameter< Function >::type validmu(validmuSEXP);
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type start(startSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_streaming_glm(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start));
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type fam_params(fam_paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_streaming_glm(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -149,10 +280,14 @@ RcppExport SEXP prod_vec_big_right(SEXP, SEXP);
 static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_colMax_dense", (DL_FUNC) &_fastglm_colMax_dense, 1},
     {"_fastglm_colMin_dense", (DL_FUNC) &_fastglm_colMin_dense, 1},
-    {"_fastglm_fit_glm", (DL_FUNC) &_fastglm_fit_glm, 17},
-    {"_fastglm_fit_big_glm", (DL_FUNC) &_fastglm_fit_big_glm, 17},
-    {"_fastglm_fit_sparse_glm", (DL_FUNC) &_fastglm_fit_sparse_glm, 17},
-    {"_fastglm_fit_streaming_glm", (DL_FUNC) &_fastglm_fit_streaming_glm, 14},
+    {"_fastglm_fit_glm", (DL_FUNC) &_fastglm_fit_glm, 18},
+    {"_fastglm_fit_big_glm", (DL_FUNC) &_fastglm_fit_big_glm, 18},
+    {"_fastglm_fit_sparse_glm", (DL_FUNC) &_fastglm_fit_sparse_glm, 18},
+    {"_fastglm_fit_glm_firth", (DL_FUNC) &_fastglm_fit_glm_firth, 17},
+    {"_fastglm_fit_glm_hurdle", (DL_FUNC) &_fastglm_fit_glm_hurdle, 21},
+    {"_fastglm_fit_glm_nb", (DL_FUNC) &_fastglm_fit_glm_nb, 22},
+    {"_fastglm_fit_glm_zi", (DL_FUNC) &_fastglm_fit_glm_zi, 27},
+    {"_fastglm_fit_streaming_glm", (DL_FUNC) &_fastglm_fit_streaming_glm, 15},
     {"colmax_big",         (DL_FUNC) &colmax_big,         1},
     {"colmin_big",         (DL_FUNC) &colmin_big,         1},
     {"colsums_big",        (DL_FUNC) &colsums_big,        1},
