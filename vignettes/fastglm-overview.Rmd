@@ -92,9 +92,14 @@ dim(V)
 all.equal(sqrt(diag(V)), unname(coef(summary(fit))[, "Std. Error"]))
 ```
 
-Heteroskedasticity-consistent and cluster-robust covariance matrices are available directly:
+Heteroskedasticity-consistent and cluster-robust covariance matrices are
+available via `sandwich::vcovHC()` and `sandwich::vcovCL()` — `fastglm`
+registers methods on those generics, so loading `sandwich` is all that is
+required:
 
 ```{r}
+library(sandwich)
+
 V_hc <- vcovHC(fit, type = "HC0")
 V_hc[1:3, 1:3]
 
@@ -103,7 +108,11 @@ V_cl    <- vcovCL(fit, cluster = cluster, type = "HC1")
 V_cl[1:3, 1:3]
 ```
 
-The `vcovHC` and `vcovCL` methods produce results numerically identical to `sandwich::vcovHC()` and `sandwich::vcovCL()` (Zeileis, Köll, and Graham, 2020) to floating-point precision. They work for sparse and `big.matrix` fits as well, since the full design matrix is preserved on the fitted object (as a reference, not copied).
+Results are numerically identical to `sandwich::vcovHC()` and
+`sandwich::vcovCL()` applied to a `glm` fit (Zeileis, Köll, and Graham, 2020)
+to floating-point precision. They work for sparse and `big.matrix` fits as
+well, since the full design matrix is preserved on the fitted object (as a
+reference, not copied).
 
 `predict()` supports `se.fit = TRUE`:
 

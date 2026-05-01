@@ -178,4 +178,4 @@ The three paths above are not interchangeable in performance:
 - `big.matrix` is the right path when the design matrix is dense and *numerically generated*, but does not fit in RAM. The on-disc backing means the design lives on disc and only one chunk is in memory at a time.
 - `fastglm_streaming()` is the right path when the design matrix has to be *built from raw data* (a parquet file, a *DuckDB* query, a CSV stream). It does not need a *bigmemory* backing file and can pull from any source via a closure.
 
-All three return a fitted object of class `"fastglm"` and support the same downstream methods: `summary()`, `vcov()`, `predict()`, `vcovHC()`, `vcovCL()`. The dispersion, deviance, and AIC are all computed in the streaming pass; nothing about the fitted object distinguishes it from an in-memory fit.
+All three return a fitted object of class `"fastglm"` and support the same downstream methods: `summary()`, `vcov()`, `predict()`, and `sandwich::vcovHC()` / `sandwich::vcovCL()` (after `library(sandwich)`). The dispersion, deviance, and AIC are all computed in the streaming pass; nothing about the fitted object distinguishes it from an in-memory fit.
