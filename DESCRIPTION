@@ -21,10 +21,11 @@ License: GPL (>= 2)
 Encoding: UTF-8
 Depends:
     R (>= 4.0.0)
-Imports: 
+Imports:
     Rcpp (>= 0.12.13),
     bigmemory,
-    methods
+    methods,
+    Matrix
 LinkingTo:
     Rcpp, 
     RcppEigen,
@@ -33,6 +34,10 @@ LinkingTo:
 Suggests:
     glm2,
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 3.0.0),
+    sandwich,
+    microbenchmark
+Config/testthat/edition: 3
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
