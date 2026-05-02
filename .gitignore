@@ -14,3 +14,6 @@ inst/doc
 # R CMD check / build artifacts
 *.Rcheck/
 *.tar.gz
+
+# revdepcheck output (regenerable; not in package build either)
+revdep/
