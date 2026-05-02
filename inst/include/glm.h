@@ -121,7 +121,7 @@ protected:
         XtWX_buf.selfadjointView<Lower>().rankUpdate(WX.adjoint());
     }
 
-    virtual void update_mu_eta()
+    virtual void update_mu_eta() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
@@ -133,7 +133,7 @@ protected:
         std::copy(mu_eta_nv.begin(), mu_eta_nv.end(), mu_eta.data());
     }
 
-    virtual void update_var_mu()
+    virtual void update_var_mu() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
@@ -145,7 +145,7 @@ protected:
         std::copy(var_mu_nv.begin(), var_mu_nv.end(), var_mu.data());
     }
 
-    virtual void update_mu()
+    virtual void update_mu() override
     {
         // mu <- linkinv(eta <- eta + offset)
         if (fam_code >= 0) {
@@ -158,7 +158,7 @@ protected:
         std::copy(mu_nv.begin(), mu_nv.end(), mu.data());
     }
     
-    virtual void update_eta()
+    virtual void update_eta() override
     {
         // eta <- drop(x %*% beta) + offset
         if (use_streaming) {
@@ -169,19 +169,19 @@ protected:
         }
     }
     
-    virtual void update_z()
+    virtual void update_z() override
     {
         // z <- (eta - offset)[good] + (y - mu)[good]/mu.eta.val[good]
         z = (eta - offset).array() + (Y - mu).array() / mu_eta.array();
     }
     
-    virtual void update_w()
+    virtual void update_w() override
     {
         // w <- sqrt((weights[good] * mu.eta.val[good]^2)/variance(mu)[good])
         w = (weights.array() * mu_eta.array().square() / var_mu.array()).array().sqrt();
     }
     
-    virtual void update_dev_resids()
+    virtual void update_dev_resids() override
     {
         devold = dev;
         double std_dev;
@@ -199,7 +199,7 @@ protected:
         dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
-    virtual void update_dev_resids_dont_update_old()
+    virtual void update_dev_resids_dont_update_old() override
     {
         double std_dev;
         if (fam_code >= 0) {
@@ -214,7 +214,7 @@ protected:
         dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
-    virtual void step_halve()
+    virtual void step_halve() override
     {
         // take half step
         beta = 0.5 * (beta.array() + beta_prev.array());
@@ -256,7 +256,7 @@ protected:
         return as<bool>(validmu(mu));
     }
 
-    virtual void run_step_halving(int &iterr)
+    virtual void run_step_halving(int &iterr) override
     {
         // Firth: penalized dev is std_dev - log|X'WX| where the log-det term
         // is computed at the *previous* beta inside solve_wls_firth.  That
@@ -379,7 +379,7 @@ protected:
 
     // much of solve_wls() comes directly
     // from the source code of the RcppEigen package
-    virtual void solve_wls(int iter)
+    virtual void solve_wls(int iter) override
     {
         if (firth_) { solve_wls_firth(); return; }
         //enum {ColPivQR_t = 0, QR_t, LLT_t, LDLT_t, SVD_t, SymmEigen_t, GESDD_t};
@@ -494,7 +494,7 @@ protected:
         
     }
     
-    virtual void save_vcov()
+    virtual void save_vcov() override
     {
         const double NaN = std::numeric_limits<double>::quiet_NaN();
         MatrixXd I_p = MatrixXd::Identity(nvars, nvars);
@@ -564,7 +564,7 @@ protected:
         }
     }
 
-    virtual void save_se()
+    virtual void save_se() override
     {
 
         if (type == 0)
@@ -669,9 +669,9 @@ public:
     
     
     // must set params to starting vals
-    void init_parms(const Map<VectorXd> & start_, 
+    void init_parms(const Map<VectorXd> & start_,
                     const Map<VectorXd> & mu_,
-                    const Map<VectorXd> & eta_)
+                    const Map<VectorXd> & eta_) override
     {
         beta = start_;
         eta = eta_;
@@ -693,7 +693,7 @@ public:
         rank = nvars;
     }
     
-    virtual VectorXd get_beta()
+    virtual VectorXd get_beta() override
     {
         if (type == 0 || type == 4)
         {
@@ -707,8 +707,8 @@ public:
         return beta;
     }
     
-    virtual VectorXd get_weights()  { return weights; }
-    virtual int get_rank()          { return rank; }
+    virtual VectorXd get_weights()  override { return weights; }
+    virtual int get_rank()          override { return rank; }
 
     // Allow the NB / hurdle / ZI drivers to update theta (and other
     // params-aware fields) between successive IRLS passes, without
