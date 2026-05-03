@@ -128,5 +128,5 @@ max(abs(coef(gl1) - gf4$coef))
 
 }
 \seealso{
-[fastglm.fit()]
+[fastglm_fit()]
 }

@@ -48,13 +48,13 @@ gfit1 <- fastglm(x = x, y = y, family = binomial(link = "cloglog"))
 summary(gfit1)
 ```
 
-Alternatively, to use the built-in function of `glm()` for processing formulas and data frames, we can use `glm()` with `method = fastglm.fit` to call the *fastglm* fitting functionality:
+Alternatively, to use the built-in function of `glm()` for processing formulas and data frames, we can use `glm()` with `method = fastglm_fit` to call the *fastglm* fitting functionality:
 
 ```{r}
 gfit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) +
                  unclass(alcgp), data = esoph,
              family = binomial(link = "cloglog"),
-             method = fastglm.fit)
+             method = fastglm_fit)
 
 summary(gfit2, refit = FALSE)
 ```
@@ -75,7 +75,7 @@ y <- exp(0.25 * x[,1] - 0.25 * x[,3] + 0.5 * x[,4] - 0.5 * x[,5] + rnorm(10000))
 
 # fastglm
 system.time(gfit1 <- glm(y ~ x, family = Gamma(link = "sqrt"),
-                         method = fastglm.fit))
+                         method = fastglm_fit))
 
 # glm
 system.time(gfit2 <- glm(y ~ x, family = Gamma(link = "sqrt")))

@@ -33,16 +33,7 @@ This release adds:
 
 ## R CMD check results
 
-0 errors | 0 warnings | 1 note
-
-The note flags `fastglm.fit` and `fastglm.control` as apparent S3
-methods of the generic `fastglm()` because of the dot-naming pattern;
-they are intentionally standalone exported functions (mirroring
-`stats::glm.fit` / `stats::glm.control`) and their signatures
-deliberately differ from the generic. The names predate the package's
-adoption of `fastglm()` as a generic and are preserved for backwards
-compatibility with downstream callers using
-`glm(..., method = fastglm.fit)`.
+0 errors | 0 warnings | 0 notes
 
 ## Reverse dependency results
 

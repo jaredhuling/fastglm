@@ -171,7 +171,7 @@ vcov.fastglm <- function(object, ...)
 #' Equivalent to `sandwich::vcovHC.glm`.
 #'
 #' Requires the model matrix `x` stored on the fitted object (set automatically
-#' by `fastglm()`, `fastglmPure()`, and `fastglm.fit()` since version 0.0.6).
+#' by `fastglm()`, `fastglmPure()`, and `fastglm_fit()` since version 0.0.6).
 #'
 #' @examples
 #' if (requireNamespace("sandwich", quietly = TRUE)) {
@@ -275,7 +275,7 @@ bread.fastglmFit <- bread.fastglm
     x <- object$x
     if (is.null(x))
         stop("vcovHC/vcovCL require the design matrix to be stored on the fitted object. ",
-             "Refit with fastglm/fastglmPure/fastglm.fit (>= 0.0.6).", call. = FALSE)
+             "Refit with fastglm/fastglmPure/fastglm_fit (>= 0.0.6).", call. = FALSE)
     if (inherits(x, "big.matrix"))
         x <- x[]
     if (inherits(x, "dgCMatrix"))

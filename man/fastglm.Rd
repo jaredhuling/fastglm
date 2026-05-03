@@ -111,5 +111,5 @@ system.time(gfb1 <- fastglm(bigmat, y, family = binomial(), method = 3))
 
 }
 \seealso{
-[fastglm.fit()]
+[fastglm_fit()]
 }

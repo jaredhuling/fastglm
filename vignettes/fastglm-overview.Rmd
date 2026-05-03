@@ -40,12 +40,12 @@ fit <- fastglm(x, y, family = binomial(link = "cloglog"))
 summary(fit)
 ```
 
-`fastglm()` does not accept a formula directly, it operates on a pre-built design matrix. To use a formula and a data frame, pass `fastglm.fit` as the fitting function to base `glm()`:
+`fastglm()` does not accept a formula directly, it operates on a pre-built design matrix. To use a formula and a data frame, pass `fastglm_fit` as the fitting function to base `glm()`:
 
 ```{r}
 fit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + unclass(alcgp),
             data = esoph, family = binomial(link = "cloglog"),
-            method = fastglm.fit)
+            method = fastglm_fit)
 ```
 
 # Decomposition methods
@@ -186,7 +186,7 @@ The *fastglm* package switches transparently between the two paths; user code do
 A handful of regressions that come up often in practice are not standard GLMs but build on the same IRLS machinery. *fastglm* provides dedicated entry points for these:
 
 - **`fastglm_nb()`** — negative-binomial regression with the dispersion `theta` estimated jointly with `beta`. Plays the same role as `MASS::glm.nb()` but runs the joint `(beta, theta)` MLE entirely in C++ (IRLS for `beta`, Brent for `theta`).
-- **`firth = TRUE`** — a flag on `fastglm()` / `fastglm.fit()` that activates Firth's bias-reducing penalty on the score. Useful for binary logistic regression under separation or in small samples; analogous to `logistf::logistf()`.
+- **`firth = TRUE`** — a flag on `fastglm()` / `fastglm_fit()` that activates Firth's bias-reducing penalty on the score. Useful for binary logistic regression under separation or in small samples; analogous to `logistf::logistf()`.
 - **`fastglm_hurdle()`** — a two-part count model: a binary regression for whether `y > 0`, plus a zero-truncated Poisson or NB regression on the positive subset. The two parts factorize, and both are fit by the same C++ IRLS solver. Same model as `pscl::hurdle()`.
 - **`fastglm_zi()`** — a zero-inflated Poisson or NB regression: a binary inflation component overlaid on the original count distribution, fit by an EM algorithm in C++ with closed-form posterior responsibilities and an analytical observed-information `vcov`. Same model as `pscl::zeroinfl()`.
 
@@ -197,7 +197,7 @@ All four take the standard *fastglm* tuning options (`method`, `tol`, `maxit`) a
 There are three `R`-side functions to fit a GLM with *fastglm*. They all call into the same C++ solver, but differ in how much of base R's machinery they wrap around it:
 
 - **`fastglm()`** is the top-level S3 function. It returns an object of class `"fastglm"` with deviance, AIC, null deviance, residuals, etc. populated --- the right entry point for interactive use.
-- **`fastglm.fit()`** is designed to be passed as `method = fastglm.fit` to base `glm()`. The returned object inherits from `"fastglmFit"` so that `glm()`'s formula/data handling, `update()`, `predict()`, etc. all work on top.
+- **`fastglm_fit()`** is designed to be passed as `method = fastglm_fit` to base `glm()`. The returned object inherits from `"fastglmFit"` so that `glm()`'s formula/data handling, `update()`, `predict()`, etc. all work on top.
 - **`fastglmPure()`** is the lowest-level wrapper: no dispersion, no AIC, no null-deviance computation. Use this when calling *fastglm* from another package and you only need the coefficients.
 
 # References
