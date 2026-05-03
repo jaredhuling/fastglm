@@ -104,7 +104,7 @@ y <- (exp(0.25 * x[,1] - 0.25 * x[,3] + 0.5 * x[,4] - 0.5 * x[,5] + rnorm(10000)
 
 
 system.time(gfit1 <- glm(y ~ x, family = Gamma(link = "sqrt"),
-                         method = fastglm.fit))
+                         method = fastglm_fit))
 
 system.time(gfit2 <- glm(y ~ x, family = Gamma(link = "sqrt")))
 

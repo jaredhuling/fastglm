@@ -42,7 +42,7 @@ weight, and `h_i = w_i^2 * x_i' (X' W X)^(-1) x_i` is the IRLS leverage.
 Equivalent to `sandwich::vcovHC.glm`.
 
 Requires the model matrix `x` stored on the fitted object (set automatically
-by `fastglm()`, `fastglmPure()`, and `fastglm.fit()` since version 0.0.6).
+by `fastglm()`, `fastglmPure()`, and `fastglm_fit()` since version 0.0.6).
 }
 \examples{
 if (requireNamespace("sandwich", quietly = TRUE)) {

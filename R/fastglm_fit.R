@@ -1,6 +1,6 @@
 #' Fast generalized linear model fitting
-#' 
-#' `fastglm.fit()` is a fitting method for [glm()]. It works like `glm.fit()`, i.e., by being supplied to the `method` argument of `glm()`.
+#'
+#' `fastglm_fit()` is a fitting method for [glm()]. It works like `glm.fit()`, i.e., by being supplied to the `method` argument of `glm()`.
 #' 
 #' @param x a design matrix of dimension `n * p`. Can also be a `big.matrix` object from \pkg{bigmemory}.
 #' @param y a vector of observations of length `n`.
@@ -10,7 +10,7 @@
 #' @param mustart optional starting values for the vector of means.
 #' @param offset this can be used to specify an *a priori* known component to be included in the linear predictor during fitting. This should be `NULL` or a numeric vector of length equal to the number of cases.
 #' @param family a description of the error distribution and link function to be used in the model. This must be a family function or the result of a call to a family function. (See [`family`] for details of family functions.)
-#' @param control a list of parameters for controlling the fitting process. This is passed to `fastglm.control()`.
+#' @param control a list of parameters for controlling the fitting process. This is passed to `fastglm_control()`.
 #' @param singular.ok,intercept See [glm.fit()].
 #' @param fastmethod `integer`; the method used for fitting. Allowable values include 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition, 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, and 5 for the Bidiagonal Divide and Conquer SVD. Default is 0. Can also be supplied as `method` when not supplied directly as an argument from `glm()` (see Examples).
 #' @param tol `numeric`; threshold tolerance for convergence.
@@ -19,11 +19,11 @@
 #'   penalty to the score function. Currently supported only for
 #'   `family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
 #'   for the canonical reference implementation.
-#' @param object a `fastglmFit` object; the output of a call to `glm()` with `method = fastglm.fit`.
+#' @param object a `fastglmFit` object; the output of a call to `glm()` with `method = fastglm_fit`.
 #' @param \dots for `vcov()` and `summary()`, other arguments passed downstream.
 #'
 #' @details
-#' The purpose of the functions documented on this page is to facilitate integration with existing [glm()] utilities in base R. `fastglm.fit()` is just a wrapper for [fastglmPure()] with some additional quality-of-life features. The `vcov()` and `summary()` methods use the unscaled coefficient covariance matrix returned directly from the C++ solver, so no refit is required.
+#' The purpose of the functions documented on this page is to facilitate integration with existing [glm()] utilities in base R. `fastglm_fit()` is just a wrapper for [fastglmPure()] with some additional quality-of-life features. The `vcov()` and `summary()` methods use the unscaled coefficient covariance matrix returned directly from the C++ solver, so no refit is required.
 #' 
 #' @examples
 #' set.seed(1234)
@@ -43,13 +43,13 @@
 #' system.time({
 #'     gf0 <- glm(y ~ ., data = dat,
 #'                family = binomial,
-#'                method = fastglm.fit)
+#'                method = fastglm_fit)
 #' })
 #' 
 #' system.time({
 #'     gf1 <- glm(y ~ ., data = dat,
 #'                family = binomial,
-#'                method = fastglm.fit,
+#'                method = fastglm_fit,
 #'                fastmethod = 1)
 #' })
 #' 
@@ -64,13 +64,13 @@
 #' system.time({
 #'     gf0 <- glm(y ~ ., data = dat,
 #'                family = poisson,
-#'                method = fastglm.fit)
+#'                method = fastglm_fit)
 #' })
 #' 
 #' system.time({
 #'     gf1 <- glm(y ~ ., data = dat,
 #'                family = poisson,
-#'                method = fastglm.fit,
+#'                method = fastglm_fit,
 #'                fastmethod = 1)
 #' })
 #' 
@@ -85,13 +85,13 @@
 #' system.time({
 #'     gf0 <- glm(y ~ ., data = dat,
 #'                family = Gamma(link = "log"),
-#'                method = fastglm.fit)
+#'                method = fastglm_fit)
 #' })
 #' 
 #' system.time({
 #'     gf1 <- glm(y ~ ., data = dat,
 #'                family = Gamma(link = "log"),
-#'                method = fastglm.fit,
+#'                method = fastglm_fit,
 #'                fastmethod = 1)
 #' })
 #' 
@@ -99,21 +99,21 @@
 #' # control arguments:
 #' gf1 <- glm(y ~ ., data = dat,
 #'            family = Gamma(link = "log"),
-#'            method = fastglm.fit,
+#'            method = fastglm_fit,
 #'            fastmethod = 1)
 #' 
 #' gf1 <- glm(y ~ ., data = dat,
 #'            family = Gamma(link = "log"),
-#'            method = fastglm.fit,
+#'            method = fastglm_fit,
 #'            control = list(fastmethod = 1))
 #' 
 #' gf1 <- glm(y ~ ., data = dat,
 #'            family = Gamma(link = "log"),
-#'            method = fastglm.fit,
+#'            method = fastglm_fit,
 #'            control = list(method = 1))
 
-#' @export `fastglm.fit`
-fastglm.fit <- function(x, y,
+#' @export
+fastglm_fit <- function(x, y,
                         weights  = rep(1, NROW(y)),
                         start    = NULL,
                         etastart = NULL,
@@ -125,7 +125,7 @@ fastglm.fit <- function(x, y,
                         singular.ok = TRUE,
                         firth = FALSE)
 {
-    control <- do.call("fastglm.control", control)
+    control <- do.call("fastglm_control", control)
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE.", call. = FALSE)
     if (firth) {
@@ -300,19 +300,19 @@ fastglm.fit <- function(x, y,
     
     if (!res$converged)
     {
-        warning("fastglm.fit: algorithm did not converge", call. = FALSE)
+        warning("fastglm_fit: algorithm did not converge", call. = FALSE)
     }
     
     eps <- 10 * .Machine$double.eps
     if (family$family == "binomial") 
     {
         if (any(res$fitted.values > 1 - eps) || any(res$fitted.values < eps))
-            warning("fastglm.fit: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
+            warning("fastglm_fit: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
     }
     if (family$family == "poisson") 
     {
         if (any(res$fitted.values < eps))
-            warning("fastglm.fit: fitted rates numerically 0 occurred", call. = FALSE)
+            warning("fastglm_fit: fitted rates numerically 0 occurred", call. = FALSE)
     }
     
     if (is.null(xnames))
@@ -365,9 +365,9 @@ fastglm.fit <- function(x, y,
     res
 }
 
-#' @export `fastglm.control`
-#' @rdname fastglm.fit
-fastglm.control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, ...) {
+#' @export
+#' @rdname fastglm_fit
+fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, ...) {
     if (...length() > 0L && "method" %in% ...names() && identical(fastmethod, 0L)) {
         fastmethod <- ...elt(which(...names() == "method")[1L])
         fastmethod_name <- "method"
@@ -389,7 +389,7 @@ fastglm.control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, ...) {
 }
 
 #' @exportS3Method stats::vcov fastglmFit
-#' @rdname fastglm.fit
+#' @rdname fastglm_fit
 vcov.fastglmFit <- function(object, ...) {
     cov.unscaled <- object$cov.unscaled
     if (is.null(cov.unscaled)) {
@@ -404,7 +404,7 @@ vcov.fastglmFit <- function(object, ...) {
 }
 
 #' @exportS3Method summary fastglmFit
-#' @rdname fastglm.fit
+#' @rdname fastglm_fit
 summary.fastglmFit <- function(object, ...) {
     summary.fastglm(object, ...)
 }

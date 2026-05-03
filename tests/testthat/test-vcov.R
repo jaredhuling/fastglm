@@ -45,7 +45,7 @@ test_that("predict(se.fit = TRUE) matches predict.glm", {
 test_that("vcov.fastglmFit no longer requires a refit", {
     d <- make_glm_data(n = 200, p = 4, response = "gaussian")
     df <- data.frame(d$X, y = d$y)
-    gl <- glm(y ~ . - 1, data = df, family = gaussian(), method = fastglm.fit)
+    gl <- glm(y ~ . - 1, data = df, family = gaussian(), method = fastglm_fit)
     expect_s3_class(gl, "fastglmFit")
     v <- vcov(gl)
     v_ref <- vcov(glm(y ~ . - 1, data = df, family = gaussian()))

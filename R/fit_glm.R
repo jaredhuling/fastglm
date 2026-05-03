@@ -157,7 +157,7 @@ tweedie_link_power <- function(family) {
 #' \item{residuals}{the vector of residuals}
 #' \item{s}{a numeric scalar - the root mean square for residuals}
 #' \item{fitted.values}{the vector of fitted values}
-#' @seealso [fastglm.fit()]
+#' @seealso [fastglm_fit()]
 #' @export
 #' @examples
 #'
@@ -472,7 +472,7 @@ fastglmPure <- function(x, y,
 #' \item{residuals}{the vector of residuals}
 #' \item{s}{a numeric scalar - the root mean square for residuals}
 #' \item{fitted.values}{the vector of fitted values}
-#' @seealso [fastglm.fit()]
+#' @seealso [fastglm_fit()]
 #' @export
 #' @examples
 #'

@@ -1,5 +1,13 @@
 # fastglm 0.1.0
 
+## Breaking changes
+
+* `fastglm.fit()` and `fastglm.control()` have been renamed to
+  `fastglm_fit()` and `fastglm_control()`. The old dot-form names
+  triggered an apparent-S3-method `R CMD check` NOTE because `fastglm`
+  is itself a generic. Existing code that passes `method = fastglm.fit`
+  to `glm()` should be updated to `method = fastglm_fit`.
+
 ## New features
 
 * New top-level function `fastglm_nb()` for negative-binomial
@@ -21,7 +29,7 @@
   weighted IRLS for both M-steps, the inner Brent MLE for `theta`, and
   the analytical observed-information `vcov`.
 
-* New `firth = TRUE` argument to `fastglm()` and `fastglm.fit()` for
+* New `firth = TRUE` argument to `fastglm()` and `fastglm_fit()` for
   Firth's bias-reducing penalty on the score. Currently supported for
   `family = binomial(link = "logit")` on dense designs; converges in
   finite steps under separation, where unpenalized IRLS would diverge.
@@ -73,7 +81,7 @@
   registering on the canonical *sandwich* generics.)
 
 * Sparse design matrices (`Matrix::dgCMatrix`) are now supported directly
-  by `fastglm()` and `fastglm.fit()` for the LLT (`method = 2`) and LDLT
+  by `fastglm()` and `fastglm_fit()` for the LLT (`method = 2`) and LDLT
   (`method = 3`) Cholesky paths. Other decompositions are rejected with
   an informative error rather than silently densified.
 

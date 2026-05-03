@@ -96,12 +96,12 @@ test_that("firth result reports unpenalized deviance and penalized.deviance", {
     expect_true(isTRUE(f$firth))
 })
 
-test_that("fastglm.fit accepts firth = TRUE", {
+test_that("fastglm_fit accepts firth = TRUE", {
     set.seed(99)
     n <- 100
     X <- cbind(1, matrix(rnorm(n * 2), n, 2))
     y <- rbinom(n, 1, plogis(X %*% c(0.1, 0.5, -0.3)))
-    fit <- fastglm.fit(X, y, family = binomial(), firth = TRUE)
+    fit <- fastglm_fit(X, y, family = binomial(), firth = TRUE)
     expect_true(fit$converged)
     expect_true(isTRUE(fit$firth))
 })
