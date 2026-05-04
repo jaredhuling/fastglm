@@ -45,9 +45,12 @@ snapshot-test failure.
   Post-Expansion") compares fitted coefficients to a hardcoded
   expected list with `tolerance = 1e-2`. Several coefficients drift
   1-5% between fastglm 0.0.4 (against which the snapshot was
-  generated) and 0.1.0. Both versions match `stats::glm()` to
-  approximately 1e-15 on non-degenerate fits; the SEQTaRget test
-  exercises a near-separated quasi-binomial scenario (one fitted
-  coefficient is ~10.2 on the logit scale) where the likelihood is
-  nearly flat near the boundary and IRLS endpoints are not unique to
-  floating-point precision. 
+  generated) and 0.1.0. The fit is a `quasibinomial()` IRLS on
+  expanded inverse-probability-of-censoring-weighted data: n=33,150
+  rows, p=10, only 16 events, with weights spanning 67 orders of
+  magnitude (5.3e-52 to 5.4e+15) and a Kish effective sample size of
+  58.7. The condition number of `X' W X` at the converged point is
+  about 1.4e+11, leaving roughly five reliable digits in any IRLS
+  solve. On the same captured (X, y, w), `stats::glm()` and
+  `fastglm()` 0.1.0 land more than 100% apart in relative terms on
+  several coefficients

@@ -53,6 +53,18 @@ struct FamilyParams {
 static inline double thresh_eps() { return std::numeric_limits<double>::epsilon(); }
 static inline double pmin1(double x) { return x > 1.0 ? 1.0 : x; }
 
+// Logit link cutoffs.  These mirror R's `src/library/stats/src/family.c`
+// (logit_linkinv / logit_mu_eta) constants exactly — THRESH = 30 and
+// MTHRESH = -30, with the formula switching to DOUBLE_EPS / INVEPS at the
+// boundaries.  Matching R is more important than tighter accuracy: under
+// extreme weighting, IRLS endpoints are sensitive to small changes in the
+// per-observation mu / mu_eta values, and disagreeing with R-callback
+// fastglm by O(eps) makes converged log-likelihoods differ by O(1) on
+// near-degenerate problems (cf. SEQTaRget regression test).
+static constexpr double LOGIT_THRESH  =  30.0;
+static constexpr double LOGIT_MTHRESH = -30.0;
+static inline double logit_inveps() { return 1.0 / std::numeric_limits<double>::epsilon(); }
+
 // y * log(y/mu)  with the standard 0*log(0) = 0 convention used by R.
 static inline double y_log_y(double y, double mu) {
     return y > 0.0 ? y * std::log(y / mu) : 0.0;
@@ -88,10 +100,20 @@ inline void linkinv(int code,
     case FAM_TWEEDIE_INVERSE:
         mu = 1.0 / eta; break;
     case FAM_BINOMIAL_LOGIT: {
-        // Numerically stable: pmax(pmin(eta, large), -large) then plogis
-        const double thr = -std::log(thresh_eps());
-        Eigen::ArrayXd e = eta.max(-thr).min(thr);
-        mu = 1.0 / (1.0 + (-e).exp());
+        // Match R's logit_linkinv (src/library/stats/src/family.c) exactly:
+        //   tmp = (eta < MTHRESH) ? DOUBLE_EPS
+        //        : (eta > THRESH ) ? INVEPS
+        //        : exp(eta)
+        //   mu  = tmp / (1 + tmp)
+        const double eps   = thresh_eps();
+        const double inveps = logit_inveps();
+        for (Eigen::Index i = 0; i < eta.size(); ++i) {
+            const double e = eta[i];
+            const double tmp = (e < LOGIT_MTHRESH) ? eps
+                             : (e > LOGIT_THRESH ) ? inveps
+                             : std::exp(e);
+            mu[i] = tmp / (1.0 + tmp);
+        }
         break;
     }
     case FAM_BINOMIAL_PROBIT: {
@@ -105,13 +127,17 @@ inline void linkinv(int code,
         break;
     }
     case FAM_BINOMIAL_CLOGLOG: {
-        Eigen::ArrayXd v = -((-eta.exp()).exp()) + 1.0;  // 1 - exp(-exp(eta))
-        // pmax(pmin(v, 1-eps), eps)
-        for (Eigen::Index i = 0; i < v.size(); ++i) {
-            if (v[i] < thresh_eps()) v[i] = thresh_eps();
-            if (v[i] > 1.0 - thresh_eps()) v[i] = 1.0 - thresh_eps();
+        // Match R's cloglog_linkinv: -expm1(-exp(eta)), then clamp to
+        // [DOUBLE_EPS, 1 - DOUBLE_EPS].  expm1 is mandatory for accuracy at
+        // very negative eta where (1 - exp(-exp(eta))) catastrophically
+        // cancels (off by ~1e-4 at eta = -30).
+        const double eps = thresh_eps();
+        for (Eigen::Index i = 0; i < eta.size(); ++i) {
+            double v = -std::expm1(-std::exp(eta[i]));
+            if (v < eps)             v = eps;
+            else if (v > 1.0 - eps)  v = 1.0 - eps;
+            mu[i] = v;
         }
-        mu = v;
         break;
     }
     case FAM_INVGAUSS_INVMU2:
@@ -157,10 +183,20 @@ inline void mu_eta(int code,
     case FAM_TWEEDIE_INVERSE:
         dmu = -1.0 / eta.square(); break;
     case FAM_BINOMIAL_LOGIT: {
-        Eigen::ArrayXd ee = (-eta.abs()).exp();
-        dmu = ee / (1.0 + ee).square();
-        for (Eigen::Index i = 0; i < dmu.size(); ++i)
-            if (dmu[i] < thresh_eps()) dmu[i] = thresh_eps();
+        // Match R's logit_mu_eta (src/library/stats/src/family.c) exactly:
+        //   if (eta > THRESH || eta < MTHRESH)  mu_eta = DOUBLE_EPS
+        //   else                                mu_eta = exp(eta) / (1+exp(eta))^2
+        const double eps = thresh_eps();
+        for (Eigen::Index i = 0; i < eta.size(); ++i) {
+            const double e = eta[i];
+            if (e > LOGIT_THRESH || e < LOGIT_MTHRESH) {
+                dmu[i] = eps;
+            } else {
+                const double ee = std::exp(e);
+                const double op = 1.0 + ee;
+                dmu[i] = ee / (op * op);
+            }
+        }
         break;
     }
     case FAM_BINOMIAL_PROBIT: {
