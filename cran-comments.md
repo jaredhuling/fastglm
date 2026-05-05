@@ -37,20 +37,4 @@ This release adds:
 
 ## Reverse dependency results
 
-revdepcheck against 16 CRAN reverse dependencies: 15 OK, 1 with a
-snapshot-test failure.
-
-* `SEQTaRget 1.4.1` — one snapshot test
-  (`test_multinomial.R:92`, "Multinomial Censoring Excused
-  Post-Expansion") compares fitted coefficients to a hardcoded
-  expected list with `tolerance = 1e-2`. Several coefficients drift
-  1-5% between fastglm 0.0.4 (against which the snapshot was
-  generated) and 0.1.0. The fit is a `quasibinomial()` IRLS on
-  expanded inverse-probability-of-censoring-weighted data: n=33,150
-  rows, p=10, only 16 events, with weights spanning 67 orders of
-  magnitude (5.3e-52 to 5.4e+15) and a Kish effective sample size of
-  58.7. The condition number of `X' W X` at the converged point is
-  about 1.4e+11, leaving roughly five reliable digits in any IRLS
-  solve. On the same captured (X, y, w), `stats::glm()` and
-  `fastglm()` 0.1.0 land more than 100% apart in relative terms on
-  several coefficients
+- passes all
