@@ -18,7 +18,7 @@ bigLm default"><!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/li
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.0.5</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
       </span>
     </div>
 
@@ -29,6 +29,25 @@ bigLm default"><!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/li
 <li>
   <a href="../reference/index.html">Reference</a>
 </li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Articles
+
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+    </li>
+    <li>
+      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+  </ul></li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
@@ -73,6 +92,7 @@ bigLm default"><!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/li
 <span>  method <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  tol <span class="op">=</span> <span class="fl">1e-08</span>,</span>
 <span>  maxit <span class="op">=</span> <span class="fl">100L</span>,</span>
+<span>  firth <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -133,6 +153,13 @@ This should be a numeric vector of length equal to the number of cases</p></dd>
 <dt id="arg-maxit">maxit<a class="anchor" aria-label="anchor" href="#arg-maxit"></a></dt>
 <dd><p>maximum number of IRLS iterations. Should be an integer</p></dd>
 
+
+<dt id="arg-firth">firth<a class="anchor" aria-label="anchor" href="#arg-firth"></a></dt>
+<dd><p>logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
+to the score function. Currently supported only for
+`family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
+for the canonical reference implementation.</p></dd>
+
 </dl></div>
     <div id="value">
     <h2>Value</h2>
@@ -161,7 +188,7 @@ This should be a numeric vector of length equal to the number of cases</p></dd>
 </dl></div>
     <div id="see-also">
     <h2>See also</h2>
-    <div class="dont-index"><p>[fastglm.fit()]</p></div>
+    <div class="dont-index"><p>[fastglm_fit()]</p></div>
     </div>
 
     <div id="ref-examples">
@@ -172,11 +199,11 @@ This should be a numeric vector of length equal to the number of cases</p></dd>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gl1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.204   0.004   0.208 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.202   0.006   0.208 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf1</span> <span class="op">&lt;-</span> <span class="fu">fastglm</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.061   0.001   0.063 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.065   0.001   0.067 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf2</span> <span class="op">&lt;-</span> <span class="fu">fastglm</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
@@ -184,18 +211,18 @@ This should be a numeric vector of length equal to the number of cases</p></dd>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf3</span> <span class="op">&lt;-</span> <span class="fu">fastglm</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.015   0.001   0.017 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.016   0.001   0.016 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf4</span> <span class="op">&lt;-</span> <span class="fu">fastglm</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.016   0.001   0.017 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.015   0.001   0.015 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf1</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.165734e-15</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf2</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.498801e-15</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.609823e-15</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf3</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.165734e-15</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.110223e-15</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf4</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.110223e-15</span>
 <span class="r-in"><span></span></span>

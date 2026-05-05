@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.0.5</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
       </span>
     </div>
 
@@ -28,6 +28,25 @@
 <li>
   <a href="../reference/index.html">Reference</a>
 </li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Articles
+
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+    </li>
+    <li>
+      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+  </ul></li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
@@ -67,7 +86,8 @@
 <span>  mustart <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  method <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  tol <span class="op">=</span> <span class="fl">1e-07</span>,</span>
-<span>  maxit <span class="op">=</span> <span class="fl">100L</span></span>
+<span>  maxit <span class="op">=</span> <span class="fl">100L</span>,</span>
+<span>  firth <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -123,6 +143,16 @@ Conquer SVD</p></dd>
 <dt id="arg-maxit">maxit<a class="anchor" aria-label="anchor" href="#arg-maxit"></a></dt>
 <dd><p>maximum number of IRLS iterations. Should be an integer</p></dd>
 
+
+<dt id="arg-firth">firth<a class="anchor" aria-label="anchor" href="#arg-firth"></a></dt>
+<dd><p>logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
+to the score function. Currently supported only for
+`family = binomial(link = "logit")` on dense `x`. The penalty modifies
+the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where
+`h_i` is the leverage; convergence is checked on the sup-norm of the
+coefficient update. See `logistf::logistf()` for the canonical
+reference implementation.</p></dd>
+
 </dl></div>
     <div id="value">
     <h2>Value</h2>
@@ -151,7 +181,7 @@ Conquer SVD</p></dd>
 </dl></div>
     <div id="see-also">
     <h2>See also</h2>
-    <div class="dont-index"><p>[fastglm.fit()]</p></div>
+    <div class="dont-index"><p>[fastglm_fit()]</p></div>
     </div>
 
     <div id="ref-examples">
@@ -172,7 +202,7 @@ Conquer SVD</p></dd>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf1</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.000 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.001 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf2</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">1</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
@@ -184,14 +214,14 @@ Conquer SVD</p></dd>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf4</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">3</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.001 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.000 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf1</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.776357e-15</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.110223e-15</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf2</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 8.881784e-16</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 4.440892e-16</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf3</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.998401e-15</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.332268e-15</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf4</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.776357e-15</span>
 <span class="r-in"><span></span></span>
@@ -202,33 +232,33 @@ Conquer SVD</p></dd>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf1</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">yp</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.000 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.001   0.001 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf2</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">yp</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">1</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.000 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.001 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf3</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">yp</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>       0       0       0 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.000 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf4</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">yp</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">3</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.001 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.000 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf1</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.665335e-16</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf2</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 2.012279e-16</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 2.220446e-16</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf3</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.387779e-16</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 2.220446e-16</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf4</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.665335e-16</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.457168e-16</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># gamma</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gl1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">yg</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.007   0.001   0.007 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.007   0.000   0.007 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf1</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">yg</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
@@ -240,20 +270,20 @@ Conquer SVD</p></dd>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf3</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">yg</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.002 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.001 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gf4</span> <span class="op">&lt;-</span> <span class="fu">fastglmPure</span><span class="op">(</span><span class="va">x</span>, <span class="va">yg</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">3</span>, tol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    user  system elapsed </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.001   0.000   0.001 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.000   0.000   0.001 </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf1</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 7.771561e-16</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 3.885781e-16</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf2</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 5.551115e-16</span>
-<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf3</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 4.996004e-16</span>
-<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf4</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 6.661338e-16</span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf3</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 5.551115e-16</span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl1</span><span class="op">)</span> <span class="op">-</span> <span class="va">gf4</span><span class="op">$</span><span class="va">coef</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 8.881784e-16</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

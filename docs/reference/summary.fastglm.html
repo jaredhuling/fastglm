@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.0.5</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
       </span>
     </div>
 
@@ -28,6 +28,25 @@
 <li>
   <a href="../reference/index.html">Reference</a>
 </li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Articles
+
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+    </li>
+    <li>
+      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+  </ul></li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
@@ -57,7 +76,13 @@
 
     <div id="ref-usage">
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="co"># S3 method for class 'fastglm'</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">object</span>, dispersion <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span></span>
+<span>  <span class="va">object</span>,</span>
+<span>  dispersion <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  correlation <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  symbolic.cor <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  <span class="va">...</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div id="arguments">
@@ -70,6 +95,14 @@
 
 <dt id="arg-dispersion">dispersion<a class="anchor" aria-label="anchor" href="#arg-dispersion"></a></dt>
 <dd><p>the dispersion parameter for the family used. Either a single numerical value or `NULL` (the default), when it is inferred from `object`.</p></dd>
+
+
+<dt id="arg-correlation">correlation<a class="anchor" aria-label="anchor" href="#arg-correlation"></a></dt>
+<dd><p>logical; if `TRUE`, the correlation matrix of the estimated parameters is returned.</p></dd>
+
+
+<dt id="arg-symbolic-cor">symbolic.cor<a class="anchor" aria-label="anchor" href="#arg-symbolic-cor"></a></dt>
+<dd><p>logical; if `TRUE`, print the correlations in a symbolic form (see `symnum`) rather than as numbers.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -98,25 +131,25 @@
 <span class="r-out co"><span class="r-pr">#&gt;</span> fastglm.default(x = x, y = y, family = binomial())</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Coefficients:</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>       Estimate Std. Error z value Pr(&gt;|z|)    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1   4.245e-01  2.141e-02  19.827   &lt;2e-16 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X2  -2.902e-02  2.047e-02  -1.418    0.156    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3  -3.647e-01  2.132e-02 -17.107   &lt;2e-16 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X4   7.534e-03  2.089e-02   0.361    0.718    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X5  -3.794e-03  2.063e-02  -0.184    0.854    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X6   2.654e-02  2.080e-02   1.276    0.202    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X7  -9.933e-03  2.059e-02  -0.482    0.630    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X8   6.531e-03  2.087e-02   0.313    0.754    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X9   6.044e-05  2.056e-02   0.003    0.998    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X10  2.260e-02  2.079e-02   1.087    0.277    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      Estimate Std. Error z value Pr(&gt;|z|)    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1   0.430087   0.021778  19.748   &lt;2e-16 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X2  -0.003827   0.021031  -0.182    0.856    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3  -0.453793   0.021656 -20.955   &lt;2e-16 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X4  -0.019732   0.020998  -0.940    0.347    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X5  -0.008936   0.020556  -0.435    0.664    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X6   0.009996   0.020965   0.477    0.634    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X7  -0.008167   0.021143  -0.386    0.699    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X8   0.029878   0.020820   1.435    0.151    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X9  -0.024408   0.020823  -1.172    0.241    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X10 -0.013253   0.020674  -0.641    0.522    </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ---</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> (Dispersion parameter for binomial family taken to be 1)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     Null deviance: 13863  on 10000  degrees of freedom</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Residual deviance: 13150  on  9990  degrees of freedom</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> AIC: 13170</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Residual deviance: 12981  on  9990  degrees of freedom</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> AIC: 13001</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Number of Fisher Scoring iterations: 4</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
