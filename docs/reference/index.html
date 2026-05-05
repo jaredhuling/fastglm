@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.0.5</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
       </span>
     </div>
 
@@ -28,6 +28,25 @@
 <li>
   <a href="../reference/index.html">Reference</a>
 </li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Articles
+
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+    </li>
+    <li>
+      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+  </ul></li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
@@ -58,17 +77,41 @@
         </td>
         <td><p>big.matrix prod</p></td>
       </tr><tr><td>
-          <p><code><a href="fastglm.html">fastglm()</a></code> </p>
+          <p><code><a href="fastglm-sandwich.html">estfun.fastglm()</a></code> <code><a href="fastglm-sandwich.html">estfun.fastglmFit()</a></code> <code><a href="fastglm-sandwich.html">bread.fastglm()</a></code> <code><a href="fastglm-sandwich.html">bread.fastglmFit()</a></code> </p>
         </td>
-        <td><p>Fast generalized linear model fitting</p></td>
+        <td><p>Empirical estimating-function and bread methods for `fastglm` objects</p></td>
       </tr><tr><td>
-          <p><code><a href="fastglm.fit.html">fastglm(<i>&lt;fit&gt;</i>)</a></code> <code><a href="fastglm.fit.html">fastglm(<i>&lt;control&gt;</i>)</a></code> <code><a href="fastglm.fit.html">vcov(<i>&lt;fastglmFit&gt;</i>)</a></code> <code><a href="fastglm.fit.html">summary(<i>&lt;fastglmFit&gt;</i>)</a></code> </p>
+          <p><code><a href="fastglm.html">fastglm()</a></code> </p>
         </td>
         <td><p>Fast generalized linear model fitting</p></td>
       </tr><tr><td>
           <p><code><a href="fastglmPure.html">fastglmPure()</a></code> </p>
         </td>
         <td><p>Fast generalized linear model fitting</p></td>
+      </tr><tr><td>
+          <p><code><a href="fastglm_fit.html">fastglm_fit()</a></code> <code><a href="fastglm_fit.html">fastglm_control()</a></code> <code><a href="fastglm_fit.html">vcov(<i>&lt;fastglmFit&gt;</i>)</a></code> <code><a href="fastglm_fit.html">summary(<i>&lt;fastglmFit&gt;</i>)</a></code> </p>
+        </td>
+        <td><p>Fast generalized linear model fitting</p></td>
+      </tr><tr><td>
+          <p><code><a href="fastglm_hurdle.html">fastglm_hurdle()</a></code> </p>
+        </td>
+        <td><p>Hurdle (two-part) Poisson / Negative-Binomial regression</p></td>
+      </tr><tr><td>
+          <p><code><a href="fastglm_nb.html">fastglm_nb()</a></code> </p>
+        </td>
+        <td><p>Fit a negative-binomial GLM with simultaneous (beta, theta) MLE</p></td>
+      </tr><tr><td>
+          <p><code><a href="fastglm_streaming.html">fastglm_streaming()</a></code> </p>
+        </td>
+        <td><p>Fit a GLM by streaming row-blocks of the design matrix</p></td>
+      </tr><tr><td>
+          <p><code><a href="fastglm_zi.html">fastglm_zi()</a></code> </p>
+        </td>
+        <td><p>Zero-inflated Poisson / Negative-Binomial regression</p></td>
+      </tr><tr><td>
+          <p><code><a href="negbin.html">negbin()</a></code> </p>
+        </td>
+        <td><p>Negative binomial family with known dispersion</p></td>
       </tr><tr><td>
           <p><code><a href="predict.fastglm.html">predict(<i>&lt;fastglm&gt;</i>)</a></code> </p>
         </td>
@@ -77,6 +120,14 @@
           <p><code><a href="summary.fastglm.html">summary(<i>&lt;fastglm&gt;</i>)</a></code> </p>
         </td>
         <td><p>`summary()` method for `fastglm` fitted objects</p></td>
+      </tr><tr><td>
+          <p><code><a href="vcov.fastglm.html">vcov(<i>&lt;fastglm&gt;</i>)</a></code> </p>
+        </td>
+        <td><p>`vcov()` method for `fastglm` fitted objects</p></td>
+      </tr><tr><td>
+          <p><code><a href="vcovHC.fastglm.html">vcovHC.fastglm()</a></code> <code><a href="vcovHC.fastglm.html">vcovHC.fastglmFit()</a></code> </p>
+        </td>
+        <td><p>Heteroskedasticity-consistent (HC) variance estimators for `fastglm` objects</p></td>
       </tr></tbody></table></div>
 
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">

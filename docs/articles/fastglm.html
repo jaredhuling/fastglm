@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.0.5</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
       </span>
     </div>
 
@@ -43,6 +43,27 @@
 </li>
 <li>
   <a href="../reference/index.html">Reference</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Articles
+
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+<li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+    </li>
+    <li>
+      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+  </ul>
 </li>
 <li>
   <a href="../news/index.html">Changelog</a>
@@ -72,7 +93,7 @@
                         <h4 data-toc-skip class="author">Jared
 Huling</h4>
             
-            <h4 data-toc-skip class="date">2025-12-16</h4>
+            <h4 data-toc-skip class="date">2026-05-05</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/jaredhuling/fastglm/blob/HEAD/vignettes/fastglm.Rmd" class="external-link"><code>vignettes/fastglm.Rmd</code></a></small>
       <div class="hidden name"><code>fastglm.Rmd</code></div>
@@ -88,7 +109,7 @@ fitting generalized linear models. <em>fastglm</em> is compatible with
 <code>R</code>’s <code>family</code> objects (see <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">?family</a></code>).
 The package can be installed via</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">pak</span><span class="fu">::</span><span class="fu">pak</span><span class="op">(</span><span class="st">"fastglm"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"fastglm"</span><span class="op">)</span></span>
 <span><span class="co"># pak::pak("jaredhuling/fastglm") #development version</span></span></code></pre></div>
 <p>and loaded via:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
@@ -136,20 +157,20 @@ the usage of <code><a href="../reference/fastglm.html">fastglm()</a></code>:</p>
 <span><span class="co">#&gt; Number of Fisher Scoring iterations: 6</span></span></code></pre></div>
 <p>Alternatively, to use the built-in function of <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> for
 processing formulas and data frames, we can use <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> with
-<code>method = fastglm.fit</code> to call the <em>fastglm</em> fitting
+<code>method = fastglm_fit</code> to call the <em>fastglm</em> fitting
 functionality:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gfit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">ncases</span>, <span class="va">ncontrols</span><span class="op">)</span> <span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span></span>
 <span>                 <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>, data <span class="op">=</span> <span class="va">esoph</span>,</span>
 <span>             family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"cloglog"</span><span class="op">)</span>,</span>
-<span>             method <span class="op">=</span> <span class="va">fastglm.fit</span><span class="op">)</span></span>
+<span>             method <span class="op">=</span> <span class="va">fastglm_fit</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">gfit2</span>, refit <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Call:</span></span>
 <span><span class="co">#&gt; glm(formula = cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + </span></span>
 <span><span class="co">#&gt;     unclass(alcgp), family = binomial(link = "cloglog"), data = esoph, </span></span>
-<span><span class="co">#&gt;     method = fastglm.fit)</span></span>
+<span><span class="co">#&gt;     method = fastglm_fit)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Coefficients:</span></span>
 <span><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
@@ -164,7 +185,7 @@ functionality:</p>
 <span><span class="co">#&gt; ---</span></span>
 <span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; (Dispersion parameter for binomial family taken to be NULL)</span></span>
+<span><span class="co">#&gt; (Dispersion parameter for binomial family taken to be 1)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;     Null deviance: 367.95  on 87  degrees of freedom</span></span>
 <span><span class="co">#&gt; Residual deviance:  96.95  on 80  degrees of freedom</span></span>
@@ -201,33 +222,33 @@ and thus tends to have better convergence properties in practice.</p>
 <span></span>
 <span><span class="co"># fastglm</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span>,</span>
-<span>                         method <span class="op">=</span> <span class="va">fastglm.fit</span><span class="op">)</span><span class="op">)</span></span>
+<span>                         method <span class="op">=</span> <span class="va">fastglm_fit</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   0.242   0.006   0.248</span></span>
+<span><span class="co">#&gt;   0.268   0.006   0.274</span></span>
 <span></span>
 <span><span class="co"># glm</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   1.398   0.028   1.427</span></span>
+<span><span class="co">#&gt;   1.426   0.033   1.460</span></span>
 <span></span>
 <span><span class="co"># glm2</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit3</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span>,</span>
 <span>                         method <span class="op">=</span> <span class="fu">glm2</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/glm2/man/glm.fit2.html" class="external-link">glm.fit2</a></span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   1.022   0.024   1.046</span></span>
+<span><span class="co">#&gt;   0.998   0.023   1.023</span></span>
 <span></span>
 <span><span class="co">## Note that fastglm() returns estimates with the</span></span>
 <span><span class="co">## largest likelihood</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit1</span><span class="op">)</span></span>
-<span><span class="co">#&gt; 'log Lik.' -16030.81 (df=102)</span></span>
+<span><span class="co">#&gt; 'log Lik.' -16046.66 (df=102)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; 'log Lik.' -16704.05 (df=102)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit3</span><span class="op">)</span></span>
 <span><span class="co">#&gt; 'log Lik.' -16046.66 (df=102)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gfit1</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">]</span></span>
-<span><span class="co">#&gt;  (Intercept)           x1           x2           x3           x4 </span></span>
-<span><span class="co">#&gt;  1.429259574  0.125871413  0.005311209 -0.129396035  0.238950809</span></span>
+<span><span class="co">#&gt;   (Intercept)            x1            x2            x3            x4 </span></span>
+<span><span class="co">#&gt;  1.426850e+00  1.242357e-01 -7.475901e-05 -1.254684e-01  2.361046e-01</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gfit2</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">]</span></span>
 <span><span class="co">#&gt;   (Intercept)            x1            x2            x3            x4 </span></span>
 <span><span class="co">#&gt;  1.431168e+00  1.251936e-01 -6.896739e-05 -1.281857e-01  2.366473e-01</span></span>
@@ -240,7 +261,7 @@ and thus tends to have better convergence properties in practice.</p>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="co">## number of IRLS iterations</span></span>
 <span><span class="va">gfit1</span><span class="op">$</span><span class="va">iter</span></span>
-<span><span class="co">#&gt; [1] 15</span></span>
+<span><span class="co">#&gt; [1] 16</span></span>
 <span></span>
 <span><span class="co">## now check convergence for glm()</span></span>
 <span><span class="va">gfit2</span><span class="op">$</span><span class="va">converged</span></span>
@@ -259,7 +280,7 @@ and thus tends to have better convergence properties in practice.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span>,</span>
 <span>                         control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>maxit <span class="op">=</span> <span class="fl">100</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   5.258   0.122   5.395</span></span>
+<span><span class="co">#&gt;   5.272   0.105   5.387</span></span>
 <span></span>
 <span><span class="va">gfit2</span><span class="op">$</span><span class="va">converged</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
@@ -267,7 +288,7 @@ and thus tends to have better convergence properties in practice.</p>
 <span><span class="co">#&gt; [1] 100</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit1</span><span class="op">)</span></span>
-<span><span class="co">#&gt; 'log Lik.' -16030.81 (df=102)</span></span>
+<span><span class="co">#&gt; 'log Lik.' -16046.66 (df=102)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; 'log Lik.' -16068.27 (df=102)</span></span></code></pre></div>
 </div>

@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.0.5</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
       </span>
     </div>
 
@@ -28,6 +28,25 @@
 <li>
   <a href="../reference/index.html">Reference</a>
 </li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Articles
+
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+    </li>
+    <li>
+      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+  </ul></li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
@@ -51,9 +70,55 @@
     </div>
 
     <div class="section level2">
-<h2 class="page-header" data-toc-text="development version" id="fastglm-development-version">fastglm (development version)<a class="anchor" aria-label="anchor" href="#fastglm-development-version"></a></h2>
+<h2 class="page-header" data-toc-text="0.1.0" id="fastglm-010">fastglm 0.1.0<a class="anchor" aria-label="anchor" href="#fastglm-010"></a></h2>
+<div class="section level3">
+<h3 id="breaking-changes-0-1-0">Breaking changes<a class="anchor" aria-label="anchor" href="#breaking-changes-0-1-0"></a></h3>
+<ul><li>
+<code>fastglm.fit()</code> and <code>fastglm.control()</code> have been renamed to <code><a href="../reference/fastglm_fit.html">fastglm_fit()</a></code> and <code><a href="../reference/fastglm_fit.html">fastglm_control()</a></code>. The old dot-form names triggered an apparent-S3-method <code>R CMD check</code> NOTE because <code>fastglm</code> is itself a generic. Existing code that passes <code>method = fastglm.fit</code> to <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> should be updated to <code>method = fastglm_fit</code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="new-features-0-1-0">New features<a class="anchor" aria-label="anchor" href="#new-features-0-1-0"></a></h3>
+<ul><li><p>New top-level function <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> for negative-binomial regression with the dispersion <code>theta</code> estimated jointly with the regression coefficients. Plays the same role as <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code>, but the IRLS loop, the inner Brent root-find for <code>theta</code>, and the outer <code>(beta, theta)</code> alternation all run entirely in C++.</p></li>
+<li><p>New top-level function <code><a href="../reference/fastglm_hurdle.html">fastglm_hurdle()</a></code> for two-part count models with a binary zero / non-zero component and a zero-truncated Poisson or NB count component. Same model as <code><a href="https://rdrr.io/pkg/pscl/man/hurdle.html" class="external-link">pscl::hurdle()</a></code>; the joint fit runs in a single C++ driver that calls the existing IRLS solver twice and runs an inner Brent MLE for <code>theta</code> in the unknown-<code>theta</code> NB case.</p></li>
+<li><p>New top-level function <code><a href="../reference/fastglm_zi.html">fastglm_zi()</a></code> for zero-inflated Poisson and NB regression. Same model as <code><a href="https://rdrr.io/pkg/pscl/man/zeroinfl.html" class="external-link">pscl::zeroinfl()</a></code>; the entire EM driver runs in C++, including closed-form posterior responsibilities, weighted IRLS for both M-steps, the inner Brent MLE for <code>theta</code>, and the analytical observed-information <code>vcov</code>.</p></li>
+<li><p>New <code>firth = TRUE</code> argument to <code><a href="../reference/fastglm.html">fastglm()</a></code> and <code><a href="../reference/fastglm_fit.html">fastglm_fit()</a></code> for Firth’s bias-reducing penalty on the score. Currently supported for <code>family = binomial(link = "logit")</code> on dense designs; converges in finite steps under separation, where unpenalized IRLS would diverge. Coefficients agree with <code><a href="https://rdrr.io/pkg/logistf/man/logistf.html" class="external-link">logistf::logistf()</a></code> to 1e-7 on the standard Heinze-Schemper test cases.</p></li>
+<li><p>New built-in <code>negbin(theta, link)</code> family for negative-binomial regression with known dispersion, dispatched to a native C++ kernel on the <code>log</code>, <code>sqrt</code>, and <code>identity</code> links. Drop-in for <code>MASS::negative.binomial(theta, link)</code> without a hard dependency on <em>MASS</em>.</p></li>
+<li><p>Native fast paths for the <code>family$family == "Negative Binomial(K)"</code> form produced by <code><a href="https://rdrr.io/pkg/MASS/man/negative.binomial.html" class="external-link">MASS::negative.binomial()</a></code>, the <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">quasibinomial()</a></code> / <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">quasipoisson()</a></code> families, and <code><a href="https://rdrr.io/pkg/statmod/man/tweedie.html" class="external-link">statmod::tweedie()</a></code>. Detection is automatic.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="documentation-0-1-0">Documentation<a class="anchor" aria-label="anchor" href="#documentation-0-1-0"></a></h3>
+<ul><li><p>New vignette <code>count-firth-fastglm</code> covering <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code>, <code><a href="../reference/fastglm_hurdle.html">fastglm_hurdle()</a></code>, <code><a href="../reference/fastglm_zi.html">fastglm_zi()</a></code>, and the <code>firth = TRUE</code> flag, with small inline accuracy and timing comparisons against <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb</a></code>, <code><a href="https://rdrr.io/pkg/pscl/man/hurdle.html" class="external-link">pscl::hurdle</a></code>, <code><a href="https://rdrr.io/pkg/pscl/man/zeroinfl.html" class="external-link">pscl::zeroinfl</a></code>, and <code><a href="https://rdrr.io/pkg/logistf/man/logistf.html" class="external-link">logistf::logistf</a></code>.</p></li>
+<li><p>New vignette <code>benchmarks-fastglm</code> providing a more comprehensive benchmark study at larger sample sizes, covering all six model classes. Pre-compiled at maintainer build time so it does not run during <code>R CMD check</code> / <code>R CMD build</code> and adds essentially zero time to the package check budget.</p></li>
+<li><p><code>fastglm-overview</code> updated with a short section introducing the new count-data and Firth entry points.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="other-new-features-0-1-0">Other new features<a class="anchor" aria-label="anchor" href="#other-new-features-0-1-0"></a></h3>
+<ul><li><p>Real <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> for <code>"fastglm"</code> objects: the unscaled covariance is now computed in C++ from the IRLS factorisation directly and exposed as <code>$cov.unscaled</code>. <code><a href="../reference/summary.fastglm.html">summary.fastglm()</a></code>, <code><a href="../reference/vcov.fastglm.html">vcov.fastglm()</a></code>, and <code>predict.fastglm(se.fit = TRUE)</code> now all work without a refit hack; <code><a href="../reference/fastglm_fit.html">vcov.fastglmFit()</a></code> no longer re-runs <code>glm.fit</code> to recover a <code>qr</code> slot.</p></li>
+<li><p><code>S3</code> methods registered on <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">sandwich::vcovHC()</a></code> and <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">sandwich::vcovCL()</a></code> for heteroskedasticity-consistent (HC0–HC3) and cluster-robust covariance matrices. After <code><a href="https://sandwich.R-Forge.R-project.org/" class="external-link">library(sandwich)</a></code>, <code>vcovHC(fit)</code> and <code>vcovCL(fit, ...)</code> match <code>sandwich::vcovHC.glm()</code> / <code>sandwich::vcovCL.glm()</code> to floating-point precision and work for sparse, <code>big.matrix</code>, and in-memory fits. (Earlier development versions shipped local <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">vcovHC()</a></code> / <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">vcovCL()</a></code> generics; those have been removed in favour of registering on the canonical <em>sandwich</em> generics.)</p></li>
+<li><p>Sparse design matrices (<code>Matrix::dgCMatrix</code>) are now supported directly by <code><a href="../reference/fastglm.html">fastglm()</a></code> and <code><a href="../reference/fastglm_fit.html">fastglm_fit()</a></code> for the LLT (<code>method = 2</code>) and LDLT (<code>method = 3</code>) Cholesky paths. Other decompositions are rejected with an informative error rather than silently densified.</p></li>
+<li><p><code><a href="https://rdrr.io/pkg/bigmemory/man/big.matrix.html" class="external-link">bigmemory::big.matrix</a></code> inputs now stream the design matrix in row-blocks of <code>FASTGLM_CHUNK_ROWS</code> rows (default <code>16384</code>, user-configurable via the environment variable). Filebacked <code>big.matrix</code> objects no longer have to be materialised in RAM.</p></li>
+<li><p>New top-level function <code>fastglm_streaming(chunk_callback, n_chunks, family, ...)</code> for fitting GLMs on data sources that do not fit in memory: Arrow datasets, Parquet files, DuckDB queries, CSV streamers, and any other chunk-yielding iterator. The IRLS loop, step-halving, and Cholesky solve all run in C++; the closure is invoked only to deliver one row-block at a time.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="speed-0-1-0">Speed<a class="anchor" aria-label="anchor" href="#speed-0-1-0"></a></h3>
+<ul><li><p>For standard families (gaussian / binomial / poisson / Gamma / inverse.gaussian on their common links) the per-iteration calls to <code>family$variance</code>, <code>mu.eta</code>, <code>linkinv</code>, and <code>dev.resids</code> are now evaluated in inline C++ rather than via R callbacks. Detection is automatic; non-standard families fall back to the previous R-callback path with no user-facing change.</p></li>
+<li><p>The IRLS solver pre-allocates its working buffers across iterations and uses <code>noalias()</code> writes throughout <code>solve_wls()</code>. Eigen’s parallelism is no longer disabled.</p></li>
+<li><p>On large <code>n</code> the combined effect is roughly a 1.5×–2× speed-up over fastglm 0.0.4 on the same hardware, on top of the existing 3×–10× advantage over <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">stats::glm()</a></code>.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="documentation-0-1-0-1">Documentation<a class="anchor" aria-label="anchor" href="#documentation-0-1-0-1"></a></h3>
+<ul><li><p>New vignette <code>fastglm-overview</code> providing a single high-level entry point covering all of the package’s functionality.</p></li>
+<li><p>New vignette <code>large-data-fastglm</code> walking through the three large-data paths (sparse, <code>big.matrix</code>, streaming callback) end to end, including the Arrow / Parquet recipe.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="internal-0-1-0">Internal<a class="anchor" aria-label="anchor" href="#internal-0-1-0"></a></h3>
+<ul><li>New <code>tests/testthat/</code> suite covering <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, native vs callback family dispatch, sparse fits, <code>big.matrix</code> streaming, callback-based streaming, and robust SE.</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="0.0.4" id="fastglm-004-and-earlier">fastglm 0.0.4 and earlier<small>2025-12-16</small><a class="anchor" aria-label="anchor" href="#fastglm-004-and-earlier"></a></h2>
 <ul><li><p>Added a <code>NEWS.md</code> file to track changes to the package.</p></li>
-<li><p>Added <code><a href="../reference/fastglm.fit.html">fastglm.fit()</a></code> to be used as a fitting method for <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>.</p></li>
+<li><p>Added <code>fastglm.fit()</code> to be used as a fitting method for <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>.</p></li>
 <li><p>Documentation and vignette updates.</p></li>
 </ul></div>
   </div>
