@@ -1,10 +1,10 @@
 ---
-title: "Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'"
+title: "Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'"
 author: "Jared Huling"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'}
+  %\VignetteIndexEntry{Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -20,21 +20,19 @@ knitr::opts_chunk$set(
 )
 ```
 
-Beyond `family`-driven GLMs, *fastglm* has fitting functions for four model types/situations that arise often in practice but require model-specific machinery on top of the standard IRLS solver:
+Beyond `family`-driven GLMs, *fastglm* has fitting functions for three count-data model types that arise often in practice but require model-specific machinery on top of the standard IRLS solver:
 
 - **`fastglm_nb()`** — negative-binomial regression with the dispersion `theta` estimated jointly with the regression coefficients, in the spirit of `MASS::glm.nb()`.
-- **`firth = TRUE`** — Firth's (1993) bias-reducing penalty for logistic regression, useful under separation or in small samples (the `logistf::logistf()` use case).
 - **`fastglm_hurdle()`** — a two-part count model with a binary zero / non-zero component and a zero-truncated Poisson or NB count component, the same model as `pscl::hurdle()`.
 - **`fastglm_zi()`** — a zero-inflated Poisson or NB regression, with a binary inflation component layered on the original (untruncated) count distribution, the same model as `pscl::zeroinfl()`.
 
-All four reuse the same C++ IRLS solver as `fastglm()` itself; the outer iteration (joint NB MLE, the EM loop in zero-inflation, the inner theta-Brent for unknown-`theta` NB hurdle / ZI) likewise lives in C++. Cameron and Trivedi (1998) is the standard textbook reference for the count-data theory underlying this vignette, and Zeileis, Kleiber, and Jackman (2008) gives the *pscl* implementation we benchmark against.
+All three reuse the same C++ IRLS solver as `fastglm()` itself; the outer iteration (joint NB MLE, the EM loop in zero-inflation, the inner theta-Brent for unknown-`theta` NB hurdle / ZI) likewise lives in C++. Cameron and Trivedi (1998) is the standard textbook reference for the count-data theory underlying this vignette, and Zeileis, Kleiber, and Jackman (2008) gives the *pscl* implementation we benchmark against.
 
 ```{r}
 library(fastglm)
 suppressPackageStartupMessages({
-    library(MASS)        # glm.nb, rnegbin, sex2-style separation data
+    library(MASS)        # glm.nb, rnegbin
     library(pscl)        # hurdle, zeroinfl, bioChemists
-    library(logistf)     # canonical Firth implementation
     library(microbenchmark)
 })
 ```
@@ -86,43 +84,6 @@ fit_joint <- fastglm_nb(X, y)
 fit_known <- fastglm(X, y, family = negbin(theta = fit_joint$theta, link = "log"))
 max(abs(unname(coef(fit_known)) - unname(coef(fit_joint))))
 ```
-
-# Firth bias-reduced logistic regression
-
-Logistic regression breaks down under (quasi-) separation: the MLE is at infinity and the Wald standard errors blow up. Firth (1993) modifies the score by `(1/2) ∂ log|I(beta)| / ∂beta`, which both removes the leading `O(1/n)` bias and produces finite estimates under separation. *fastglm* exposes the penalty as a flag,
-
-```{r, eval = FALSE}
-fastglm(x, y, family = binomial(), firth = TRUE)
-```
-
-For binomial logit the penalty collapses to a per-iteration adjustment of the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where `h_i` is the leverage; no new family code is needed, and the cost per IRLS iteration is one extra streaming pass for the leverages.
-
-The canonical demonstration uses the `sex2` dataset shipped with *logistf* (Heinze and Schemper, 2002):
-
-```{r}
-data(sex2, package = "logistf")
-X <- model.matrix(~ age + oc + vic + vicl + vis + dia, data = sex2)
-y <- sex2$case
-
-fit_f <- fastglm(X, y, family = binomial(), firth = TRUE)
-fit_l <- logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2)
-
-cbind(fastglm = unname(coef(fit_f)), logistf = unname(coef(fit_l)))
-max(abs(unname(coef(fit_f)) - unname(coef(fit_l))))
-```
-
-The two implementations land on the same penalized MLE to about 2e-7. The difference in runtime is substantial because *fastglm*'s Firth-fitting code leverages our existing C++ solver:
-
-```{r}
-mb_firth <- microbenchmark(
-    fastglm = fastglm(X, y, family = binomial(), firth = TRUE),
-    logistf = logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2),
-    times = 10L
-)
-print(mb_firth)
-```
-
-`firth = TRUE` is currently restricted to `family = binomial(link = "logit")` on a dense matrix `x`; probit / cloglog use a different score correction and will be added separately.
 
 # Hurdle models
 
@@ -227,10 +188,6 @@ print(mb_zi)
 ```
 
 # References
-
-- Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika*, 80(1), 27–38. <doi:10.1093/biomet/80.1.27>
-
-- Heinze, G. and Schemper, M. (2002). A solution to the problem of separation in logistic regression. *Statistics in Medicine*, 21(16), 2409–2419. <doi:10.1002/sim.1047>
 
 - Cameron, A. C. and Trivedi, P. K. (1998). *Regression Analysis of Count Data*. Cambridge University Press.
 

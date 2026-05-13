@@ -254,7 +254,7 @@ static MatrixXd obs_info_numjac(int dist_code, int zero_fam_code,
 //   weights = wts, link = zero_fam_code.  Uses the existing glm class with
 //   native fam_code dispatch.
 // We supply binomial family R-callbacks too as a fallback (the C++ class
-// honours fam_code ahead of them).
+// honors fam_code ahead of them).
 // ---------------------------------------------------------------------------
 static void mstep_gamma(const Map<MatrixXd>& Z, const VectorXd& tau,
                         const Map<VectorXd>& wts, const Map<VectorXd>& off_z,

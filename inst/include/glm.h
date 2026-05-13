@@ -277,11 +277,7 @@ protected:
                     break;
                 }
 
-                //std::cout << "half step (infinite)!" << itrr << std::endl;
-
                 step_halve();
-
-                // update deviance
                 update_dev_resids_dont_update_old();
             }
         }
@@ -335,15 +331,20 @@ protected:
         }
     }
     
-    // Firth-augmented solve_wls.  Restricted to FAM_BINOMIAL_LOGIT and the
-    // dense path (no streaming / sparse / big.matrix).  The leverage h_i is
-    // computed from the LLT of X'WX and used to shift the working response:
+    // Generalized Firth / AS_mean bias-reducing penalty for arbitrary GLM
+    // families.  Dense path only (no streaming / sparse / big.matrix).
     //
-    //   z_i^* = z_i + h_i * (0.5 - mu_i) / (mu_i * (1 - mu_i))
+    // The leverage h_i from the LLT of X'WX shifts the working response:
     //
-    // The Cholesky factor is reused both for h and for the WLS update.
-    // log|X'WX| is stored on the solver so update_dev_resids() can form
-    // the penalized deviance dev* = std_dev - log|X'WX|.
+    //   ξ_i = h_i · (d²μ/dη²)_i · V(μ_i) / (2 · pw_i · (dμ/dη)³_i)
+    //   z_i^* = z_i + ξ_i
+    //
+    // For binomial logit this reduces to the familiar
+    //   ξ_i = h_i · (0.5 − μ_i) / (μ_i(1 − μ_i)).
+    //
+    // The Cholesky factor is reused for both h and the WLS update.
+    // log|X'WX| is stored so update_dev_resids() can form the penalized
+    // deviance dev* = std_dev − log|X'WX|.
     void solve_wls_firth()
     {
         beta_prev = beta;
@@ -353,18 +354,77 @@ protected:
         update_XtWX();
         Ch.compute(XtWX_buf.selfadjointView<Lower>());
 
+        if (Ch.info() != Eigen::Success) {
+            // Cholesky failed — X'WX not positive definite.  Fall back to
+            // an unmodified WLS step (no Firth adjustment).
+            wz.noalias() = w.cwiseProduct(z);
+            beta = Ch.solve(WX.adjoint() * wz);
+            log_det_XtWX_ = 0.0;
+            rank = nvars;
+            return;
+        }
+
         // h_i = ||L^{-1} (WX_i)'||^2 = w_i^2 * x_i' (X'WX)^{-1} x_i.
-        // Solve L V = (WX)', so V (p x n) has columns L^{-1} (w_i x_i),
-        // and h_i = sum of squares of the i-th column.
         MatrixXd V = WX.transpose();
         Ch.matrixL().solveInPlace(V);
         VectorXd h_lev = V.colwise().squaredNorm();
 
-        // Firth-augmented working response.  Binomial logit:
-        //   mu_eta_i = mu_i (1 - mu_i) = var_mu_i.
+        // Compute the AS_mean (Kosmidis-Firth) adjustment ξ.
+        //
+        // The bias-reducing score adjustment (brglm2's "AS_mean") is:
+        //   A_j = 0.5 · Σ_k h_k · (d²μ/dη²)_k / (dμ/dη)_k · x_{kj}
+        //
+        // Mapped to the IRLS working response:
+        //   ξ_i = φ · h_i · (d²μ/dη²)_i · V(μ_i)
+        //               / [2 · pw_i · (dμ/dη)³_i]
+        //
+        // where φ is the dispersion (1 for binomial/Poisson, estimated for
+        // Gaussian/Gamma/inverse.gaussian).  The signed cube of dμ/dη
+        // appears in the denominator to preserve the correct sign for
+        // links where dμ/dη < 0 (e.g. inverse link).
         const double eps = std::numeric_limits<double>::epsilon();
-        Eigen::ArrayXd denom = (mu.array() * (1.0 - mu.array())).max(eps);
-        VectorXd zstar = z + (h_lev.array() * (0.5 - mu.array()) / denom).matrix();
+
+        Eigen::ArrayXd d2mu(nobs);
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> d(mu_eta.data(), mu_eta.size());
+            fglm::d2mu_deta2(fam_code, fam_params, e, m, d, d2mu);
+        } else {
+            const double h = std::pow(eps, 1.0 / 3.0);
+            VectorXd eta_p = eta.array() + h;
+            VectorXd eta_m = eta.array() - h;
+            NumericVector dmu_p = mu_eta_fun(eta_p);
+            NumericVector dmu_m = mu_eta_fun(eta_m);
+            for (int i = 0; i < nobs; ++i)
+                d2mu[i] = (dmu_p[i] - dmu_m[i]) / (2.0 * h);
+        }
+
+        // Dispersion estimate for families where φ ≠ 1.
+        double phi = 1.0;
+        bool unit_disp = (fam_code >= fglm::FAM_BINOMIAL_LOGIT &&
+                          fam_code <= fglm::FAM_POISSON_SQRT);
+        if (fam_code == fglm::FAM_UNKNOWN) {
+            // Callback family: cannot determine, assume phi=1
+            unit_disp = true;
+        }
+        if (!unit_disp && nobs > nvars) {
+            Eigen::Map<const Eigen::ArrayXd> y_a(Y.data(), Y.size());
+            Eigen::Map<const Eigen::ArrayXd> m_a(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> w_a(weights.data(), weights.size());
+            double std_dev = fglm::dev_resids_sum(fam_code, fam_params,
+                                                  y_a, m_a, w_a);
+            phi = std_dev / (nobs - nvars);
+            if (phi < eps) phi = 1.0;
+        }
+
+        Eigen::ArrayXd dmu3 = mu_eta.array().cube();
+        for (int i = 0; i < nobs; ++i) {
+            if (std::abs(dmu3[i]) < eps) dmu3[i] = (dmu3[i] >= 0) ? eps : -eps;
+        }
+        Eigen::ArrayXd xi = phi * h_lev.array() * d2mu * var_mu.array()
+                          / (2.0 * weights.array().max(eps) * dmu3);
+        VectorXd zstar = z + xi.matrix();
 
         wz.noalias() = w.cwiseProduct(zstar);
         beta = Ch.solve(WX.adjoint() * wz);

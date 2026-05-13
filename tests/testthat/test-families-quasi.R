@@ -1,5 +1,5 @@
 # quasibinomial / quasipoisson share C++ kernels with binomial / poisson.
-# The only behavioural differences are (a) the dispersion is estimated from
+# The only behavioral differences are (a) the dispersion is estimated from
 # the Pearson statistic instead of being clamped to 1, and (b) summary()
 # reports it as such.
 

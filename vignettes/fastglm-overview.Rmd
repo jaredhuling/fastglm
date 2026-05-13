@@ -50,7 +50,7 @@ fit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + unclass(alcgp),
 
 # Decomposition methods
 
-The IRLS algorithm reduces every iteration to a weighted least-squares problem. *fastglm* supports six different matrix decompositions for solving that WLS step, all from *RcppEigen* (Bates and Eddelbuettel, 2013); the choice trades off speed against numerical stability and rank-revealing behaviour:
+The IRLS algorithm reduces every iteration to a weighted least-squares problem. *fastglm* supports six different matrix decompositions for solving that WLS step, all from *RcppEigen* (Bates and Eddelbuettel, 2013); the choice trades off speed against numerical stability and rank-revealing behavior:
 
 | `method` | decomposition |
 |---|---|
@@ -76,7 +76,7 @@ system.time(f3 <- fastglm(x, y, family = binomial(), method = 3))     # LDLT
 
 # Stability
 
-*fastglm* does not compromise computational stability for speed. It uses a step-halving safeguard following Marschner (2011) and starts from better-initialised values than `glm()` or `glm2::glm2()`, so it tends to converge in cases where the standard IRLS algorithm fails. See `vignette("fastglm", package = "fastglm")` for a Gamma-with-`sqrt`-link example where `glm()` does not converge but `fastglm()` does.
+*fastglm* does not compromise computational stability for speed. It uses a step-halving safeguard following Marschner (2011) and starts from better-initialized values than `glm()` or `glm2::glm2()`, so it tends to converge in cases where the standard IRLS algorithm fails. See `vignette("fastglm", package = "fastglm")` for a Gamma-with-`sqrt`-link example where `glm()` does not converge but `fastglm()` does.
 
 # Inference: `vcov()`, robust SE, predictions
 
@@ -168,7 +168,7 @@ n <- 50000; p <- 30
 x <- matrix(rnorm(n * p), n, p)
 y <- rpois(n, exp(x %*% rnorm(p) * 0.05 + 1))
 
-## force the R-callback path by giving the family object an unrecognised name
+## force the R-callback path by giving the family object an unrecognized name
 disguise <- function(fam) { fam$family <- paste0(fam$family, "*"); fam }
 
 mb <- microbenchmark(

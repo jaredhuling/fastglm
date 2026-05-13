@@ -279,6 +279,56 @@ inline void variance(int code,
 }
 
 // ---------------------------------------------------------------------------
+// dvariance: V'(mu) = dV/dmu, derivative of the variance function.
+// Used in the general Firth / AS_mean adjustment for non-canonical links.
+// ---------------------------------------------------------------------------
+inline void dvariance(int code,
+                      const FamilyParams& params,
+                      const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                      Eigen::Ref<Eigen::ArrayXd> dv)
+{
+    switch (code) {
+    case FAM_GAUSSIAN_IDENTITY:
+    case FAM_GAUSSIAN_LOG:
+    case FAM_GAUSSIAN_INVERSE:
+        dv.setZero(); break;
+    case FAM_BINOMIAL_LOGIT:
+    case FAM_BINOMIAL_PROBIT:
+    case FAM_BINOMIAL_CLOGLOG:
+    case FAM_BINOMIAL_LOG:
+        dv = 1.0 - 2.0 * mu; break;
+    case FAM_POISSON_LOG:
+    case FAM_POISSON_IDENTITY:
+    case FAM_POISSON_SQRT:
+        dv.setOnes(); break;
+    case FAM_GAMMA_LOG:
+    case FAM_GAMMA_INVERSE:
+    case FAM_GAMMA_IDENTITY:
+        dv = 2.0 * mu; break;
+    case FAM_INVGAUSS_INVMU2:
+    case FAM_INVGAUSS_LOG:
+    case FAM_INVGAUSS_IDENTITY:
+    case FAM_INVGAUSS_INVERSE:
+        dv = 3.0 * mu.square(); break;
+    case FAM_NB_LOG:
+    case FAM_NB_SQRT:
+    case FAM_NB_IDENTITY: {
+        const double inv_theta = (params.theta > 0.0) ? 1.0 / params.theta : 0.0;
+        dv = 1.0 + 2.0 * mu * inv_theta;
+        break;
+    }
+    case FAM_TWEEDIE_LOG:
+    case FAM_TWEEDIE_IDENTITY:
+    case FAM_TWEEDIE_INVERSE:
+    case FAM_TWEEDIE_SQRT:
+        dv = params.var_power * mu.pow(params.var_power - 1.0); break;
+    default:
+        dv.setZero();
+        break;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // dev_resids: per-observation deviance contribution.
 //
 // Returns the *sum* over all observations.  For binomial with prior weights,
@@ -415,6 +465,79 @@ inline double dev_resids_sum(int code,
     }
 
     return s;
+}
+
+// ---------------------------------------------------------------------------
+// d2mu_deta2: d²μ / dη²  (second derivative of the inverse link)
+//
+// Needed by the generalized Firth / AS_mean bias-reducing penalty.  The
+// per-observation adjustment to the working response is
+//
+//   ξ_i = h_i · (d²μ/dη²)_i · V(μ_i) / (2 · pw_i · (dμ/dη)_i³)
+//
+// For the canonical logit link this collapses to the familiar
+//   ξ_i = h_i · (0.5 - μ_i) / (μ_i (1 - μ_i)).
+// ---------------------------------------------------------------------------
+inline void d2mu_deta2(int code,
+                       const FamilyParams& /*params*/,
+                       const Eigen::Ref<const Eigen::ArrayXd>& eta,
+                       const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                       const Eigen::Ref<const Eigen::ArrayXd>& dmu,
+                       Eigen::Ref<Eigen::ArrayXd> d2mu)
+{
+    switch (code) {
+    // Identity link: d²μ/dη² = 0
+    case FAM_GAUSSIAN_IDENTITY:
+    case FAM_POISSON_IDENTITY:
+    case FAM_GAMMA_IDENTITY:
+    case FAM_INVGAUSS_IDENTITY:
+    case FAM_NB_IDENTITY:
+    case FAM_TWEEDIE_IDENTITY:
+        d2mu.setZero(); break;
+
+    // Log link: μ = exp(η), d²μ/dη² = exp(η) = dμ/dη
+    case FAM_GAUSSIAN_LOG:
+    case FAM_POISSON_LOG:
+    case FAM_GAMMA_LOG:
+    case FAM_INVGAUSS_LOG:
+    case FAM_BINOMIAL_LOG:
+    case FAM_NB_LOG:
+    case FAM_TWEEDIE_LOG:
+        d2mu = dmu; break;
+
+    // Inverse link: μ = 1/η, d²μ/dη² = 2/η³
+    case FAM_GAUSSIAN_INVERSE:
+    case FAM_GAMMA_INVERSE:
+    case FAM_INVGAUSS_INVERSE:
+    case FAM_TWEEDIE_INVERSE:
+        d2mu = 2.0 / (eta * eta * eta); break;
+
+    // Logit: μ = logistic(η), d²μ/dη² = μ(1−μ)(1−2μ)
+    case FAM_BINOMIAL_LOGIT:
+        d2mu = mu * (1.0 - mu) * (1.0 - 2.0 * mu); break;
+
+    // Probit: μ = Φ(η), d²μ/dη² = −η · φ(η) = −η · dμ/dη
+    case FAM_BINOMIAL_PROBIT:
+        d2mu = -eta * dmu; break;
+
+    // Cloglog: μ = 1−exp(−exp(η)), d²μ/dη² = dμ/dη · (1 − exp(η))
+    case FAM_BINOMIAL_CLOGLOG:
+        d2mu = dmu * (1.0 - eta.exp()); break;
+
+    // 1/μ² link: μ = η^{−1/2}, d²μ/dη² = (3/4) · η^{−5/2}
+    case FAM_INVGAUSS_INVMU2:
+        d2mu = 0.75 / eta.pow(2.5); break;
+
+    // Sqrt link: μ = η², d²μ/dη² = 2
+    case FAM_POISSON_SQRT:
+    case FAM_NB_SQRT:
+    case FAM_TWEEDIE_SQRT:
+        d2mu.setConstant(2.0); break;
+
+    default:
+        d2mu.setZero();
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------

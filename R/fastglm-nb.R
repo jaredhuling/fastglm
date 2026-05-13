@@ -26,7 +26,7 @@
 #'
 #' @returns A list of class `c("fastglm_nb", "fastglm")` with the usual
 #'   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
-#'   `twologlik` (twice the maximised NB log-likelihood).
+#'   `twologlik` (twice the maximized NB log-likelihood).
 #'
 #' @examples
 #' set.seed(1)

@@ -36,11 +36,8 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         if (fpv.size() >= 3) fp.link_power = fpv[2];
     }
 
-    // Firth currently only valid for binomial logit.  Higher-level R wrapper
-    // already enforces this; double-check at the C++ boundary.
-    if (fam_code != fglm::FAM_BINOMIAL_LOGIT) {
-        Rcpp::stop("fit_glm_firth currently supports family = binomial(link = \"logit\") only.");
-    }
+    // Bias reduction is supported for all families with a native C++ fast
+    // path, and for callback families via finite-difference d2mu/deta2.
 
     const Map<MatrixXd>  X(as<Map<MatrixXd> >(x));
     const Map<VectorXd>  Y(as<Map<VectorXd> >(y));

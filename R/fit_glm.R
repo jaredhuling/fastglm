@@ -142,13 +142,18 @@ tweedie_link_power <- function(family) {
 #' Conquer SVD
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
-#' @param firth logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
-#'   to the score function. Currently supported only for
-#'   `family = binomial(link = "logit")` on dense `x`. The penalty modifies
-#'   the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where
-#'   `h_i` is the leverage; convergence is checked on the sup-norm of the
-#'   coefficient update. See `logistf::logistf()` for the canonical
-#'   reference implementation.
+#' @param firth logical; if `TRUE` apply the Kosmidis--Firth mean
+#'   bias-reducing adjusted score (AS_mean) to the IRLS iteration.  The
+#'   adjustment modifies each working response by
+#'   \eqn{\xi_i = \varphi \, h_i \, (d^2\mu/d\eta^2)_i \, V(\mu_i) /
+#'   (2\, w_i\, (d\mu/d\eta)_i^3)}{xi_i = phi * h_i * d2mu * V(mu) /
+#'   (2 * pw * dmu^3)}, where \eqn{\varphi}{phi} is the dispersion
+#'   (1 for binomial/Poisson, estimated iteratively for other families).
+#'   For `binomial(logit)` this reduces to the familiar
+#'   \eqn{h_i (0.5 - \mu_i) / (\mu_i (1 - \mu_i))}.  Supported for all
+#'   standard GLM families on dense `x`; requires the LLT Cholesky
+#'   decomposition (forced internally).  Convergence is checked on the
+#'   sup-norm of the coefficient update.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -232,16 +237,10 @@ fastglmPure <- function(x, y,
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE.", call. = FALSE)
     if (firth) {
-        if (is.null(family$family) || family$family != "binomial" ||
-            is.null(family$link) || family$link != "logit")
-            stop("'firth = TRUE' currently requires family = binomial(link = \"logit\").",
-                 call. = FALSE)
         if (inherits(x, "dgCMatrix") || (requireNamespace("bigmemory", quietly = TRUE) &&
                                           bigmemory::is.big.matrix(x)))
             stop("'firth = TRUE' is not supported for sparse or big.matrix designs.",
                  call. = FALSE)
-        # Firth uses the same Cholesky factor for the leverage and the WLS
-        # update; force LLT internally regardless of caller's `method`.
         method <- 2L
     }
     weights <- as.vector(weights)
