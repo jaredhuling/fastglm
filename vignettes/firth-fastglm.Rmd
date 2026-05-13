@@ -1,0 +1,246 @@
+---
+title: "Firth Bias-Reduced GLMs with 'fastglm'"
+author: "Jared Huling"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Firth Bias-Reduced GLMs with 'fastglm'}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE,
+  echo = TRUE,
+  eval = TRUE
+)
+```
+
+Firth's (1993) penalized likelihood removes the leading $O(1/n)$ bias from maximum likelihood estimates and produces finite estimates even under separation. *fastglm* implements the general mean-bias reduction of Kosmidis and Firth (2009, 2021), which extends Firth's original logistic penalty to arbitrary GLM families. The method is activated with a single flag:
+
+```{r, eval = FALSE}
+fastglm(x, y, family = binomial(), firth = TRUE)
+```
+
+The penalty adds $\frac{1}{2} \partial \log |X^\top W X| / \partial \beta$ to the score, which is equivalent to modifying the IRLS working response by
+
+$$
+\xi_i = \frac{\phi \, h_i \, \mu''(\eta_i) \, V(\mu_i)}{2 \, w_i \, [\mu'(\eta_i)]^3}
+$$
+
+where $h_i$ is the $i$-th diagonal of the hat matrix $H = W^{1/2} X (X^\top W X)^{-1} X^\top W^{1/2}$, $\mu''(\eta)$ is the second derivative of the inverse link, $V(\mu)$ is the variance function, $w_i$ is the prior weight, and $\phi$ is the dispersion (1 for binomial and Poisson families; estimated iteratively for Gaussian, Gamma, and inverse Gaussian). This is the AS_mean adjustment of Kosmidis and Firth (2009), the same method used by `brglm2::brglmFit(type = "AS_mean")`.
+
+The adjustment is computed once per IRLS iteration using the leverages from the weighted least-squares decomposition that *fastglm* already performs, so the overhead relative to an unpenalized fit is modest.
+
+```{r}
+library(fastglm)
+```
+
+# Logistic regression under separation
+
+The canonical application is logistic regression with (quasi-) separation, where the standard MLE diverges. The `sex2` dataset from *logistf* (Heinze and Schemper, 2002) demonstrates:
+
+```{r}
+data(sex2, package = "logistf")
+X <- model.matrix(~ age + oc + vic + vicl + vis + dia, data = sex2)
+y <- sex2$case
+
+fit_f <- fastglm(X, y, family = binomial(), firth = TRUE)
+fit_l <- logistf::logistf(case ~ age + oc + vic + vicl + vis + dia,
+                          data = sex2, pl = FALSE, plconf = NULL,
+                          control = logistf::logistf.control(
+                              lconv = 1e-12, gconv = 1e-12, xconv = 1e-12,
+                              maxit = 200L))
+
+cbind(fastglm = unname(coef(fit_f)), logistf = unname(coef(fit_l)))
+max(abs(unname(coef(fit_f)) - unname(coef(fit_l))))
+```
+
+Coefficients agree to roughly 1e-7. The runtime advantage is substantial because *fastglm*'s Firth solver reuses the C++ IRLS infrastructure:
+
+```{r}
+mb <- microbenchmark::microbenchmark(
+    fastglm = fastglm(X, y, family = binomial(), firth = TRUE),
+    logistf = logistf::logistf(case ~ age + oc + vic + vicl + vis + dia,
+                               data = sex2, pl = FALSE, plconf = NULL),
+    times = 10L
+)
+print(mb, unit = "ms")
+```
+
+# General GLM families
+
+`firth = TRUE` works with all standard R families and link functions. For each family below, we verify that *fastglm* reproduces the bias-reduced coefficients from `brglm2::brglmFit(type = "AS_mean")` --- both implement the same AS_mean adjustment, so the coefficients should agree to near machine precision.
+
+```{r}
+library(brglm2)
+set.seed(123)
+n <- 500
+x1 <- rnorm(n);  x2 <- rnorm(n)
+X <- cbind(1, x1, x2)
+eta_true <- 0.5 + 0.3 * x1 - 0.2 * x2
+```
+
+## Binomial (logit, probit, cloglog)
+
+```{r}
+y_bin <- rbinom(n, 1, plogis(eta_true))
+df <- data.frame(y = y_bin, x1 = x1, x2 = x2)
+
+for (lnk in c("logit", "probit", "cloglog")) {
+    fam <- binomial(lnk)
+    f <- fastglm(X, y_bin, family = fam, firth = TRUE, tol = 1e-10)
+    b <- glm(y ~ x1 + x2, data = df, family = fam, method = "brglmFit",
+             type = "AS_mean", control = list(epsilon = 1e-10, maxit = 200))
+    cat(sprintf("binomial %-8s max|diff| = %.2e\n", lnk,
+                max(abs(unname(coef(f)) - unname(coef(b))))))
+}
+```
+
+## Poisson (log, sqrt)
+
+```{r}
+y_pois <- rpois(n, exp(eta_true))
+
+for (lnk in c("log", "sqrt")) {
+    fam <- poisson(lnk)
+    f <- fastglm(X, y_pois, family = fam, firth = TRUE, tol = 1e-10)
+    b <- glm(y ~ x1 + x2, data = data.frame(y = y_pois, x1 = x1, x2 = x2),
+             family = fam, method = "brglmFit", type = "AS_mean",
+             control = list(epsilon = 1e-10, maxit = 200))
+    cat(sprintf("poisson  %-8s max|diff| = %.2e\n", lnk,
+                max(abs(unname(coef(f)) - unname(coef(b))))))
+}
+```
+
+## Gamma (log, inverse)
+
+```{r}
+y_gam <- rgamma(n, shape = 5, rate = 5 / exp(eta_true))
+
+for (lnk in c("log", "inverse")) {
+    fam <- Gamma(lnk)
+    f <- fastglm(X, y_gam, family = fam, firth = TRUE, tol = 1e-10)
+    b <- glm(y ~ x1 + x2, data = data.frame(y = y_gam, x1 = x1, x2 = x2),
+             family = fam, method = "brglmFit", type = "AS_mean",
+             control = list(epsilon = 1e-10, maxit = 200))
+    cat(sprintf("Gamma    %-8s max|diff| = %.2e\n", lnk,
+                max(abs(unname(coef(f)) - unname(coef(b))))))
+}
+```
+
+## Gaussian (identity, log)
+
+```{r}
+y_gauss <- eta_true + rnorm(n, 0, 0.5)
+
+for (lnk in c("identity", "log")) {
+    fam <- gaussian(lnk)
+    y0 <- if (lnk == "log") pmax(y_gauss, 0.01) else y_gauss
+    f <- fastglm(X, y0, family = fam, firth = TRUE, tol = 1e-10)
+    b <- glm(y ~ x1 + x2, data = data.frame(y = y0, x1 = x1, x2 = x2),
+             family = fam, method = "brglmFit", type = "AS_mean",
+             control = list(epsilon = 1e-10, maxit = 200))
+    cat(sprintf("gaussian %-8s max|diff| = %.2e\n", lnk,
+                max(abs(unname(coef(f)) - unname(coef(b))))))
+}
+```
+
+## Inverse Gaussian (log)
+
+```{r}
+mu_ig <- exp(eta_true)
+y_ig <- statmod::rinvgauss(n, mean = mu_ig, shape = 5)
+y_ig[y_ig <= 0] <- 0.01
+
+f <- fastglm(X, y_ig, family = inverse.gaussian("log"), firth = TRUE, tol = 1e-10)
+b <- glm(y ~ x1 + x2, data = data.frame(y = y_ig, x1 = x1, x2 = x2),
+         family = inverse.gaussian("log"), method = "brglmFit", type = "AS_mean",
+         control = list(epsilon = 1e-10, maxit = 200))
+cat(sprintf("inv.gauss log      max|diff| = %.2e\n",
+            max(abs(unname(coef(f)) - unname(coef(b))))))
+```
+
+# Standard errors
+
+The standard errors reported by `fastglm` with `firth = TRUE` come from the unscaled $(X^\top W X)^{-1}$ at convergence, the same quantity that `brglm2` uses. For unit-dispersion families (binomial, Poisson), these are the Firth-penalized standard errors directly; for other families, the dispersion is estimated as $\hat\phi = D / (n - p)$ and applied to the variance-covariance matrix.
+
+```{r}
+f <- fastglm(X, y_bin, family = binomial(), firth = TRUE, tol = 1e-10)
+b <- glm(y ~ x1 + x2, data = df, family = binomial(), method = "brglmFit",
+         type = "AS_mean", control = list(epsilon = 1e-10, maxit = 200))
+
+cbind(fastglm_SE = f$se, brglm2_SE = summary(b)$coefficients[, "Std. Error"])
+max(abs(f$se - summary(b)$coefficients[, "Std. Error"]))
+```
+
+# Penalized deviance
+
+The Firth-penalized deviance is $D^* = D - \log |X^\top W X|$, where $D$ is the standard deviance and the log-determinant comes from the information matrix at the penalized MLE. Both the standard and penalized deviances are reported:
+
+```{r}
+f <- fastglm(X, y_bin, family = binomial(), firth = TRUE)
+c(deviance = f$deviance,
+  log.det.XtWX = f$log.det.XtWX,
+  penalized.deviance = f$penalized.deviance)
+```
+
+# Speed comparison across families
+
+A timing comparison of `fastglm(firth = TRUE)` against `brglm2::brglmFit(type = "AS_mean")` across families with `n = 10000` observations and `p = 5` covariates:
+
+```{r}
+set.seed(123)
+n <- 10000;  p <- 5
+x1 <- rnorm(n);  x2 <- rnorm(n); x3 <- rnorm(n)
+x4 <- rnorm(n);  x5 <- rnorm(n)
+X <- cbind(1, x1, x2, x3, x4, x5)
+eta <- 0.5 + 0.3 * x1 - 0.2 * x2 + 0.1 * x3
+
+families <- list(
+    `binomial logit`   = list(fam = binomial("logit"),
+                              y = rbinom(n, 1, plogis(eta))),
+    `binomial probit`  = list(fam = binomial("probit"),
+                              y = rbinom(n, 1, plogis(eta))),
+    `binomial cloglog` = list(fam = binomial("cloglog"),
+                              y = rbinom(n, 1, plogis(eta))),
+    `poisson log`      = list(fam = poisson("log"),
+                              y = rpois(n, exp(eta))),
+    `Gamma log`        = list(fam = Gamma("log"),
+                              y = rgamma(n, shape = 5, rate = 5 / exp(eta))),
+    `gaussian identity`= list(fam = gaussian("identity"),
+                              y = eta + rnorm(n, 0, 0.5))
+)
+
+df <- data.frame(y = 0, x1 = x1, x2 = x2, x3 = x3, x4 = x4, x5 = x5)
+results <- list()
+for (nm in names(families)) {
+    fi <- families[[nm]]
+    df$y <- fi$y
+    mb <- microbenchmark::microbenchmark(
+        fastglm = fastglm(X, fi$y, family = fi$fam, firth = TRUE),
+        brglm2  = glm(y ~ x1 + x2 + x3 + x4 + x5, data = df,
+                      family = fi$fam, method = "brglmFit", type = "AS_mean"),
+        times = 10L
+    )
+    s <- summary(mb, unit = "ms")
+    cat(sprintf("%-20s fastglm=%7.2f ms  brglm2=%7.2f ms  speedup=%.1fx\n",
+                nm, s$median[1], s$median[2], s$median[2] / s$median[1]))
+}
+```
+
+# References
+
+- Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika*, 80(1), 27--38. <doi:10.1093/biomet/80.1.27>
+
+- Heinze, G. and Schemper, M. (2002). A solution to the problem of separation in logistic regression. *Statistics in Medicine*, 21(16), 2409--2419. <doi:10.1002/sim.1047>
+
+- Kosmidis, I. and Firth, D. (2009). Bias reduction in exponential family nonlinear models. *Biometrika*, 96(4), 793--804. <doi:10.1093/biomet/asp055>
+
+- Kosmidis, I. and Firth, D. (2021). Jeffreys-prior penalty, finiteness and shrinkage in binomial-response generalized linear models. *Biometrika*, 108(1), 71--82. <doi:10.1093/biomet/asaa052>
+
+- Kosmidis, I. (2014). Bias in parametric estimation: reduction and useful side-effects. *WIREs Computational Statistics*, 6(3), 185--196. <doi:10.1002/wics.1296>

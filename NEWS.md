@@ -1,3 +1,10 @@
+
+# fastglm 0.1.1
+
+* Adds Firth bias-correction for standard GLM families
+
+## New features
+
 # fastglm 0.1.0
 
 ## Breaking changes
@@ -77,7 +84,7 @@
   match `sandwich::vcovHC.glm()` / `sandwich::vcovCL.glm()` to
   floating-point precision and work for sparse, `big.matrix`, and
   in-memory fits. (Earlier development versions shipped local
-  `vcovHC()` / `vcovCL()` generics; those have been removed in favour of
+  `vcovHC()` / `vcovCL()` generics; those have been removed in favor of
   registering on the canonical *sandwich* generics.)
 
 * Sparse design matrices (`Matrix::dgCMatrix`) are now supported directly
