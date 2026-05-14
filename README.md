@@ -116,8 +116,9 @@ package and you only need the coefficients.
 
 The IRLS algorithm reduces every iteration to a weighted least-squares
 problem. *fastglm* supports six different matrix decompositions for
-solving that WLS step, all from *RcppEigen*; the choice trades off speed
-against numerical stability and rank-revealing behavior:
+solving that WLS step, all from *RcppEigen* (Bates and Eddelbuettel,
+2013); the choice trades off speed against numerical stability and
+rank-revealing behavior:
 
 | `method` | decomposition                                           |
 |----------|---------------------------------------------------------|
@@ -140,7 +141,7 @@ y <- rbinom(n, 1, plogis(x %*% rnorm(p) * 0.05))
 
 system.time(f0 <- fastglm(x, y, family = binomial()))                 # default QR
 #>    user  system elapsed 
-#>   0.004   0.000   0.004
+#>   0.004   0.000   0.005
 system.time(f2 <- fastglm(x, y, family = binomial(), method = 2))     # LLT
 #>    user  system elapsed 
 #>   0.003   0.000   0.002
@@ -307,9 +308,9 @@ c(coef = coef(f_nb), theta = f_nb$theta)
 `fastglm_hurdle()` fits a two-part count model: a binary regression for
 whether `y > 0`, plus a zero-truncated Poisson or NB regression on the
 positive subset. The two parts factorize and both are fit by the same
-C++ IRLS solver. This is the same model as `pscl::hurdle()`. Different
-designs for the count and zero parts are specified via the `Formula`
-package’s two-RHS syntax:
+C++ IRLS solver. This is the same model as `pscl::hurdle()` (Zeileis,
+Kleiber, and Jackman, 2008). Different designs for the count and zero
+parts are specified via the `Formula` package’s two-RHS syntax:
 
 ``` r
 set.seed(123)
