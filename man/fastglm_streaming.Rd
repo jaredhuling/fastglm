@@ -11,7 +11,8 @@ fastglm_streaming(
   start = NULL,
   method = 2L,
   tol = 1e-07,
-  maxit = 100L
+  maxit = 100L,
+  firth = FALSE
 )
 }
 \arguments{
@@ -37,9 +38,14 @@ See [stats::family()].}
 \item{method}{integer; `2` for LLT Cholesky (default) or `3` for LDLT
 Cholesky. QR / SVD methods are not supported in streaming mode.}
 
-\item{tol}{convergence tolerance on the relative change in deviance.}
+\item{tol}{convergence tolerance on the relative change in deviance
+(or sup-norm of coefficient update when `firth = TRUE`).}
 
 \item{maxit}{maximum number of IRLS iterations.}
+
+\item{firth}{logical; if `TRUE` apply Firth bias reduction using
+lagged leverages from the previous IRLS iteration.  At convergence
+the result matches the exact-leverage dense path.}
 }
 \value{
 A list with class `"fastglm"` containing the same elements as

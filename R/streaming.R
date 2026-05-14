@@ -24,8 +24,12 @@
 #' @param start optional length-`p` numeric vector of starting coefficients.
 #' @param method integer; `2` for LLT Cholesky (default) or `3` for LDLT
 #'   Cholesky. QR / SVD methods are not supported in streaming mode.
-#' @param tol convergence tolerance on the relative change in deviance.
+#' @param tol convergence tolerance on the relative change in deviance
+#'   (or sup-norm of coefficient update when `firth = TRUE`).
 #' @param maxit maximum number of IRLS iterations.
+#' @param firth logical; if `TRUE` apply Firth bias reduction using
+#'   lagged leverages from the previous IRLS iteration.  At convergence
+#'   the result matches the exact-leverage dense path.
 #'
 #' @returns A list with class `"fastglm"` containing the same elements as
 #'   [fastglm()], including `coefficients`, `cov.unscaled`, `deviance`,
@@ -77,7 +81,8 @@ fastglm_streaming <- function(chunk_callback,
                               start    = NULL,
                               method   = 2L,
                               tol      = 1e-7,
-                              maxit    = 100L)
+                              maxit    = 100L,
+                              firth    = FALSE)
 {
     if (!is.function(chunk_callback))
         stop("'chunk_callback' must be a function", call. = FALSE)
@@ -141,7 +146,8 @@ fastglm_streaming <- function(chunk_callback,
         valideta       = valideta,
         validmu        = validmu,
         start          = start_vec,
-        fam_params     = fam_par
+        fam_params     = fam_par,
+        firth          = firth
     )
 
     # C++ always reports Pearson-based dispersion; override to 1 for
@@ -200,6 +206,11 @@ fastglm_streaming <- function(chunk_callback,
         x                 = NULL,
         call              = match.call()
     )
-    class(out) <- "fastglm"
+    if (firth) {
+        out$firth              <- TRUE
+        out$penalized.deviance <- res[["penalized.deviance"]]
+        out$log.det.XtWX       <- res[["log.det.XtWX"]]
+    }
+    class(out) <- if (firth) c("fastglm_firth", "fastglm") else "fastglm"
     out
 }

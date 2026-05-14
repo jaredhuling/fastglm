@@ -13,16 +13,16 @@ fit_glm <- function(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv,
     .Call(`_fastglm_fit_glm`, x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params)
 }
 
-fit_big_glm <- function(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code = -1L, fam_params = NULL) {
-    .Call(`_fastglm_fit_big_glm`, x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params)
+fit_big_glm <- function(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code = -1L, fam_params = NULL, firth = FALSE) {
+    .Call(`_fastglm_fit_big_glm`, x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params, firth)
 }
 
-fit_sparse_glm <- function(x_sparse, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code = -1L, fam_params = NULL) {
-    .Call(`_fastglm_fit_sparse_glm`, x_sparse, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params)
+fit_sparse_glm <- function(x_sparse, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code = -1L, fam_params = NULL, firth = FALSE) {
+    .Call(`_fastglm_fit_sparse_glm`, x_sparse, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params, firth)
 }
 
-fit_glm_firth <- function(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, tol, maxit, fam_code, fam_params = NULL) {
-    .Call(`_fastglm_fit_glm_firth`, x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, tol, maxit, fam_code, fam_params)
+fit_glm_firth <- function(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params = NULL) {
+    .Call(`_fastglm_fit_glm_firth`, x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fam_params)
 }
 
 fit_glm_hurdle <- function(x_count, z_zero, y, weights, offset_count, offset_zero, dist_code, zero_fam_code, init_theta, tol, maxit, outer_tol, outer_maxit, theta_tol, theta_maxit, var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero, dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero) {
@@ -37,7 +37,7 @@ fit_glm_zi <- function(x_count, z_zero, y, weights, offset_count, offset_zero, d
     .Call(`_fastglm_fit_glm_zi`, x_count, z_zero, y, weights, offset_count, offset_zero, dist_code, zero_fam_code, init_theta, tol, maxit, em_tol, em_maxit, theta_tol, theta_maxit, var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero, dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero, var_fun_count, mu_eta_fun_count, linkinv_fun_count, dev_resids_fun_count, valideta_fun_count, validmu_fun_count)
 }
 
-fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start = NULL, fam_params = NULL) {
-    .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params)
+fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start = NULL, fam_params = NULL, firth = FALSE) {
+    .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth)
 }
 

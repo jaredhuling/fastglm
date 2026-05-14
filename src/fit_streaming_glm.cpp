@@ -3,6 +3,7 @@
 #include <Rcpp.h>
 #include <RcppEigen.h>
 #include "../inst/include/families.h"
+#include "../inst/include/chunk_source.h"
 
 #include <stdexcept>
 #include <string>
@@ -97,6 +98,24 @@ struct FamilyOps {
         if (native) return fglm::validmu(code, params, mu);
         SEXP r = validmu_fn(NumericVector(mu.data(), mu.data() + mu.size()));
         return Rf_asLogical(r) == TRUE;
+    }
+    void d2mu_deta2(const ArrayXd& eta, const ArrayXd& mu,
+                    const ArrayXd& dmu, ArrayXd& d2mu) const {
+        if (native) {
+            d2mu.resize(eta.size());
+            fglm::d2mu_deta2(code, params, eta, mu, dmu, d2mu);
+        } else {
+            const double h = std::pow(std::numeric_limits<double>::epsilon(), 1.0/3.0);
+            ArrayXd ep = eta + h;
+            ArrayXd em = eta - h;
+            ArrayXd dp, dm;
+            mu_eta(ep, dp);
+            mu_eta(em, dm);
+            d2mu = (dp - dm) / (2.0 * h);
+        }
+    }
+    bool is_unit_dispersion() const {
+        return (code >= fglm::FAM_BINOMIAL_LOGIT && code <= fglm::FAM_POISSON_SQRT);
     }
 };
 
@@ -244,6 +263,87 @@ static double stream_pass(Function& callback,
     return dev_sum;
 }
 
+// Firth-aware streaming pass.  Computes XtWX, Xtwz*, and deviance in a
+// single sweep.  When A_prev is non-null, leverages from the previous
+// iteration are used to compute the AS_mean adjustment xi.
+// phi_prev: dispersion estimate from the previous iteration.
+//           For unit-dispersion families (binomial, Poisson) this is always 1.
+//           For the first Firth iteration (A_prev == nullptr) phi_prev is unused.
+static double stream_pass_firth(Function& callback,
+                                int n_chunks, int p,
+                                const VectorXd& beta,
+                                const FamilyOps& fam,
+                                const MatrixXd* A_prev,
+                                double phi_prev,
+                                MatrixXd* XtWX_out,
+                                VectorXd* Xtwz_out,
+                                int* n_total_out)
+{
+    double dev_sum = 0.0;
+    int n_total = 0;
+    const double eps = std::numeric_limits<double>::epsilon();
+
+    XtWX_out->setZero();
+    Xtwz_out->setZero();
+
+    for (int k = 1; k <= n_chunks; ++k) {
+        Chunk c = pull_chunk(callback, k, p);
+        const int n_k = c.y.size();
+        n_total += n_k;
+
+        ArrayXd eta = (c.X * beta).array() + c.off.array();
+        if (!fam.valideta(eta))
+            Rcpp::stop("invalid linear predictor in streaming pass");
+
+        ArrayXd mu_arr;
+        fam.linkinv(eta, mu_arr);
+        if (!fam.validmu(mu_arr))
+            Rcpp::stop("invalid mean in streaming pass");
+
+        ArrayXd ya = c.y.array();
+        ArrayXd wa = c.w.array();
+        dev_sum += fam.dev_resids_sum(ya, mu_arr, wa);
+
+        ArrayXd dmu, va;
+        fam.mu_eta(eta, dmu);
+        fam.variance(mu_arr, va);
+
+        ArrayXd w2 = wa * dmu.square() / va;
+        ArrayXd w_sqrt = w2.sqrt();
+        ArrayXd z_arr = eta - c.off.array() + (ya - mu_arr) / dmu;
+
+        // X'WX accumulation
+        MatrixXd Xw = c.X.array().colwise() * w_sqrt;
+        XtWX_out->selfadjointView<Eigen::Lower>().rankUpdate(Xw.adjoint());
+
+        // Firth adjustment
+        ArrayXd zstar = z_arr;
+        if (A_prev != nullptr) {
+            MatrixXd XA = c.X * (*A_prev);
+            ArrayXd h_k = (XA.array() * c.X.array()).rowwise().sum() * w2;
+
+            ArrayXd d2mu;
+            fam.d2mu_deta2(eta, mu_arr, dmu, d2mu);
+
+            ArrayXd dmu3 = dmu.cube();
+            for (int i = 0; i < n_k; ++i)
+                if (std::abs(dmu3[i]) < eps)
+                    dmu3[i] = (dmu3[i] >= 0) ? eps : -eps;
+
+            ArrayXd xi = phi_prev * h_k * d2mu * va / (2.0 * wa.max(eps) * dmu3);
+            zstar += xi;
+        }
+
+        VectorXd wz = (w2 * zstar).matrix();
+        (*Xtwz_out).noalias() += c.X.adjoint() * wz;
+    }
+
+    XtWX_out->triangularView<Eigen::Upper>() = XtWX_out->adjoint();
+
+    if (n_total_out) *n_total_out = n_total;
+    return dev_sum;
+}
+
 }  // anonymous namespace
 
 
@@ -262,7 +362,8 @@ List fit_streaming_glm(Function chunk_callback,
                        Function valideta,
                        Function validmu,
                        Nullable<NumericVector> start = R_NilValue,
-                       Nullable<NumericVector> fam_params = R_NilValue)
+                       Nullable<NumericVector> fam_params = R_NilValue,
+                       bool     firth = false)
 {
     if (n_chunks < 1) Rcpp::stop("n_chunks must be >= 1");
     if (type != 2 && type != 3)
@@ -303,46 +404,75 @@ List fit_streaming_glm(Function chunk_callback,
     Eigen::LLT<MatrixXd>  llt;
     Eigen::LDLT<MatrixXd> ldlt;
 
+    MatrixXd A_prev(p, p);
+    bool A_prev_available = false;
+    double log_det_XtWX = 0.0;
+    double phi_prev = 1.0;
+
     for (iter = 1; iter <= maxit; ++iter) {
-        // Build XtWX, Xtwz at the current beta and refresh dev_curr.
-        dev_curr = stream_pass(chunk_callback, n_chunks, p, beta, fam,
-                               /*accumulate=*/true,
-                               &XtWX, &Xtwz, nullptr, nullptr);
+        double std_dev;
+        if (firth) {
+            std_dev = stream_pass_firth(chunk_callback, n_chunks, p, beta, fam,
+                                        A_prev_available ? &A_prev : nullptr,
+                                        phi_prev,
+                                        &XtWX, &Xtwz, nullptr);
+        } else {
+            std_dev = stream_pass(chunk_callback, n_chunks, p, beta, fam,
+                                  /*accumulate=*/true,
+                                  &XtWX, &Xtwz, nullptr, nullptr);
+        }
+        dev_curr = std_dev;
 
         VectorXd beta_new(p);
         if (type == 2) {
             llt.compute(XtWX);
             if (llt.info() != Eigen::Success)
-                Rcpp::stop("Cholesky factorisation (LLT) failed; "
+                Rcpp::stop("Cholesky factorization (LLT) failed; "
                                          "design may be rank-deficient. "
                                          "Streaming mode requires full column rank.");
             beta_new = llt.solve(Xtwz);
         } else {
             ldlt.compute(XtWX);
             if (ldlt.info() != Eigen::Success)
-                Rcpp::stop("Cholesky factorisation (LDLT) failed; "
+                Rcpp::stop("Cholesky factorization (LDLT) failed; "
                                          "design may be rank-deficient. "
                                          "Streaming mode requires full column rank.");
             beta_new = ldlt.solve(Xtwz);
         }
 
-        // Deviance at proposed beta (no accumulation).
-        double dev_new;
-        bool   pass_ok;
-        try {
-            dev_new = stream_pass(chunk_callback, n_chunks, p, beta_new, fam,
-                                  false, nullptr, nullptr, nullptr, nullptr);
-            pass_ok = true;
-        } catch (...) {
-            dev_new = std::numeric_limits<double>::infinity();
-            pass_ok = false;
-        }
+        if (firth) {
+            // Compute log|X'WX| for penalized deviance
+            double ld = 0.0;
+            if (type == 2) {
+                const MatrixXd &Lm = llt.matrixLLT();
+                for (int j = 0; j < p; ++j) ld += std::log(Lm(j, j));
+                log_det_XtWX = 2.0 * ld;
+            } else {
+                VectorXd D = ldlt.vectorD();
+                for (int j = 0; j < p; ++j) ld += std::log(std::abs(D[j]));
+                log_det_XtWX = ld;
+            }
+            // Update A_prev for next iteration
+            MatrixXd I_p = MatrixXd::Identity(p, p);
+            if (type == 2) A_prev = llt.solve(I_p);
+            else           A_prev = ldlt.solve(I_p);
+            A_prev_available = true;
 
-        // Step-halving (Marschner 2011).
-        int halv = 0;
-        while ((!pass_ok || !std::isfinite(dev_new) ||
-                dev_new > dev_curr * (1.0 + tol)) && halv < 25) {
-            beta_new = 0.5 * (beta_new + beta);
+            // Update phi for next iteration
+            if (!fam.is_unit_dispersion() && n_total > p) {
+                phi_prev = std_dev / (n_total - p);
+                if (phi_prev < std::numeric_limits<double>::epsilon())
+                    phi_prev = 1.0;
+            }
+
+            // Firth convergence: sup-norm of coefficient change
+            double beta_change = (beta_new - beta).cwiseAbs().maxCoeff();
+            beta = beta_new;
+            if (beta_change < tol) { converged = true; break; }
+        } else {
+            // Deviance at proposed beta (no accumulation).
+            double dev_new;
+            bool   pass_ok;
             try {
                 dev_new = stream_pass(chunk_callback, n_chunks, p, beta_new, fam,
                                       false, nullptr, nullptr, nullptr, nullptr);
@@ -351,13 +481,28 @@ List fit_streaming_glm(Function chunk_callback,
                 dev_new = std::numeric_limits<double>::infinity();
                 pass_ok = false;
             }
-            ++halv;
-        }
 
-        double rel = std::abs(dev_new - dev_curr) / (0.1 + std::abs(dev_new));
-        beta     = beta_new;
-        dev_curr = dev_new;
-        if (rel < tol) { converged = true; break; }
+            // Step-halving (Marschner 2011).
+            int halv = 0;
+            while ((!pass_ok || !std::isfinite(dev_new) ||
+                    dev_new > dev_curr * (1.0 + tol)) && halv < 25) {
+                beta_new = 0.5 * (beta_new + beta);
+                try {
+                    dev_new = stream_pass(chunk_callback, n_chunks, p, beta_new, fam,
+                                          false, nullptr, nullptr, nullptr, nullptr);
+                    pass_ok = true;
+                } catch (...) {
+                    dev_new = std::numeric_limits<double>::infinity();
+                    pass_ok = false;
+                }
+                ++halv;
+            }
+
+            double rel = std::abs(dev_new - dev_curr) / (0.1 + std::abs(dev_new));
+            beta     = beta_new;
+            dev_curr = dev_new;
+            if (rel < tol) { converged = true; break; }
+        }
     }
     if (iter > maxit) iter = maxit;
 
@@ -451,7 +596,7 @@ List fit_streaming_glm(Function chunk_callback,
     LogicalVector intercept_lgl(p);
     for (int j = 0; j < p; ++j) intercept_lgl[j] = intercept_mask[j];
 
-    return List::create(
+    List out = List::create(
         _["coefficients"] = beta,
         _["se"]           = se,
         _["cov.unscaled"] = cov_unscaled,
@@ -468,4 +613,12 @@ List fit_streaming_glm(Function chunk_callback,
         _["intercept_mask"] = intercept_lgl,
         _["has_intercept"] = has_intercept
     );
+
+    if (firth) {
+        out["penalized.deviance"] = dev_final - log_det_XtWX;
+        out["log.det.XtWX"]       = log_det_XtWX;
+        out["firth"]              = true;
+    }
+
+    return out;
 }
