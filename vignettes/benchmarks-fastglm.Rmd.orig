@@ -28,7 +28,7 @@ This vignette is a more comprehensive benchmarking study than the small inline t
 - standard GLMs against `stats::glm()`, `glm2::glm.fit2()`, and `speedglm::speedglm.wfit()`,
 - the sparse and `big.matrix` solver paths against the dense path,
 - negative-binomial regression against `MASS::glm.nb()`,
-- Firth bias-reduced GLMs against `brglm2::brglmFit()` and `logistf::logistf()`,
+- Firth bias-reduced GLMs against `brglm2::brglmFit()` and `logistf::logistf()`, including sparse, streaming, and `big.matrix` Firth paths,
 - hurdle and zero-inflated count regressions against `pscl::hurdle()` and `pscl::zeroinfl()`.
 
 The vignette is **pre-compiled** &mdash; the timings below were produced once on the maintainer's machine and are baked into the shipped `.Rmd`. R CMD check / build does *not* re-run the benchmarks, which keeps the package well within CRAN's runtime budget. To re-run the benchmarks (after a code change, on a different machine, etc.), execute `vignettes/_precompile.R` from the package root.
@@ -379,6 +379,82 @@ for (flab in unique(firth_scale_tim$family)) {
 }
 par(op)
 ```
+
+## Firth across all decomposition methods
+
+Firth bias reduction now works with all six decomposition methods (0&ndash;5), not just the LLT Cholesky. Here we verify that all methods produce identical coefficients and compare their timings:
+
+```{r}
+set.seed(123)
+n_meth <- 10000;  p_meth <- 10
+X_meth <- cbind(1, matrix(rnorm(n_meth * (p_meth - 1)), n_meth, p_meth - 1))
+y_meth <- rbinom(n_meth, 1, plogis(X_meth %*% rnorm(p_meth) * 0.1))
+
+ref_coef <- coef(fastglm(X_meth, y_meth, family = binomial(), method = 2, firth = TRUE))
+method_names <- c("ColPivQR", "QR", "LLT", "LDLT", "FullPivQR", "SVD")
+for (m in c(0L, 1L, 3L, 4L, 5L)) {
+    d <- max(abs(coef(fastglm(X_meth, y_meth, family = binomial(), method = m,
+                               firth = TRUE)) - ref_coef))
+    cat(sprintf("  method %d (%s) vs LLT: max |diff| = %.2e\n",
+                m, method_names[m + 1], d))
+}
+
+mb_methods <- microbenchmark(
+    ColPivQR = fastglm(X_meth, y_meth, family = binomial(), method = 0, firth = TRUE),
+    QR       = fastglm(X_meth, y_meth, family = binomial(), method = 1, firth = TRUE),
+    LLT      = fastglm(X_meth, y_meth, family = binomial(), method = 2, firth = TRUE),
+    LDLT     = fastglm(X_meth, y_meth, family = binomial(), method = 3, firth = TRUE),
+    FullPivQR= fastglm(X_meth, y_meth, family = binomial(), method = 4, firth = TRUE),
+    SVD      = fastglm(X_meth, y_meth, family = binomial(), method = 5, firth = TRUE),
+    times = 5L
+)
+cat(sprintf("\n--- Firth logistic, n=%d, p=%d ---\n", n_meth, p_meth))
+print(.fmt(mb_methods))
+```
+
+All six methods agree to machine precision. The LLT and LDLT Cholesky methods are the fastest because they only decompose the `p x p` cross-product, while the QR and SVD methods work with the full `n x p` matrix.
+
+## Firth on sparse and streaming designs
+
+Firth bias reduction is now also supported on sparse (`dgCMatrix`), `big.matrix`, and streaming callback designs. The sparse and streaming paths use *lagged leverages* from the previous IRLS iteration; at convergence, the result matches the exact-leverage dense path.
+
+```{r}
+set.seed(123)
+n_sp <- 5000;  p_sp <- 6
+X_sp <- cbind(1, matrix(rnorm(n_sp * (p_sp - 1)), n_sp, p_sp - 1))
+Xs_sp <- as(X_sp, "CsparseMatrix")
+Xb_sp <- as.big.matrix(X_sp)
+y_sp <- rbinom(n_sp, 1, plogis(X_sp %*% c(-0.3, 0.4, -0.2, 0.1, 0.05, -0.15)))
+
+chunk_size_sp <- 500
+chunks_sp <- function(k) {
+    idx <- ((k - 1) * chunk_size_sp + 1):(k * chunk_size_sp)
+    list(X = X_sp[idx, , drop = FALSE], y = y_sp[idx])
+}
+
+mb_backends <- microbenchmark(
+    dense      = fastglm(X_sp,  y_sp, family = binomial(), method = 2, firth = TRUE),
+    sparse     = fastglm(Xs_sp, y_sp, family = binomial(), method = 2, firth = TRUE),
+    big.matrix = fastglm(Xb_sp, y_sp, family = binomial(), method = 2, firth = TRUE),
+    streaming  = fastglm_streaming(chunks_sp, n_chunks = n_sp / chunk_size_sp,
+                                   family = binomial(), method = 2, firth = TRUE),
+    times = 5L
+)
+cat(sprintf("\n--- Firth logistic across backends (n=%d, p=%d) ---\n", n_sp, p_sp))
+print(.fmt(mb_backends))
+
+# Verify agreement
+ref_sp <- coef(fastglm(X_sp, y_sp, family = binomial(), method = 2, firth = TRUE))
+sp_c   <- coef(fastglm(Xs_sp, y_sp, family = binomial(), method = 2, firth = TRUE))
+bm_c   <- coef(fastglm(Xb_sp, y_sp, family = binomial(), method = 2, firth = TRUE))
+st_c   <- coef(fastglm_streaming(chunks_sp, n_chunks = n_sp / chunk_size_sp,
+                                  family = binomial(), method = 2, firth = TRUE))
+cat(sprintf("  sparse  vs dense: max |diff| = %.2e\n", max(abs(sp_c - ref_sp))))
+cat(sprintf("  big.mat vs dense: max |diff| = %.2e\n", max(abs(bm_c - ref_sp))))
+cat(sprintf("  stream  vs dense: max |diff| = %.2e\n", max(abs(st_c - ref_sp))))
+```
+
+All backends converge to the same Firth-penalized MLE to high precision ($< 10^{-7}$). The dense path is fastest when the matrix fits in RAM; the `big.matrix` and streaming paths are designed for datasets that exceed available memory.
 
 # Hurdle models
 

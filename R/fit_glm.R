@@ -151,8 +151,11 @@ tweedie_link_power <- function(family) {
 #'   (1 for binomial/Poisson, estimated iteratively for other families).
 #'   For `binomial(logit)` this reduces to the familiar
 #'   \eqn{h_i (0.5 - \mu_i) / (\mu_i (1 - \mu_i))}.  Supported for all
-#'   standard GLM families on dense `x`; requires the LLT Cholesky
-#'   decomposition (forced internally).  Convergence is checked on the
+#'   standard GLM families on dense, sparse (`dgCMatrix`), and
+#'   `big.matrix` designs, and with any decomposition method.
+#'   Sparse and `big.matrix` paths use lagged leverages from the
+#'   previous IRLS iteration; at convergence the result is identical
+#'   to the exact-leverage dense path.  Convergence is checked on the
 #'   sup-norm of the coefficient update.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
@@ -236,13 +239,6 @@ fastglmPure <- function(x, y,
 {
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE.", call. = FALSE)
-    if (firth) {
-        if (inherits(x, "dgCMatrix") || (requireNamespace("bigmemory", quietly = TRUE) &&
-                                          bigmemory::is.big.matrix(x)))
-            stop("'firth = TRUE' is not supported for sparse or big.matrix designs.",
-                 call. = FALSE)
-        method <- 2L
-    }
     weights <- as.vector(weights)
     offset  <- as.vector(offset)
     
@@ -361,8 +357,7 @@ fastglmPure <- function(x, y,
                               family$variance, family$mu.eta, family$linkinv, family$dev.resids,
                               family$valideta, family$validmu,
                               as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
-                              as.integer(fc), fp)
-        # Detect intercept-like columns (all entries identical) by max == min.
+                              as.integer(fc), fp, firth = firth)
         col_max <- apply(x, 2, max)
         col_min <- apply(x, 2, min)
         res$intercept <- any(is.int <- (col_max == col_min))
@@ -372,7 +367,7 @@ fastglmPure <- function(x, y,
                              drop(start), drop(mu), drop(eta),
                              family$variance, family$mu.eta, family$linkinv, family$dev.resids,
                              family$valideta, family$validmu,
-                             as.double(tol[1]), as.integer(maxit[1]),
+                             as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
                              as.integer(fc), fp)
         res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else if (!is_big_matrix)
@@ -392,7 +387,7 @@ fastglmPure <- function(x, y,
                            family$variance, family$mu.eta, family$linkinv, family$dev.resids,
                            family$valideta, family$validmu,
                            as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
-                           as.integer(fc), fp)
+                           as.integer(fc), fp, firth = firth)
 
         res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
     }
@@ -459,10 +454,10 @@ fastglmPure <- function(x, y,
 #' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
-#' @param firth logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
-#'   to the score function. Currently supported only for
-#'   `family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
-#'   for the canonical reference implementation.
+#' @param firth logical; if `TRUE` apply the Kosmidis--Firth mean
+#'   bias-reducing adjusted score.  Supported for all standard GLM families
+#'   on dense, sparse, and `big.matrix` designs, and with any decomposition
+#'   method.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}

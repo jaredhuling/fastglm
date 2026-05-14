@@ -9,10 +9,10 @@ using Eigen::VectorXd;
 using Eigen::MatrixXd;
 using Eigen::Map;
 
-// Firth-penalized binomial-logit IRLS.  Restricted to the dense path and
-// LLT (method = 2): Firth's bias-reducing penalty 0.5 * log|I(beta)| is
-// computed from the same Cholesky factor as the WLS update, and the
-// leverage h_i used to augment the working response falls out of L^{-1} X.
+// Firth-penalized IRLS.  Supports all decomposition types (method 0-5).
+// The AS_mean bias-reducing adjustment modifies each working response by
+//   xi_i = phi * h_i * d2mu * V(mu) / (2 * pw * dmu^3)
+// where h_i is computed from the current decomposition (exact leverages).
 //
 // Returned list mirrors fit_glm() with two extra entries:
 //   penalized.deviance : -2 * (l(beta) + 0.5 * log|I(beta)|)
@@ -25,7 +25,7 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
                    Rcpp::NumericVector eta,
                    Function var, Function mu_eta, Function linkinv,
                    Function dev_resids, Function valideta, Function validmu,
-                   double tol, int maxit, int fam_code,
+                   int type, double tol, int maxit, int fam_code,
                    Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
 {
     fglm::FamilyParams fp;
@@ -50,13 +50,10 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
     if ((Eigen::Index)Y.size() != X.rows())
         Rcpp::stop("size mismatch");
 
-    // Force method = 2 (LLT).  Firth's leverage is derived from the same
-    // Cholesky factor as the beta update, so other decompositions would
-    // double the cost.
     glm solver(X, Y, W, Off,
                var, mu_eta, linkinv, dev_resids,
                valideta, validmu,
-               tol, maxit, /*type=*/2,
+               tol, maxit, type,
                /*is_big_matrix=*/false,
                fam_code, fp,
                /*firth=*/true);

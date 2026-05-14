@@ -67,8 +67,10 @@ protected:
     int rank;
     int fam_code;   // fglm::FamilyCode; -1 = unknown (use R callbacks)
     fglm::FamilyParams fam_params;  // theta / var_power / link_power for params-aware families
-    bool firth_;                    // true = Firth bias-reduced score (binomial logit only)
+    bool firth_;                    // true = Firth bias-reduced score
     double log_det_XtWX_;           // log|X'WX| from most recent solve_wls (used by Firth)
+    MatrixXd A_prev;                // (X'WX)^{-1} from previous IRLS iteration (lagged leverages)
+    bool     A_prev_available;
     
     
     FullPivHouseholderQR<MatrixXd> FPQR;
@@ -332,59 +334,21 @@ protected:
     }
     
     // Generalized Firth / AS_mean bias-reducing penalty for arbitrary GLM
-    // families.  Dense path only (no streaming / sparse / big.matrix).
+    // families.  Supports all decomposition types on the dense path and
+    // streaming (big.matrix) via lagged leverages.
     //
-    // The leverage h_i from the LLT of X'WX shifts the working response:
+    // The AS_mean adjustment shifts the working response by
+    //   ξ_i = φ · h_i · (d²μ/dη²)_i · V(μ_i) / (2 · pw_i · (dμ/dη)³_i)
+    // where h_i is the leverage diagonal of the hat matrix.
     //
-    //   ξ_i = h_i · (d²μ/dη²)_i · V(μ_i) / (2 · pw_i · (dμ/dη)³_i)
-    //   z_i^* = z_i + ξ_i
-    //
-    // For binomial logit this reduces to the familiar
-    //   ξ_i = h_i · (0.5 − μ_i) / (μ_i(1 − μ_i)).
-    //
-    // The Cholesky factor is reused for both h and the WLS update.
-    // log|X'WX| is stored so update_dev_resids() can form the penalized
-    // deviance dev* = std_dev − log|X'WX|.
-    void solve_wls_firth()
+    // Dense path: exact leverages from the current iteration's decomposition.
+    // Streaming path: lagged leverages from A_prev = (X'WX)^{-1} of the
+    //   previous iteration.  The fixed point is identical.
+
+    // Compute d²μ/dη² for all observations.
+    void compute_d2mu(Eigen::ArrayXd &d2mu)
     {
-        beta_prev = beta;
-        // WX = w_sqrt * X.
-        WX.noalias() = w.asDiagonal() * X;
-        // X'WX = (WX)' (WX)
-        update_XtWX();
-        Ch.compute(XtWX_buf.selfadjointView<Lower>());
-
-        if (Ch.info() != Eigen::Success) {
-            // Cholesky failed — X'WX not positive definite.  Fall back to
-            // an unmodified WLS step (no Firth adjustment).
-            wz.noalias() = w.cwiseProduct(z);
-            beta = Ch.solve(WX.adjoint() * wz);
-            log_det_XtWX_ = 0.0;
-            rank = nvars;
-            return;
-        }
-
-        // h_i = ||L^{-1} (WX_i)'||^2 = w_i^2 * x_i' (X'WX)^{-1} x_i.
-        MatrixXd V = WX.transpose();
-        Ch.matrixL().solveInPlace(V);
-        VectorXd h_lev = V.colwise().squaredNorm();
-
-        // Compute the AS_mean (Kosmidis-Firth) adjustment ξ.
-        //
-        // The bias-reducing score adjustment (brglm2's "AS_mean") is:
-        //   A_j = 0.5 · Σ_k h_k · (d²μ/dη²)_k / (dμ/dη)_k · x_{kj}
-        //
-        // Mapped to the IRLS working response:
-        //   ξ_i = φ · h_i · (d²μ/dη²)_i · V(μ_i)
-        //               / [2 · pw_i · (dμ/dη)³_i]
-        //
-        // where φ is the dispersion (1 for binomial/Poisson, estimated for
-        // Gaussian/Gamma/inverse.gaussian).  The signed cube of dμ/dη
-        // appears in the denominator to preserve the correct sign for
-        // links where dμ/dη < 0 (e.g. inverse link).
         const double eps = std::numeric_limits<double>::epsilon();
-
-        Eigen::ArrayXd d2mu(nobs);
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
@@ -399,42 +363,238 @@ protected:
             for (int i = 0; i < nobs; ++i)
                 d2mu[i] = (dmu_p[i] - dmu_m[i]) / (2.0 * h);
         }
+    }
 
-        // Dispersion estimate for families where φ ≠ 1.
-        double phi = 1.0;
+    // Estimate the dispersion φ (1 for binomial/Poisson).
+    double compute_firth_phi()
+    {
+        const double eps = std::numeric_limits<double>::epsilon();
         bool unit_disp = (fam_code >= fglm::FAM_BINOMIAL_LOGIT &&
                           fam_code <= fglm::FAM_POISSON_SQRT);
-        if (fam_code == fglm::FAM_UNKNOWN) {
-            // Callback family: cannot determine, assume phi=1
-            unit_disp = true;
-        }
-        if (!unit_disp && nobs > nvars) {
-            Eigen::Map<const Eigen::ArrayXd> y_a(Y.data(), Y.size());
-            Eigen::Map<const Eigen::ArrayXd> m_a(mu.data(), mu.size());
-            Eigen::Map<const Eigen::ArrayXd> w_a(weights.data(), weights.size());
-            double std_dev = fglm::dev_resids_sum(fam_code, fam_params,
-                                                  y_a, m_a, w_a);
-            phi = std_dev / (nobs - nvars);
-            if (phi < eps) phi = 1.0;
-        }
+        if (fam_code == fglm::FAM_UNKNOWN) unit_disp = true;
+        if (unit_disp || nobs <= nvars) return 1.0;
+        Eigen::Map<const Eigen::ArrayXd> y_a(Y.data(), Y.size());
+        Eigen::Map<const Eigen::ArrayXd> m_a(mu.data(), mu.size());
+        Eigen::Map<const Eigen::ArrayXd> w_a(weights.data(), weights.size());
+        double phi = fglm::dev_resids_sum(fam_code, fam_params, y_a, m_a, w_a)
+                     / (nobs - nvars);
+        return (phi < eps) ? 1.0 : phi;
+    }
 
+    // Compute ξ from h, d2mu, var_mu, mu_eta, weights, phi and form z* = z + ξ.
+    void apply_firth_xi(const VectorXd &h_lev, const Eigen::ArrayXd &d2mu,
+                        double phi, VectorXd &zstar)
+    {
+        const double eps = std::numeric_limits<double>::epsilon();
         Eigen::ArrayXd dmu3 = mu_eta.array().cube();
-        for (int i = 0; i < nobs; ++i) {
+        for (int i = 0; i < nobs; ++i)
             if (std::abs(dmu3[i]) < eps) dmu3[i] = (dmu3[i] >= 0) ? eps : -eps;
-        }
+
         Eigen::ArrayXd xi = phi * h_lev.array() * d2mu * var_mu.array()
                           / (2.0 * weights.array().max(eps) * dmu3);
-        VectorXd zstar = z + xi.matrix();
+        zstar = z + xi.matrix();
+    }
 
-        wz.noalias() = w.cwiseProduct(zstar);
-        beta = Ch.solve(WX.adjoint() * wz);
+    // Compute leverages from the current decomposition (dense path).
+    void compute_leverages_dense(VectorXd &h_out)
+    {
+        if (type == 2) {
+            // LLT: h_i = ||L^{-1} (WX_i)'||^2
+            MatrixXd V = WX.transpose();
+            Ch.matrixL().solveInPlace(V);
+            h_out = V.colwise().squaredNorm();
+        } else if (type == 3) {
+            // LDLT: h_i from (LD^{1/2})^{-1}
+            MatrixXd inv = ChD.solve(MatrixXd::Identity(nvars, nvars));
+            h_out.resize(nobs);
+            for (int i = 0; i < nobs; ++i) {
+                auto wx_i = WX.row(i);
+                h_out[i] = wx_i * inv * wx_i.transpose();
+            }
+        } else if (type == 5) {
+            // SVD of WX = USV': h_i = ||U_i||^2
+            h_out = bSVD.matrixU().rowwise().squaredNorm();
+        } else {
+            // QR methods (0, 1, 4): h_i from Q.
+            // Compute Q explicitly as Q * I_rank (n x rank).
+            MatrixXd Q;
+            int r = nvars;
+            if (type == 0) {
+                r = PQR.rank();
+                Q = PQR.householderQ() * MatrixXd::Identity(nobs, r);
+            } else if (type == 1) {
+                Q = QR.householderQ() * MatrixXd::Identity(nobs, r);
+            } else { // type == 4
+                r = FPQR.rank();
+                Q = FPQR.matrixQ() * MatrixXd::Identity(nobs, r);
+            }
+            h_out = Q.rowwise().squaredNorm();
+        }
+    }
 
-        // log|X'WX| = 2 * sum(log(diag(L)))
-        const MatrixXd &Lstore = Ch.matrixLLT();
+    // Compute log|X'WX| from the current decomposition.
+    void compute_log_det_XtWX()
+    {
         double ld = 0.0;
-        for (int j = 0; j < Lstore.cols(); ++j) ld += std::log(Lstore(j, j));
-        log_det_XtWX_ = 2.0 * ld;
-        rank = nvars;
+        if (type == 2) {
+            const MatrixXd &Lstore = Ch.matrixLLT();
+            for (int j = 0; j < Lstore.cols(); ++j) ld += std::log(Lstore(j, j));
+            log_det_XtWX_ = 2.0 * ld;
+        } else if (type == 3) {
+            Eigen::VectorXd D = ChD.vectorD();
+            for (int j = 0; j < D.size(); ++j) ld += std::log(std::abs(D[j]));
+            log_det_XtWX_ = ld;
+        } else if (type == 5) {
+            Eigen::ArrayXd s = bSVD.singularValues().array();
+            for (int j = 0; j < s.size(); ++j) ld += std::log(s[j]);
+            log_det_XtWX_ = 2.0 * ld;
+        } else {
+            // QR methods: |X'WX| = |R'R| = |R|^2, log|R| = sum(log|R_jj|)
+            MatrixXd R;
+            if (type == 0)      R = PQR.matrixQR().topRows(nvars);
+            else if (type == 1) R = QR.matrixQR().topRows(nvars);
+            else                R = FPQR.matrixQR().topRows(nvars);
+            for (int j = 0; j < nvars; ++j) ld += std::log(std::abs(R(j, j)));
+            log_det_XtWX_ = 2.0 * ld;
+        }
+    }
+
+    // Update A_prev = (X'WX)^{-1} from current decomposition.
+    void update_A_prev()
+    {
+        MatrixXd I_p = MatrixXd::Identity(nvars, nvars);
+        if (type == 2)      A_prev = Ch.solve(I_p);
+        else if (type == 3) A_prev = ChD.solve(I_p);
+        else if (type == 5) {
+            const MatrixXd &V = bSVD.matrixV();
+            Eigen::ArrayXd s = bSVD.singularValues().array();
+            Eigen::ArrayXd dinv2(s.size());
+            for (int j = 0; j < s.size(); ++j) dinv2[j] = 1.0 / (s[j] * s[j]);
+            A_prev.noalias() = V * dinv2.matrix().asDiagonal() * V.adjoint();
+        } else {
+            // QR methods: (X'WX)^{-1} = R^{-1} R'^{-1} (or with permutation)
+            if (type == 0) {
+                MatrixXd Ri = PQR.matrixQR().topRows(nvars)
+                    .triangularView<Upper>().solve(I_p);
+                MatrixXd PRi = Pmat * Ri;
+                A_prev.noalias() = PRi * PRi.transpose();
+            } else if (type == 1) {
+                MatrixXd Ri = QR.matrixQR().topRows(nvars)
+                    .triangularView<Upper>().solve(I_p);
+                A_prev.noalias() = Ri * Ri.transpose();
+            } else { // type == 4
+                MatrixXd Ri = FPQR.matrixQR().topRows(nvars)
+                    .triangularView<Upper>().solve(I_p);
+                MatrixXd PRi = Pmat * Ri;
+                A_prev.noalias() = PRi * PRi.transpose();
+            }
+        }
+        A_prev_available = true;
+    }
+
+    void solve_wls_firth()
+    {
+        beta_prev = beta;
+
+        Eigen::ArrayXd d2mu(nobs);
+        compute_d2mu(d2mu);
+        double phi = compute_firth_phi();
+
+        // --- Streaming path (big.matrix + Cholesky) ---
+        if (use_streaming) {
+            if (!A_prev_available) {
+                // First iteration: standard solve, no Firth adjustment
+                fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
+                fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf);
+            } else {
+                fglm::accumulate_firth_streamed(
+                    X, w, z, Eigen::Map<const Eigen::VectorXd>(d2mu.data(), nobs),
+                    var_mu, mu_eta, weights, phi, A_prev,
+                    XtWX_buf, Xtwz_buf);
+            }
+            if (type == 2) {
+                Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                beta = Ch.solve(Xtwz_buf);
+            } else {
+                ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                Dplus(ChD.vectorD());
+                beta = ChD.solve(Xtwz_buf);
+            }
+            compute_log_det_XtWX();
+            update_A_prev();
+            rank = nvars;
+            return;
+        }
+
+        // --- Dense path: exact leverages from current decomposition ---
+        WX.noalias() = w.asDiagonal() * X;
+        wz.noalias() = w.cwiseProduct(z);
+
+        // Decompose
+        if (type == 0) {
+            PQR.compute(WX);
+            Pmat = PQR.colsPermutation();
+            rank = PQR.rank();
+        } else if (type == 1) {
+            QR.compute(WX);
+            rank = nvars;
+        } else if (type == 2) {
+            update_XtWX();
+            Ch.compute(XtWX_buf.selfadjointView<Lower>());
+            rank = nvars;
+        } else if (type == 3) {
+            update_XtWX();
+            ChD.compute(XtWX_buf.selfadjointView<Lower>());
+            Dplus(ChD.vectorD());
+            rank = nvars;
+        } else if (type == 4) {
+            FPQR.compute(WX);
+            Pmat = FPQR.colsPermutation();
+            rank = FPQR.rank();
+        } else if (type == 5) {
+            bSVD.compute(WX, ComputeThinU | ComputeThinV);
+            rank = bSVD.rank();
+        }
+
+        // Compute leverages and Firth adjustment
+        VectorXd h_lev;
+        compute_leverages_dense(h_lev);
+
+        VectorXd zstar;
+        apply_firth_xi(h_lev, d2mu, phi, zstar);
+
+        // Solve with modified response
+        wz.noalias() = w.cwiseProduct(zstar);
+        if (type == 0) {
+            if (rank == nvars) {
+                beta = PQR.solve(wz);
+            } else {
+                effects = PQR.householderQ().adjoint() * wz;
+                beta.head(rank) = PQR.matrixQR().topLeftCorner(rank, rank)
+                    .triangularView<Upper>().solve(effects.head(rank));
+                beta = Pmat * beta;
+            }
+        } else if (type == 1) {
+            beta = QR.solve(wz);
+        } else if (type == 2) {
+            beta = Ch.solve(WX.adjoint() * wz);
+        } else if (type == 3) {
+            beta = ChD.solve(WX.adjoint() * wz);
+        } else if (type == 4) {
+            if (rank == nvars) {
+                beta = FPQR.solve(wz);
+            } else {
+                effects = FPQR.matrixQ().adjoint() * wz;
+                beta.head(rank) = FPQR.matrixQR().topLeftCorner(rank, rank)
+                    .triangularView<Upper>().solve(effects.head(rank));
+                beta = Pmat * beta;
+            }
+        } else if (type == 5) {
+            beta = bSVD.solve(wz);
+        }
+
+        compute_log_det_XtWX();
+        update_A_prev();
     }
 
     // much of solve_wls() comes directly
@@ -719,6 +879,8 @@ public:
                                                      fam_params(fam_params_),
                                                      firth_(firth_flag),
                                                      log_det_XtWX_(0.0),
+                                                     A_prev(X_.cols(), X_.cols()),
+                                                     A_prev_available(false),
                                                      WX( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows(),
                                                          (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.cols()),
                                                      wz( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows()),

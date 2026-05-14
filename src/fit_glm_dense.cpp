@@ -140,7 +140,8 @@ List bigfastglm(XPtr<BigMatrix> Xs,
                 double tol,
                 int maxit,
                 int fam_code,
-                const fglm::FamilyParams& fam_params)
+                const fglm::FamilyParams& fam_params,
+                bool firth = false)
 {
     //const Map<MatrixXd>  X(as<Map<MatrixXd> >(Xs));
     //XPtr<BigMatrix> bMPtr(Xs);
@@ -170,51 +171,61 @@ List bigfastglm(XPtr<BigMatrix> Xs,
         throw invalid_argument("type must be either 2 or 3 for big.matrix objects");
     }
     
-    // instantiate fitting class
-    GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
-    
     bool is_big_matrix = true;
-    
-    glm_solver = new glm(X, y, weights, offset,
-                         var, mu_eta, linkinv, dev_resids,
-                         valideta, validmu, tol, maxit, type,
-                         is_big_matrix, fam_code, fam_params);
+
+    glm *solver = new glm(X, y, weights, offset,
+                          var, mu_eta, linkinv, dev_resids,
+                          valideta, validmu, tol, maxit, type,
+                          is_big_matrix, fam_code, fam_params, firth);
 
     // initialize parameters
-    glm_solver->init_parms(beta_init, mu_init, eta_init);
+    solver->init_parms(beta_init, mu_init, eta_init);
 
 
     // maximize likelihood
-    int iters = glm_solver->solve(maxit);
+    int iters = solver->solve(maxit);
 
-    VectorXd beta      = glm_solver->get_beta();
-    VectorXd se        = glm_solver->get_se();
-    VectorXd mu        = glm_solver->get_mu();
-    VectorXd eta       = glm_solver->get_eta();
-    VectorXd wts       = glm_solver->get_w();
-    VectorXd pweights  = glm_solver->get_weights();
-    MatrixXd vcov      = glm_solver->get_vcov();
+    VectorXd beta      = solver->get_beta();
+    VectorXd se        = solver->get_se();
+    VectorXd mu        = solver->get_mu();
+    VectorXd eta       = solver->get_eta();
+    VectorXd wts       = solver->get_w();
+    VectorXd pweights  = solver->get_weights();
+    MatrixXd vcov      = solver->get_vcov();
 
-    double dev         = glm_solver->get_dev();
-    int rank           = glm_solver->get_rank();
-    bool converged     = glm_solver->get_converged();
+    double dev         = solver->get_dev();
+    int rank           = solver->get_rank();
+    bool converged     = solver->get_converged();
 
     int df = X.rows() - rank;
 
-    delete glm_solver;
+    List out = List::create(_["coefficients"]      = beta,
+                            _["se"]                = se,
+                            _["fitted.values"]     = mu,
+                            _["linear.predictors"] = eta,
+                            _["deviance"]          = dev,
+                            _["weights"]           = wts,
+                            _["prior.weights"]     = pweights,
+                            _["rank"]              = rank,
+                            _["df.residual"]       = df,
+                            _["iter"]              = iters,
+                            _["converged"]         = converged,
+                            _["cov.unscaled"]      = vcov);
+    if (firth) {
+        double log_det = solver->get_log_det_XtWX();
+        VectorXd mu_final = solver->get_mu();
+        Eigen::Map<const Eigen::ArrayXd> y_arr(y.data(), y.size());
+        Eigen::Map<const Eigen::ArrayXd> mu_arr(mu_final.data(), mu_final.size());
+        Eigen::Map<const Eigen::ArrayXd> w_arr(weights.data(), weights.size());
+        double std_dev = fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr);
+        out["deviance"]           = std_dev;
+        out["penalized.deviance"] = dev;
+        out["log.det.XtWX"]       = log_det;
+        out["firth"]              = true;
+    }
 
-    return List::create(_["coefficients"]      = beta,
-                        _["se"]                = se,
-                        _["fitted.values"]     = mu,
-                        _["linear.predictors"] = eta,
-                        _["deviance"]          = dev,
-                        _["weights"]           = wts,
-                        _["prior.weights"]     = pweights,
-                        _["rank"]              = rank,
-                        _["df.residual"]       = df,
-                        _["iter"]              = iters,
-                        _["converged"]         = converged,
-                        _["cov.unscaled"]      = vcov);
+    delete solver;
+    return out;
 }
 
 
@@ -224,11 +235,12 @@ List fit_big_glm(SEXP x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcp
                  Function var, Function mu_eta, Function linkinv, Function dev_resids,
                  Function valideta, Function validmu,
                  int type, double tol, int maxit, int fam_code = -1,
-                 Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
+                 Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue,
+                 bool firth = false)
 {
     XPtr<BigMatrix> xpMat(x);
     fglm::FamilyParams fp = parse_fam_params(fam_params);
-    return bigfastglm(xpMat, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp);
+    return bigfastglm(xpMat, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp, firth);
 }
 
 
@@ -242,7 +254,8 @@ List fit_sparse_glm(SEXP x_sparse,
                     Function var, Function mu_eta, Function linkinv, Function dev_resids,
                     Function valideta, Function validmu,
                     int type, double tol, int maxit, int fam_code = -1,
-                    Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
+                    Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue,
+                    bool firth = false)
 {
     if (type != 2 && type != 3) {
         throw std::invalid_argument("for dgCMatrix objects, 'method' must be 2 (LLT) or 3 (LDLT).");
@@ -251,9 +264,7 @@ List fit_sparse_glm(SEXP x_sparse,
     fglm::FamilyParams fp = parse_fam_params(fam_params);
 
     typedef Eigen::SparseMatrix<double> SpMat;
-    // Use MappedSparseMatrix which RcppEigen knows how to convert dgCMatrix into.
     const Eigen::MappedSparseMatrix<double> Xm(as<Eigen::MappedSparseMatrix<double> >(x_sparse));
-    // Make a Map<SparseMatrix> view sharing the same storage (no copy).
     Eigen::Map<const SpMat> X(Xm.rows(), Xm.cols(), Xm.nonZeros(),
                               Xm.outerIndexPtr(), Xm.innerIndexPtr(), Xm.valuePtr());
 
@@ -270,7 +281,7 @@ List fit_sparse_glm(SEXP x_sparse,
     glm_sparse solver(X, Y, wts, off,
                       var, mu_eta, linkinv, dev_resids,
                       valideta, validmu,
-                      tol, maxit, type, fam_code, fp);
+                      tol, maxit, type, fam_code, fp, firth);
     solver.init_parms(beta_init, mu_init, eta_init);
     int iters = solver.solve(maxit);
 
@@ -287,17 +298,29 @@ List fit_sparse_glm(SEXP x_sparse,
     bool conv = solver.get_converged();
     int df = (int)n - rk;
 
-    return List::create(_["coefficients"]      = b,
-                        _["se"]                = se,
-                        _["fitted.values"]     = m,
-                        _["linear.predictors"] = e,
-                        _["deviance"]          = dev,
-                        _["weights"]           = wfit,
-                        _["prior.weights"]     = pwt,
-                        _["rank"]              = rk,
-                        _["df.residual"]       = df,
-                        _["iter"]              = iters,
-                        _["converged"]         = conv,
-                        _["cov.unscaled"]      = vc);
+    List out = List::create(_["coefficients"]      = b,
+                            _["se"]                = se,
+                            _["fitted.values"]     = m,
+                            _["linear.predictors"] = e,
+                            _["deviance"]          = dev,
+                            _["weights"]           = wfit,
+                            _["prior.weights"]     = pwt,
+                            _["rank"]              = rk,
+                            _["df.residual"]       = df,
+                            _["iter"]              = iters,
+                            _["converged"]         = conv,
+                            _["cov.unscaled"]      = vc);
+    if (firth) {
+        double log_det = solver.get_log_det_XtWX();
+        Eigen::Map<const Eigen::ArrayXd> y_arr(Y.data(), Y.size());
+        Eigen::Map<const Eigen::ArrayXd> mu_arr(m.data(), m.size());
+        Eigen::Map<const Eigen::ArrayXd> w_arr(wts.data(), wts.size());
+        double std_dev = fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr);
+        out["deviance"]           = std_dev;
+        out["penalized.deviance"] = dev;
+        out["log.det.XtWX"]       = log_det;
+        out["firth"]              = true;
+    }
+    return out;
 }
 

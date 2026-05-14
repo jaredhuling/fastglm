@@ -47,13 +47,21 @@ Conquer SVD}
 
 \item{maxit}{maximum number of IRLS iterations. Should be an integer}
 
-\item{firth}{logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
-to the score function. Currently supported only for
-`family = binomial(link = "logit")` on dense `x`. The penalty modifies
-the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where
-`h_i` is the leverage; convergence is checked on the sup-norm of the
-coefficient update. See `logistf::logistf()` for the canonical
-reference implementation.}
+\item{firth}{logical; if `TRUE` apply the Kosmidis--Firth mean
+bias-reducing adjusted score (AS_mean) to the IRLS iteration.  The
+adjustment modifies each working response by
+\eqn{\xi_i = \varphi \, h_i \, (d^2\mu/d\eta^2)_i \, V(\mu_i) /
+(2\, w_i\, (d\mu/d\eta)_i^3)}{xi_i = phi * h_i * d2mu * V(mu) /
+(2 * pw * dmu^3)}, where \eqn{\varphi}{phi} is the dispersion
+(1 for binomial/Poisson, estimated iteratively for other families).
+For `binomial(logit)` this reduces to the familiar
+\eqn{h_i (0.5 - \mu_i) / (\mu_i (1 - \mu_i))}.  Supported for all
+standard GLM families on dense, sparse (`dgCMatrix`), and
+`big.matrix` designs, and with any decomposition method.
+Sparse and `big.matrix` paths use lagged leverages from the
+previous IRLS iteration; at convergence the result is identical
+to the exact-leverage dense path.  Convergence is checked on the
+sup-norm of the coefficient update.}
 }
 \value{
 A list with the elements

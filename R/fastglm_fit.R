@@ -127,13 +127,6 @@ fastglm_fit <- function(x, y,
     control <- do.call("fastglm_control", control)
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE.", call. = FALSE)
-    if (firth) {
-        if (inherits(x, "dgCMatrix") || (requireNamespace("bigmemory", quietly = TRUE) &&
-                                          bigmemory::is.big.matrix(x)))
-            stop("'firth = TRUE' is not supported for sparse or big.matrix designs.",
-                 call. = FALSE)
-        control$method <- 2L
-    }
     
     is_sparse_matrix <- inherits(x, "dgCMatrix")
     if (is_sparse_matrix)
@@ -258,7 +251,7 @@ fastglm_fit <- function(x, y,
                               variance, mu.eta, linkinv, dev.resids,
                               valideta, validmu,
                               as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                              as.integer(fc), fp)
+                              as.integer(fc), fp, firth = firth)
         col_max <- apply(x, 2, max)
         col_min <- apply(x, 2, min)
         res$intercept <- any(is.int <- (col_max == col_min))
@@ -268,7 +261,7 @@ fastglm_fit <- function(x, y,
                              drop(start), drop(mu), drop(eta),
                              variance, mu.eta, linkinv, dev.resids,
                              valideta, validmu,
-                             as.double(control$tol), as.integer(control$maxit),
+                             as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
                              as.integer(fc), fp)
         res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else if (!is_big_matrix)
@@ -288,7 +281,7 @@ fastglm_fit <- function(x, y,
                            variance, mu.eta, linkinv, dev.resids,
                            valideta, validmu,
                            as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                           as.integer(fc), fp)
+                           as.integer(fc), fp, firth = firth)
 
         res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
     }

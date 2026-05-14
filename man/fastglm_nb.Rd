@@ -55,7 +55,7 @@ sup-norm of the beta update plus the relative change in `theta`.}
 \value{
 A list of class `c("fastglm_nb", "fastglm")` with the usual
   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
-  `twologlik` (twice the maximised NB log-likelihood).
+  `twologlik` (twice the maximized NB log-likelihood).
 }
 \description{
 `fastglm_nb()` fits a negative-binomial regression model, jointly
