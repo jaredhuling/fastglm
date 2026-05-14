@@ -99,7 +99,7 @@ RcppExport SEXP crossprod_big(SEXP X_)
   } catch (std::exception &ex) {
     forward_exception_to_r(ex);
   } catch (...) {
-    ::Rf_error("C++ exception (unknown reason)");
+    Rcpp::stop("C++ exception (unknown reason)");
   }
   return R_NilValue; //-Wall
 }
