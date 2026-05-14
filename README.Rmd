@@ -17,6 +17,7 @@ knitr::opts_chunk$set(
 ```
 
 [![version](http://www.r-pkg.org/badges/version/fastglm)](https://cran.r-project.org/package=fastglm)
+[![downloads](http://cranlogs.r-pkg.org/badges/grand-total/fastglm)](https://cran.r-project.org/package=fastglm)
 
 # fastglm
 

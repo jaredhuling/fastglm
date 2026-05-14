@@ -2,6 +2,7 @@
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 [![version](http://www.r-pkg.org/badges/version/fastglm)](https://cran.r-project.org/package=fastglm)
+[![downloads](http://cranlogs.r-pkg.org/badges/grand-total/fastglm)](https://cran.r-project.org/package=fastglm)
 
 # fastglm
 
@@ -144,7 +145,7 @@ system.time(f0 <- fastglm(x, y, family = binomial()))                 # default 
 #>   0.004   0.000   0.005
 system.time(f2 <- fastglm(x, y, family = binomial(), method = 2))     # LLT
 #>    user  system elapsed 
-#>   0.003   0.000   0.002
+#>   0.002   0.000   0.003
 ```
 
 ## Speed
