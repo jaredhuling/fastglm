@@ -98,7 +98,16 @@ inline void linkinv(int code,
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
     case FAM_TWEEDIE_INVERSE:
-        mu = 1.0 / eta; break;
+        // Clamp to +/-1/eps to avoid Inf when eta is near zero.
+        // valideta rejects eta==0, but near-zero values produce
+        // mu so large that downstream mu^2 / mu^3 overflow.
+        for (Eigen::Index i = 0; i < eta.size(); ++i) {
+            double e = eta[i];
+            double m = 1.0 / e;
+            if (!std::isfinite(m)) m = (e >= 0.0 ? 1.0 : -1.0) / thresh_eps();
+            mu[i] = m;
+        }
+        break;
     case FAM_BINOMIAL_LOGIT: {
         // Match R's logit_linkinv (src/library/stats/src/family.c) exactly:
         //   tmp = (eta < MTHRESH) ? DOUBLE_EPS
@@ -141,7 +150,13 @@ inline void linkinv(int code,
         break;
     }
     case FAM_INVGAUSS_INVMU2:
-        mu = 1.0 / eta.sqrt(); break;
+        // mu = 1/sqrt(eta); clamp to avoid Inf when eta is near zero.
+        for (Eigen::Index i = 0; i < eta.size(); ++i) {
+            double m = 1.0 / std::sqrt(eta[i]);
+            if (!std::isfinite(m)) m = 1.0 / thresh_eps();
+            mu[i] = m;
+        }
+        break;
     case FAM_POISSON_SQRT:
     case FAM_NB_SQRT:
     case FAM_TWEEDIE_SQRT:
@@ -389,43 +404,28 @@ inline double dev_resids_sum(int code,
     case FAM_INVGAUSS_INVMU2:
     case FAM_INVGAUSS_LOG:
     case FAM_INVGAUSS_IDENTITY:
-    case FAM_INVGAUSS_INVERSE:
-        for (Eigen::Index i = 0; i < n; ++i) {
-            double yi = y[i], mi = mu[i];
-            double d  = yi - mi;
-            s += wt[i] * (d * d) / (yi * mi * mi);
-        }
+    case FAM_INVGAUSS_INVERSE: {
+        // (y - mu)^2 / (y * mu^2) rewritten as ((y/mu - 1)^2) / y
+        // to avoid mu^2 overflow.
+        Eigen::ArrayXd r = y / mu - 1.0;
+        s = (wt * r * r / y).sum();
         break;
+    }
 
     case FAM_NB_LOG:
     case FAM_NB_SQRT:
     case FAM_NB_IDENTITY: {
-        // d_i = 2 * [ y * log(y/mu) - (y + theta) * log((y + theta)/(mu + theta)) ]
-        // y = 0 limit: d_i = 2 * theta * log1p(mu/theta).
-        //
-        // The naive formula suffers from -Inf - (-Inf) = NaN when mu is
-        // very large.  Rewrite by expanding logs and regrouping:
-        //
-        //   d_i = 2 * [ y*log(y) - (y+t)*log(y+t) + (y+t)*log(mu+t) - y*log(mu) ]
-        //       = 2 * [ y*log(y) - (y+t)*log(y+t) + y*log1p(t/mu) + t*log(mu+t) ]
-        //
-        // Every term here is finite when mu is finite and positive.
+        // Stable NB deviance avoiding cancellation for large mu.
+        // d_i = 2*[y*log(y) - (y+t)*log(y+t) + y*log1p(t/mu) + t*log(mu+t)]
+        // For y=0: y.max(1).log() = log(1) = 0, so the y*log(y) term vanishes.
         const double theta = params.theta;
-        for (Eigen::Index i = 0; i < n; ++i) {
-            double yi = y[i], mi = mu[i];
-            double yt = yi + theta;
-            double mt = mi + theta;
-            double d;
-            if (yi < 1.0) {
-                d = 2.0 * theta * std::log1p(mi / theta);
-            } else {
-                d = 2.0 * (yi * std::log(yi)
-                           - yt * std::log(yt)
-                           + yi * std::log1p(theta / mi)
-                           + theta * std::log(mt));
-            }
-            s += wt[i] * d;
-        }
+        Eigen::ArrayXd yt  = y + theta;
+        Eigen::ArrayXd mt  = mu + theta;
+        Eigen::ArrayXd ysf = y.max(1.0);
+        Eigen::ArrayXd d   = 2.0 * (y * ysf.log() - yt * yt.log()
+                                     + y * (theta / mu).log1p()
+                                     + theta * mt.log());
+        s = (wt * d).sum();
         break;
     }
 
@@ -614,30 +614,45 @@ inline bool validmu(int code,
 }
 
 // ---------------------------------------------------------------------------
-// Stable IRLS working-weight computation for NB log link.
+// Stable IRLS working-weight computation for families where the generic
+// formula  w = sqrt(prior_wt * mu_eta^2 / V(mu))  can overflow.
 //
-// The generic formula  w = sqrt(mu_eta^2 / V(mu))  overflows when mu is
-// large and theta is small because V(mu) = mu + mu^2/theta can exceed
-// DBL_MAX.  For the log link, mu_eta = mu, so:
+// For a log link, mu_eta = mu for all families.  Then:
 //
-//   w^2 = mu^2 / (mu + mu^2/theta) = mu * theta / (theta + mu)
+//   Gamma log:     w^2 = mu^2 / mu^2 = 1
+//   InvGauss log:  w^2 = mu^2 / mu^3 = 1/mu
+//   NB log:        w^2 = mu^2 / (mu + mu^2/theta) = mu*theta/(theta+mu)
 //
-// which is bounded by theta and never overflows.  Returns TRUE if a
-// stable formula was used (caller should skip the generic path).
+// Each of these is bounded and avoids computing V(mu) which can overflow.
+// Returns TRUE if a stable formula was used (caller should skip the
+// generic path).
 // ---------------------------------------------------------------------------
-inline bool stable_nb_weights(int code,
-                              const FamilyParams& params,
-                              const Eigen::Ref<const Eigen::ArrayXd>& mu,
-                              const Eigen::Ref<const Eigen::ArrayXd>& /*mu_eta*/,
-                              const Eigen::Ref<const Eigen::ArrayXd>& prior_wt,
-                              Eigen::Ref<Eigen::ArrayXd> w)
+inline bool stable_weights(int code,
+                           const FamilyParams& params,
+                           const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                           const Eigen::Ref<const Eigen::ArrayXd>& /*mu_eta*/,
+                           const Eigen::Ref<const Eigen::ArrayXd>& prior_wt,
+                           Eigen::Ref<Eigen::ArrayXd> w)
 {
-    if (code != FAM_NB_LOG) return false;
-    const double theta = params.theta;
-    if (theta <= 0.0) return false;
-    // w = sqrt(prior_wt * theta * mu / (theta + mu))
-    w = (prior_wt * theta * mu / (theta + mu)).sqrt();
-    return true;
+    switch (code) {
+    case FAM_GAMMA_LOG:
+        // w^2 = prior_wt * mu^2 / mu^2 = prior_wt
+        w = prior_wt.sqrt();
+        return true;
+    case FAM_INVGAUSS_LOG:
+        // w^2 = prior_wt * mu^2 / mu^3 = prior_wt / mu
+        w = (prior_wt / mu).sqrt();
+        return true;
+    case FAM_NB_LOG: {
+        const double theta = params.theta;
+        if (theta <= 0.0) return false;
+        // w^2 = prior_wt * mu * theta / (theta + mu)
+        w = (prior_wt * theta * mu / (theta + mu)).sqrt();
+        return true;
+    }
+    default:
+        return false;
+    }
 }
 
 }  // namespace fglm

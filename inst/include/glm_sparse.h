@@ -107,7 +107,7 @@ protected:
             Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data(), mu_eta.size());
             Eigen::Map<const Eigen::ArrayXd> pw(weights.data(), weights.size());
             Eigen::Map<Eigen::ArrayXd>       ww(w.data(), w.size());
-            if (fglm::stable_nb_weights(fam_code, fam_params, m, me, pw, ww))
+            if (fglm::stable_weights(fam_code, fam_params, m, me, pw, ww))
                 return;
         }
         w = (weights.array() * mu_eta.array().square() / var_mu.array()).array().sqrt();

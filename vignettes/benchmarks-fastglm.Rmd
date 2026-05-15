@@ -1,7 +1,7 @@
 ---
 title: "Benchmark Study for 'fastglm'"
 author: "Jared Huling"
-date: "2026-05-13"
+date: "2026-05-15"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Benchmark Study for 'fastglm'}
@@ -150,27 +150,27 @@ for (n in c(1e3, 1e4, 1e5)) {
 #> 
 #> --- n = 1000 ---
 #>           expr min (ms) median (ms) mean (ms) max (ms)
-#> 1   fastglm_qr 0.801345    0.868995 1.1457368 2.313343
-#> 2 fastglm_chol 0.422054    0.443784 0.4464736 0.479864
-#> 3      glm.fit 2.621212    2.828918 3.2753752 5.171822
-#> 4    glm2_fit2 2.641220    2.784720 3.1933752 4.921353
-#> 5     speedglm 1.912855    2.007729 2.5360058 4.661536
+#> 1   fastglm_qr 0.794580    0.817212 0.9289370 1.401708
+#> 2 fastglm_chol 0.389910    0.402620 0.4153464 0.456125
+#> 3      glm.fit 2.470578    2.534087 2.9303520 4.394831
+#> 4    glm2_fit2 2.543763    2.616374 3.0174606 4.753499
+#> 5     speedglm 1.944630    1.992231 2.4812626 4.515453
 #> 
 #> --- n = 10000 ---
 #>           expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1   fastglm_qr  9.182934   10.091576 10.187614 11.075289
-#> 2 fastglm_chol  4.201106    4.458135  5.281013  8.645588
-#> 3      glm.fit 28.289508   29.166498 29.146752 30.131556
-#> 4    glm2_fit2 29.113034   30.070835 30.048744 31.390420
-#> 5     speedglm 20.589216   21.055140 21.325568 22.552501
+#> 1   fastglm_qr  8.763381    9.025248  9.064829  9.295602
+#> 2 fastglm_chol  3.730467    3.826407  4.405614  6.726993
+#> 3      glm.fit 26.986979   27.900705 27.737599 28.154167
+#> 4    glm2_fit2 27.574755   29.157437 29.169483 30.585385
+#> 5     speedglm 19.079104   19.948099 19.855250 20.656456
 #> 
 #> --- n = 1e+05 ---
 #>           expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1   fastglm_qr  93.44072    95.58670  96.22099  99.02131
-#> 2 fastglm_chol  42.16018    44.79303  44.44246  46.91269
-#> 3      glm.fit 275.32025   328.48708 337.44055 427.43025
-#> 4    glm2_fit2 282.51202   331.98368 324.38964 340.24834
-#> 5     speedglm 196.43719   198.88637 217.63481 248.18173
+#> 1   fastglm_qr  93.35655    95.70987  95.54092  97.25536
+#> 2 fastglm_chol  40.99533    43.18776  44.42999  49.70992
+#> 3      glm.fit 272.86197   326.19432 334.82782 423.21516
+#> 4    glm2_fit2 283.19057   330.61043 324.46523 344.84530
+#> 5     speedglm 194.16099   200.41891 217.03083 248.08846
 logit_tim <- do.call(rbind, logit_tim)
 .plot_scaling(logit_tim, "Logistic regression: median time vs n (p = 30)")
 ```
@@ -207,27 +207,27 @@ for (n in c(1e3, 1e4, 1e5)) {
 #> 
 #> --- n = 1000 ---
 #>           expr min (ms) median (ms) mean (ms) max (ms)
-#> 1   fastglm_qr 0.826683    0.834227 0.8320868 0.836974
-#> 2 fastglm_chol 0.380234    0.417134 0.4291552 0.510614
-#> 3      glm.fit 2.608707    2.662048 2.6799486 2.779185
-#> 4    glm2_fit2 2.667706    2.714405 2.7072710 2.726008
-#> 5     speedglm 1.983580    1.994035 2.0126654 2.074600
+#> 1   fastglm_qr 0.909503    0.957760 0.9796130 1.106344
+#> 2 fastglm_chol 0.389459    0.428573 0.4337226 0.493476
+#> 3      glm.fit 2.567666    2.796528 2.7521332 2.829943
+#> 4    glm2_fit2 2.724655    2.860324 2.8962318 3.190046
+#> 5     speedglm 2.138970    2.276730 2.3004116 2.556883
 #> 
 #> --- n = 10000 ---
-#>           expr  min (ms) median (ms) mean (ms) max (ms)
-#> 1   fastglm_qr  8.492002    8.724759  9.614205 12.67896
-#> 2 fastglm_chol  3.547115    3.676511  3.828195  4.49278
-#> 3      glm.fit 26.687843   28.170444 29.081144 32.01198
-#> 4    glm2_fit2 26.573822   28.469949 28.537099 31.30621
-#> 5     speedglm 19.242981   19.809765 19.721886 20.21759
+#>           expr  min (ms) median (ms) mean (ms)  max (ms)
+#> 1   fastglm_qr  8.702824   10.127861 10.515385 13.625325
+#> 2 fastglm_chol  4.128372    4.273307  4.282926  4.493682
+#> 3      glm.fit 26.922568   31.918828 31.807136 37.974036
+#> 4    glm2_fit2 28.641616   30.246807 29.744655 30.525320
+#> 5     speedglm 19.505996   19.963802 20.416606 21.924381
 #> 
 #> --- n = 1e+05 ---
 #>           expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1   fastglm_qr  88.62744    89.17151   89.7178  91.56751
-#> 2 fastglm_chol  37.53386    40.30710   40.2234  42.75829
-#> 3      glm.fit 274.16675   325.92819  306.5993 329.47567
-#> 4    glm2_fit2 329.43976   335.01202  363.9326 435.22693
-#> 5     speedglm 198.67825   200.88754  201.1752 205.61176
+#> 1   fastglm_qr  89.89307    91.28441  91.55310  93.28890
+#> 2 fastglm_chol  40.44908    41.10312  42.00083  44.65872
+#> 3      glm.fit 287.50582   327.76774 328.83403 363.60981
+#> 4    glm2_fit2 345.99515   383.39100 396.15101 462.36864
+#> 5     speedglm 201.66002   207.48120 207.33500 217.53341
 pois_tim <- do.call(rbind, pois_tim)
 .plot_scaling(pois_tim, "Poisson regression: median time vs n (p = 30)")
 ```
@@ -258,8 +258,8 @@ mb_sparse <- microbenchmark(
 )
 print(.fmt(mb_sparse))
 #>             expr min (ms) median (ms) mean (ms) max (ms)
-#> 1  fastglm_dense 218.8495    221.7805  221.3548 225.0010
-#> 2 fastglm_sparse 250.2879    258.0642  267.9884 308.2838
+#> 1  fastglm_dense 229.6472    232.9752  244.7914 289.6429
+#> 2 fastglm_sparse 267.2627    276.7871  284.6829 327.2953
 
 cat("ncol(Xd) =", ncol(Xd), "  fraction nonzero =",
     round(length(Xs@x) / prod(dim(Xs)), 3), "\n")
@@ -284,8 +284,8 @@ mb_big <- microbenchmark(
 )
 print(.fmt(mb_big))
 #>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1      dense 144.3981    146.6374  149.5357 157.5715
-#> 2 big.matrix 150.8332    154.1466  153.0670 154.2213
+#> 1      dense 147.9737    149.2950  151.0093 155.7592
+#> 2 big.matrix 160.4455    166.5907  165.6877 170.0268
 
 f1 <- fastglm(X,  y, family = binomial(), method = 2)
 f2 <- fastglm(Xb, y, family = binomial(), method = 2)
@@ -324,23 +324,23 @@ for (n in c(1e3, 1e4, 1e5, 5e5)) {
 #> 
 #> --- n = 1000 ---
 #>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_nb 0.627464    0.717582  1.013176 2.304405
-#> 2     glm.nb 7.247816    7.463353  7.444772 7.658103
+#> 1 fastglm_nb 0.706061    0.759771 0.8295612 1.105934
+#> 2     glm.nb 7.538588    7.567739 7.6600218 8.004389
 #> 
 #> --- n = 10000 ---
-#>         expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_nb  6.651061    6.699072  7.014633  8.259409
-#> 2     glm.nb 59.084116   60.004156 62.593839 67.619332
+#>         expr  min (ms) median (ms) mean (ms) max (ms)
+#> 1 fastglm_nb  7.999469    8.622177   9.41902 12.27081
+#> 2     glm.nb 60.877743   62.264117  64.43124 69.25191
 #> 
 #> --- n = 1e+05 ---
-#>         expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_nb  58.27662    59.42122   60.3820  65.42665
-#> 2     glm.nb 507.93289   524.96584  540.8787 591.79917
+#>         expr min (ms) median (ms) mean (ms)  max (ms)
+#> 1 fastglm_nb  66.2865    67.08982  68.30545  72.83228
+#> 2     glm.nb 513.7286   537.48618 549.85302 592.27464
 #> 
 #> --- n = 5e+05 ---
 #>         expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_nb  291.6463    295.4331  296.9507  305.5486
-#> 2     glm.nb 2110.3085   2141.2810 2148.2098 2189.8533
+#> 1 fastglm_nb  351.6267    366.0966  362.7968  373.2974
+#> 2     glm.nb 2095.8521   2180.2203 2214.6316 2350.5706
 nb_tim <- do.call(rbind, nb_tim)
 .plot_scaling(nb_tim, "Negative-binomial joint MLE: median time vs n")
 ```
@@ -360,12 +360,12 @@ df <- data.frame(y = y, x1 = X[, 2], x2 = X[, 3], x3 = X[, 4])
 f_nb <- fastglm_nb(X, y)
 m_nb <- MASS::glm.nb(y ~ x1 + x2 + x3, data = df)
 cat("coef max abs diff:", max(abs(unname(coef(f_nb)) - unname(coef(m_nb)))), "\n")
-#> coef max abs diff: 2.930989e-14
+#> coef max abs diff: 2.198242e-14
 cat("theta diff       :", abs(f_nb$theta - m_nb$theta), "\n")
-#> theta diff       : 3.095302e-13
+#> theta diff       : 9.67848e-12
 cat("logLik diff      :",
     abs(as.numeric(logLik(f_nb)) - as.numeric(logLik(m_nb))), "\n")
-#> logLik diff      : 1.164153e-10
+#> logLik diff      : 2.095476e-09
 ```
 
 # Firth bias-reduced GLMs
@@ -392,9 +392,9 @@ cat("\n--- Heinze-Schemper sex2 (n =", nrow(sex2), ") ---\n")
 #> --- Heinze-Schemper sex2 (n = 239 ) ---
 print(.fmt(mb_firth_logistf))
 #>      expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm 0.260924   0.2885375 0.3377211 0.651736
-#> 2 logistf 6.877832   7.0460960 7.3229198 9.329263
-#> 3  brglm2 2.449914   2.6850080 2.9001760 5.041729
+#> 1 fastglm 0.260186    0.317832 0.3190579 0.406146
+#> 2 logistf 7.293777    7.533709 7.6178246 8.711926
+#> 3  brglm2 2.716947    3.048514 3.4343322 6.777587
 ```
 
 Next, a comprehensive comparison of `fastglm(firth = TRUE)` against `brglm2` across all supported families and links. We fix `n = 10000` and `p = 5` to see the per-family speedup:
@@ -445,14 +445,14 @@ for (fi in firth_families) {
     firth_all_tim[[length(firth_all_tim) + 1]] <-
         transform(.collect(mb, n), family = fi$label)
 }
-#> binomial logit       fastglm=   3.61 ms  brglm2=  14.60 ms  speedup=  4.0x
-#> binomial probit      fastglm=   4.36 ms  brglm2=  16.04 ms  speedup=  3.7x
-#> binomial cloglog     fastglm=   5.16 ms  brglm2=  17.59 ms  speedup=  3.4x
-#> poisson log          fastglm=   3.56 ms  brglm2= 123.87 ms  speedup= 34.8x
-#> poisson sqrt         fastglm=   4.58 ms  brglm2= 120.81 ms  speedup= 26.4x
-#> Gamma log            fastglm=   4.02 ms  brglm2= 104.00 ms  speedup= 25.9x
-#> gaussian identity    fastglm=   1.42 ms  brglm2=  20.31 ms  speedup= 14.4x
-#> gaussian log         fastglm=   7.15 ms  brglm2=  28.36 ms  speedup=  4.0x
+#> binomial logit       fastglm=   3.67 ms  brglm2=  13.70 ms  speedup=  3.7x
+#> binomial probit      fastglm=   4.73 ms  brglm2=  16.10 ms  speedup=  3.4x
+#> binomial cloglog     fastglm=   5.51 ms  brglm2=  19.41 ms  speedup=  3.5x
+#> poisson log          fastglm=   3.81 ms  brglm2= 125.11 ms  speedup= 32.8x
+#> poisson sqrt         fastglm=   4.65 ms  brglm2= 122.28 ms  speedup= 26.3x
+#> Gamma log            fastglm=   4.50 ms  brglm2= 104.73 ms  speedup= 23.3x
+#> gaussian identity    fastglm=   1.75 ms  brglm2=  21.60 ms  speedup= 12.3x
+#> gaussian log         fastglm=   5.50 ms  brglm2=  31.19 ms  speedup=  5.7x
 firth_all_tim <- do.call(rbind, firth_all_tim)
 ```
 
@@ -519,22 +519,22 @@ for (n_val in c(1e3, 1e4, 5e4)) {
 }
 #> 
 #> --- n = 1000 ---
-#>   binomial logit       fastglm=   0.67 ms  brglm2=   2.47 ms
-#>   poisson log          fastglm=   0.40 ms  brglm2=  12.51 ms
-#>   Gamma log            fastglm=   0.53 ms  brglm2=  11.95 ms
-#>   gaussian identity    fastglm=   0.51 ms  brglm2=   3.48 ms
+#>   binomial logit       fastglm=   0.48 ms  brglm2=   2.34 ms
+#>   poisson log          fastglm=   0.70 ms  brglm2=  12.87 ms
+#>   Gamma log            fastglm=   0.46 ms  brglm2=  12.06 ms
+#>   gaussian identity    fastglm=   0.21 ms  brglm2=   3.50 ms
 #> 
 #> --- n = 10000 ---
-#>   binomial logit       fastglm=   4.84 ms  brglm2=  13.99 ms
-#>   poisson log          fastglm=   4.80 ms  brglm2= 125.04 ms
-#>   Gamma log            fastglm=   4.87 ms  brglm2=  99.31 ms
-#>   gaussian identity    fastglm=   1.90 ms  brglm2=  20.07 ms
+#>   binomial logit       fastglm=   4.56 ms  brglm2=  13.44 ms
+#>   poisson log          fastglm=   3.87 ms  brglm2= 126.64 ms
+#>   Gamma log            fastglm=   4.19 ms  brglm2= 102.34 ms
+#>   gaussian identity    fastglm=   1.39 ms  brglm2=  20.14 ms
 #> 
 #> --- n = 50000 ---
-#>   binomial logit       fastglm=  18.90 ms  brglm2=  75.67 ms
-#>   poisson log          fastglm=  19.70 ms  brglm2= 612.02 ms
-#>   Gamma log            fastglm=  18.55 ms  brglm2= 502.03 ms
-#>   gaussian identity    fastglm=   5.40 ms  brglm2= 112.27 ms
+#>   binomial logit       fastglm=  18.36 ms  brglm2=  70.03 ms
+#>   poisson log          fastglm=  21.11 ms  brglm2= 626.05 ms
+#>   Gamma log            fastglm=  19.36 ms  brglm2= 510.59 ms
+#>   gaussian identity    fastglm=   5.71 ms  brglm2= 102.76 ms
 firth_scale_tim <- do.call(rbind, firth_scale_tim)
 
 # one panel per family
@@ -590,12 +590,12 @@ cat(sprintf("\n--- Firth logistic, n=%d, p=%d ---\n", n_meth, p_meth))
 #> --- Firth logistic, n=10000, p=10 ---
 print(.fmt(mb_methods))
 #>        expr    min (ms) median (ms)   mean (ms)    max (ms)
-#> 1  ColPivQR    5.362472    5.982843    5.915218    6.242742
-#> 2        QR    5.161121    5.633318    5.518830    5.751439
-#> 3       LLT    3.599472    4.061788    3.924028    4.143993
-#> 4      LDLT    4.051415    4.303524    4.313774    4.750711
-#> 5 FullPivQR 2253.015723 2309.661282 2303.293933 2335.489806
-#> 6       SVD    9.415076   10.512277   10.413664   11.228055
+#> 1  ColPivQR    5.277561    5.467022    5.598091    6.217568
+#> 2        QR    5.273051    6.519328    6.250089    6.751798
+#> 3       LLT    3.830794    4.169577    4.555953    6.063080
+#> 4      LDLT    3.896230    4.799993    4.773917    5.829995
+#> 5 FullPivQR 2287.996677 2317.206225 2318.172882 2374.701632
+#> 6       SVD    9.380718   10.070789   10.508841   12.025997
 ```
 
 All six methods agree to machine precision. The LLT and LDLT Cholesky methods are the fastest because they only decompose the `p x p` cross-product, while the QR and SVD methods work with the full `n x p` matrix.
@@ -632,10 +632,10 @@ cat(sprintf("\n--- Firth logistic across backends (n=%d, p=%d) ---\n", n_sp, p_s
 #> --- Firth logistic across backends (n=5000, p=6) ---
 print(.fmt(mb_backends))
 #>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1      dense 1.478952    1.488259  1.498378 1.542502
-#> 2     sparse 3.378974    3.631411  3.590001 3.707179
-#> 3 big.matrix 1.673579    1.710192  2.163996 3.895656
-#> 4  streaming 1.820482    1.858858  1.945614 2.178330
+#> 1      dense 1.200152    1.663329  1.687445 2.476195
+#> 2     sparse 3.123954    4.103362  3.813295 4.389091
+#> 3 big.matrix 1.378994    1.593793  1.871576 2.949786
+#> 4  streaming 1.782516    1.881080  1.910379 2.117978
 
 # Verify agreement
 ref_sp <- coef(fastglm(X_sp, y_sp, family = binomial(), method = 2, firth = TRUE))
@@ -687,23 +687,23 @@ for (n in c(1e3, 1e4, 5e4, 1e5)) {
 #> 
 #> --- n = 1000 ---
 #>             expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_hurdle 0.515862    0.551491  1.395574 4.783921
-#> 2    pscl_hurdle 4.828775    4.938532  5.099572 5.853447
+#> 1 fastglm_hurdle 0.526891    0.564488  1.303431 4.307911
+#> 2    pscl_hurdle 5.038039    5.170920  5.363587 6.333393
 #> 
 #> --- n = 10000 ---
-#>             expr min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_hurdle  2.69616     2.96389   3.02835  3.483893
-#> 2    pscl_hurdle 42.73213    43.59690  46.81997 60.060326
+#>             expr  min (ms) median (ms) mean (ms) max (ms)
+#> 1 fastglm_hurdle  2.647493    3.040765  2.947014  3.10042
+#> 2    pscl_hurdle 43.356229   43.744622 46.307220 57.09799
 #> 
 #> --- n = 50000 ---
 #>             expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_hurdle  14.20876    15.24507  17.10269  25.61377
-#> 2    pscl_hurdle 275.05797   277.89808 280.22831 286.18049
+#> 1 fastglm_hurdle  15.02326    15.14602  15.35893  15.92387
+#> 2    pscl_hurdle 274.16302   277.63166 279.13816 289.09067
 #> 
 #> --- n = 1e+05 ---
 #>             expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_hurdle  31.42634    31.92039  34.07009  42.67797
-#> 2    pscl_hurdle 486.21634   489.21893 492.91396 503.01166
+#> 1 fastglm_hurdle  31.81473    31.86122  33.61961  39.64237
+#> 2    pscl_hurdle 486.22273   496.61492 506.94603 555.09117
 hurdle_tim <- do.call(rbind, hurdle_tim)
 .plot_scaling(hurdle_tim, "Hurdle Poisson: median time vs n")
 ```
@@ -736,8 +736,8 @@ mb_hurdle_nb <- microbenchmark(
 )
 print(.fmt(mb_hurdle_nb))
 #>             expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_hurdle 21.00155    21.43431  23.15795 27.03798
-#> 2    pscl_hurdle 48.67073    48.88582  49.08709 49.70471
+#> 1 fastglm_hurdle  21.3649    22.59371  23.66252 27.02896
+#> 2    pscl_hurdle  48.3456    49.83931  49.56409 50.50737
 ```
 
 # Zero-inflated models
@@ -771,23 +771,23 @@ for (n in c(1e3, 1e4, 5e4, 1e5)) {
 #> 
 #> --- n = 1000 ---
 #>         expr min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi 4.204960    4.325090  4.547425  5.474238
-#> 2    pscl_zi 8.875147    8.937672  9.335315 10.067304
+#> 1 fastglm_zi 4.200409    4.330707  4.362671  4.599708
+#> 2    pscl_zi 8.977114    9.059360  9.298890 10.053774
 #> 
 #> --- n = 10000 ---
-#>         expr min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi 49.29369    53.55949  52.88751  54.65964
-#> 2    pscl_zi 93.95593   105.88886 102.39822 108.81699
+#>         expr min (ms) median (ms) mean (ms) max (ms)
+#> 1 fastglm_zi 45.80688    47.98984  48.73255  51.8083
+#> 2    pscl_zi 95.77604   105.66725 104.73037 117.7136
 #> 
 #> --- n = 50000 ---
 #>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_zi 234.7449    238.1448  239.0739 247.5707
-#> 2    pscl_zi 517.4489    542.0748  540.2612 554.4235
+#> 1 fastglm_zi 237.8157    246.4627  245.1594 250.7469
+#> 2    pscl_zi 535.0187    548.5062  566.9048 617.4711
 #> 
 #> --- n = 1e+05 ---
 #>         expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi  453.4962    467.4733  470.3528  501.8436
-#> 2    pscl_zi 1047.5451   1077.6677 1081.3805 1121.2999
+#> 1 fastglm_zi  451.6678    467.4127  471.1382  489.6206
+#> 2    pscl_zi 1055.8323   1076.4873 1083.9564 1143.0180
 zi_tim <- do.call(rbind, zi_tim)
 .plot_scaling(zi_tim, "Zero-inflated Poisson: median time vs n")
 ```
@@ -814,9 +814,9 @@ mb_zi_nb <- microbenchmark(
     times = 3L
 )
 print(.fmt(mb_zi_nb))
-#>         expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi  71.35722    72.28603  73.48226  76.80354
-#> 2    pscl_zi 147.58299   156.41082 153.97770 157.93930
+#>         expr  min (ms) median (ms) mean (ms) max (ms)
+#> 1 fastglm_zi  78.97354    79.65324  88.59188 107.1489
+#> 2    pscl_zi 147.69590   154.62785 154.20006 160.2764
 ```
 
 # Summary

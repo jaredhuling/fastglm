@@ -1,7 +1,7 @@
 ---
 title: "Negative Binomial Convergence: fastglm vs MASS"
 author: "Jared Huling"
-date: "2026-05-14"
+date: "2026-05-15"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Negative Binomial Convergence: fastglm vs MASS}
@@ -168,7 +168,7 @@ cat(sprintf("\nAmong agreeing fits:\n"))
 cat(sprintf("  Max |logLik difference|:  %.2e\n", max(abs(ll_good))))
 #>   Max |logLik difference|:  1.74e-06
 cat(sprintf("  Mean |logLik difference|: %.2e\n", mean(abs(ll_good))))
-#>   Mean |logLik difference|: 2.19e-08
+#>   Mean |logLik difference|: 2.20e-08
 ```
 
 
