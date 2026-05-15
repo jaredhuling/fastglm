@@ -179,6 +179,14 @@ protected:
     
     virtual void update_w() override
     {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data(), mu_eta.size());
+            Eigen::Map<const Eigen::ArrayXd> pw(weights.data(), weights.size());
+            Eigen::Map<Eigen::ArrayXd>       ww(w.data(), w.size());
+            if (fglm::stable_nb_weights(fam_code, fam_params, m, me, pw, ww))
+                return;
+        }
         // w <- sqrt((weights[good] * mu.eta.val[good]^2)/variance(mu)[good])
         w = (weights.array() * mu_eta.array().square() / var_mu.array()).array().sqrt();
     }
@@ -267,11 +275,11 @@ protected:
         // Only halve to recover from infinite dev / invalid (eta, mu); skip
         // the "increasing deviance" branch.
         const bool firth_skip_dev_halving = firth_;
-        // check for infinite deviance
-        if (std::isinf(dev))
+        // check for non-finite deviance (Inf or NaN)
+        if (!std::isfinite(dev))
         {
             int itrr = 0;
-            while(std::isinf(dev))
+            while(!std::isfinite(dev))
             {
                 ++itrr;
                 if (itrr > maxit)

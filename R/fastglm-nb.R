@@ -67,7 +67,7 @@ fastglm_nb <- function(x, y,
     if (is.null(offset))  offset  <- rep(0, n)
     weights <- as.numeric(weights); offset <- as.numeric(offset)
 
-    # Pilot Poisson fit to seed mu / eta and (if needed) theta.
+    # Pilot Poisson fit -- used only for theta initialization via theta.ml.
     pilot <- fastglmPure(x, y,
                          family  = poisson(link = link),
                          weights = weights,
@@ -76,18 +76,36 @@ fastglm_nb <- function(x, y,
                          method  = as.integer(method),
                          tol     = tol,
                          maxit   = maxit)
-    mu_init  <- as.numeric(pilot$fitted.values)
-    eta_init <- as.numeric(pilot$linear.predictors)
-    beta_init <- if (!is.null(start)) as.numeric(start) else as.numeric(pilot$coefficients)
 
-    # Theta init: caller-supplied, or MoM (signalled to C++ via theta <= 0).
+    if (!is.null(start)) {
+        beta_init <- as.numeric(start)
+        mu_init   <- as.numeric(pilot$fitted.values)
+        eta_init  <- as.numeric(pilot$linear.predictors)
+    } else {
+        # Use the NB family's mustart (y + small constant for y=0) rather
+        # than the Poisson MLE.  The Poisson pilot can overshoot badly when
+        # theta is small, making the first NB IRLS step diverge.
+        mustart  <- y + 0.1667 * (y == 0)
+        lnk      <- make.link(link)
+        eta_init <- as.numeric(lnk$linkfun(mustart) + offset)
+        mu_init  <- as.numeric(lnk$linkinv(eta_init - offset))
+        beta_init <- as.numeric(qr.solve(x, eta_init - offset))
+    }
+
+    # Theta init: caller-supplied, or estimated from the Poisson pilot.
     init_th <- if (!is.null(init.theta)) {
         if (!is.numeric(init.theta) || length(init.theta) != 1L ||
             !is.finite(init.theta) || init.theta <= 0)
             stop("'init.theta' must be a positive finite scalar.", call. = FALSE)
         init.theta
     } else {
-        -1
+        if (requireNamespace("MASS", quietly = TRUE)) {
+            th <- suppressWarnings(
+                MASS::theta.ml(y, pilot$fitted.values, limit = 10L))
+            if (!is.finite(th) || th <= 0) -1 else th
+        } else {
+            -1
+        }
     }
 
     # The C++ driver uses the native NB kernels for {log,sqrt,identity}, but
