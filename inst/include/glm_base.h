@@ -173,7 +173,7 @@ public:
             
             run_step_halving(i);
             
-            if (std::isinf(dev) && i == 0)
+            if (!std::isfinite(dev) && i == 0)
             {
                 stop("cannot find valid starting values: please specify some");
             }

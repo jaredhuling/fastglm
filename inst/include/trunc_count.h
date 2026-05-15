@@ -440,9 +440,9 @@ protected:
         // monotonicity halving (Fisher scoring is monotone here, and the
         // true deviance is expensive to compute).
         (void) iterr;
-        if (std::isinf(dev)) {
+        if (!std::isfinite(dev)) {
             int itrr = 0;
-            while (std::isinf(dev) && itrr < maxit) {
+            while (!std::isfinite(dev) && itrr < maxit) {
                 ++itrr;
                 step_halve();
                 update_dev_resids_dont_update_old();

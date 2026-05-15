@@ -102,6 +102,14 @@ protected:
 
     virtual void update_w()
     {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data(), mu_eta.size());
+            Eigen::Map<const Eigen::ArrayXd> pw(weights.data(), weights.size());
+            Eigen::Map<Eigen::ArrayXd>       ww(w.data(), w.size());
+            if (fglm::stable_nb_weights(fam_code, fam_params, m, me, pw, ww))
+                return;
+        }
         w = (weights.array() * mu_eta.array().square() / var_mu.array()).array().sqrt();
     }
 
@@ -171,9 +179,9 @@ protected:
     virtual void run_step_halving(int &iterr)
     {
         const bool firth_skip = firth_;
-        if (std::isinf(dev)) {
+        if (!std::isfinite(dev)) {
             int itrr = 0;
-            while (std::isinf(dev)) {
+            while (!std::isfinite(dev)) {
                 if (++itrr > maxit) break;
                 step_halve();
                 update_dev_resids_dont_update_old();

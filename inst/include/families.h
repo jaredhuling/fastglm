@@ -93,7 +93,7 @@ inline void linkinv(int code,
     case FAM_BINOMIAL_LOG:
     case FAM_NB_LOG:
     case FAM_TWEEDIE_LOG:
-        mu = eta.exp(); break;
+        mu = eta.exp().max(thresh_eps()); break;
     case FAM_GAUSSIAN_INVERSE:
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
@@ -401,17 +401,30 @@ inline double dev_resids_sum(int code,
     case FAM_NB_SQRT:
     case FAM_NB_IDENTITY: {
         // d_i = 2 * [ y * log(y/mu) - (y + theta) * log((y + theta)/(mu + theta)) ]
-        // y = 0 limit: d_i = 2 * theta * log((mu + theta)/theta) = 2*theta*log1p(mu/theta).
+        // y = 0 limit: d_i = 2 * theta * log1p(mu/theta).
+        //
+        // The naive formula suffers from -Inf - (-Inf) = NaN when mu is
+        // very large.  Rewrite by expanding logs and regrouping:
+        //
+        //   d_i = 2 * [ y*log(y) - (y+t)*log(y+t) + (y+t)*log(mu+t) - y*log(mu) ]
+        //       = 2 * [ y*log(y) - (y+t)*log(y+t) + y*log1p(t/mu) + t*log(mu+t) ]
+        //
+        // Every term here is finite when mu is finite and positive.
         const double theta = params.theta;
         for (Eigen::Index i = 0; i < n; ++i) {
             double yi = y[i], mi = mu[i];
-            double a = (yi > 0.0) ? yi * std::log(yi / mi) : 0.0;
-            // (y + theta) * log((y + theta)/(mu + theta)) computed in stable form.
-            // log((y + theta)/(mu + theta)) = log1p((y - mu)/(mu + theta))
             double yt = yi + theta;
             double mt = mi + theta;
-            double b  = yt * std::log(yt / mt);
-            s += 2.0 * wt[i] * (a - b);
+            double d;
+            if (yi < 1.0) {
+                d = 2.0 * theta * std::log1p(mi / theta);
+            } else {
+                d = 2.0 * (yi * std::log(yi)
+                           - yt * std::log(yt)
+                           + yi * std::log1p(theta / mi)
+                           + theta * std::log(mt));
+            }
+            s += wt[i] * d;
         }
         break;
     }
@@ -598,6 +611,33 @@ inline bool validmu(int code,
     default:
         return mu.allFinite();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Stable IRLS working-weight computation for NB log link.
+//
+// The generic formula  w = sqrt(mu_eta^2 / V(mu))  overflows when mu is
+// large and theta is small because V(mu) = mu + mu^2/theta can exceed
+// DBL_MAX.  For the log link, mu_eta = mu, so:
+//
+//   w^2 = mu^2 / (mu + mu^2/theta) = mu * theta / (theta + mu)
+//
+// which is bounded by theta and never overflows.  Returns TRUE if a
+// stable formula was used (caller should skip the generic path).
+// ---------------------------------------------------------------------------
+inline bool stable_nb_weights(int code,
+                              const FamilyParams& params,
+                              const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                              const Eigen::Ref<const Eigen::ArrayXd>& /*mu_eta*/,
+                              const Eigen::Ref<const Eigen::ArrayXd>& prior_wt,
+                              Eigen::Ref<Eigen::ArrayXd> w)
+{
+    if (code != FAM_NB_LOG) return false;
+    const double theta = params.theta;
+    if (theta <= 0.0) return false;
+    // w = sqrt(prior_wt * theta * mu / (theta + mu))
+    w = (prior_wt * theta * mu / (theta + mu)).sqrt();
+    return true;
 }
 
 }  // namespace fglm

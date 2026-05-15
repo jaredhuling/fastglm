@@ -50,6 +50,29 @@ test_that("init.theta is honored", {
     expect_equal(unname(coef(f1)), unname(coef(f2)), tolerance = 1e-7)
 })
 
+test_that("fastglm_nb converges on overdispersed data where MASS::glm.nb fails", {
+    set.seed(4)
+    n  <- 200
+    p  <- 9
+    X  <- cbind(1, matrix(rnorm(n * (p - 1)), n, p - 1))
+    beta <- c(4, 1.5, -1.2, 1.5, -1.2, 1.5, -1.2, 1.5, -1.2)
+    mu <- exp(X %*% beta)
+    y  <- MASS::rnegbin(n, mu = mu, theta = 1)
+
+    f <- fastglm_nb(X, y, link = "log")
+    expect_true(f$converged)
+    expect_true(all(is.finite(coef(f))))
+    expect_true(is.finite(f$theta))
+    expect_equal(f$theta, 1, tolerance = 0.2)
+
+    # Verify log-likelihood against glm at the converged theta.
+    fam <- MASS::negative.binomial(theta = f$theta)
+    g <- glm(y ~ X[, -1], family = fam)
+    expect_equal(unname(coef(f)), unname(coef(g)), tolerance = 1e-5)
+    expect_equal(as.numeric(logLik(f)), as.numeric(logLik(g)),
+                 tolerance = 1e-3)
+})
+
 test_that("fastglm_nb returns a fastglm-classed object with the expected slots", {
     set.seed(33)
     n  <- 200
