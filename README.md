@@ -145,7 +145,7 @@ system.time(f0 <- fastglm(x, y, family = binomial()))                 # default 
 #>   0.004   0.000   0.005
 system.time(f2 <- fastglm(x, y, family = binomial(), method = 2))     # LLT
 #>    user  system elapsed 
-#>   0.002   0.000   0.003
+#>   0.002   0.000   0.002
 ```
 
 ## Speed
@@ -353,9 +353,9 @@ y <- ifelse(z == 1, 0L, rpois(n, exp(eta_c)))
 f_zi <- fastglm_zi(y ~ x1 + x2, data = data.frame(y, x1, x2), dist = "poisson")
 coef(f_zi)
 #> count_(Intercept)          count_x1          count_x2  zero_(Intercept) 
-#>         0.6647500         0.3965097        -0.3407115        -0.3749949 
+#>         0.6647396         0.3965153        -0.3407168        -0.3750258 
 #>           zero_x1           zero_x2 
-#>         0.4512522         0.1819184
+#>         0.4512788         0.1819040
 ```
 
 ### Firth bias-reduced GLMs
