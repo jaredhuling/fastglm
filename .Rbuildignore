@@ -19,6 +19,8 @@ docs
 ^vignettes/_precompile\.R$
 ^vignettes/.*\.Rmd\.orig$
 ^vignettes/.*_files$
+^vignettes/cache$
+^vignettes/figure$
 ^revdep$
 ^.*\.Rcheck$
 ^.*\.tar\.gz$

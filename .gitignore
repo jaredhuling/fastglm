@@ -17,3 +17,7 @@ inst/doc
 
 # revdepcheck output (regenerable; not in package build either)
 revdep/
+
+# knitr artifacts from vignette precompilation
+vignettes/cache/
+vignettes/figure/
