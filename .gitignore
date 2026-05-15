@@ -21,3 +21,6 @@ revdep/
 # knitr artifacts from vignette precompilation
 vignettes/cache/
 vignettes/figure/
+
+# R profiling output
+Rprof.out

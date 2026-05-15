@@ -2,6 +2,7 @@
 # fastglm 0.1.1
 
 * Adds Firth bias-correction for standard GLM families
+* Adds additional features to improve numerical stability on edge cases
 
 ## New features
 

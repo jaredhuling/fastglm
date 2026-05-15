@@ -10,16 +10,12 @@
 #include <cmath>
 #include <vector>
 
-// Zero-inflated Poisson / NB driver via EM.  All numerical work in C++.
+// Zero-inflated Poisson / NB driver via EM with SQUAREM acceleration.
 //
 // Model:
 //   Z_i ~ Bern(pi_i),     g_z(pi_i) = z_i' gamma            (zero link)
 //   if Z_i = 0:  Y_i ~ Poisson(mu_i) or NB2(mu_i, theta)    (log link on count)
 //   if Z_i = 1:  Y_i = 0
-//
-// Observed log-lik:
-//   y > 0:  log(1 - pi) + log f(y; mu, theta)
-//   y = 0:  log( pi + (1 - pi) * f(0; mu, theta) )
 //
 // EM:
 //   E-step:  tau_i = pi_i / (pi_i + (1-pi_i) f_0_i)  for y_i = 0;  tau_i = 0 ow.
@@ -27,10 +23,11 @@
 //   M-step (beta):   Poisson (or NB) regression on (y, X) with weights w_i*(1-tau_i).
 //   M-step (theta):  Brent on the NB-only theta-MLE at fixed beta.
 //
+// SQUAREM (Varadhan & Roland 2008) acceleration converts EM's linear
+// convergence to near-quadratic by extrapolating two successive EM maps.
+//
 // Final vcov: numerical Jacobian of the analytical observed score at the EM
-// fixed point (block-structured score for (gamma, beta, theta)).  Cheaper /
-// more stable than fully numerical Hessian; reuses the per-observation score
-// kernels in zi.h.
+// fixed point.
 
 using namespace Rcpp;
 using Eigen::VectorXd;
@@ -39,40 +36,40 @@ using Eigen::ArrayXd;
 using Eigen::Map;
 
 // ---------------------------------------------------------------------------
-// Score helpers (analytical, vectorized).  Used both by the M-steps (only
-// weights are needed) and by the final numerical-Jacobian vcov.
+// Score helpers (analytical, vectorized where possible).
 // ---------------------------------------------------------------------------
 
-// Score wrt gamma (zero coefs):  s_gamma_k = sum_i Z_ik * s_eta_z_i.
 static VectorXd score_gamma(int zero_fam_code,
                             const VectorXd& tau, const VectorXd& eta_z,
                             const VectorXd& wts, const MatrixXd& Z)
 {
     const Eigen::Index n = Z.rows();
-    const Eigen::Index p = Z.cols();
     VectorXd s_per_obs(n);
-    for (Eigen::Index i = 0; i < n; ++i) {
-        s_per_obs[i] = wts[i] * fglm::zi::score_eta_z(zero_fam_code, tau[i], eta_z[i]);
+    if (zero_fam_code == fglm::FAM_BINOMIAL_LOGIT) {
+        ArrayXd pi = 1.0 / (1.0 + (-eta_z.array()).exp());
+        s_per_obs = (wts.array() * (tau.array() - pi)).matrix();
+    } else {
+        for (Eigen::Index i = 0; i < n; ++i)
+            s_per_obs[i] = wts[i] * fglm::zi::score_eta_z(zero_fam_code, tau[i], eta_z[i]);
     }
     return Z.transpose() * s_per_obs;
 }
 
-// Score wrt beta (count coefs):
 static VectorXd score_beta(int dist_code, double theta,
                            const VectorXd& tau, const VectorXd& y,
                            const VectorXd& mu,
                            const VectorXd& wts, const MatrixXd& X)
 {
-    const Eigen::Index n = X.rows();
-    VectorXd s_per_obs(n);
-    for (Eigen::Index i = 0; i < n; ++i) {
-        s_per_obs[i] = wts[i] * fglm::zi::score_eta_count(
-            dist_code, theta, tau[i], y[i], mu[i]);
+    ArrayXd w = wts.array() * (1.0 - tau.array());
+    VectorXd s_per_obs;
+    if (dist_code == 0) {
+        s_per_obs = (w * (y.array() - mu.array())).matrix();
+    } else {
+        s_per_obs = (w * theta * (y.array() - mu.array()) / (theta + mu.array())).matrix();
     }
     return X.transpose() * s_per_obs;
 }
 
-// Score wrt theta (NB only):
 static double score_theta_zi(double theta,
                              const VectorXd& tau, const VectorXd& y,
                              const VectorXd& mu, const VectorXd& wts)
@@ -86,10 +83,7 @@ static double score_theta_zi(double theta,
 }
 
 // ---------------------------------------------------------------------------
-// Theta MLE for the ZI count component (NB only).  At an EM fixed point the
-// posterior tau_i is fixed; the M-step for theta is a 1-D root find on
-//   sum_i wts_i (1 - tau_i) * score_theta_one(theta, y_i, mu_i).
-// We bracket adaptively from the current theta and Brent-solve.
+// Theta MLE for the ZI count component (NB only).
 // ---------------------------------------------------------------------------
 static double mle_theta_zi(double theta_init,
                            const VectorXd& tau, const VectorXd& y,
@@ -124,7 +118,6 @@ static double mle_theta_zi(double theta_init,
     if (sb == 0.0) return b;
     if (sa * sb > 0) return (std::fabs(sa) < std::fabs(sb)) ? a : b;
 
-    // Brent
     double c = a, sc = sa, d = b - a, e = d;
     for (int iter = 0; iter < maxit; ++iter) {
         if (sb * sc > 0) { c = a; sc = sa; d = b - a; e = d; }
@@ -156,7 +149,7 @@ static double mle_theta_zi(double theta_init,
 }
 
 // ---------------------------------------------------------------------------
-// Single observed-data log-likelihood pass (also returns posterior tau).
+// Observed log-likelihood + posterior tau.
 // ---------------------------------------------------------------------------
 static double obs_loglik(int dist_code, int zero_fam_code, double theta,
                          const VectorXd& y, const VectorXd& mu,
@@ -168,10 +161,7 @@ static double obs_loglik(int dist_code, int zero_fam_code, double theta,
 }
 
 // ---------------------------------------------------------------------------
-// Full analytical score vector at (gamma, beta, theta), evaluated at the
-// posterior tau implied by the current params.  Used for the numerical-
-// Jacobian observed-information matrix (Louis equivalent) at the EM fixpoint.
-// Order of params:  [gamma (p_z), beta (p_c), theta (NB only)].
+// Full analytical score vector.
 // ---------------------------------------------------------------------------
 static VectorXd full_score(int dist_code, int zero_fam_code,
                            const VectorXd& gamma, const VectorXd& beta,
@@ -203,8 +193,6 @@ static VectorXd full_score(int dist_code, int zero_fam_code,
 
 // ---------------------------------------------------------------------------
 // Numerical Jacobian of full_score (= negative observed information).
-// The observed-information matrix is - d s / d theta_full = J -> we return
-// (-J) so the caller can invert directly.
 // ---------------------------------------------------------------------------
 static MatrixXd obs_info_numjac(int dist_code, int zero_fam_code,
                                 const VectorXd& gamma, const VectorXd& beta,
@@ -244,121 +232,20 @@ static MatrixXd obs_info_numjac(int dist_code, int zero_fam_code,
                                   Z, X, y, wts, off_z, off_c);
         J.col(k) = (s_k - s0) / h;
     }
-    // Symmetrize and negate -> observed information.
     MatrixXd I_obs = -0.5 * (J + J.transpose());
     return I_obs;
 }
 
 // ---------------------------------------------------------------------------
-// M-step gamma:  weighted (binomial) regression with response = tau,
-//   weights = wts, link = zero_fam_code.  Uses the existing glm class with
-//   native fam_code dispatch.
-// We supply binomial family R-callbacks too as a fallback (the C++ class
-// honors fam_code ahead of them).
-// ---------------------------------------------------------------------------
-static void mstep_gamma(const Map<MatrixXd>& Z, const VectorXd& tau,
-                        const Map<VectorXd>& wts, const Map<VectorXd>& off_z,
-                        int zero_fam_code,
-                        Rcpp::Function var_fun_z, Rcpp::Function mu_eta_fun_z,
-                        Rcpp::Function linkinv_fun_z, Rcpp::Function dev_resids_fun_z,
-                        Rcpp::Function valideta_fun_z, Rcpp::Function validmu_fun_z,
-                        VectorXd& gamma_out, VectorXd& eta_z_out,
-                        VectorXd& mu_z_out,
-                        const VectorXd& gamma_warm, double tol, int maxit)
-{
-    const Eigen::Index n = Z.rows();
-    NumericVector y_nv(n);
-    for (Eigen::Index i = 0; i < n; ++i) y_nv[i] = tau[i];
-    Map<VectorXd> y_map(as<Map<VectorXd> >(y_nv));
-
-    NumericVector mu0_nv(n), eta0_nv(n);
-    for (Eigen::Index i = 0; i < n; ++i) {
-        double mi = (y_map[i] + 0.5) / 2.0;
-        if (mi <= 1e-6) mi = 1e-6;
-        if (mi >= 1.0 - 1e-6) mi = 1.0 - 1e-6;
-        mu0_nv[i]  = mi;
-        eta0_nv[i] = std::log(mi / (1.0 - mi));
-    }
-    Map<VectorXd> mu0(as<Map<VectorXd> >(mu0_nv));
-    Map<VectorXd> eta0(as<Map<VectorXd> >(eta0_nv));
-
-    NumericVector start_nv(Z.cols());
-    for (Eigen::Index k = 0; k < Z.cols(); ++k) start_nv[k] = gamma_warm[k];
-    Map<VectorXd> start_map(as<Map<VectorXd> >(start_nv));
-
-    fglm::FamilyParams fp;
-    glm solver(Z, y_map, wts, off_z,
-               var_fun_z, mu_eta_fun_z, linkinv_fun_z,
-               dev_resids_fun_z, valideta_fun_z, validmu_fun_z,
-               tol, maxit, /*type=*/2, /*is_big=*/false,
-               zero_fam_code, fp);
-    solver.init_parms(start_map, mu0, eta0);
-    solver.solve(maxit);
-    gamma_out = solver.get_beta();
-    eta_z_out = solver.get_eta();
-    mu_z_out  = solver.get_mu();
-}
-
-// ---------------------------------------------------------------------------
-// M-step beta:  Poisson or NB IRLS with prior weights wts*(1-tau).  Uses the
-// existing glm class with native fam_code dispatch (FAM_POISSON_LOG = 7,
-// FAM_NB_LOG = 17).  count link is fixed to log here.
-// ---------------------------------------------------------------------------
-static void mstep_beta(const Map<MatrixXd>& X, const Map<VectorXd>& y,
-                       const VectorXd& w_eff, const Map<VectorXd>& off_c,
-                       int dist_code, double theta,
-                       Rcpp::Function var_fun_c, Rcpp::Function mu_eta_fun_c,
-                       Rcpp::Function linkinv_fun_c, Rcpp::Function dev_resids_fun_c,
-                       Rcpp::Function valideta_fun_c, Rcpp::Function validmu_fun_c,
-                       VectorXd& beta_out, VectorXd& eta_c_out,
-                       VectorXd& mu_c_out,
-                       const VectorXd& beta_warm, double tol, int maxit)
-{
-    const Eigen::Index n = X.rows();
-    // Effective weights
-    NumericVector w_nv(n);
-    for (Eigen::Index i = 0; i < n; ++i) w_nv[i] = w_eff[i];
-    Map<VectorXd> w_map(as<Map<VectorXd> >(w_nv));
-
-    // Init mu/eta on full y; for ZI Poisson/NB we use a Poisson-like start
-    // matching family$initialize: mu0 = y + 0.1.
-    NumericVector mu0_nv(n), eta0_nv(n);
-    for (Eigen::Index i = 0; i < n; ++i) {
-        double mi = y[i] + 0.1;
-        mu0_nv[i] = mi;
-        eta0_nv[i] = std::log(mi);
-    }
-    Map<VectorXd> mu0(as<Map<VectorXd> >(mu0_nv));
-    Map<VectorXd> eta0(as<Map<VectorXd> >(eta0_nv));
-
-    NumericVector start_nv(X.cols());
-    for (Eigen::Index k = 0; k < X.cols(); ++k) start_nv[k] = beta_warm[k];
-    Map<VectorXd> start_map(as<Map<VectorXd> >(start_nv));
-
-    fglm::FamilyParams fp;
-    fp.theta = theta;
-    int fam_code = (dist_code == 0) ? 7 : 17;  // FAM_POISSON_LOG / FAM_NB_LOG
-    glm solver(X, y, w_map, off_c,
-               var_fun_c, mu_eta_fun_c, linkinv_fun_c,
-               dev_resids_fun_c, valideta_fun_c, validmu_fun_c,
-               tol, maxit, /*type=*/2, /*is_big=*/false,
-               fam_code, fp);
-    solver.init_parms(start_map, mu0, eta0);
-    solver.solve(maxit);
-    beta_out  = solver.get_beta();
-    eta_c_out = solver.get_eta();
-    mu_c_out  = solver.get_mu();
-}
-
-// ---------------------------------------------------------------------------
-// Pilot starting values:
-//   gamma:   logit(P(Y=0)) ~ Z  (binomial logit, response 1(y == 0))
-//   beta:    Poisson regression on the full y on X
-//   theta:   1 if NB, else NA
+// Pilot starting values.
 // ---------------------------------------------------------------------------
 struct PilotResult {
     VectorXd gamma;
     VectorXd beta;
+    VectorXd mu_z;
+    VectorXd eta_z;
+    VectorXd mu_c;
+    VectorXd eta_c;
     double   theta;
 };
 static PilotResult pilot_init(const Map<MatrixXd>& X, const Map<MatrixXd>& Z,
@@ -377,66 +264,60 @@ static PilotResult pilot_init(const Map<MatrixXd>& X, const Map<MatrixXd>& Z,
     PilotResult out;
     const Eigen::Index n = X.rows();
 
-    // -- gamma pilot: binomial(zero link) on 1(y == 0) ----------------------
-    NumericVector y0_nv(n);
-    for (Eigen::Index i = 0; i < n; ++i) y0_nv[i] = (y[i] == 0.0) ? 1.0 : 0.0;
-    Map<VectorXd> y0(as<Map<VectorXd> >(y0_nv));
+    VectorXd y0(n);
+    for (Eigen::Index i = 0; i < n; ++i) y0[i] = (y[i] == 0.0) ? 1.0 : 0.0;
 
-    NumericVector mu0_nv(n), eta0_nv(n);
+    VectorXd mu0_z(n), eta0_z(n);
     for (Eigen::Index i = 0; i < n; ++i) {
         double mi = (y0[i] + 0.5) / 2.0;
-        mu0_nv[i] = mi;
-        eta0_nv[i] = std::log(mi / (1.0 - mi));
+        mu0_z[i] = mi;
+        eta0_z[i] = std::log(mi / (1.0 - mi));
     }
-    Map<VectorXd> mu0_z(as<Map<VectorXd> >(mu0_nv));
-    Map<VectorXd> eta0_z(as<Map<VectorXd> >(eta0_nv));
-
-    NumericVector zero_start_nv(Z.cols(), 0.0);
-    Map<VectorXd> zero_start(as<Map<VectorXd> >(zero_start_nv));
+    VectorXd zero_start = VectorXd::Zero(Z.cols());
 
     fglm::FamilyParams fp_empty;
-    glm gamma_solver(Z, y0, wts, off_z,
+    glm gamma_solver(Z,
+                     Map<VectorXd>(y0.data(), n),
+                     wts, off_z,
                      var_fun_z, mu_eta_fun_z, linkinv_fun_z,
                      dev_resids_fun_z, valideta_fun_z, validmu_fun_z,
                      tol, maxit, 2, false, zero_fam_code, fp_empty);
-    gamma_solver.init_parms(zero_start, mu0_z, eta0_z);
+    gamma_solver.init_parms(Map<VectorXd>(zero_start.data(), zero_start.size()),
+                            Map<VectorXd>(mu0_z.data(), n),
+                            Map<VectorXd>(eta0_z.data(), n));
     gamma_solver.solve(maxit);
     out.gamma = gamma_solver.get_beta();
+    out.mu_z  = gamma_solver.get_mu();
+    out.eta_z = gamma_solver.get_eta();
 
-    // -- beta pilot: Poisson regression on full y on X ----------------------
-    NumericVector mu0c_nv(n), eta0c_nv(n);
+    VectorXd mu0c(n), eta0c(n);
     for (Eigen::Index i = 0; i < n; ++i) {
         double mi = y[i] + 0.1;
-        mu0c_nv[i] = mi;
-        eta0c_nv[i] = std::log(mi);
+        mu0c[i] = mi;
+        eta0c[i] = std::log(mi);
     }
-    Map<VectorXd> mu0c(as<Map<VectorXd> >(mu0c_nv));
-    Map<VectorXd> eta0c(as<Map<VectorXd> >(eta0c_nv));
-
-    NumericVector beta_start_nv(X.cols(), 0.0);
-    Map<VectorXd> beta_start(as<Map<VectorXd> >(beta_start_nv));
+    VectorXd beta_start = VectorXd::Zero(X.cols());
 
     fglm::FamilyParams fp_pilot;
     glm beta_solver(X, y, wts, off_c,
                     var_fun_c, mu_eta_fun_c, linkinv_fun_c,
                     dev_resids_fun_c, valideta_fun_c, validmu_fun_c,
-                    tol, maxit, 2, false, 7, fp_pilot);  // FAM_POISSON_LOG
-    beta_solver.init_parms(beta_start, mu0c, eta0c);
+                    tol, maxit, 2, false, 7, fp_pilot);
+    beta_solver.init_parms(Map<VectorXd>(beta_start.data(), beta_start.size()),
+                           Map<VectorXd>(mu0c.data(), n),
+                           Map<VectorXd>(eta0c.data(), n));
     beta_solver.solve(maxit);
-    out.beta = beta_solver.get_beta();
+    out.beta  = beta_solver.get_beta();
+    out.mu_c  = beta_solver.get_mu();
+    out.eta_c = beta_solver.get_eta();
 
-    // -- theta pilot (NB only): theta.ml on Poisson residuals ---------------
     if (dist_code == 1) {
-        VectorXd mu_pilot = beta_solver.get_mu();
         ArrayXd y_arr  = y.array();
-        ArrayXd mu_arr = mu_pilot.array().max(1e-12);
+        ArrayXd mu_arr = out.mu_c.array().max(1e-12);
         ArrayXd w_arr  = wts.array();
         double th = fglm::nb::init_theta_mom(y_arr, mu_arr, w_arr);
         if (!std::isfinite(th) || th <= 0.0) th = 1.0;
-        // 1-D MLE refinement, on the unconditional NB likelihood (the EM
-        // will refine further with tau-aware weights later).
-        out.theta = fglm::nb::mle_theta(th, y_arr, mu_arr, w_arr,
-                                        1e-7, 50);
+        out.theta = fglm::nb::mle_theta(th, y_arr, mu_arr, w_arr, 1e-7, 50);
     } else {
         out.theta = std::numeric_limits<double>::quiet_NaN();
     }
@@ -454,9 +335,9 @@ List fit_glm_zi(
     Rcpp::NumericVector weights,
     Rcpp::NumericVector offset_count,
     Rcpp::NumericVector offset_zero,
-    int                 dist_code,        // 0 = Poisson, 1 = NegBin
-    int                 zero_fam_code,    // FAM_BINOMIAL_*
-    double              init_theta,       // <=0  =>  pilot
+    int                 dist_code,
+    int                 zero_fam_code,
+    double              init_theta,
     double              tol,
     int                 maxit,
     double              em_tol,
@@ -505,7 +386,7 @@ List fit_glm_zi(
         ? ((init_theta > 0) ? init_theta : pilot.theta)
         : std::numeric_limits<double>::quiet_NaN();
 
-    // ---------------- EM loop -----------------------------------------------
+    // ---------------- initial E-step ----------------------------------------
     VectorXd eta_z = Z * gamma + OffZ;
     VectorXd eta_c = X * beta  + OffC;
     VectorXd mu_c  = eta_c.array().exp();
@@ -513,71 +394,200 @@ List fit_glm_zi(
     double ll = obs_loglik(dist_code, zero_fam_code,
                            (dist_code == 1 ? theta : 1.0),
                            Y, mu_c, eta_z, W, tau);
+
+    // ---------------- persistent solver buffers -----------------------------
+    VectorXd tau_buf(n);
+    tau_buf = tau;
+    VectorXd w_eff_buf(n);
+    w_eff_buf = W.array() * (1.0 - tau.array());
+
+    fglm::FamilyParams fp_gamma;
+    glm gamma_solver(Z,
+                     Map<VectorXd>(tau_buf.data(), n),
+                     W, OffZ,
+                     var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero,
+                     dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero,
+                     tol, maxit, 2, false, zero_fam_code, fp_gamma);
+
+    fglm::FamilyParams fp_beta;
+    fp_beta.theta = (dist_code == 1) ? theta : 1.0;
+    int fam_code_beta = (dist_code == 0) ? 7 : 17;
+    glm beta_solver(X, Y,
+                    Map<VectorXd>(w_eff_buf.data(), n),
+                    OffC,
+                    var_fun_count, mu_eta_fun_count, linkinv_fun_count,
+                    dev_resids_fun_count, valideta_fun_count, validmu_fun_count,
+                    tol, maxit, 2, false, fam_code_beta, fp_beta);
+
+    // Warm-start vectors (seeded from pilot)
+    VectorXd gamma_warm = gamma;
+    VectorXd mu_z_warm  = pilot.mu_z;
+    VectorXd eta_z_warm = pilot.eta_z;
+    mu_z_warm = mu_z_warm.array().max(1e-6).min(1.0 - 1e-6);
+
+    VectorXd beta_warm  = beta;
+    VectorXd mu_c_warm  = pilot.mu_c;
+    VectorXd eta_c_warm = pilot.eta_c;
+
+    // ---------------- EM step helper ----------------------------------------
+    // Runs one complete EM iteration: updates gamma, beta, theta, warm-starts,
+    // eta_z, eta_c, mu_c, tau.  Returns new log-likelihood.
+    auto do_em_step = [&]() -> double {
+        tau_buf = tau;
+        w_eff_buf = W.array() * (1.0 - tau.array());
+        for (Eigen::Index i = 0; i < n; ++i)
+            if (w_eff_buf[i] < 1e-300) w_eff_buf[i] = 0.0;
+
+        // M-step gamma
+        gamma_solver.init_parms(
+            Map<VectorXd>(gamma_warm.data(), gamma_warm.size()),
+            Map<VectorXd>(mu_z_warm.data(), n),
+            Map<VectorXd>(eta_z_warm.data(), n));
+        gamma_solver.solve(maxit);
+        gamma = gamma_solver.get_beta();
+        eta_z = gamma_solver.get_eta();
+        gamma_warm = gamma;
+        mu_z_warm  = gamma_solver.get_mu();
+        eta_z_warm = eta_z;
+        mu_z_warm  = mu_z_warm.array().max(1e-6).min(1.0 - 1e-6);
+
+        // M-step beta
+        if (dist_code == 1) {
+            fp_beta.theta = theta;
+            beta_solver.set_fam_params(fp_beta);
+        }
+        beta_solver.init_parms(
+            Map<VectorXd>(beta_warm.data(), beta_warm.size()),
+            Map<VectorXd>(mu_c_warm.data(), n),
+            Map<VectorXd>(eta_c_warm.data(), n));
+        beta_solver.solve(maxit);
+        beta  = beta_solver.get_beta();
+        eta_c = beta_solver.get_eta();
+        mu_c  = beta_solver.get_mu();
+        beta_warm  = beta;
+        mu_c_warm  = mu_c;
+        eta_c_warm = eta_c;
+
+        // M-step theta
+        if (dist_code == 1) {
+            theta = mle_theta_zi(theta, tau, Y, mu_c, W,
+                                 theta_tol, theta_maxit);
+        }
+
+        // E-step + log-lik
+        return obs_loglik(dist_code, zero_fam_code,
+                          (dist_code == 1 ? theta : 1.0),
+                          Y, mu_c, eta_z, W, tau);
+    };
+
+    // Pack/unpack parameter vector for SQUAREM
+    const Eigen::Index n_params = p_z + p_c + (dist_code == 1 ? 1 : 0);
+
+    auto pack_params = [&]() -> VectorXd {
+        VectorXd x(n_params);
+        x.head(p_z) = gamma;
+        x.segment(p_z, p_c) = beta;
+        if (dist_code == 1) x[n_params - 1] = theta;
+        return x;
+    };
+
+    auto unpack_params = [&](const VectorXd& x) {
+        gamma = x.head(p_z);
+        beta  = x.segment(p_z, p_c);
+        if (dist_code == 1) {
+            theta = x[n_params - 1];
+            if (theta <= 0.0) theta = 1e-4;
+        }
+    };
+
+    // Recompute eta/mu/warm-starts from current gamma,beta (not from IRLS)
+    auto set_warm_from_params = [&]() {
+        gamma_warm = gamma;
+        eta_z = Z * gamma + OffZ;
+        eta_z_warm = eta_z;
+        ArrayXd eta_arr = eta_z.array();
+        ArrayXd mu_arr(n);
+        fglm::linkinv(zero_fam_code, fp_gamma, eta_arr, mu_arr);
+        mu_z_warm = mu_arr.array().max(1e-6).min(1.0 - 1e-6);
+
+        beta_warm  = beta;
+        eta_c = X * beta + OffC;
+        eta_c_warm = eta_c;
+        mu_c  = eta_c.array().exp().matrix();
+        mu_c_warm  = mu_c;
+    };
+
+    // ---------------- EM + SQUAREM loop -------------------------------------
     double ll_prev = ll;
     bool   conv    = false;
     int    em_iter = 0;
 
-    for (em_iter = 0; em_iter < em_maxit; ++em_iter) {
-        // E-step (already done above for the first iteration; for subsequent
-        // iterations we recompute mu_c and tau from the latest params at the
-        // top of the loop).
-        // Effective weights for the count IRLS:
-        VectorXd w_eff = W.array() * (1.0 - tau.array());
-        // Numerical guard: nudge zero weights up so the IRLS QR has a stable
-        // factorization; the contribution to score is w*(y - mu_T)*(...) so
-        // tiny w doesn't bias the solution.
-        for (Eigen::Index i = 0; i < n; ++i)
-            if (w_eff[i] < 1e-300) w_eff[i] = 0.0;
+    for (; em_iter < em_maxit; ) {
+        VectorXd x0 = pack_params();
 
-        // -- M-step gamma ---------------------------------------------------
-        VectorXd gamma_new, eta_z_new, mu_z_new;
-        mstep_gamma(Z, tau, W, OffZ, zero_fam_code,
-                    var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero,
-                    dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero,
-                    gamma_new, eta_z_new, mu_z_new,
-                    gamma, tol, maxit);
+        // -- First EM step --
+        double ll1 = do_em_step();
+        ++em_iter;
+        double rel = std::fabs(ll1 - ll) / (std::fabs(ll1) + 0.1);
+        ll = ll1;
+        if (rel < em_tol && em_iter > 1) { conv = true; break; }
+        if (em_iter >= em_maxit) break;
 
-        // -- M-step beta ----------------------------------------------------
-        VectorXd beta_new, eta_c_new, mu_c_new;
-        mstep_beta(X, Y, w_eff, OffC, dist_code,
-                   (dist_code == 1 ? theta : 1.0),
-                   var_fun_count, mu_eta_fun_count, linkinv_fun_count,
-                   dev_resids_fun_count, valideta_fun_count, validmu_fun_count,
-                   beta_new, eta_c_new, mu_c_new,
-                   beta, tol, maxit);
+        VectorXd x1 = pack_params();
 
-        // -- M-step theta (NB only) -----------------------------------------
-        double theta_new = theta;
-        if (dist_code == 1) {
-            theta_new = mle_theta_zi(theta, tau, Y, mu_c_new, W,
-                                     theta_tol, theta_maxit);
+        // -- Second EM step --
+        double ll2 = do_em_step();
+        ++em_iter;
+        rel = std::fabs(ll2 - ll) / (std::fabs(ll2) + 0.1);
+        ll = ll2;
+        if (rel < em_tol && em_iter > 1) { conv = true; break; }
+        if (em_iter >= em_maxit) break;
+
+        VectorXd x2 = pack_params();
+
+        // -- SQUAREM extrapolation (SqS3: Varadhan & Roland 2008) --
+        VectorXd r = x1 - x0;
+        VectorXd v = (x2 - x1) - r;
+        double sr2 = r.squaredNorm();
+        double sv2 = v.squaredNorm();
+
+        if (sv2 < 1e-30) continue;
+
+        double alpha = -std::sqrt(sr2 / sv2);
+        if (alpha > -1.0) alpha = -1.0;
+
+        bool sq_accepted = false;
+        for (int bt = 0; bt < 5 && !sq_accepted; ++bt) {
+            VectorXd x_try = x0 - 2.0 * alpha * r + alpha * alpha * v;
+            unpack_params(x_try);
+            set_warm_from_params();
+            double ll_try = obs_loglik(dist_code, zero_fam_code,
+                                       (dist_code == 1 ? theta : 1.0),
+                                       Y, mu_c, eta_z, W, tau);
+            if (std::isfinite(ll_try) && ll_try >= ll2) {
+                ll = ll_try;
+                sq_accepted = true;
+            } else {
+                alpha = 0.5 * (alpha - 1.0);
+            }
         }
 
-        // -- update params + recompute tau / log-lik -----------------------
-        gamma = gamma_new;
-        beta  = beta_new;
-        theta = theta_new;
-        eta_z = eta_z_new;
-        eta_c = eta_c_new;
-        mu_c  = mu_c_new;
-
-        ll_prev = ll;
-        ll = obs_loglik(dist_code, zero_fam_code,
-                        (dist_code == 1 ? theta : 1.0),
-                        Y, mu_c, eta_z, W, tau);
-
-        const double rel = std::fabs(ll - ll_prev) / (std::fabs(ll) + 0.1);
-        if (rel < em_tol && em_iter > 0) { conv = true; ++em_iter; break; }
+        if (!sq_accepted) {
+            unpack_params(x2);
+            set_warm_from_params();
+            obs_loglik(dist_code, zero_fam_code,
+                       (dist_code == 1 ? theta : 1.0),
+                       Y, mu_c, eta_z, W, tau);
+        }
     }
 
-    // ---------------- final vcov via numerical-Jac observed information ----
+    // ---------------- final vcov via numerical-Jac observed information ------
     MatrixXd vcov_full;
     {
         MatrixXd I_obs = obs_info_numjac(dist_code, zero_fam_code,
                                          gamma, beta,
                                          (dist_code == 1 ? theta : 1.0),
                                          Z, X, Y, W, OffZ, OffC);
-        // Solve I^{-1} for the full param block.  If singular, return NaN-filled.
         Eigen::LDLT<MatrixXd> ldlt(I_obs);
         if (ldlt.info() != Eigen::Success) {
             const Eigen::Index pp = I_obs.rows();
@@ -588,7 +598,6 @@ List fit_glm_zi(
         }
     }
 
-    // Split
     MatrixXd vcov_zero  = vcov_full.topLeftCorner(p_z, p_z);
     MatrixXd vcov_count = vcov_full.block(p_z, p_z, p_c, p_c);
     VectorXd se_zero    = vcov_zero.diagonal().array().abs().sqrt();
@@ -597,25 +606,19 @@ List fit_glm_zi(
         ? std::sqrt(std::fabs(vcov_full(p_z + p_c, p_z + p_c)))
         : std::numeric_limits<double>::quiet_NaN();
 
-    // Reorder vcov to match output: count first, then zero, then theta.
     const Eigen::Index pp = p_c + p_z + (dist_code == 1 ? 1 : 0);
     MatrixXd vcov_out = MatrixXd::Zero(pp, pp);
-    // Count block
     vcov_out.block(0, 0, p_c, p_c) = vcov_count;
     vcov_out.block(p_c, p_c, p_z, p_z) = vcov_zero;
-    // Cross-terms gamma <-> beta
-    MatrixXd vcov_zb = vcov_full.block(0, p_z, p_z, p_c);  // (gamma, beta)
+    MatrixXd vcov_zb = vcov_full.block(0, p_z, p_z, p_c);
     vcov_out.block(p_c, 0, p_z, p_c) = vcov_zb;
     vcov_out.block(0, p_c, p_c, p_z) = vcov_zb.transpose();
     if (dist_code == 1) {
-        // theta block
         vcov_out(pp - 1, pp - 1) = vcov_full(p_z + p_c, p_z + p_c);
-        // theta <-> gamma
         for (Eigen::Index k = 0; k < p_z; ++k) {
             vcov_out(pp - 1, p_c + k) = vcov_full(p_z + p_c, k);
             vcov_out(p_c + k, pp - 1) = vcov_full(k, p_z + p_c);
         }
-        // theta <-> beta
         for (Eigen::Index k = 0; k < p_c; ++k) {
             vcov_out(pp - 1, k) = vcov_full(p_z + p_c, p_z + k);
             vcov_out(k, pp - 1) = vcov_full(p_z + k, p_z + p_c);
