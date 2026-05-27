@@ -13,7 +13,7 @@ downstream methods you expect (`summary()`, `vcov()`, `predict()`,
 `coef()`, `residuals()`, `logLik()`) all work exactly as they do for a
 `glm`.
 
-Beyond standard GLMs, *fastglm* provides dedicated entry points for
+Beyond standard GLMs, *fastglm* provides dedicated fitting functions for
 negative-binomial regression, hurdle and zero-inflated count models, and
 Firth bias-reduced GLMs, all of which reuse the same C++ IRLS solver.
 
@@ -180,7 +180,7 @@ autoplot(ct, log = FALSE) +
     ggplot2::theme_bw()
 ```
 
-<img src="man/figures/README-glm_bench-1.png" width="100%" style="display: block; margin: auto;" />
+<img src="man/figures/README-glm_bench-1.png" alt="" width="100%" style="display: block; margin: auto;" />
 
 Coefficient estimates agree with `glm.fit()` to floating-point
 precision:
