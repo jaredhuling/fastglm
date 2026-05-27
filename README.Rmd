@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 
 The *fastglm* package is a **fast** and **stable** alternative to `stats::glm()` for fitting generalized linear models. It is built on *RcppEigen* and is fully compatible with R's `family` objects: the downstream methods you expect (`summary()`, `vcov()`, `predict()`, `coef()`, `residuals()`, `logLik()`) all work exactly as they do for a `glm`.
 
-Beyond standard GLMs, *fastglm* provides dedicated entry points for negative-binomial regression, hurdle and zero-inflated count models, and Firth bias-reduced GLMs, all of which reuse the same C++ IRLS solver.
+Beyond standard GLMs, *fastglm* provides dedicated fitting functions for negative-binomial regression, hurdle and zero-inflated count models, and Firth bias-reduced GLMs, all of which reuse the same C++ IRLS solver.
 
 ### Features
 

@@ -1,7 +1,7 @@
 ---
 title: "Negative Binomial Convergence: fastglm vs MASS"
 author: "Jared Huling"
-date: "2026-05-15"
+date: "2026-05-27"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Negative Binomial Convergence: fastglm vs MASS}
