@@ -8,6 +8,7 @@
 #include "../inst/include/glm.h"
 #include "../inst/include/glm_sparse.h"
 #include <RcppEigen.h>
+#include <memory>
 
 using namespace Rcpp;
 
@@ -48,14 +49,12 @@ List fastglm(Rcpp::NumericMatrix Xs,
     if ((Index)y.size() != n) throw invalid_argument("size mismatch");
 
     // instantiate fitting class
-    GlmBase<Eigen::VectorXd, Eigen::MatrixXd> *glm_solver = NULL;
-
     bool is_big_matrix = false;
 
-    glm_solver = new glm(X, y, weights, offset,
+    std::unique_ptr<glm> glm_solver(new glm(X, y, weights, offset,
                          var, mu_eta, linkinv, dev_resids,
                          valideta, validmu, tol, maxit, type,
-                         is_big_matrix, fam_code, fam_params);
+                         is_big_matrix, fam_code, fam_params));
 
     // initialize parameters
     glm_solver->init_parms(beta_init, mu_init, eta_init);
@@ -77,8 +76,6 @@ List fastglm(Rcpp::NumericMatrix Xs,
     bool converged     = glm_solver->get_converged();
 
     int df = X.rows() - rank;
-
-    delete glm_solver;
 
     return List::create(_["coefficients"]      = beta,
                         _["se"]                = se,
@@ -173,10 +170,10 @@ List bigfastglm(XPtr<BigMatrix> Xs,
     
     bool is_big_matrix = true;
 
-    glm *solver = new glm(X, y, weights, offset,
+    std::unique_ptr<glm> solver(new glm(X, y, weights, offset,
                           var, mu_eta, linkinv, dev_resids,
                           valideta, validmu, tol, maxit, type,
-                          is_big_matrix, fam_code, fam_params, firth);
+                          is_big_matrix, fam_code, fam_params, firth));
 
     // initialize parameters
     solver->init_parms(beta_init, mu_init, eta_init);
@@ -224,7 +221,6 @@ List bigfastglm(XPtr<BigMatrix> Xs,
         out["firth"]              = true;
     }
 
-    delete solver;
     return out;
 }
 

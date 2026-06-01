@@ -57,7 +57,7 @@ summary.fastglm <- function(object, dispersion = NULL,
     if (p > 0)
     {
         coef   <- object$coefficients
-        se     <- object$se
+        se     <- if (!is.null(covmat)) sqrt(diag(covmat)) else object$se
         tvalue <- coef / se
 
         dn <- c("Estimate", "Std. Error")
@@ -417,7 +417,19 @@ predict.fastglm <- function(object,
     if (is.null(dispersion))
         dispersion <- if (is.null(object$dispersion) || is.nan(object$dispersion)) 1 else object$dispersion
 
-    pred <- predict_fastglm_lm(object, newdata, se.fit, dispersion = dispersion, ...)
+    if (is.null(newdata)) {
+        eta <- object$linear.predictors
+        if (is.null(eta)) eta <- drop(object$x %*% object$coefficients)
+        if (!se.fit) {
+            pred <- eta
+        } else {
+            cov.scaled <- dispersion * object$cov.unscaled
+            se <- sqrt(rowSums((object$x %*% cov.scaled) * object$x))
+            pred <- list(fit = eta, se.fit = se, residual.scale = sqrt(dispersion))
+        }
+    } else {
+        pred <- predict_fastglm_lm(object, newdata, se.fit, dispersion = dispersion, ...)
+    }
 
     if (type == "response")
     {

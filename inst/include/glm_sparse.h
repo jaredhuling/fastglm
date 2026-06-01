@@ -312,10 +312,14 @@ protected:
         if (type == 2) {
             if (!pattern_analyzed) { Ch.analyzePattern(XtWX); pattern_analyzed = true; }
             Ch.factorize(XtWX);
+            if (Ch.info() != Eigen::Success)
+                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
             beta = Ch.solve(Xtwz);
         } else {
             if (!pattern_analyzed) { ChD.analyzePattern(XtWX); pattern_analyzed = true; }
             ChD.factorize(XtWX);
+            if (ChD.info() != Eigen::Success)
+                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
             beta = ChD.solve(Xtwz);
         }
         rank = nvars;
@@ -342,10 +346,14 @@ protected:
         if (type == 2) {
             if (!pattern_analyzed) { Ch.analyzePattern(XtWX); pattern_analyzed = true; }
             Ch.factorize(XtWX);
+            if (Ch.info() != Eigen::Success)
+                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
             beta = Ch.solve(Xtwz);
         } else { // type == 3
             if (!pattern_analyzed) { ChD.analyzePattern(XtWX); pattern_analyzed = true; }
             ChD.factorize(XtWX);
+            if (ChD.info() != Eigen::Success)
+                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
             beta = ChD.solve(Xtwz);
         }
         rank = nvars;  // assume full rank for sparse Cholesky (factorize will fail otherwise)
