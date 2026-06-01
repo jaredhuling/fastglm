@@ -808,6 +808,10 @@ protected:
                 // (can't use X*m_coef if X is rank-deficient)
                 se.head(rank)                    = Rinv.rowwise().norm();
                 se                               = Pmat * se;
+                for (int j = rank; j < nvars; ++j) {
+                    int aliased_idx = Pmat.indices()[j];
+                    se[aliased_idx] = std::numeric_limits<double>::quiet_NaN();
+                }
             }
         } else if (type == 1)
         {
@@ -832,6 +836,10 @@ protected:
                 // (can't use X*m_coef if X is rank-deficient)
                 se.head(rank)                    = Rinv.rowwise().norm();
                 se                               = Pmat * se;
+                for (int j = rank; j < nvars; ++j) {
+                    int aliased_idx = Pmat.indices()[j];
+                    se[aliased_idx] = std::numeric_limits<double>::quiet_NaN();
+                }
             }
         } else if (type == 5)
         {

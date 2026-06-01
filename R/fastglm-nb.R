@@ -87,7 +87,7 @@ fastglm_nb <- function(x, y,
         beta_init <- .lm.fit(x, eta_init - offset)$coefficients
         beta_init[is.na(beta_init)] <- 0
         eta_init  <- as.numeric(x %*% beta_init + offset)
-        mu_init   <- as.numeric(lnk$linkinv(eta_init - offset))
+        mu_init   <- as.numeric(lnk$linkinv(eta_init))
     }
 
     init_th <- if (!is.null(init.theta)) {
@@ -152,13 +152,18 @@ fastglm_nb <- function(x, y,
     res$family        <- final_family
     res$y             <- as.numeric(y)
     res$x             <- x
+    res$n             <- n
     res$prior.weights <- weights
     res$dispersion    <- 1                       # NB likelihood is fully specified
+    res$intercept     <- any(apply(x, 2, function(col) max(col) == min(col)))
     res$df.null       <- n - 1L
     res$null.deviance <- sum(final_family$dev.resids(
         as.numeric(y),
         rep(if (sum(weights) > 0) sum(weights * as.numeric(y))/sum(weights) else mean(y), n),
         weights))
+    aic_fn <- final_family$aic
+    res$aic <- aic_fn(res$y, res$n, res$fitted.values, res$prior.weights,
+                      res$deviance) + 2 * res$rank
     res$call <- match.call()
     class(res) <- c("fastglm_nb", "fastglm")
     res

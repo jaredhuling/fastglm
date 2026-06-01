@@ -195,8 +195,10 @@ inline void mu_eta(int code,
     case FAM_GAUSSIAN_INVERSE:
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
-    case FAM_TWEEDIE_INVERSE:
-        dmu = -1.0 / eta.square(); break;
+    case FAM_TWEEDIE_INVERSE: {
+        Eigen::ArrayXd eta2 = eta.square().max(thresh_eps());
+        dmu = -1.0 / eta2; break;
+    }
     case FAM_BINOMIAL_LOGIT: {
         // Match R's logit_mu_eta (src/library/stats/src/family.c) exactly:
         //   if (eta > THRESH || eta < MTHRESH)  mu_eta = DOUBLE_EPS
@@ -235,7 +237,7 @@ inline void mu_eta(int code,
     case FAM_POISSON_SQRT:
     case FAM_NB_SQRT:
     case FAM_TWEEDIE_SQRT:
-        dmu = 2.0 * eta; break;
+        dmu = (2.0 * eta).max(thresh_eps()); break;
     default:
         dmu.setOnes();
         break;

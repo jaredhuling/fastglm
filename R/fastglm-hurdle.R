@@ -231,7 +231,7 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     if (model) out$model <- mf
     if (y)     out$y     <- Y_resp
     if (x)     out$x     <- list(count = X_count, zero = Z_zero)
-    class(out) <- c("fastglm_hurdle", "fastglm")
+    class(out) <- "fastglm_hurdle"
     out
 }
 
