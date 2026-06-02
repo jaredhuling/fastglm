@@ -344,6 +344,51 @@ static double stream_pass_firth(Function& callback,
     return dev_sum;
 }
 
+// Solve the SPD system A x = rhs with LLT (type 2) or LDLT (type 3),
+// factorizing into the supplied decomposition objects so the factor can be
+// reused afterwards (log|A|, A^{-1}).  Throws if A is rank-deficient.
+static VectorXd spd_factorize_and_solve(int type, const MatrixXd& A,
+                                        const VectorXd& rhs,
+                                        Eigen::LLT<MatrixXd>& llt,
+                                        Eigen::LDLT<MatrixXd>& ldlt)
+{
+    if (type == 2) {
+        llt.compute(A);
+        if (llt.info() != Eigen::Success)
+            Rcpp::stop("Cholesky factorization (LLT) failed; "
+                       "design may be rank-deficient. "
+                       "Streaming mode requires full column rank.");
+        return llt.solve(rhs);
+    }
+    ldlt.compute(A);
+    if (ldlt.info() != Eigen::Success)
+        Rcpp::stop("Cholesky factorization (LDLT) failed; "
+                   "design may be rank-deficient. "
+                   "Streaming mode requires full column rank.");
+    return ldlt.solve(rhs);
+}
+
+// A^{-1} via a fresh SPD factorization (LLT for type 2, LDLT for type 3).
+// Throws if A is rank-deficient.
+static MatrixXd spd_inverse(int type, const MatrixXd& A)
+{
+    const Eigen::Index p = A.rows();
+    if (type == 2) {
+        Eigen::LLT<MatrixXd> chol(A);
+        if (chol.info() != Eigen::Success)
+            Rcpp::stop("Cholesky factorization (LLT) failed; "
+                       "design may be rank-deficient. "
+                       "Streaming mode requires full column rank.");
+        return chol.solve(MatrixXd::Identity(p, p));
+    }
+    Eigen::LDLT<MatrixXd> chol(A);
+    if (chol.info() != Eigen::Success)
+        Rcpp::stop("Cholesky factorization (LDLT) failed; "
+                   "design may be rank-deficient. "
+                   "Streaming mode requires full column rank.");
+    return chol.solve(MatrixXd::Identity(p, p));
+}
+
 }  // anonymous namespace
 
 
@@ -423,22 +468,7 @@ List fit_streaming_glm(Function chunk_callback,
         }
         dev_curr = std_dev;
 
-        VectorXd beta_new(p);
-        if (type == 2) {
-            llt.compute(XtWX);
-            if (llt.info() != Eigen::Success)
-                Rcpp::stop("Cholesky factorization (LLT) failed; "
-                                         "design may be rank-deficient. "
-                                         "Streaming mode requires full column rank.");
-            beta_new = llt.solve(Xtwz);
-        } else {
-            ldlt.compute(XtWX);
-            if (ldlt.info() != Eigen::Success)
-                Rcpp::stop("Cholesky factorization (LDLT) failed; "
-                                         "design may be rank-deficient. "
-                                         "Streaming mode requires full column rank.");
-            beta_new = ldlt.solve(Xtwz);
-        }
+        VectorXd beta_new = spd_factorize_and_solve(type, XtWX, Xtwz, llt, ldlt);
 
         if (firth) {
             // Compute log|X'WX| for penalized deviance
@@ -511,22 +541,7 @@ List fit_streaming_glm(Function chunk_callback,
                 /*accumulate=*/true, &XtWX, &Xtwz, nullptr, nullptr);
 
     // cov.unscaled = (X'WX)^{-1}.
-    MatrixXd cov_unscaled(p, p);
-    if (type == 2) {
-        Eigen::LLT<MatrixXd> chol(XtWX);
-        if (chol.info() != Eigen::Success)
-            Rcpp::stop("Cholesky factorisation (LLT) failed; "
-                                     "design may be rank-deficient. "
-                                     "Streaming mode requires full column rank.");
-        cov_unscaled = chol.solve(MatrixXd::Identity(p, p));
-    } else {
-        Eigen::LDLT<MatrixXd> chol(XtWX);
-        if (chol.info() != Eigen::Success)
-            Rcpp::stop("Cholesky factorisation (LDLT) failed; "
-                                     "design may be rank-deficient. "
-                                     "Streaming mode requires full column rank.");
-        cov_unscaled = chol.solve(MatrixXd::Identity(p, p));
-    }
+    MatrixXd cov_unscaled = spd_inverse(type, XtWX);
 
     // Final pass: total weighted y, total weights, deviance, null deviance,
     // Pearson chi-square (for dispersion).

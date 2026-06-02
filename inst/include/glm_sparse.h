@@ -206,6 +206,37 @@ protected:
     }
 
     // ------------------------------------------------------------------
+    // Sparse linear-algebra helpers shared by the plain and Firth solves.
+    // ------------------------------------------------------------------
+
+    // Factorize A with the active sparse Cholesky (LLT for type 2, LDLT for
+    // type 3) and solve A x = rhs.  analyzePattern is done once; the symbolic
+    // factor and the numeric factor are retained for the post-solve readouts
+    // (log|X'WX|, (X'WX)^{-1}).
+    Eigen::VectorXd factorize_and_solve(const SpMat &A, const Eigen::VectorXd &rhs)
+    {
+        if (type == 2) {
+            if (!pattern_analyzed) { Ch.analyzePattern(A); pattern_analyzed = true; }
+            Ch.factorize(A);
+            if (Ch.info() != Eigen::Success)
+                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
+            return Ch.solve(rhs);
+        }
+        if (!pattern_analyzed) { ChD.analyzePattern(A); pattern_analyzed = true; }
+        ChD.factorize(A);
+        if (ChD.info() != Eigen::Success)
+            Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
+        return ChD.solve(rhs);
+    }
+
+    // (X' W^2 X)^{-1} from the retained factorization.
+    Eigen::MatrixXd inverse_XtWX()
+    {
+        Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
+        return (type == 2) ? Ch.solve(I_p) : ChD.solve(I_p);
+    }
+
+    // ------------------------------------------------------------------
     // Firth helpers (sparse path uses lagged leverages from A_prev)
     // ------------------------------------------------------------------
     void compute_d2mu_sparse(Eigen::ArrayXd &d2mu)
@@ -274,9 +305,7 @@ protected:
 
     void update_A_prev_sparse()
     {
-        Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
-        if (type == 2) A_prev = Ch.solve(I_p);
-        else           A_prev = ChD.solve(I_p);
+        A_prev = inverse_XtWX();
         A_prev_available = true;
     }
 
@@ -309,19 +338,7 @@ protected:
             Xtwz.noalias() = X.adjoint() * (w2.array() * zstar.array()).matrix();
         }
 
-        if (type == 2) {
-            if (!pattern_analyzed) { Ch.analyzePattern(XtWX); pattern_analyzed = true; }
-            Ch.factorize(XtWX);
-            if (Ch.info() != Eigen::Success)
-                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
-            beta = Ch.solve(Xtwz);
-        } else {
-            if (!pattern_analyzed) { ChD.analyzePattern(XtWX); pattern_analyzed = true; }
-            ChD.factorize(XtWX);
-            if (ChD.info() != Eigen::Success)
-                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
-            beta = ChD.solve(Xtwz);
-        }
+        beta = factorize_and_solve(XtWX, Xtwz);
         rank = nvars;
 
         compute_log_det_XtWX_sparse();
@@ -343,37 +360,19 @@ protected:
         XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
         Xtwz.noalias() = X.adjoint() * (w2.array() * z.array()).matrix();
 
-        if (type == 2) {
-            if (!pattern_analyzed) { Ch.analyzePattern(XtWX); pattern_analyzed = true; }
-            Ch.factorize(XtWX);
-            if (Ch.info() != Eigen::Success)
-                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
-            beta = Ch.solve(Xtwz);
-        } else { // type == 3
-            if (!pattern_analyzed) { ChD.analyzePattern(XtWX); pattern_analyzed = true; }
-            ChD.factorize(XtWX);
-            if (ChD.info() != Eigen::Success)
-                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
-            beta = ChD.solve(Xtwz);
-        }
+        beta = factorize_and_solve(XtWX, Xtwz);
         rank = nvars;  // assume full rank for sparse Cholesky (factorize will fail otherwise)
     }
 
     virtual void save_se()
     {
-        // SE = sqrt(diag((X' W^2 X)^{-1})).  Solve against I_p and take diag.
-        Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
-        Eigen::MatrixXd inv;
-        if (type == 2) inv = Ch.solve(I_p);
-        else           inv = ChD.solve(I_p);
-        se = inv.diagonal().array().sqrt();
+        // SE = sqrt(diag((X' W^2 X)^{-1})).
+        se = inverse_XtWX().diagonal().array().sqrt();
     }
 
     virtual void save_vcov()
     {
-        Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
-        if (type == 2) vcov = Ch.solve(I_p);
-        else           vcov = ChD.solve(I_p);
+        vcov = inverse_XtWX();
     }
 
 public:
