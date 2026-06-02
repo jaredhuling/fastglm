@@ -228,50 +228,16 @@ inline double mle_trunc_theta(double theta_init,
                               double tol = 1e-8, int maxit = 100,
                               double theta_lo = 1e-6, double theta_hi = 1e8)
 {
+    auto score = [&](double t) { return trunc_nb_score_theta(t, y, lambda, wt); };
     auto br = bracket_trunc_theta(theta_init, y, lambda, wt, theta_lo, theta_hi);
     double a = br.first, b = br.second;
-    double sa = trunc_nb_score_theta(a, y, lambda, wt);
-    double sb = trunc_nb_score_theta(b, y, lambda, wt);
+    double sa = score(a);
+    double sb = score(b);
     if (sa == 0.0) return a;
     if (sb == 0.0) return b;
     if (sa * sb > 0) return (std::fabs(sa) < std::fabs(sb)) ? a : b;
 
-    double c = a, sc = sa, d = b - a, e = d;
-    for (int iter = 0; iter < maxit; ++iter) {
-        if (sb * sc > 0) { c = a; sc = sa; d = b - a; e = d; }
-        if (std::fabs(sc) < std::fabs(sb)) {
-            a = b; b = c; c = a;
-            sa = sb; sb = sc; sc = sa;
-        }
-        const double tol1 = 2.0 * std::numeric_limits<double>::epsilon() * std::fabs(b) + 0.5 * tol;
-        const double xm   = 0.5 * (c - b);
-        if (std::fabs(xm) <= tol1 || sb == 0.0) return b;
-
-        if (std::fabs(e) >= tol1 && std::fabs(sa) > std::fabs(sb)) {
-            double s = sb / sa, p, q, r;
-            if (a == c) {
-                p = 2.0 * xm * s;
-                q = 1.0 - s;
-            } else {
-                q = sa / sc;
-                r = sb / sc;
-                p = s * (2.0 * xm * q * (q - r) - (b - a) * (r - 1.0));
-                q = (q - 1.0) * (r - 1.0) * (s - 1.0);
-            }
-            if (p > 0) q = -q;
-            p = std::fabs(p);
-            const double min1 = 3.0 * xm * q - std::fabs(tol1 * q);
-            const double min2 = std::fabs(e * q);
-            if (2.0 * p < std::min(min1, min2)) { e = d; d = p / q; }
-            else                                { d = xm; e = d; }
-        } else {
-            d = xm; e = d;
-        }
-        a  = b;  sa = sb;
-        b += (std::fabs(d) > tol1) ? d : (xm > 0 ? tol1 : -tol1);
-        sb = trunc_nb_score_theta(b, y, lambda, wt);
-    }
-    return b;
+    return fglm::brent_root(score, a, b, sa, sb, tol, maxit);
 }
 
 // Information for theta via numerical differentiation of the score; used
