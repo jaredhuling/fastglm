@@ -237,7 +237,14 @@ inline void mu_eta(int code,
     case FAM_POISSON_SQRT:
     case FAM_NB_SQRT:
     case FAM_TWEEDIE_SQRT:
-        dmu = (2.0 * eta).max(thresh_eps()); break;
+        // dmu/deta = 2*eta. The sqrt link admits eta < 0 (statmod's Tweedie
+        // sets valideta = TRUE), where the derivative is genuinely negative;
+        // floor only the magnitude away from zero so the sign is preserved.
+        dmu = 2.0 * eta;
+        for (Eigen::Index i = 0; i < dmu.size(); ++i)
+            if (std::fabs(dmu[i]) < thresh_eps())
+                dmu[i] = (dmu[i] < 0.0 ? -thresh_eps() : thresh_eps());
+        break;
     default:
         dmu.setOnes();
         break;
