@@ -45,7 +45,8 @@ Suggests:
     brglm2,
     pscl,
     speedglm,
-    tweedie
+    tweedie,
+    ggplot2
 Config/testthat/edition: 3
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr

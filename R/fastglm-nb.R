@@ -50,7 +50,7 @@ fastglm_nb <- function(x, y,
                        method      = 2L,
                        tol         = 1e-8,
                        maxit       = 100L,
-                       outer.maxit = 25L,
+                       outer.maxit = 50L,
                        outer.tol   = 1e-7,
                        theta.tol   = 1e-8,
                        theta.maxit = 100L)
