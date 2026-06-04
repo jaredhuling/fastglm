@@ -233,7 +233,8 @@ protected:
     Eigen::MatrixXd inverse_XtWX()
     {
         Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
-        return (type == 2) ? Ch.solve(I_p) : ChD.solve(I_p);
+        if (type == 2) return Ch.solve(I_p);
+        return ChD.solve(I_p);
     }
 
     // ------------------------------------------------------------------
