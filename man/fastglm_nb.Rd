@@ -15,7 +15,7 @@ fastglm_nb(
   method = 2L,
   tol = 1e-08,
   maxit = 100L,
-  outer.maxit = 25L,
+  outer.maxit = 50L,
   outer.tol = 1e-07,
   theta.tol = 1e-08,
   theta.maxit = 100L
