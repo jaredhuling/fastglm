@@ -53,7 +53,7 @@ protected:
     // ------------------------------------------------------------------
     // family helpers (mirror glm::update_*)
     // ------------------------------------------------------------------
-    virtual void update_mu_eta()
+    void update_mu_eta() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
@@ -65,7 +65,7 @@ protected:
         std::copy(v.begin(), v.end(), mu_eta.data());
     }
 
-    virtual void update_var_mu()
+    void update_var_mu() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
@@ -77,7 +77,7 @@ protected:
         std::copy(v.begin(), v.end(), var_mu.data());
     }
 
-    virtual void update_mu()
+    void update_mu() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
@@ -89,18 +89,18 @@ protected:
         std::copy(v.begin(), v.end(), mu.data());
     }
 
-    virtual void update_eta()
+    void update_eta() override
     {
         eta.noalias() = X * beta;
         eta += offset;
     }
 
-    virtual void update_z()
+    void update_z() override
     {
         z = (eta - offset).array() + (Y - mu).array() / mu_eta.array();
     }
 
-    virtual void update_w()
+    void update_w() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
@@ -113,7 +113,7 @@ protected:
         w = (weights.array() * mu_eta.array().square() / var_mu.array()).array().sqrt();
     }
 
-    virtual void update_dev_resids()
+    void update_dev_resids() override
     {
         devold = dev;
         double std_dev;
@@ -129,7 +129,7 @@ protected:
         dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
-    virtual void update_dev_resids_dont_update_old()
+    void update_dev_resids_dont_update_old() override
     {
         double std_dev;
         if (fam_code >= 0) {
@@ -144,7 +144,7 @@ protected:
         dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
-    virtual void step_halve()
+    void step_halve() override
     {
         beta = 0.5 * (beta.array() + beta_prev.array());
         update_eta();
@@ -176,7 +176,7 @@ protected:
         return std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol;
     }
 
-    virtual void run_step_halving(int &iterr)
+    void run_step_halving(int &iterr) override
     {
         const bool firth_skip = firth_;
         if (!std::isfinite(dev)) {
@@ -349,7 +349,7 @@ protected:
     // ------------------------------------------------------------------
     // Core sparse WLS solve: X' diag(w^2) X beta = X' diag(w^2) z.
     // ------------------------------------------------------------------
-    virtual void solve_wls(int /*iter*/)
+    void solve_wls(int /*iter*/) override
     {
         if (firth_) { solve_wls_firth(); return; }
 
@@ -365,13 +365,12 @@ protected:
         rank = nvars;  // assume full rank for sparse Cholesky (factorize will fail otherwise)
     }
 
-    virtual void save_se()
+    void save_se() override
     {
-        // SE = sqrt(diag((X' W^2 X)^{-1})).
         se = inverse_XtWX().diagonal().array().sqrt();
     }
 
-    virtual void save_vcov()
+    void save_vcov() override
     {
         vcov = inverse_XtWX();
     }
@@ -404,7 +403,7 @@ public:
 
     void init_parms(const Eigen::Map<Eigen::VectorXd> &start_,
                     const Eigen::Map<Eigen::VectorXd> &mu_,
-                    const Eigen::Map<Eigen::VectorXd> &eta_)
+                    const Eigen::Map<Eigen::VectorXd> &eta_) override
     {
         beta = start_;
         eta  = eta_;
@@ -413,8 +412,8 @@ public:
         rank = nvars;
     }
 
-    virtual int get_rank() { return rank; }
-    virtual Eigen::VectorXd get_weights() { return weights; }
+    int get_rank() override { return rank; }
+    Eigen::VectorXd get_weights() override { return weights; }
     double get_log_det_XtWX() const { return log_det_XtWX_; }
     bool   get_firth()        const { return firth_; }
 };
