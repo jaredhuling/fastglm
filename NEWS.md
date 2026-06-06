@@ -1,10 +1,60 @@
 
 # fastglm 0.1.1
 
-* Adds Firth bias-correction for standard GLM families
-* Adds additional features to improve numerical stability on edge cases
-
 ## New features
+
+* Firth bias-reduced GLMs (`firth = TRUE`) now work for all standard
+  families (gaussian, binomial, Poisson, Gamma, inverse.gaussian) on
+  dense, sparse, and streaming backends. In 0.1.0 Firth was limited to
+  `binomial(link = "logit")` on dense designs only.
+
+* SQUAREM acceleration (Varadhan and Roland, 2008) for the
+  `fastglm_zi()` EM driver, converting linear EM convergence to
+  near-quadratic.
+
+## Numerical stability
+
+* Negative-binomial initialization in `fastglm_nb()` now uses a
+  moment-based mu/theta seed instead of always running a full pilot
+  Poisson fit, improving convergence on overdispersed data and near
+  boundary cases.
+
+* Increased the default `outer.maxit` for `fastglm_nb()` from 25 to
+  50 to allow convergence in harder NB problems.
+
+* Clamping guards in native C++ family kernels for inverse-link and
+  sqrt-link families (Gamma, inverse.gaussian, Tweedie) to prevent
+  overflow when `eta` is near zero.
+
+* Floor on `mu.eta` for Tweedie inverse and sqrt links to avoid
+  division by zero in IRLS weights.
+
+* Sign correction in the Tweedie sqrt `mu.eta` kernel.
+
+## Bug fixes
+
+* Replaced `Rf_error()` with `Rcpp::stop()` in `bigmemory.cpp`
+  (reported in GitHub issue).
+
+## Documentation
+
+* New vignette `firth-fastglm` covering Firth bias-reduced GLMs for
+  all supported families.
+
+* New vignettes `nb-convergence-fastglm` and `nb-stability-fastglm`
+  demonstrating `fastglm_nb()` convergence and stability relative to
+  `MASS::glm.nb()` on challenging datasets.
+
+* Expanded benchmarks vignette with additional model classes.
+
+## Internal
+
+* Shared Brent root-finder moved to `inst/include/brent.h`,
+  replacing three duplicated implementations.
+
+* Expanded test suite (107 test blocks / 361 expectations, up from
+  54 / 131 in 0.1.0), including new suites for numerical edge cases
+  and Firth across all families.
 
 # fastglm 0.1.0
 
