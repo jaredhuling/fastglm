@@ -20,7 +20,7 @@ count model implies are absorbed by the inflation component."><!-- mathjax --><s
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
       </span>
     </div>
 
@@ -41,13 +41,22 @@ count model implies are absorbed by the inflation component."><!-- mathjax --><s
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
     </li>
     <li>
+      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
+    </li>
+    <li>
       <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
     </li>
   </ul></li>
 <li>
@@ -203,10 +212,10 @@ allow for the EM iteration), with all numerical loops in C++.</p>
 <span class="r-in"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu">fastglm_zi</span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, data <span class="op">=</span> <span class="va">df</span>, dist <span class="op">=</span> <span class="st">"poisson"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit</span>, model <span class="op">=</span> <span class="st">"count"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> (Intercept)           x </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   0.8590558   0.3067513 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   0.8591195   0.3066998 </span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit</span>, model <span class="op">=</span> <span class="st">"zero"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> (Intercept)           x </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  -0.5134892   0.3188130 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  -0.5132890   0.3186351 </span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
       </span>
     </div>
 
@@ -38,13 +38,22 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
     </li>
     <li>
+      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
+    </li>
+    <li>
       <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
     </li>
   </ul></li>
 <li>
@@ -70,7 +79,38 @@
     </div>
 
     <div class="section level2">
-<h2 class="page-header" data-toc-text="0.1.0" id="fastglm-010">fastglm 0.1.0<a class="anchor" aria-label="anchor" href="#fastglm-010"></a></h2>
+<h2 class="page-header" data-toc-text="0.1.1" id="fastglm-011">fastglm 0.1.1<small>2026-06-07</small><a class="anchor" aria-label="anchor" href="#fastglm-011"></a></h2>
+<div class="section level3">
+<h3 id="new-features-0-1-1">New features<a class="anchor" aria-label="anchor" href="#new-features-0-1-1"></a></h3>
+<ul><li><p>Firth bias-reduced GLMs (<code>firth = TRUE</code>) now work for all standard families (gaussian, binomial, Poisson, Gamma, inverse.gaussian) on dense, sparse, and streaming backends. In 0.1.0 Firth was limited to <code>binomial(link = "logit")</code> on dense designs only.</p></li>
+<li><p>SQUAREM acceleration (Varadhan and Roland, 2008) for the <code><a href="../reference/fastglm_zi.html">fastglm_zi()</a></code> EM driver, converting linear EM convergence to near-quadratic.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="numerical-stability-0-1-1">Numerical stability<a class="anchor" aria-label="anchor" href="#numerical-stability-0-1-1"></a></h3>
+<ul><li><p>Negative-binomial initialization in <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> now uses a moment-based mu/theta seed instead of always running a full pilot Poisson fit, improving convergence on overdispersed data and near boundary cases.</p></li>
+<li><p>Increased the default <code>outer.maxit</code> for <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> from 25 to 50 to allow convergence in harder NB problems.</p></li>
+<li><p>Clamping guards in native C++ family kernels for inverse-link and sqrt-link families (Gamma, inverse.gaussian, Tweedie) to prevent overflow when <code>eta</code> is near zero.</p></li>
+<li><p>Floor on <code>mu.eta</code> for Tweedie inverse and sqrt links to avoid division by zero in IRLS weights.</p></li>
+<li><p>Sign correction in the Tweedie sqrt <code>mu.eta</code> kernel.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-0-1-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-0-1-1"></a></h3>
+<ul><li>Replaced <code>Rf_error()</code> with <code>Rcpp::stop()</code> in <code>bigmemory.cpp</code> (reported in GitHub issue).</li>
+</ul></div>
+<div class="section level3">
+<h3 id="documentation-0-1-1">Documentation<a class="anchor" aria-label="anchor" href="#documentation-0-1-1"></a></h3>
+<ul><li><p>New vignette <code>firth-fastglm</code> covering Firth bias-reduced GLMs for all supported families.</p></li>
+<li><p>New vignettes <code>nb-convergence-fastglm</code> and <code>nb-stability-fastglm</code> demonstrating <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> convergence and stability relative to <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> on challenging datasets.</p></li>
+<li><p>Expanded benchmarks vignette with additional model classes.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="internal-0-1-1">Internal<a class="anchor" aria-label="anchor" href="#internal-0-1-1"></a></h3>
+<ul><li><p>Shared Brent root-finder moved to <code>inst/include/brent.h</code>, replacing three duplicated implementations.</p></li>
+<li><p>Expanded test suite (107 test blocks / 361 expectations, up from 54 / 131 in 0.1.0), including new suites for numerical edge cases and Firth across all families.</p></li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="0.1.0" id="fastglm-010">fastglm 0.1.0<small>2026-05-05</small><a class="anchor" aria-label="anchor" href="#fastglm-010"></a></h2>
 <div class="section level3">
 <h3 id="breaking-changes-0-1-0">Breaking changes<a class="anchor" aria-label="anchor" href="#breaking-changes-0-1-0"></a></h3>
 <ul><li>
@@ -94,7 +134,7 @@
 <div class="section level3">
 <h3 id="other-new-features-0-1-0">Other new features<a class="anchor" aria-label="anchor" href="#other-new-features-0-1-0"></a></h3>
 <ul><li><p>Real <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> for <code>"fastglm"</code> objects: the unscaled covariance is now computed in C++ from the IRLS factorisation directly and exposed as <code>$cov.unscaled</code>. <code><a href="../reference/summary.fastglm.html">summary.fastglm()</a></code>, <code><a href="../reference/vcov.fastglm.html">vcov.fastglm()</a></code>, and <code>predict.fastglm(se.fit = TRUE)</code> now all work without a refit hack; <code><a href="../reference/fastglm_fit.html">vcov.fastglmFit()</a></code> no longer re-runs <code>glm.fit</code> to recover a <code>qr</code> slot.</p></li>
-<li><p><code>S3</code> methods registered on <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">sandwich::vcovHC()</a></code> and <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">sandwich::vcovCL()</a></code> for heteroskedasticity-consistent (HC0–HC3) and cluster-robust covariance matrices. After <code><a href="https://sandwich.R-Forge.R-project.org/" class="external-link">library(sandwich)</a></code>, <code>vcovHC(fit)</code> and <code>vcovCL(fit, ...)</code> match <code>sandwich::vcovHC.glm()</code> / <code>sandwich::vcovCL.glm()</code> to floating-point precision and work for sparse, <code>big.matrix</code>, and in-memory fits. (Earlier development versions shipped local <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">vcovHC()</a></code> / <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">vcovCL()</a></code> generics; those have been removed in favour of registering on the canonical <em>sandwich</em> generics.)</p></li>
+<li><p><code>S3</code> methods registered on <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">sandwich::vcovHC()</a></code> and <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">sandwich::vcovCL()</a></code> for heteroskedasticity-consistent (HC0–HC3) and cluster-robust covariance matrices. After <code><a href="https://sandwich.R-Forge.R-project.org/" class="external-link">library(sandwich)</a></code>, <code>vcovHC(fit)</code> and <code>vcovCL(fit, ...)</code> match <code>sandwich::vcovHC.glm()</code> / <code>sandwich::vcovCL.glm()</code> to floating-point precision and work for sparse, <code>big.matrix</code>, and in-memory fits. (Earlier development versions shipped local <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">vcovHC()</a></code> / <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">vcovCL()</a></code> generics; those have been removed in favor of registering on the canonical <em>sandwich</em> generics.)</p></li>
 <li><p>Sparse design matrices (<code>Matrix::dgCMatrix</code>) are now supported directly by <code><a href="../reference/fastglm.html">fastglm()</a></code> and <code><a href="../reference/fastglm_fit.html">fastglm_fit()</a></code> for the LLT (<code>method = 2</code>) and LDLT (<code>method = 3</code>) Cholesky paths. Other decompositions are rejected with an informative error rather than silently densified.</p></li>
 <li><p><code><a href="https://rdrr.io/pkg/bigmemory/man/big.matrix.html" class="external-link">bigmemory::big.matrix</a></code> inputs now stream the design matrix in row-blocks of <code>FASTGLM_CHUNK_ROWS</code> rows (default <code>16384</code>, user-configurable via the environment variable). Filebacked <code>big.matrix</code> objects no longer have to be materialised in RAM.</p></li>
 <li><p>New top-level function <code>fastglm_streaming(chunk_callback, n_chunks, family, ...)</code> for fitting GLMs on data sources that do not fit in memory: Arrow datasets, Parquet files, DuckDB queries, CSV streamers, and any other chunk-yielding iterator. The IRLS loop, step-halving, and Cholesky solve all run in C++; the closure is invoked only to deliver one row-block at a time.</p></li>
