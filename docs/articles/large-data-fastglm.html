@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
       </span>
     </div>
 
@@ -55,13 +55,22 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
     </li>
     <li>
+      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
+    </li>
+    <li>
       <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
     </li>
   </ul>
 </li>
@@ -94,7 +103,7 @@
                         <h4 data-toc-skip class="author">Jared
 Huling</h4>
             
-            <h4 data-toc-skip class="date">2026-05-05</h4>
+            <h4 data-toc-skip class="date">2026-06-07</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/jaredhuling/fastglm/blob/HEAD/vignettes/large-data-fastglm.Rmd" class="external-link"><code>vignettes/large-data-fastglm.Rmd</code></a></small>
       <div class="hidden name"><code>large-data-fastglm.Rmd</code></div>
@@ -163,7 +172,8 @@ silently densifying a large sparse matrix is exactly the wrong thing to
 do:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">Xs</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Error in fastglmPure(x, y, family, weights, offset, start, etastart, mustart, : for sparse (dgCMatrix) objects, 'method' must be 2 (LLT) or 3 (LDLT). QR / SVD on sparse matrices is not supported by this package.</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `fastglmPure()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> for sparse (dgCMatrix) objects, 'method' must be 2 (LLT) or 3 (LDLT). QR / SVD on sparse matrices is not supported by this package.</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="filebacked-big-matrix">Filebacked <code>big.matrix</code><a class="anchor" aria-label="anchor" href="#filebacked-big-matrix"></a>
@@ -205,7 +215,8 @@ QR-style decompositions need the entire design matrix at once and would
 defeat the on-disc benefit, so they are rejected:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">Xb</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Error in fastglmPure(x, y, family, weights, offset, start, etastart, mustart, : for big.matrix objects, 'method' must be 2 (LLT) or 3 (LDLT). QR / SVD methods would force the matrix to be fully read into RAM, defeating the purpose of bigmemory.</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `fastglmPure()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> for big.matrix objects, 'method' must be 2 (LLT) or 3 (LDLT). QR / SVD methods would force the matrix to be fully read into RAM, defeating the purpose of bigmemory.</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="streaming-from-an-external-source">Streaming from an external source<a class="anchor" aria-label="anchor" href="#streaming-from-an-external-source"></a>

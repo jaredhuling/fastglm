@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
       </span>
     </div>
 
@@ -55,13 +55,22 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
     </li>
     <li>
+      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
+    </li>
+    <li>
       <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
     </li>
   </ul>
 </li>
@@ -93,7 +102,7 @@
                         <h4 data-toc-skip class="author">Jared
 Huling</h4>
             
-            <h4 data-toc-skip class="date">2026-05-05</h4>
+            <h4 data-toc-skip class="date">2026-06-07</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/jaredhuling/fastglm/blob/HEAD/vignettes/fastglm-overview.Rmd" class="external-link"><code>vignettes/fastglm-overview.Rmd</code></a></small>
       <div class="hidden name"><code>fastglm-overview.Rmd</code></div>
@@ -107,12 +116,11 @@ Huling</h4>
 <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">stats::glm()</a></code> for fitting generalized linear models. It is
 compatible with <code>R</code>’s <code>family</code> objects (see
 <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">?family</a></code>) and produces fitted objects whose downstream
-methods — <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>,
+methods (<code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>,
 <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>,
-<code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code> — behave exactly like those for a
-<code>glm</code>. This vignette walks through the main functionality of
-the package at a higher level than the other vignettes; it is intended
-as a single entry point for a new user.</p>
+<code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>) behave exactly like those for a <code>glm</code>.
+This vignette walks through the main functionality of the package at a
+higher level than the other vignettes.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/jaredhuling/fastglm" class="external-link">fastglm</a></span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
@@ -169,7 +177,7 @@ frame, pass <code>fastglm_fit</code> as the fitting function to base
 least-squares problem. <em>fastglm</em> supports six different matrix
 decompositions for solving that WLS step, all from <em>RcppEigen</em>
 (Bates and Eddelbuettel, 2013); the choice trades off speed against
-numerical stability and rank-revealing behaviour:</p>
+numerical stability and rank-revealing behavior:</p>
 <table class="table">
 <thead><tr class="header">
 <th><code>method</code></th>
@@ -214,20 +222,20 @@ The Cholesky methods (<code>2</code> and <code>3</code>) are roughly
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">f0</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>                 <span class="co"># default</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   0.004   0.000   0.004</span></span>
+<span><span class="co">#&gt;   0.005   0.000   0.006</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">f2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span>     <span class="co"># LLT</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   0.002   0.000   0.002</span></span>
+<span><span class="co">#&gt;   0.003   0.000   0.003</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">f3</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span>     <span class="co"># LDLT</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   0.002   0.000   0.002</span></span></code></pre></div>
+<span><span class="co">#&gt;   0.003   0.000   0.003</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="stability">Stability<a class="anchor" aria-label="anchor" href="#stability"></a>
 </h2>
 <p><em>fastglm</em> does not compromise computational stability for
 speed. It uses a step-halving safeguard following Marschner (2011) and
-starts from better-initialised values than <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> or
+starts from better-initialized values than <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> or
 <code><a href="https://rdrr.io/pkg/glm2/man/glm2.html" class="external-link">glm2::glm2()</a></code>, so it tends to converge in cases where the
 standard IRLS algorithm fails. See
 <code><a href="../articles/fastglm.html">vignette("fastglm", package = "fastglm")</a></code> for a
@@ -362,7 +370,7 @@ the four family functions:</p>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">p</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">p</span><span class="op">)</span></span>
 <span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Poisson.html" class="external-link">rpois</a></span><span class="op">(</span><span class="va">n</span>, <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">x</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.05</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co">## force the R-callback path by giving the family object an unrecognised name</span></span>
+<span><span class="co">## force the R-callback path by giving the family object an unrecognized name</span></span>
 <span><span class="va">disguise</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fam</span><span class="op">)</span> <span class="op">{</span> <span class="va">fam</span><span class="op">$</span><span class="va">family</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">fam</span><span class="op">$</span><span class="va">family</span>, <span class="st">"*"</span><span class="op">)</span>; <span class="va">fam</span> <span class="op">}</span></span>
 <span></span>
 <span><span class="va">mb</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/microbenchmark/man/microbenchmark.html" class="external-link">microbenchmark</a></span><span class="op">(</span></span>
@@ -373,8 +381,8 @@ the four family functions:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">mb</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Unit: milliseconds</span></span>
 <span><span class="co">#&gt;      expr      min       lq     mean   median       uq      max neval cld</span></span>
-<span><span class="co">#&gt;    native 16.44772 16.89647 17.05270 17.11078 17.33648 17.47207     5  a </span></span>
-<span><span class="co">#&gt;  callback 22.69264 24.28869 24.27382 24.47671 24.71710 25.19397     5   b</span></span></code></pre></div>
+<span><span class="co">#&gt;    native 20.94879 21.16883 23.18276 23.23572 24.14326 26.41720     5  a </span></span>
+<span><span class="co">#&gt;  callback 30.42237 30.50129 31.14845 31.26455 31.40297 32.15109     5   b</span></span></code></pre></div>
 <p>The <em>fastglm</em> package switches transparently between the two
 paths; user code does not change.</p>
 </div>
@@ -383,7 +391,7 @@ paths; user code does not change.</p>
 </h2>
 <p>A handful of regressions that come up often in practice are not
 standard GLMs but build on the same IRLS machinery. <em>fastglm</em>
-provides dedicated entry points for these:</p>
+provides dedicated fitting functions for these:</p>
 <ul>
 <li>
 <strong><code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code></strong> — negative-binomial
@@ -432,8 +440,8 @@ how much of base R’s machinery they wrap around it:</p>
 <li>
 <strong><code><a href="../reference/fastglm.html">fastglm()</a></code></strong> is the top-level S3
 function. It returns an object of class <code>"fastglm"</code> with
-deviance, AIC, null deviance, residuals, etc. populated — the right
-entry point for interactive use.</li>
+deviance, AIC, null deviance, residuals, etc. populated for interactive
+use.</li>
 <li>
 <strong><code><a href="../reference/fastglm_fit.html">fastglm_fit()</a></code></strong> is designed to be passed
 as <code>method = fastglm_fit</code> to base <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>. The

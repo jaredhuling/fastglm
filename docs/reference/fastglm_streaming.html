@@ -22,7 +22,7 @@ on-disk CSV streams, etc.)."><!-- mathjax --><script src="https://cdnjs.cloudfla
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
       </span>
     </div>
 
@@ -43,13 +43,22 @@ on-disk CSV streams, etc.)."><!-- mathjax --><script src="https://cdnjs.cloudfla
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, Zero-Inflation, and Firth Logistic Regression with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
     </li>
     <li>
+      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
+    </li>
+    <li>
       <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+    </li>
+    <li>
+      <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
     </li>
   </ul></li>
 <li>
@@ -92,7 +101,8 @@ on-disk CSV streams, etc.).</p>
 <span>  start <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  method <span class="op">=</span> <span class="fl">2L</span>,</span>
 <span>  tol <span class="op">=</span> <span class="fl">1e-07</span>,</span>
-<span>  maxit <span class="op">=</span> <span class="fl">100L</span></span>
+<span>  maxit <span class="op">=</span> <span class="fl">100L</span>,</span>
+<span>  firth <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -139,11 +149,18 @@ Cholesky. QR / SVD methods are not supported in streaming mode.</p></dd>
 
 
 <dt id="arg-tol">tol<a class="anchor" aria-label="anchor" href="#arg-tol"></a></dt>
-<dd><p>convergence tolerance on the relative change in deviance.</p></dd>
+<dd><p>convergence tolerance on the relative change in deviance
+(or sup-norm of coefficient update when `firth = TRUE`).</p></dd>
 
 
 <dt id="arg-maxit">maxit<a class="anchor" aria-label="anchor" href="#arg-maxit"></a></dt>
 <dd><p>maximum number of IRLS iterations.</p></dd>
+
+
+<dt id="arg-firth">firth<a class="anchor" aria-label="anchor" href="#arg-firth"></a></dt>
+<dd><p>logical; if `TRUE` apply Firth bias reduction using
+lagged leverages from the previous IRLS iteration.  At convergence
+the result matches the exact-leverage dense path.</p></dd>
 
 </dl></div>
     <div id="value">
