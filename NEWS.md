@@ -1,4 +1,17 @@
 
+# fastglm 0.1.2
+
+## Bug fixes
+
+* Compilation now works under libc++ with clang 23 and newer, which
+  no longer supplies `<iterator>` and `<algorithm>` as transitive
+  includes. The `bigmemory` header `BigMatrix.h`, pulled in by the
+  big.matrix backend, uses `std::back_inserter` and `std::copy` without
+  including those headers itself, so the two source files that include
+  it (`fit_glm_dense.cpp` and `bigmemory.cpp`) now include `<iterator>`
+  and `<algorithm>` explicitly beforehand. Reported by CRAN's
+  clang-trunk checks.
+
 # fastglm 0.1.1
 
 ## New features
