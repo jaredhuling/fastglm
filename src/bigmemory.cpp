@@ -1,5 +1,10 @@
 #include <iostream>
 #include "math.h"
+// bigmemory's BigMatrix.h uses std::copy and std::back_inserter but relies on
+// transitive includes for <algorithm>/<iterator>. libc++ (clang >= 23) no longer
+// provides those transitively, so include them explicitly before the header.
+#include <algorithm>
+#include <iterator>
 #include "../inst/include/bigmemory.h"
 #include <bigmemory/MatrixAccessor.hpp>
 #include <bigmemory/BigMatrix.h>
