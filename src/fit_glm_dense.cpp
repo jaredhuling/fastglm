@@ -266,7 +266,7 @@ List fit_sparse_glm(SEXP x_sparse,
     fglm::FamilyParams fp = parse_fam_params(fam_params);
 
     typedef Eigen::SparseMatrix<double> SpMat;
-    const Eigen::MappedSparseMatrix<double> Xm(as<Eigen::MappedSparseMatrix<double> >(x_sparse));
+    const Eigen::Map<Eigen::SparseMatrix<double>> Xm(as<Eigen::Map<Eigen::SparseMatrix<double>> >(x_sparse));
     Eigen::Map<const SpMat> X(Xm.rows(), Xm.cols(), Xm.nonZeros(),
                               Xm.outerIndexPtr(), Xm.innerIndexPtr(), Xm.valuePtr());
 
