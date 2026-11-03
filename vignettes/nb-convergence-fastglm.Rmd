@@ -11,13 +11,13 @@ vignette: >
 
 
 
-Standard negative-binomial GLM fitting alternates between IRLS for the
-regression coefficients $\beta$ (at fixed dispersion $\theta$) and a
-one-dimensional MLE update for $\theta$.
+Negative-binomial regression estimates both the response mean and theta, which controls variation beyond a Poisson distribution. The fit alternates between updating coefficients with theta fixed and updating theta with the fitted means fixed. Coefficient updates use iteratively reweighted least squares (IRLS), a sequence of weighted regressions; theta updates maximize the likelihood with respect to that single parameter.
 Both `MASS::glm.nb()` and `fastglm_nb()` follow this strategy, but their
 implementations differ in initialization and numerical handling.  This
 vignette compares the two on a deliberately challenging data-generating
 process where MASS frequently fails to converge.
+
+The saved results below come from the historical run dated above. They describe that implementation and dataset generator, rather than all subsequent versions or a general guarantee of convergence.
 
 ## Data-generating process
 
@@ -139,10 +139,10 @@ on roughly one in six.
 
 When both methods converge they should find the same MLE, so their
 log-likelihoods should agree.  In a small number of replications
-`MASS::glm.nb()` nominally converges but lands at a degenerate solution
+`MASS::glm.nb()` reports convergence with an extreme theta estimate
 with $\hat\theta > 10^6$ and very poor log-likelihood.  We exclude
 these (identified by `fastglm` achieving a strictly higher
-log-likelihood by more than 1 unit) to focus on genuine agreement:
+log-likelihood by more than 1 unit) from the following agreement plot. These exclusions mean that the plot describes only the remaining subset, and the excluded fits must still be counted when evaluating numerical reliability:
 
 
 ``` r

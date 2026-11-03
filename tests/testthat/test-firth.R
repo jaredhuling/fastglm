@@ -1,4 +1,3 @@
-skip_if_not_installed("logistf")
 
 # Compare fastglm(firth = TRUE) against logistf::logistf, which is the
 # canonical R implementation of Heinze & Schemper (2002) Firth's penalized
@@ -17,6 +16,7 @@ test_that("Firth coefs match logistf on simulated logistic data", {
     eta <- x %*% c(0.2, 0.5, -0.4, 0.3)
     y  <- rbinom(n, 1, plogis(eta))
 
+    skip_if_not_installed("logistf")
     m <- logistf::logistf(y ~ x[, -1], pl = FALSE, plconf = NULL,
                            control = .tight_logistf())
     f <- fastglm(x, y, family = binomial(), firth = TRUE,
@@ -45,6 +45,7 @@ test_that("Firth converges under perfect separation (where unpenalized glm diver
     expect_true(all(is.finite(coef(f))))
     expect_true(all(is.finite(f$se)))
 
+    skip_if_not_installed("logistf")
     m <- logistf::logistf(y ~ x_var, pl = FALSE, plconf = NULL,
                            control = .tight_logistf())
     # Separated data: the likelihood is very flat, so algorithms converge
@@ -61,6 +62,7 @@ test_that("Firth matches logistf on a typical small-sample bias case", {
     y   <- rbinom(n, 1, plogis(eta))
     X   <- cbind(1, z1, z2)
 
+    skip_if_not_installed("logistf")
     m <- logistf::logistf(y ~ z1 + z2, pl = FALSE, plconf = NULL,
                            control = .tight_logistf())
     f <- fastglm(X, y, family = binomial(), firth = TRUE,

@@ -4,12 +4,18 @@
 \alias{vcov.fastglm}
 \title{`vcov()` method for `fastglm` fitted objects}
 \usage{
-\method{vcov}{fastglm}(object, ...)
+\method{vcov}{fastglm}(object, dispersion = object$dispersion, type = NULL, cluster = NULL, ...)
 }
 \arguments{
 \item{object}{a fitted object of class inheriting from `"fastglm"`.}
 
-\item{...}{additional arguments (currently unused).}
+\item{dispersion}{scale used for model-based covariance.}
+
+\item{type}{optional HC correction for robust covariance.}
+
+\item{cluster}{optional cluster identifiers for robust covariance.}
+
+\item{...}{arguments to [fastglm_vcov()].}
 }
 \value{
 The estimated variance-covariance matrix of the fitted coefficients.

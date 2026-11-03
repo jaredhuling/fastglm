@@ -14,8 +14,7 @@ negbin(theta, link = "log")
 \value{
 A `family` object with class `"family"` and
   `family$family == "Negative Binomial(theta)"`. The object also carries
-  the slot `family$theta`, which `family_code()` and the dispatch layer
-  use to detect the native NB fast path.
+  the slot `family$theta`, which retains the supplied size parameter.
 }
 \description{
 A built-in negative-binomial family for use with [fastglm()] and
@@ -26,7 +25,7 @@ on the **MASS** package. The variance is `mu + mu^2 / theta`; as
 }
 \details{
 For joint estimation of `theta` together with `beta`, use the dedicated
-(forthcoming) `fastglm_nb()` entry point. The `negbin()` family here is
+[fastglm_nb()] function. The `negbin()` family here is
 intended for use cases where `theta` has been pre-specified or estimated
 separately.
 }

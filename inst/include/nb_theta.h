@@ -14,11 +14,28 @@
 #include <boost/math/special_functions/trigamma.hpp>
 #include <boost/math/tools/roots.hpp>
 #include "brent.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
 
 namespace fglm { namespace nb {
+
+// The leading 1/theta terms cancel in the size score. Evaluating the
+// remaining series avoids artificial roots near the Poisson boundary.
+inline double score_theta_row(double theta, double yi, double mi, double dig_th)
+{
+    if (theta > 1e4 * std::max(1.0, std::max(yi, mi))) {
+        const double c2 = (yi - (yi - mi) * (yi - mi)) / 2.0;
+        const double c3 = yi * (yi - 1.0) * (2.0 * yi - 1.0) / 6.0
+                          + 2.0 * mi * mi * mi / 3.0 - yi * mi * mi;
+        const double c4 = -yi * yi * (yi - 1.0) * (yi - 1.0) / 4.0
+                          - 3.0 * mi * mi * mi * mi / 4.0 + yi * mi * mi * mi;
+        return (c2 + (c3 + c4 / theta) / theta) / (theta * theta);
+    }
+    return boost::math::digamma(yi + theta) - dig_th - std::log1p(mi / theta)
+           + (mi - yi) / (theta + mi);
+}
 
 // Score of the NB2 log-likelihood w.r.t. theta, evaluated at fixed mu:
 //
@@ -40,31 +57,20 @@ inline double score_theta(double theta,
     double s = 0.0;
     for (Eigen::Index i = 0; i < y.size(); ++i) {
         const double yi = y[i], mi = mu[i], wi = wt[i];
-        const double tm = theta + mi;
-        // log(theta / (theta + mu)) computed via log1p when mu << theta to
-        // retain precision.
-        double log_ratio;
-        if (mi < 1e-3 * theta) {
-            // log(theta / (theta + mu)) = -log(1 + mu/theta)
-            log_ratio = -std::log1p(mi / theta);
-        } else {
-            log_ratio = std::log(theta / tm);
-        }
-        s += wi * (digamma(yi + theta) - dig_th + log_ratio + (mi - yi) / tm);
+        s += wi * score_theta_row(theta, yi, mi, dig_th);
     }
     return s;
 }
 
-// Information for theta at fixed mu, matching MASS::theta.ml exactly:
+// Observed information for theta at fixed mu, as in MASS::theta.ml:
 //
 //   info(theta) = sum_i wt_i * [
 //                  - trigamma(y_i + theta) + trigamma(theta)
 //                  - 1/theta + 2/(theta + mu_i)
 //                  - (y_i + theta) / (theta + mu_i)^2 ]
 //
-// At the MLE, this is positive and equals the Fisher information; we
-// report SE.theta = sqrt(1 / info).  Newton fallback uses score / info
-// (matches MASS's iteration sign convention).
+// Joint information additionally includes the coefficient/size cross
+// derivatives. Newton updates use score / info.
 inline double info_theta(double theta,
                          const Eigen::Ref<const Eigen::ArrayXd>& y,
                          const Eigen::Ref<const Eigen::ArrayXd>& mu,
@@ -76,6 +82,16 @@ inline double info_theta(double theta,
     double I = 0.0;
     for (Eigen::Index i = 0; i < y.size(); ++i) {
         const double yi = y[i], mi = mu[i], wi = wt[i];
+        if (theta > 1e4 * std::max(1.0, std::max(yi, mi))) {
+            const double c2 = (yi - (yi - mi) * (yi - mi)) / 2.0;
+            const double c3 = yi * (yi - 1.0) * (2.0 * yi - 1.0) / 6.0
+                              + 2.0 * mi * mi * mi / 3.0 - yi * mi * mi;
+            const double c4 = -yi * yi * (yi - 1.0) * (yi - 1.0) / 4.0
+                              - 3.0 * mi * mi * mi * mi / 4.0 + yi * mi * mi * mi;
+            I += wi * (2.0 * c2 + (3.0 * c3 + 4.0 * c4 / theta) / theta)
+                 / (theta * theta * theta);
+            continue;
+        }
         const double tm  = theta + mi;
         const double tm2 = tm * tm;
         I += wi * (-trigamma(yi + theta) + tri_th

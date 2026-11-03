@@ -178,32 +178,21 @@ static MatrixXd obs_info_numjac(int dist_code, int zero_fam_code,
     const Eigen::Index p_c = X.cols();
     const Eigen::Index p   = p_z + p_c + (dist_code == 1 ? 1 : 0);
 
-    VectorXd s0 = full_score(dist_code, zero_fam_code, gamma, beta, theta,
-                             Z, X, y, wts, off_z, off_c);
     MatrixXd J(p, p);
-    const double rel = 1e-5;
+    const double rel = std::cbrt(std::numeric_limits<double>::epsilon());
     for (Eigen::Index k = 0; k < p; ++k) {
-        VectorXd g_k = gamma;
-        VectorXd b_k = beta;
-        double   t_k = theta;
-        double base, h;
+        VectorXd gp = gamma, gm = gamma, bp = beta, bm = beta;
+        double tp = theta, tm = theta, h;
         if (k < p_z) {
-            base = g_k[k];
-            h = rel * (std::fabs(base) + 1.0);
-            g_k[k] = base + h;
+            h = rel * (1 + std::abs(gamma[k])); gp[k] += h; gm[k] -= h;
         } else if (k < p_z + p_c) {
             Eigen::Index j = k - p_z;
-            base = b_k[j];
-            h = rel * (std::fabs(base) + 1.0);
-            b_k[j] = base + h;
+            h = rel * (1 + std::abs(beta[j])); bp[j] += h; bm[j] -= h;
         } else {
-            base = t_k;
-            h = rel * std::max(t_k, 1.0);
-            t_k = base + h;
+            h = rel * theta; tp += h; tm -= h;
         }
-        VectorXd s_k = full_score(dist_code, zero_fam_code, g_k, b_k, t_k,
-                                  Z, X, y, wts, off_z, off_c);
-        J.col(k) = (s_k - s0) / h;
+        J.col(k) = (full_score(dist_code, zero_fam_code, gp, bp, tp, Z, X, y, wts, off_z, off_c)
+                  - full_score(dist_code, zero_fam_code, gm, bm, tm, Z, X, y, wts, off_z, off_c)) / (2*h);
     }
     MatrixXd I_obs = -0.5 * (J + J.transpose());
     return I_obs;
@@ -258,7 +247,7 @@ static PilotResult pilot_init(const Map<MatrixXd>& X, const Map<MatrixXd>& Z,
     gamma_solver.init_parms(Map<VectorXd>(zero_start.data(), zero_start.size()),
                             Map<VectorXd>(mu0_z.data(), n),
                             Map<VectorXd>(eta0_z.data(), n));
-    gamma_solver.solve(maxit);
+    gamma_solver.solve(maxit, false);
     out.gamma = gamma_solver.get_beta();
     out.mu_z  = gamma_solver.get_mu();
     out.eta_z = gamma_solver.get_eta();
@@ -279,7 +268,7 @@ static PilotResult pilot_init(const Map<MatrixXd>& X, const Map<MatrixXd>& Z,
     beta_solver.init_parms(Map<VectorXd>(beta_start.data(), beta_start.size()),
                            Map<VectorXd>(mu0c.data(), n),
                            Map<VectorXd>(eta0c.data(), n));
-    beta_solver.solve(maxit);
+    beta_solver.solve(maxit, false);
     out.beta  = beta_solver.get_beta();
     out.mu_c  = beta_solver.get_mu();
     out.eta_c = beta_solver.get_eta();
@@ -416,7 +405,7 @@ List fit_glm_zi(
             Map<VectorXd>(gamma_warm.data(), gamma_warm.size()),
             Map<VectorXd>(mu_z_warm.data(), n),
             Map<VectorXd>(eta_z_warm.data(), n));
-        gamma_solver.solve(maxit);
+        gamma_solver.solve(maxit, false);
         gamma = gamma_solver.get_beta();
         eta_z = gamma_solver.get_eta();
         gamma_warm = gamma;
@@ -433,7 +422,7 @@ List fit_glm_zi(
             Map<VectorXd>(beta_warm.data(), beta_warm.size()),
             Map<VectorXd>(mu_c_warm.data(), n),
             Map<VectorXd>(eta_c_warm.data(), n));
-        beta_solver.solve(maxit);
+        beta_solver.solve(maxit, false);
         beta  = beta_solver.get_beta();
         eta_c = beta_solver.get_eta();
         mu_c  = beta_solver.get_mu();
@@ -562,7 +551,7 @@ List fit_glm_zi(
                                          (dist_code == 1 ? theta : 1.0),
                                          Z, X, Y, W, OffZ, OffC);
         Eigen::LDLT<MatrixXd> ldlt(I_obs);
-        if (ldlt.info() != Eigen::Success) {
+        if (ldlt.info() != Eigen::Success || !ldlt.isPositive() || ldlt.rcond() < 1e-12) {
             const Eigen::Index pp = I_obs.rows();
             vcov_full = MatrixXd::Constant(pp, pp,
                 std::numeric_limits<double>::quiet_NaN());
@@ -573,10 +562,10 @@ List fit_glm_zi(
 
     MatrixXd vcov_zero  = vcov_full.topLeftCorner(p_z, p_z);
     MatrixXd vcov_count = vcov_full.block(p_z, p_z, p_c, p_c);
-    VectorXd se_zero    = vcov_zero.diagonal().array().abs().sqrt();
-    VectorXd se_count   = vcov_count.diagonal().array().abs().sqrt();
+    VectorXd se_zero    = vcov_zero.diagonal().array().sqrt();
+    VectorXd se_count   = vcov_count.diagonal().array().sqrt();
     double   se_theta   = (dist_code == 1)
-        ? std::sqrt(std::fabs(vcov_full(p_z + p_c, p_z + p_c)))
+        ? std::sqrt(vcov_full(p_z + p_c, p_z + p_c))
         : std::numeric_limits<double>::quiet_NaN();
 
     const Eigen::Index pp = p_c + p_z + (dist_code == 1 ? 1 : 0);

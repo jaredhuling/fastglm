@@ -8,12 +8,22 @@
 #' Brent-1D MLE inside the C++ driver, alternating with the count-side
 #' IRLS.
 #'
-#' This is the fastglm analogue of [pscl::hurdle()] -- coefficients agree
-#' to 1e-6 on standard datasets, with all numerical loops in C++.
+#' Formula fits use the native count-model driver. Sparse designs and data
+#' supplied in blocks use the same likelihood with blockwise score updates.
+#' The latter permits repeated passes over data that need not fit in memory.
 #'
-#' @param formula a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
+#' @param formula a numeric matrix, `dgCMatrix`, [fastglm_source()], or a
+#'   [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 #'   where the right-hand side after `|` specifies the zero-model design.
 #'   If `|` is absent, the same RHS is used for both parts.
+#' @param response nonnegative integer response for a matrix design. A source
+#'   supplies its response in each block; the existing `y` argument controls
+#'   whether a fitted model retains its response.
+#' @param z optional binary-component matrix for matrix inputs; defaults to
+#'   the count design. Source blocks can supply `Z` separately from `X`.
+#' @param method decomposition for matrix/source component GLMs, as in [fastglm()].
+#' @param block.size maximum number of matrix rows processed together for the
+#'   truncated count component. A source determines its own block sizes.
 #' @param data optional data frame / environment from which to draw model
 #'   matrix variables.
 #' @param subset,na.action standard model-frame arguments.
@@ -26,14 +36,17 @@
 #' @param link character, link for the zero/non-zero binomial.  One of
 #'   `"logit"` (default), `"probit"`, `"cloglog"`, `"log"`.
 #' @param init.theta optional positive scalar starting value for the NB
-#'   dispersion.  If `NULL`, a method-of-moments initializer is used.
+#'   dispersion. Formula fits use a moment initializer by default; matrix
+#'   and source fits start at one after fitting a truncated Poisson model.
 #' @param tol,maxit IRLS-loop convergence tolerance and iteration cap.
 #' @param outer.tol,outer.maxit `(beta, theta)` outer-loop convergence
 #'   tolerance and iteration cap (only used when `dist = "negbin"`).
-#' @param theta.tol,theta.maxit Brent-loop tolerance / iteration cap for
-#'   the inner theta MLE (only used when `dist = "negbin"`).
+#' @param theta.tol,theta.maxit tolerance and iteration cap for the inner
+#'   theta update (only used when `dist = "negbin"`).
 #' @param model logical; keep the model frame on the result.
-#' @param y,x logical; keep the response / design matrices on the result.
+#' @param y,x logical; retain the response and, for formula fits, design
+#'   matrices. Matrix fits retain their supplied designs for prediction;
+#'   source fits retain the reader instead of observation-level data.
 #'
 #' @returns A list of class `c("fastglm_hurdle", "fastglm")` with elements
 #'   `coefficients` (a list with `count` and `zero`), `se` (likewise),
@@ -73,7 +86,8 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
                            outer.maxit = 50L,
                            theta.tol   = 1e-8,
                            theta.maxit = 100L,
-                           model = TRUE, y = TRUE, x = FALSE)
+                           model = TRUE, y = TRUE, x = FALSE,
+                           response = NULL, z = NULL, method = 2L, block.size = 8192L)
 {
     if (!requireNamespace("Formula", quietly = TRUE))
         stop("Package 'Formula' is required for fastglm_hurdle(); install it.",
@@ -82,6 +96,16 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     dist      <- match.arg(dist)
     link      <- match.arg(link)
     zero.dist <- match.arg(zero.dist, choices = "binomial")
+    if(is.matrix(formula) || inherits(formula,c("dgCMatrix","fastglm_source"))) {
+        if(!missing(subset) || !missing(na.action))
+            stop("subset and na.action apply only to formula fits; prepare matrix or source rows first",call.=FALSE)
+        out <- .count_backend_hurdle(formula,response,z,
+            if(missing(weights)) NULL else weights,if(missing(offset)) NULL else offset,
+            dist,link,init.theta,method,tol,maxit,outer.tol,outer.maxit,theta.tol,theta.maxit,block.size)
+        out$call <- match.call()
+        if(!isTRUE(y)) out$y <- NULL
+        return(out)
+    }
 
     # ---- 1. Build the model frame using Formula's two-RHS support ------------
     cl <- match.call()
@@ -95,6 +119,7 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     mf$tol  <- mf$maxit  <- mf$outer.tol <- mf$outer.maxit <- NULL
     mf$theta.tol <- mf$theta.maxit <- NULL
     mf$model <- mf$y <- mf$x <- NULL
+    mf$response <- mf$z <- mf$method <- mf$block.size <- NULL
     mf[[1L]] <- as.name("model.frame")
     mf <- eval(mf, parent.frame())
 
@@ -110,20 +135,22 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     X_count <- model.matrix(mt_count, mf)
     Z_zero  <- model.matrix(mt_zero,  mf)
 
+    if (ncol(X_count) == 0L || ncol(Z_zero) == 0L) stop("both components require at least one coefficient", call. = FALSE)
+
     # weights / offset
     wt <- model.weights(mf)
     if (is.null(wt)) wt <- rep(1, n)
     if (!is.numeric(wt) || any(wt < 0))
         stop("'weights' must be non-negative.", call. = FALSE)
 
-    off <- model.offset(mf)
-    if (is.null(off)) {
-        off_count <- rep(0, n); off_zero <- rep(0, n)
-    } else if (is.matrix(off) && ncol(off) == 2L) {
-        off_count <- as.numeric(off[, 1L]); off_zero <- as.numeric(off[, 2L])
-    } else {
-        off_count <- as.numeric(off);       off_zero <- as.numeric(off)
-    }
+    offsets <- .component_offsets(mf, list(count = mt_count, zero = mt_zero))
+    off_count <- offsets$count; off_zero <- offsets$zero
+    .validate_glm_data(X_count, Y_resp, wt, off_count)
+    .validate_glm_data(Z_zero, Y_resp, wt, off_zero)
+    if (any(Y_resp != floor(Y_resp))) stop("count responses must be integers", call. = FALSE)
+    .check_iterations(tol, maxit)
+    .check_iterations(outer.tol, outer.maxit)
+    .check_iterations(theta.tol, theta.maxit)
 
     # ---- 2. Map link to fam_code & family-fns for the zero/non-zero binomial -
     zero_family <- switch(link,
@@ -210,13 +237,14 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
         converged      = res$converged,
         n              = res$n,
         n_positive     = res$n_positive,
-        df.residual    = n - res$df,
+        df.residual    = sum(wt > 0) - res$df,
         dist           = dist,
         link           = link,
         zero.dist      = zero.dist,
         formula        = f,
         terms          = list(count = mt_count, zero = mt_zero),
-        levels         = .getXlevels(mt_count, mf),
+        levels         = lapply(mf[vapply(mf, is.factor, logical(1))], levels),
+        na.action      = attr(mf, "na.action"),
         contrasts      = list(count = attr(X_count, "contrasts"),
                               zero  = attr(Z_zero,  "contrasts")),
         weights        = wt,
@@ -228,6 +256,31 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
         mu_zero        = res$mu_zero,
         call           = cl
     )
+    out$vcov.full <- out$vcov
+    out$theta.estimated <- dist == "negbin"
+    out$theta.boundary <- dist == "negbin" && (out$theta<=1e-6*(1+theta.tol) || out$theta>=1e8/(1+theta.tol))
+    out$refit.controls <- list(dist=dist,link=link,tol=tol,maxit=maxit,outer.tol=outer.tol,
+        outer.maxit=outer.maxit,theta.tol=theta.tol,theta.maxit=theta.maxit,method=method,block.size=block.size)
+    if (dist == "negbin") {
+        jj <- c(seq_len(p_c), pp + 1L)
+        out$vcov.full <- matrix(0, pp + 1L, pp + 1L)
+        out$vcov.full[seq_len(pp), seq_len(pp)] <- out$vcov
+        out$vcov.full[jj, jj] <- res$vcov_count_joint
+        dimnames(out$vcov.full) <- rep(list(c(names(coef.fastglm_hurdle(out)), "theta")), 2L)
+    }
+    if(out$theta.boundary) {
+        reader <- .count_backend_reader(X_count,Y_resp,Z_zero,wt,offsets,block.size)
+        conditional <- .count_backend_joint(reader,out$coefficients$count,out$theta,
+                                             truncated=TRUE,theta.estimated=FALSE)
+        out$loglik_count <- .count_backend_count_summary(reader,out$coefficients$count,out$theta,TRUE)$loglik
+        out$loglik <- out$loglik_count+out$loglik_zero
+        out$vcov[seq_len(p_c),seq_len(p_c)] <- conditional
+        out$vcov.full[seq_len(pp),seq_len(pp)] <- out$vcov
+        out$vcov.full[pp+1L,] <- out$vcov.full[,pp+1L] <- NA_real_
+        out$SE.theta <- NA_real_;out$se$count <- sqrt(diag(conditional))
+    }
+    if (!out$converged) warning("two-component model did not converge", call. = FALSE)
+    if (any(!is.finite(diag(out$vcov)))) warning("observed information is not positive definite; covariance is unavailable", call. = FALSE)
     if (model) out$model <- mf
     if (y)     out$y     <- Y_resp
     if (x)     out$x     <- list(count = X_count, zero = Z_zero)
@@ -250,9 +303,18 @@ coef.fastglm_hurdle <- function(object, model = c("full", "count", "zero"), ...)
 }
 
 #' @export
-vcov.fastglm_hurdle <- function(object, model = c("full", "count", "zero"), ...)
+vcov.fastglm_hurdle <- function(object, model = c("full", "count", "zero"), full = FALSE,
+                               type=NULL,cluster=NULL,...)
 {
     model <- match.arg(model)
+    if(!is.null(type) || !is.null(cluster)) {
+        v <- fastglm_vcov(object,if(is.null(type)) "HC0" else type,cluster=cluster,full=full,...)
+        if(model=="full") return(v)
+        p <- length(object$coefficients$count)
+        i <- if(model=="count") seq_len(p) else p+seq_along(object$coefficients$zero)
+        return(v[i,i,drop=FALSE])
+    }
+    if (full) return(object$vcov.full)
     if (model == "full") return(object$vcov)
     p_c <- length(object$coefficients$count)
     p_z <- length(object$coefficients$zero)
@@ -265,11 +327,11 @@ logLik.fastglm_hurdle <- function(object, ...)
 {
     df <- length(object$coefficients$count) + length(object$coefficients$zero) +
           (object$dist == "negbin")
-    structure(object$loglik, df = df, nobs = object$n,
+    structure(object$loglik, df = df, nobs = nobs(object),
               class = "logLik")
 }
 
-#' @export
+#' @exportS3Method print fastglm_hurdle
 print.fastglm_hurdle <- function(x, digits = max(3, getOption("digits") - 3), ...)
 {
     cat("\nfastglm_hurdle:  hurdle ", x$dist, " | ", x$zero.dist,

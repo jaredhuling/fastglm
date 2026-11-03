@@ -20,21 +20,25 @@ knitr::opts_chunk$set(
 )
 ```
 
-Firth's (1993) penalized likelihood removes the leading $O(1/n)$ bias from maximum likelihood estimates and produces finite estimates even under separation. *fastglm* implements the general mean-bias reduction of Kosmidis and Firth (2009, 2021), which extends Firth's original logistic penalty to arbitrary GLM families. The method is activated with a single flag:
+Maximum likelihood estimates can have substantial bias in small samples. In logistic regression, a predictor or combination of predictors may perfectly distinguish successes from failures, a condition called separation. The ordinary coefficient estimates can then grow without reaching finite values. Mean bias reduction adjusts the estimating equations to reduce their leading small-sample bias; for logistic regression with a logit link it also provides finite estimates under separation when the design has full column rank. The *fastglm* implementation uses the mean-adjusted score method of Firth (1993) and Kosmidis and Firth (2009), selected by `firth=TRUE`:
 
 ```{r, eval = FALSE}
 fastglm(x, y, family = binomial(), firth = TRUE)
 ```
 
-The penalty adds $\frac{1}{2} \partial \log |X^\top W X| / \partial \beta$ to the score, which is equivalent to modifying the IRLS working response by
+A score is the derivative of the log likelihood with respect to a parameter. Ordinary maximum likelihood sets these derivatives to zero. Mean bias reduction instead sets adjusted scores to zero. For logistic regression with a logit link, this adjustment can be obtained by adding half the log determinant of the information matrix to the log likelihood. The general adjustment need not correspond to such a penalty for other families or links.
+
+The coefficients are computed by iteratively reweighted least squares (IRLS), a sequence of weighted regression updates. Bias reduction changes the temporary response used in each weighted regression by
 
 $$
 \xi_i = \frac{\phi \, h_i \, \mu''(\eta_i) \, V(\mu_i)}{2 \, w_i \, [\mu'(\eta_i)]^3}
 $$
 
-where $h_i$ is the $i$-th diagonal of the hat matrix $H = W^{1/2} X (X^\top W X)^{-1} X^\top W^{1/2}$, $\mu''(\eta)$ is the second derivative of the inverse link, $V(\mu)$ is the variance function, $w_i$ is the prior weight, and $\phi$ is the dispersion (1 for binomial and Poisson families; estimated iteratively for Gaussian, Gamma, and inverse Gaussian). This is the AS_mean adjustment of Kosmidis and Firth (2009), the same method used by `brglm2::brglmFit(type = "AS_mean")`.
+Here $X$ is the predictor matrix, $\eta_i$ is the linear predictor, and $\mu(\eta_i)$ is the fitted response mean. The derivatives $\mu'$ and $\mu''$ describe how that mean changes with the linear predictor. The variance function is $V(\mu)$, $w_i$ is the supplied prior weight, and $\phi$ is the dispersion controlling response variation. The diagonal working-weight matrix has entries $W_{ii}=w_i[\mu'(\eta_i)]^2/V(\mu_i)$.
 
-The adjustment is computed once per IRLS iteration using the leverages from the weighted least-squares decomposition that *fastglm* already performs, so the overhead relative to an unpenalized fit is modest.
+The value $h_i$ is the $i$th diagonal of $H = W^{1/2} X (X^\top W X)^{-1} X^\top W^{1/2}$. These diagonal values, called leverages, describe the relative influence of each predictor row in the weighted-regression step. They determine how strongly that row's temporary response is adjusted. For families with unknown dispersion, its estimating equation must also be adjusted. The resulting joint calculation corresponds to the `AS_mean` option in *brglm2*.
+
+The additional computation depends on the family, predictor dimension, and number of iterations. Leverage calculations use the matrix decomposition from the weighted regression. Gamma models also require solving an adjusted dispersion equation, so avoiding repeated distribution calculations is particularly useful for that family. Timings later in this vignette compare the complete fits and check agreement before reporting speed.
 
 ```{r}
 library(fastglm)
@@ -42,7 +46,7 @@ library(fastglm)
 
 # Logistic regression under separation
 
-The canonical application is logistic regression with (quasi-) separation, where the standard MLE diverges. The `sex2` dataset from *logistf* (Heinze and Schemper, 2002) demonstrates:
+The `sex2` dataset from *logistf* illustrates logistic regression with separation (Heinze and Schemper, 2002). We compare finite bias-reduced estimates from *fastglm* with those from *logistf*. The maximum likelihood estimate, abbreviated MLE, refers to the ordinary fit without the bias adjustment.
 
 ```{r}
 data(sex2, package = "logistf")
@@ -60,21 +64,23 @@ cbind(fastglm = unname(coef(fit_f)), logistf = unname(coef(fit_l)))
 max(abs(unname(coef(fit_f)) - unname(coef(fit_l))))
 ```
 
-Coefficients agree to roughly 1e-7. The runtime advantage is substantial because *fastglm*'s Firth solver reuses the C++ IRLS infrastructure:
+The maximum absolute coefficient difference above measures numerical agreement on this dataset. The following code compares elapsed time for the same bias-reduced regression, excluding profile-likelihood confidence intervals from both fits. The size of any runtime advantage depends on the problem and computing environment:
 
 ```{r}
 mb <- microbenchmark::microbenchmark(
     fastglm = fastglm(X, y, family = binomial(), firth = TRUE),
     logistf = logistf::logistf(case ~ age + oc + vic + vicl + vis + dia,
                                data = sex2, pl = FALSE, plconf = NULL),
-    times = 10L
+    times = 3L
 )
 print(mb, unit = "ms")
 ```
 
 # General GLM families
 
-`firth = TRUE` works with all standard R families and link functions. For each family below, we verify that *fastglm* reproduces the bias-reduced coefficients from `brglm2::brglmFit(type = "AS_mean")` --- both implement the same AS_mean adjustment, so the coefficients should agree to near machine precision.
+The supported response distributions are binomial, Poisson, Gaussian, Gamma, inverse Gaussian, and negative binomial with theta supplied as a fixed value. The standard family definitions must be used because the bias adjustment depends on distribution derivatives beyond those needed for an ordinary GLM. Quasi families, Tweedie families, and user-modified family calculations are therefore excluded from this estimator.
+
+The following examples compare coefficient estimates with the `AS_mean` option in `brglm2::brglmFit()`. Numerical agreement depends on the stopping tolerances and on how well the predictors distinguish the separate coefficient effects. The log, inverse, and other links specify how the response mean is related to the linear predictor.
 
 ```{r}
 library(brglm2)
@@ -167,7 +173,9 @@ cat(sprintf("inv.gauss log      max|diff| = %.2e\n",
 
 # Standard errors
 
-The standard errors reported by `fastglm` with `firth = TRUE` come from the unscaled $(X^\top W X)^{-1}$ at convergence, the same quantity that `brglm2` uses. For unit-dispersion families (binomial, Poisson), these are the Firth-penalized standard errors directly; for other families, the dispersion is estimated as $\hat\phi = D / (n - p)$ and applied to the variance-covariance matrix.
+Standard errors describe uncertainty around the fitted coefficients. The reported covariance uses the expected information, which measures how much information the fitted response distribution supplies about those coefficients, evaluated at the bias-reduced estimate. Its diagonal entries give squared standard errors. This is a model-based local approximation; it does not use the curvature of a penalized log likelihood.
+
+Binomial, Poisson, and fixed-theta negative-binomial models have dispersion one. For Gaussian and inverse Gaussian models, the mean-adjusted dispersion estimate is $D/(n-p)$, where $D$ is the deviance, $n$ counts observations with positive weight, and $p$ is the design rank. The deviance measures discrepancy between fitted and observed outcomes. Gamma dispersion requires an additional adjustment to its estimating equation. The fitted dispersion is used consistently in the coefficient adjustment and the covariance calculation.
 
 ```{r}
 f <- fastglm(X, y_bin, family = binomial(), firth = TRUE, tol = 1e-10)
@@ -178,27 +186,54 @@ cbind(fastglm_SE = f$se, brglm2_SE = summary(b)$coefficients[, "Std. Error"])
 max(abs(f$se - summary(b)$coefficients[, "Std. Error"]))
 ```
 
-# Penalized deviance
+# Adjusted scores and penalized likelihood
 
-The Firth-penalized deviance is $D^* = D - \log |X^\top W X|$, where $D$ is the standard deviance and the log-determinant comes from the information matrix at the penalized MLE. Both the standard and penalized deviances are reported:
+Mean bias reduction modifies the score equations. For logistic regression, this corresponds to adding half the log determinant of the expected information to the log likelihood. This equivalence does not extend to every family and link. `penalized.deviance` is therefore reported only for the supported canonical cases; ordinary deviance remains available for all supported families.
 
 ```{r}
-f <- fastglm(X, y_bin, family = binomial(), firth = TRUE)
-c(deviance = f$deviance,
-  log.det.XtWX = f$log.det.XtWX,
-  penalized.deviance = f$penalized.deviance)
+f <- fastglm(X, y_bin, family=binomial(), firth=TRUE)
+c(deviance=f$deviance, penalized.deviance=f$penalized.deviance)
 ```
+
+The implemented adjustment targets mean bias, which concerns the average estimation error over repeated samples. An adjustment targeting median bias and user-selected strengths of the Jeffreys penalty are outside the current interface.
+
+# Profile intervals and tests for logistic regression
+
+An interval based on a coefficient estimate plus or minus a multiple of its standard error is called a Wald interval. This calculation uses a local quadratic approximation to the likelihood, yielding an interval that is symmetric around the estimate. A profile interval instead varies the coefficient of interest and re-estimates the remaining coefficients at each value. The resulting interval can be asymmetric because it follows the shape of the fitted likelihood over a wider range.
+
+For Firth logistic regression with a logit link, `confint(..., method="profile")` uses the penalized log likelihood described above. Each constrained fit retains all columns of the original information matrix in the penalty. Dropping the tested predictor would change the penalty and therefore the comparison. A candidate coefficient value is included in the interval when twice the decrease in the maximized penalized log likelihood is below the appropriate chi-square cutoff with one degree of freedom.
+
+```{r}
+fit_profile <- fastglm(case ~ age + oc + vic + vicl + vis + dia,
+                       data=sex2, family=binomial(), firth=TRUE,
+                       tol=1e-10, maxit=200)
+profile_ci <- confint(fit_profile, parm=c("age","dia"), method="profile")
+cbind(estimate=coef(fit_profile)[rownames(profile_ci)], profile_ci)
+attr(profile_ci,"diagnostics")[,c("parameter","side","converged","lr.error")]
+```
+
+The `parm` argument selects the coefficients to profile, limiting the additional fitting work. The diagnostic column `lr.error` records the difference between the likelihood-ratio statistic at an endpoint and the target cutoff. A failed endpoint is reported as missing with a warning and a diagnostic message. These diagnostics help distinguish an interval obtained successfully from a numerical calculation that requires further examination.
+
+`fastglm_profile_test()` applies the same comparison to a specified hypothesis. With several coefficients in `parm`, it tests their hypothesized values jointly while re-estimating the remaining coefficients. The following example tests whether the coefficients for `oc` and `vic` are both zero, conditional on the other predictors:
+
+```{r}
+fastglm_profile_test(fit_profile, parm=c("oc","vic"), null=0)
+```
+
+The reference chi-square distribution has one degree of freedom for each constrained coefficient. A small p-value indicates that the constrained model fits less well relative to the unconstrained model under this reference distribution. Both the tests and profile intervals use large-sample approximations under independent binomial sampling; profiling does not make their finite-sample calibration exact. Grouped binomial counts and frequency weights are supported when the effective successes and failures are integer counts. Fractional survey or power-likelihood weights require a different inferential justification and are excluded from these procedures.
+
+Profile inference currently requires a retained dense design and response from a converged, full-rank binomial-logit Firth fit. Sparse, mapped, and streaming designs remain useful for fitting, but the profile functions do not convert them to dense form. The default `confint()` calculation remains the Wald interval, and failed profile calculations return their diagnostics without replacing the result by another interval.
 
 # Speed comparison across families
 
-A timing comparison of `fastglm(firth = TRUE)` against `brglm2::brglmFit(type = "AS_mean")` across families with `n = 10000` observations and `p = 5` covariates:
+The following comparison uses 10,000 observations and five predictors plus an intercept. Both functions receive the same preconstructed model matrix, so formula processing is excluded from both timings. Each fit is checked for convergence and coefficient agreement before timing. The methods retain their own starting-value procedures, and iteration counts are reported because these procedures and stopping rules affect the work required. These repeated timings describe this dataset and machine; they do not establish a uniform speed advantage across families or designs.
 
 ```{r}
 set.seed(123)
 n <- 10000;  p <- 5
 x1 <- rnorm(n);  x2 <- rnorm(n); x3 <- rnorm(n)
 x4 <- rnorm(n);  x5 <- rnorm(n)
-X <- cbind(1, x1, x2, x3, x4, x5)
+X <- cbind("(Intercept)"=1, x1, x2, x3, x4, x5)
 eta <- 0.5 + 0.3 * x1 - 0.2 * x2 + 0.1 * x3
 
 families <- list(
@@ -216,22 +251,35 @@ families <- list(
                               y = eta + rnorm(n, 0, 0.5))
 )
 
-df <- data.frame(y = 0, x1 = x1, x2 = x2, x3 = x3, x4 = x4, x5 = x5)
 results <- list()
 for (nm in names(families)) {
     fi <- families[[nm]]
-    df$y <- fi$y
+    fit_fast <- function() fastglm(X,fi$y,family=fi$fam,firth=TRUE,
+                                   tol=1e-8,maxit=100)
+    fit_reference <- function() brglm2::brglmFit(X,fi$y,family=fi$fam,
+        control=brglm2::brglmControl(type="AS_mean",epsilon=1e-8,maxit=100))
+    f <- fit_fast(); b <- fit_reference()
+    error <- max(abs(unname(coef(f))-unname(coef(b))))
+    stopifnot(f$converged,b$converged,error<1e-5)
     mb <- microbenchmark::microbenchmark(
-        fastglm = fastglm(X, fi$y, family = fi$fam, firth = TRUE),
-        brglm2  = glm(y ~ x1 + x2 + x3 + x4 + x5, data = df,
-                      family = fi$fam, method = "brglmFit", type = "AS_mean"),
-        times = 10L
-    )
-    s <- summary(mb, unit = "ms")
-    cat(sprintf("%-20s fastglm=%7.2f ms  brglm2=%7.2f ms  speedup=%.1fx\n",
-                nm, s$median[1], s$median[2], s$median[2] / s$median[1]))
+        fastglm=fit_fast(),brglm2=fit_reference(),times=5L)
+    timing <- summary(mb,unit="ms")
+    ms <- setNames(timing$median,as.character(timing$expr))
+    results[[nm]] <- data.frame(family=nm,fastglm_ms=ms[["fastglm"]],
+        brglm2_ms=ms[["brglm2"]],ratio=ms[["brglm2"]]/ms[["fastglm"]],
+        fastglm_iterations=f$iter,brglm2_iterations=b$iter,
+        max_coefficient_difference=error)
 }
+timing_table <- do.call(rbind,results)
+timing_table$max_coefficient_difference <- formatC(
+    timing_table$max_coefficient_difference,format="e",digits=2)
+knitr::kable(timing_table,row.names=FALSE,digits=3,
+    col.names=c("Family and link","fastglm (ms)","brglm2 (ms)",
+                "Time ratio","fastglm iterations","brglm2 iterations",
+                "Largest coefficient difference"))
 ```
+
+The time ratio divides the *brglm2* time by the *fastglm* time, so values above one favor *fastglm*. Gamma bias reduction requires an additional calculation for dispersion at each fitting iteration. When observations have equal prior weights, their contributions to part of this calculation are identical. Combining those contributions avoids repeating the same special-function evaluations for every observation. A numerical root search then solves the same dispersion equation with fewer evaluations. Gamma models with distinct prior weights also benefit from the improved search, but cannot reuse identical contributions to the same extent.
 
 # References
 

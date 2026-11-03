@@ -1,3 +1,104 @@
+# fastglm 0.1.3
+
+## Model interfaces and inference
+
+* Added penalized profile-likelihood intervals through
+  `confint(..., method = "profile")` and joint coefficient tests through
+  `fastglm_profile_test()` for retained dense binomial-logit Firth fits.
+  Constrained fits retain the full original Jeffreys penalty. The procedures
+  support binomial counts and frequency weights, use an asymptotic chi-square
+  reference, and report numerical failures through missing results and diagnostics.
+* Added `firth` to prepared designs and batch fits. Dense Gaussian-identity,
+  Gamma-log, and Poisson-square-root batches reuse common setup with the
+  automatic or LLT solver; other solvers retain their requested decomposition.
+  Modified predictors or weights invalidate the saved setup, and prepared
+  objects remain serializable across R sessions and process workers.
+
+* Extended estimated-theta negative-binomial, hurdle, and two-part fitting
+  to sparse matrices and repeatable block readers, with consistent offsets,
+  formula transformations, and joint theta uncertainty.
+* Added joint HC0/HC1 and cluster covariance for count and two-part models,
+  average response contrasts, and refitting bootstrap uncertainty. Bootstrap
+  output records failed fits, preserves reproducible replicate seeds, and
+  supports sparse designs and repeatable sources.
+
+* Added a direct formula interface, named and automatic solver choices,
+  prediction with offsets and term standard errors, leverage, simulation,
+  Wald intervals, numerical diagnostics, and optional broom methods.
+* Added reusable designs and batch fitting, including a shared Gaussian
+  factorization, optional process workers, and controls for retained data
+  and inference. `inference = "none"` skips covariance calculation.
+* Added standalone zero-truncated Poisson/NB regression and two-part
+  binomial/Gamma regression for nonnegative continuous outcomes.
+* Count models now provide component and marginal predictions, probability
+  masses, delta-method standard errors, summaries, residuals, and simulation.
+  Theta profile intervals are available for ordinary, truncated, and hurdle NB.
+* Added resettable sources with fixed formula schemas and optional DBI and
+  Parquet adapters. Streaming fits support prediction and diagnostic sinks,
+  robust/cluster covariance, and average predictions and contrasts.
+
+## Numerical corrections
+
+* Stabilized negative-binomial theta scores and likelihood calculations near
+  the Poisson limit. Boundary theta estimates have explicitly unavailable
+  theta standard errors; `SE.theta` elsewhere uses joint observed information.
+  The default beta-only NB covariance retains the usual expected-information
+  convention, while `vcov(..., full = TRUE)` includes theta jointly.
+* Truncated NB means and likelihood now correspond to the returned coefficients
+  and theta even when the outer iteration limit is reached.
+* Preserved sequential readers during component fits and bootstrap resampling,
+  retained external source offsets in new-data prediction, and corrected
+  simulation of numeric binomial proportions with integer trial weights.
+
+* Fixed rank-deficient QR updates and aliased coefficient reporting. Explicit
+  Cholesky solves reject singular or ill-conditioned information matrices;
+  automatic dense fits can fall back to pivoted QR.
+  Calls that previously returned arbitrary coefficients or invalid covariance
+  matrices can now fail explicitly. Callers with redundant predictors should
+  use pivoted QR or `method = "auto"` and handle aliased coefficients as `NA`.
+* Unified matrix/formula initialization and model accounting, including
+  grouped-binomial trials, zero-weight degrees of freedom, offset null models,
+  fixed dispersion, NB AIC, and working residuals.
+* Native family dispatch preserves modified-family callback semantics and
+  exact negative-binomial theta parameters.
+* Fixed mapped matrix views and matrix products involving row/column offsets.
+* Gamma mean bias reduction now solves the adjusted dispersion equation.
+  Supported families and the distinction between adjusted scores and penalized
+  likelihood are documented explicitly.
+* Hurdle NB covariance now uses joint coefficient–theta observed information.
+  Truncated-count iterations check likelihood improvement, and small-rate
+  derivatives use the correct limits. Component offsets are handled separately.
+* Information matrices are evaluated at the reported estimate. Indefinite
+  mixture information no longer produces standard errors from absolute values.
+* Streaming validates every chunk, uses family-specific initialization, and
+  propagates source errors. Grouped-binomial likelihoods retain trial totals.
+
+## Performance and verification
+
+* Reused constant Firth information matrices in sparse, mapped, and callback
+  fits. Gamma-log fitting also reuses the common adjustment after its initial
+  calculation. Gamma callback fits combine repeated prior weights within each
+  block while preserving sequential reads and bounded block storage.
+* Included `NEWS.md` in source packages so the README link resolves in the
+  packaged source; this repairs the incoming-check note from Windows.
+
+* Accelerated Gamma mean bias reduction by combining identical prior weights
+  in its dispersion equation and replacing fixed bisection with a safeguarded
+  Brent solve. Constant-weight Firth fits reuse matrix decompositions and
+  leverage calculations without changing the estimating equations.
+* Final dense Cholesky inference omits an unnecessary weighted-response solve,
+  and intercept detection stops scanning a column once it is nonconstant.
+* Revised vignette explanations to define technical terms and their practical
+  consequences, corrected outdated interface descriptions, and distinguished
+  historical benchmark outputs from current measurements.
+
+* Removed sparse intercept densification and duplicate covariance inversions.
+* Reused constant-weight factors and accepted streaming weighted systems;
+  omitted covariance calculations from mixture intermediate fits.
+* Added regression tests against base R, brglm2, and pscl, an accuracy-checked
+  timing script, and automatic Linux/macOS/Windows package checks.
+* Expanded the vignettes and restored the static benchmark regeneration script.
+
 
 # fastglm 0.1.2
 

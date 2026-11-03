@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-This vignette is a more comprehensive benchmarking study than the small inline timings in the other vignettes. It compares *fastglm* against the canonical reference implementations across a range of sample sizes and model classes:
+This vignette retains a historical benchmark run from the date shown above. Its saved timings describe the package and dependencies used in that run; they are not measurements of version 0.1.3, which includes subsequent numerical corrections and new fitting methods. The executable examples in the overview and bias-reduction vignettes provide comparisons using the installed version. It compares *fastglm* against the canonical reference implementations across a range of sample sizes and model classes:
 
 - standard GLMs against `stats::glm()`, `glm2::glm.fit2()`, and `speedglm::speedglm.wfit()`,
 - the sparse and `big.matrix` solver paths against the dense path,
@@ -31,7 +31,7 @@ This vignette is a more comprehensive benchmarking study than the small inline t
 - Firth bias-reduced GLMs against `brglm2::brglmFit()` and `logistf::logistf()`, including sparse, streaming, and `big.matrix` Firth paths,
 - hurdle and zero-inflated count regressions against `pscl::hurdle()` and `pscl::zeroinfl()`.
 
-The vignette is **pre-compiled** &mdash; the timings below were produced once on the maintainer's machine and are baked into the shipped `.Rmd`. R CMD check / build does *not* re-run the benchmarks, which keeps the package well within CRAN's runtime budget. To re-run the benchmarks (after a code change, on a different machine, etc.), execute `vignettes/_precompile.R` from the package root.
+The calculations were run in advance and their output was saved with the text. Building the vignette displays those saved results without repeating the benchmark. This keeps routine package checks short. The script `vignettes/_precompile.R` can regenerate the study when a new complete benchmark run is intended.
 
 ```{r}
 library(fastglm)
@@ -146,7 +146,7 @@ pois_tim <- do.call(rbind, pois_tim)
 .plot_scaling(pois_tim, "Poisson regression: median time vs n (p = 30)")
 ```
 
-The Cholesky paths are 3&ndash;5x faster than `glm.fit()` at moderate `n` and the gap widens with sample size &mdash; the IRLS structure is the same, but each iteration's WLS solve is materially cheaper in *RcppEigen* than in compiled R + LAPACK. *speedglm* is competitive at small `n` but its single-threaded cross-product accumulation overtakes the savings as `n` grows, since *fastglm* lets Eigen parallelize the WLS solve.
+These timings compare two ways to solve the weighted regression in each fitting iteration: QR uses the predictor matrix directly, whereas Cholesky works with its smaller crossproduct. Their costs depend on the numbers of rows and columns, the response family, and the numerical libraries used. The observed ratios apply to the displayed cases; attributing a difference specifically to parallel computation would require a separate comparison with threading controlled.
 
 # Sparse and big.matrix paths
 
@@ -195,7 +195,7 @@ f2 <- fastglm(Xb, y, family = binomial(), method = 2)
 cat("max coef diff:", max(abs(coef(f1) - coef(f2))), "\n")
 ```
 
-The dense path is faster for matrices that fit in RAM (the row-block reads have non-zero overhead), but the `big.matrix` path is the only viable option once the design exceeds available memory.
+Reading a file-backed matrix in blocks adds overhead but can reduce the need to copy a large predictor matrix. Another option is to supply blocks through `fastglm_source()` and fit them with `fastglm_streaming()`, as described in the large-data vignette. These choices have different memory requirements and should be compared on the intended data size.
 
 # Negative-binomial regression
 
@@ -226,7 +226,7 @@ nb_tim <- do.call(rbind, nb_tim)
 .plot_scaling(nb_tim, "Negative-binomial joint MLE: median time vs n")
 ```
 
-Accuracy on the largest case: coefficients and `theta` agree to floating-point precision against `glm.nb`, since both maximize the same likelihood. The runtime difference is structural &mdash; `glm.nb` runs its IRLS + theta-MLE alternation in R, *fastglm_nb* runs both loops in C++.
+The following calculation reports coefficient and theta differences for the largest displayed case. Both functions target the same maximum likelihood fit, but numerical agreement also depends on convergence and stopping tolerances. The original dense *fastglm* implementation performs both coefficient and theta updates in C++, which can reduce repeated calls between R and compiled code.
 
 ```{r}
 set.seed(99)
@@ -416,7 +416,7 @@ All six methods agree to machine precision. The LLT and LDLT Cholesky methods ar
 
 ## Firth on sparse and streaming designs
 
-Firth bias reduction is now also supported on sparse (`dgCMatrix`), `big.matrix`, and streaming callback designs. The sparse and streaming paths use *lagged leverages* from the previous IRLS iteration; at convergence, the result matches the exact-leverage dense path.
+This example compares several ways to supply the predictor matrix: ordinary storage, sparse storage of nonzero entries, a `big.matrix`, and a function that reads blocks of rows as needed. Bias reduction uses leverage values, which describe the relative influence of predictor rows in a weighted regression. Some block-based calculations reuse these values from the preceding coefficient update. Agreement with the direct calculation therefore needs to be checked after convergence.
 
 ```{r}
 set.seed(123)
@@ -454,7 +454,7 @@ cat(sprintf("  big.mat vs dense: max |diff| = %.2e\n", max(abs(bm_c - ref_sp))))
 cat(sprintf("  stream  vs dense: max |diff| = %.2e\n", max(abs(st_c - ref_sp))))
 ```
 
-All backends converge to the same Firth-penalized MLE to high precision ($< 10^{-7}$). The dense path is fastest when the matrix fits in RAM; the `big.matrix` and streaming paths are designed for datasets that exceed available memory.
+In this saved logistic example, the reported coefficient differences across data representations are below $10^{-7}$. Memory and runtime comparisons remain specific to the displayed design. For other families, the mean-bias adjustment is defined by adjusted estimating equations and need not correspond to a penalized likelihood.
 
 # Hurdle models
 
@@ -623,11 +623,7 @@ legend("topleft", legend = models, col = cols, pch = 19, lty = 1, lwd = 2,
 par(op)
 ```
 
-Across all model classes the same picture holds:
-
-- *fastglm* matches the canonical reference implementation to floating-point precision (or to within the EM tolerance for zero-inflation), so the numerical answer is the same.
-- The runtime gap grows with sample size, since R-side overhead in the reference implementations is fixed-per-iteration. By `n = 1e5` the speedup is generally an order of magnitude or more.
-- For models with an outer iteration (NB joint MLE, hurdle/ZI with NB), the gap is widest, since the entire outer loop is in C++ in *fastglm* and entirely in R for `MASS::glm.nb`, `pscl::hurdle`, `pscl::zeroinfl`.
+The saved comparisons indicate where compiled fitting calculations were beneficial in these examples. They do not establish a uniform speed or convergence advantage. Current comparisons should check coefficients, fitted means, uncertainty calculations, and convergence before interpreting timing differences. The accuracy-checked script in `benchmarks/benchmark.R` records these calculations and the R environment for new measurements.
 
 # References
 

@@ -113,6 +113,18 @@ protected:
         // default: leave vcov untouched (caller treats absence as "not available")
     }
 
+    virtual void finalize_inference(int iter)
+    {
+        // Generic path also updates the estimable coefficient representation
+        // when a rank-revealing decomposition changes its pivot ordering.
+        VecTypeX fitted_beta = beta;
+        update_var_mu(); update_mu_eta(); update_z(); update_w();
+        solve_wls(iter);
+        if (get_rank() == nvars) beta = fitted_beta;
+        else { update_eta(); update_mu(); update_dev_resids_dont_update_old(); }
+        save_vcov();
+    }
+
 
 public:
     GlmBase(int n_, int p_,
@@ -129,8 +141,9 @@ public:
     w(n_),
     vcov(p_, p_),
     se(p_),
+    dev(0.0), devold(0.0), devnull(0.0),
     maxit(maxit_),
-    tol(tol_)
+    tol(tol_), conv(false)
     {}
     
     virtual ~GlmBase() {}
@@ -146,7 +159,7 @@ public:
         //beta.swap(newbeta);
     }
     
-    int solve(int maxit)
+    int solve(int maxit, bool inference = true)
     {
         int i;
         
@@ -155,6 +168,7 @@ public:
         for(i = 0; i < maxit; ++i)
         {
 
+            Rcpp::checkUserInterrupt();
             update_var_mu();
 
             update_mu_eta();
@@ -187,8 +201,12 @@ public:
             
         }
         
-        save_se();
-        save_vcov();
+        if (inference) {
+            // Evaluate information at the reported estimate. The last IRLS
+            // factor otherwise belongs to the preceding coefficient vector.
+            finalize_inference(std::min(i + 1, maxit));
+            se = vcov.diagonal().array().sqrt();
+        } else { vcov.resize(0, 0); se.resize(0); }
 
         return std::min(i + 1, maxit);
     }
@@ -203,6 +221,11 @@ public:
     virtual int get_rank()          { return nvars; }
     virtual MatTypeX get_vcov()     { return vcov; }
     virtual bool get_converged()    { return conv; }
+
+    // R wrappers copy these vectors into R-owned storage. Returning a view
+    // avoids an intermediate observation-sized Eigen allocation and copy.
+    const VecTypeX& get_eta_ref() const { return eta; }
+    const VecTypeX& get_mu_ref() const { return mu; }
     
 };
 

@@ -123,14 +123,14 @@ List fit_glm_hurdle(
         if (pi < 1e-300) pi = 1e-300;
         if (pi > 1.0 - 1e-300) pi = 1.0 - 1e-300;
         const double yi = y0[i];
-        loglik_zero += W[i] * (yi * std::log(pi) + (1.0 - yi) * std::log(1.0 - pi));
+        loglik_zero += W[i] * (yi > 0 ? std::log(pi) : std::log1p(-pi));
     }
 
     // ---------------------------------------------------------------
     // (2) Truncated count fit on the y > 0 subset.
     // ---------------------------------------------------------------
     int n_pos = 0;
-    for (Eigen::Index i = 0; i < n; ++i) if (Y[i] > 0.0) ++n_pos;
+    for (Eigen::Index i = 0; i < n; ++i) if (Y[i] > 0.0 && W[i] > 0.0) ++n_pos;
     if (n_pos < (int)p_c)
         Rcpp::stop("hurdle count component has fewer positive observations than parameters");
 
@@ -139,7 +139,7 @@ List fit_glm_hurdle(
     {
         Eigen::Index k = 0;
         for (Eigen::Index i = 0; i < n; ++i) {
-            if (Y[i] > 0.0) {
+            if (Y[i] > 0.0 && W[i] > 0.0) {
                 Xp.row(k)  = X.row(i);
                 Yp[k]      = Y[i];
                 Wp[k]      = W[i];
@@ -157,6 +157,7 @@ List fit_glm_hurdle(
         Map<VectorXd>(OffCp.data(), OffCp.size()));
 
     fglm::trunc::TruncFitResult count_res;
+    MatrixXd count_joint;
     double theta_hat   = NA_REAL;
     double se_theta    = NA_REAL;
     int    outer_iter  = 0;
@@ -177,6 +178,7 @@ List fit_glm_hurdle(
             tol, maxit,
             theta_tol, theta_maxit,
             outer_tol, outer_maxit);
+        count_joint = joint.joint_vcov;
         count_res  = joint.inner;
         theta_hat  = joint.theta;
         se_theta   = joint.se_theta;
@@ -198,6 +200,7 @@ List fit_glm_hurdle(
         _["se_count"]             = count_res.se,
         _["se_zero"]              = se_zero,
         _["vcov_count"]           = count_res.vcov,
+        _["vcov_count_joint"]     = count_joint,
         _["vcov_zero"]            = vcov_zero,
         _["lambda"]               = count_res.lambda,        // count-part rate, on the y>0 subset
         _["mu_count_truncated"]   = count_res.mu_T,           // E[Y | Y>0] on the y>0 subset

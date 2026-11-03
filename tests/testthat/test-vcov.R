@@ -8,7 +8,7 @@ test_that("vcov(fastglm) matches vcov(glm) across all decomposition methods", {
                      info = sprintf("method = %d coefficients", m))
         v_glm <- summary(glm(y ~ . - 1,
                              data = data.frame(d$X, y = d$y),
-                             family = binomial()))$cov.scaled
+                             family = binomial(), control = list(epsilon = 1e-12)))$cov.scaled
         expect_equal(unname(vcov(gf)), unname(v_glm), tolerance = 1e-6,
                      info = sprintf("method = %d vcov", m))
     }
@@ -19,8 +19,8 @@ test_that("vcov(fastglm) for gaussian, poisson, gamma agrees with glm", {
         d <- make_glm_data(n = 500, p = 4, response = resp)
         fam <- family_for(resp)
         df <- data.frame(d$X, y = d$y)
-        gl_full <- glm(y ~ . - 1, data = df, family = fam)
-        gf <- fastglm(d$X, d$y, family = fam, method = 2)
+        gl_full <- glm(y ~ . - 1, data = df, family = fam, control = list(epsilon = 1e-12))
+        gf <- fastglm(d$X, d$y, family = fam, method = 2, tol = 1e-12)
         expect_equal(unname(coef(gf)), unname(coef(gl_full)), tolerance = 1e-6,
                      info = resp)
         expect_equal(unname(vcov(gf)), unname(vcov(gl_full)), tolerance = 1e-6,

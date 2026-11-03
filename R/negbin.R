@@ -7,7 +7,7 @@
 #' `theta -> Inf` it reduces to Poisson.
 #'
 #' For joint estimation of `theta` together with `beta`, use the dedicated
-#' (forthcoming) `fastglm_nb()` entry point. The `negbin()` family here is
+#' [fastglm_nb()] function. The `negbin()` family here is
 #' intended for use cases where `theta` has been pre-specified or estimated
 #' separately.
 #'
@@ -16,8 +16,7 @@
 #'
 #' @returns A `family` object with class `"family"` and
 #'   `family$family == "Negative Binomial(theta)"`. The object also carries
-#'   the slot `family$theta`, which `family_code()` and the dispatch layer
-#'   use to detect the native NB fast path.
+#'   the slot `family$theta`, which retains the supplied size parameter.
 #'
 #' @examples
 #' set.seed(1)
@@ -34,6 +33,7 @@ negbin <- function(theta, link = "log") {
     if (!is.numeric(theta) || length(theta) != 1L || !is.finite(theta) || theta <= 0)
         stop("'theta' must be a positive finite scalar.", call. = FALSE)
     link <- match.arg(link, c("log", "sqrt", "identity"))
+    aic <- function(y, n, mu, wt, dev) -2 * sum(wt * dnbinom(y,mu=mu,size=theta,log=TRUE))
 
     # Reuse MASS's negative.binomial machinery if available — its
     # initialize/aic/dev.resids closures are battle-tested.  Otherwise build
@@ -42,6 +42,7 @@ negbin <- function(theta, link = "log") {
     if (requireNamespace("MASS", quietly = TRUE)) {
         fam <- MASS::negative.binomial(theta = theta, link = link)
         fam$theta <- theta
+        fam$aic <- aic
         return(fam)
     }
 
@@ -57,14 +58,6 @@ negbin <- function(theta, link = "log") {
         mt <- mu + theta
         b  <- yt * log(yt / mt)
         2 * wt * (a - b)
-    }
-    aic <- function(y, n, mu, wt, dev) {
-        # -2 * sum( wt * (lgamma(y + theta) - lgamma(theta) - lgamma(y + 1) +
-        #                 theta*log(theta/(theta+mu)) + y*log(mu/(theta+mu))) )
-        term1 <- lgamma(y + theta) - lgamma(theta) - lgamma(y + 1)
-        term2 <- theta * log(theta / (theta + mu))
-        term3 <- ifelse(y > 0, y * log(mu / (theta + mu)), 0)
-        -2 * sum(wt * (term1 + term2 + term3))
     }
     initialize <- expression({
         if (any(y < 0)) stop("negative values not allowed for the negative binomial family")

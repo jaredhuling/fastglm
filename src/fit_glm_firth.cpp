@@ -26,7 +26,8 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
                    Function var, Function mu_eta, Function linkinv,
                    Function dev_resids, Function valideta, Function validmu,
                    int type, double tol, int maxit, int fam_code,
-                   Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
+                   Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue, bool inference = true,
+                   Rcpp::Nullable<Rcpp::List> prepared = R_NilValue)
 {
     fglm::FamilyParams fp;
     if (!fam_params.isNull()) {
@@ -50,23 +51,42 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
     if ((Eigen::Index)Y.size() != X.rows())
         Rcpp::stop("size mismatch");
 
+    Rcpp::NumericMatrix lower(0,0), covariance(0,0);
+    Rcpp::NumericVector leverage(0),adjustment(0),weight_values(0);
+    Rcpp::IntegerVector weight_counts(0);
+    double logdet=0;
+    if(prepared.isNotNull()) {
+        if(type!=2 || !(fam_code==0 || fam_code==9 || fam_code==10))
+            Rcpp::stop("prepared information requires a constant-weight LLT family");
+        Rcpp::List cache(prepared.get());
+        lower=Rcpp::as<NumericMatrix>(cache["lower"]);
+        covariance=Rcpp::as<NumericMatrix>(cache["covariance"]);
+        leverage=Rcpp::as<NumericVector>(cache["leverage"]);
+        adjustment=Rcpp::as<NumericVector>(cache["adjustment"]);
+        weight_values=Rcpp::as<NumericVector>(cache["weight.values"]);
+        weight_counts=Rcpp::as<IntegerVector>(cache["weight.counts"]);
+        logdet=Rcpp::as<double>(cache["logdet"]);
+        if(lower.nrow()!=X.cols() || lower.ncol()!=X.cols() || leverage.size()!=X.rows() ||
+           (inference && (covariance.nrow()!=X.cols() || covariance.ncol()!=X.cols())))
+            Rcpp::stop("prepared information dimensions do not match the design");
+    }
+    PreparedGlmInfo info(lower,leverage,covariance,adjustment,weight_values,weight_counts,logdet);
     glm solver(X, Y, W, Off,
                var, mu_eta, linkinv, dev_resids,
                valideta, validmu,
                tol, maxit, type,
                /*is_big_matrix=*/false,
                fam_code, fp,
-               /*firth=*/true);
+               /*firth=*/true, prepared.isNotNull()?&info:nullptr);
     solver.init_parms(beta_init, mu_init, eta_init);
 
-    int iters = solver.solve(maxit);
+    int iters = solver.solve(maxit, inference);
 
     VectorXd b   = solver.get_beta();
     VectorXd se  = solver.get_se();
-    VectorXd m   = solver.get_mu();
-    VectorXd e   = solver.get_eta();
+    const VectorXd &m = solver.get_mu_ref();
+    const VectorXd &e = solver.get_eta_ref();
     VectorXd wfit = solver.get_w();
-    VectorXd pwt  = solver.get_weights();
     MatrixXd vc   = solver.get_vcov();
     double pen_dev = solver.get_dev();
     int rk    = solver.get_rank();
@@ -77,7 +97,8 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
     Eigen::Map<const Eigen::ArrayXd> y_arr(Y.data(), Y.size());
     Eigen::Map<const Eigen::ArrayXd> mu_arr(m.data(), m.size());
     Eigen::Map<const Eigen::ArrayXd> w_arr(W.data(), W.size());
-    double std_dev = fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr);
+    double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
+            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
 
     return List::create(
         _["coefficients"]      = b,
@@ -88,11 +109,12 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         _["penalized.deviance"]= pen_dev,
         _["log.det.XtWX"]      = log_det,
         _["weights"]           = wfit,
-        _["prior.weights"]     = pwt,
+        _["prior.weights"]     = weights,
         _["rank"]              = rk,
         _["df.residual"]       = (int)X.rows() - rk,
         _["iter"]              = iters,
         _["converged"]         = conv,
         _["cov.unscaled"]      = vc,
+        _["bias.dispersion"]   = solver.get_bias_dispersion(),
         _["firth"]             = true);
 }

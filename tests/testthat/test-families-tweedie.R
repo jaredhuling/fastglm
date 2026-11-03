@@ -25,7 +25,7 @@ test_that("native Tweedie log-link matches glm() across var.power values", {
                      info = paste0("Tweedie log, var.power = ", vp))
         expect_equal(ffit$deviance, gfit$deviance, tolerance = 1e-7,
                      info = paste0("Tweedie log dev, var.power = ", vp))
-        expect_equal(ffit$dispersion, summary(gfit)$dispersion,
+        expect_equal(ffit$dispersion, sum(gfit$prior.weights * (gfit$y - fitted(gfit))^2 / gfit$family$variance(fitted(gfit))) / gfit$df.residual,
                      tolerance = 1e-6)
     }
 })

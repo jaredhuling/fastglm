@@ -7,16 +7,18 @@
 \method{predict}{fastglm}(
   object,
   newdata = NULL,
-  type = c("link", "response"),
+  type = c("link", "response", "terms"),
   se.fit = FALSE,
   dispersion = NULL,
+  offset = NULL,
+  terms = NULL,
   ...
 )
 }
 \arguments{
 \item{object}{a fitted object of class inheriting from `"fastglm"`.}
 
-\item{newdata}{a matrix to be used for prediction.}
+\item{newdata}{a model matrix, or a data frame for a formula fit.}
 
 \item{type}{the type of prediction required. The default is on the scale of the linear predictors;
 the alternative "\code{response}" is on the scale of the response variable. Thus for a default binomial
@@ -30,6 +32,10 @@ The value of this argument can be abbreviated.}
 
 \item{dispersion}{the dispersion of the GLM fit to be assumed in computing the standard errors.
 If omitted, that returned by \code{summary} applied to the object is used.}
+
+\item{offset}{optional prediction offsets.}
+
+\item{terms}{optional subset of model terms for term predictions.}
 
 \item{...}{further arguments passed to or from other methods.}
 }

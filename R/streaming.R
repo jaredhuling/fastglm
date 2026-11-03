@@ -1,11 +1,10 @@
-#' Fit a GLM by streaming row-blocks of the design matrix
+#' Fit a GLM by reading blocks of observations as needed
 #'
-#' `fastglm_streaming()` runs an IRLS GLM fit where the design matrix is
-#' produced one chunk at a time by a user-supplied closure. It never holds
-#' more than a single chunk in memory at once, plus a `p x p` accumulator.
-#' This is the front-end for fitting on data sources too large to load
-#' completely into RAM (Arrow datasets, Parquet files, DuckDB query results,
-#' on-disk CSV streams, etc.).
+#' `fastglm_streaming()` fits a GLM while keeping only a block of design rows
+#' and coefficient-sized summary matrices in memory. Reading successive
+#' blocks this way is called streaming. It permits fitting data that cannot
+#' be loaded into memory together, at the cost of rereading the observations
+#' as the coefficient estimates are updated.
 #'
 #' @param chunk_callback a function. Called as `chunk_callback(k)` for
 #'   `k = 1, ..., n_chunks`. Must return a list with elements
@@ -16,8 +15,8 @@
 #'     \item{`offset`}{optional; numeric vector of length `n_k` of offsets.}
 #'   }
 #'   Every chunk must have the same number of columns, in the same order. The
-#'   closure is called multiple times per IRLS iteration, so it should be
-#'   reasonably cheap (e.g. an Arrow scanner that reads from columnar files).
+#'   supplied function, called a callback, is called repeatedly during fitting.
+#'   It must return the same rows and values each time a block is requested.
 #' @param n_chunks integer; the number of chunks to iterate over.
 #' @param family a `family` object describing the error distribution and link.
 #'   See [stats::family()].
@@ -31,32 +30,28 @@
 #'   lagged leverages from the previous IRLS iteration.  At convergence
 #'   the result matches the exact-leverage dense path.
 #'
-#' @returns A list with class `"fastglm"` containing the same elements as
+#' @returns An object with classes `"fastglm_stream"` and `"fastglm"` containing
+#'   coefficient estimates and model summaries as in
 #'   [fastglm()], including `coefficients`, `cov.unscaled`, `deviance`,
-#'   `iter`, `converged`, etc. The design matrix is *not* attached, so
-#'   `sandwich::vcovHC()` / `sandwich::vcovCL()` will require re-streaming.
+#'   `iter`, and `converged`. The object retains the function used to read
+#'   the observations. Prediction and [fastglm_vcov()] call that function
+#'   again, so the data must remain accessible and unchanged.
 #'
 #' @details
-#' The IRLS loop and step-halving (Marschner 2011) run entirely in C++; the
-#' R closure is called only to *deliver* one chunk at a time. For tier-1
-#' families (gaussian / binomial / poisson / Gamma / inverse.gaussian on
-#' their common links) the family functions are evaluated inline in C++, so
-#' the only R round-trip per iteration is the chunk fetch.
+#' Iteratively reweighted least squares (IRLS) updates the coefficients by
+#' solving a sequence of weighted regressions. The updates and safeguards
+#' that shorten unsuccessful steps run in C++. For supported standard
+#' families, the distribution calculations also run in C++; the R function
+#' is called to supply each block of observations.
 #'
 #' Standard errors and `cov.unscaled` come from the final `(X' W X)`
 #' Cholesky factor, exactly as in the in-memory path.
 #'
-#' @section Arrow / Parquet recipe:
-#'
-#' Wrap an Arrow scanner in a closure -- pull each `RecordBatch` as a chunk,
-#' build the model matrix, and return it together with the response:
-#' `chunks(k)` opens the dataset, scans the `k`-th batch, calls
-#' `as.data.frame()`, then returns
-#' `list(X = model.matrix(~ x1 + x2, data = tbl), y = tbl$y)`. Pass that
-#' closure plus `n_chunks = length(batches)` to `fastglm_streaming()`.
-#'
-#' The same recipe works for DuckDB (one `dbReadTable` per chunk), CSV
-#' streamers, and custom binary formats.
+#' @section Files and databases:
+#' [fastglm_source_arrow()] reads one Parquet file per block, and
+#' [fastglm_source_dbi()] reads the rows returned by one database query per
+#' block. [fastglm_source()] records the factor levels and transformations
+#' needed to give the design columns the same meaning in each block.
 #'
 #' @examples
 #' # Simulate a "data source" that yields the design matrix in 4 row-blocks.
@@ -75,142 +70,125 @@
 #' max(abs(coef(fit_stream) - coef(fit_full)))
 #'
 #' @export
-fastglm_streaming <- function(chunk_callback,
-                              n_chunks,
-                              family   = gaussian(),
-                              start    = NULL,
-                              method   = 2L,
-                              tol      = 1e-7,
-                              maxit    = 100L,
-                              firth    = FALSE)
-{
-    if (!is.function(chunk_callback))
-        stop("'chunk_callback' must be a function", call. = FALSE)
-    if (!is.numeric(n_chunks) || length(n_chunks) != 1L || n_chunks < 1)
-        stop("'n_chunks' must be a positive integer", call. = FALSE)
-    n_chunks <- as.integer(n_chunks)
-    method <- as.integer(method)
-    if (!(method %in% c(2L, 3L)))
-        stop("for streaming fits, 'method' must be 2 (LLT) or 3 (LDLT).", call. = FALSE)
-
-    if (is.character(family))   family <- get(family, mode = "function", envir = parent.frame())
-    if (is.function(family))    family <- family()
-    if (is.null(family$family)) stop("'family' not recognized", call. = FALSE)
-
-    fam_code <- family_code(family)
-    fam_par  <- family_params(family)
-
-    # Pull one chunk to discover p and column names, and to do up-front
-    # shape validation.  The C++ solver re-pulls all chunks (including this
-    # one) on each pass.
-    c1 <- chunk_callback(1L)
-    if (!is.list(c1) || is.null(c1$X) || is.null(c1$y))
-        stop("chunk_callback(1) did not return a list with 'X' and 'y'.",
-             call. = FALSE)
-    if (!is.matrix(c1$X) && !inherits(c1$X, "Matrix"))
-        stop("chunk$X must be a matrix", call. = FALSE)
-    if (nrow(c1$X) != length(c1$y))
-        stop(sprintf("chunk$X has %d rows but length(y) = %d",
-                     nrow(c1$X), length(c1$y)), call. = FALSE)
-    p <- ncol(c1$X)
-    cnames <- colnames(c1$X)
-    rm(c1)
-
-    # Default start = 0_p.
-    if (is.null(start)) {
-        start_vec <- rep(0, p)
-    } else {
-        if (length(start) != p)
-            stop(sprintf("length(start) = %d does not match number of columns (%d)",
-                         length(start), p), call. = FALSE)
-        start_vec <- as.numeric(start)
+fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
+                              family = gaussian(), start = NULL, method = 2L,
+                              tol = 1e-8, maxit = 100L, firth = FALSE) {
+    source <- if (inherits(chunk_callback, "fastglm_source")) chunk_callback else
+        fastglm_source(chunk_callback, n_chunks)
+    if(!is.null(source$schema$terms) && !inherits(source$schema$terms,"terms"))
+        stop("a two-component source requires fastglm_hurdle() or fastglm_twopart()",call.=FALSE)
+    n_chunks <- source$n_chunks
+    family <- .resolve_family(family)
+    .check_iterations(tol,maxit)
+    method <- .solver_method(method)
+    if (!(method %in% 2:3)) stop("streaming requires method 'llt' or 'ldlt'",call.=FALSE)
+    fc <- family_code(family)
+    if (firth && fc %in% c(0:2,10:16) && !is.null(family$dispersion) && is.finite(family$dispersion)) stop("mean bias reduction with externally fixed dispersion is not implemented for this family",call.=FALSE)
+    if (firth && (fc < 0 || fc >= 20 || grepl("^quasi",family$family)))
+        stop("mean bias reduction requires a supported likelihood family",call.=FALSE)
+    if (!is.logical(firth) || length(firth) != 1L || is.na(firth)) stop("'firth' must be TRUE or FALSE",call.=FALSE)
+    state <- new.env(parent=emptyenv()); state$passes <- 0L; state$reads <- 0L
+    state$columns <- NULL; state$p <- NULL; state$rows <- integer(n_chunks)
+    state$initialization.warnings <- character()
+    initialize <- function(z) {
+        x <- z$X; y <- z$y; nobs <- n <- NROW(y)
+        if(inherits(x,"sparseMatrix")) x <- as.matrix(x)
+        weights <- if(is.null(z$weights)) rep(1,nobs) else z$weights
+        offset <- if(is.null(z$offset)) rep(0,nobs) else z$offset
+        if (!is.matrix(x) || !is.numeric(x)) stop("each chunk$X must be a numeric matrix",call.=FALSE)
+        if(is.integer(x)) storage.mode(x)<-"double"
+        if (nobs == 0L) stop("empty chunks are not supported; omit them from the source",call.=FALSE)
+        if (nrow(x) != nobs || any(!is.finite(x)) || anyNA(y) ||
+            any(!is.finite(weights)) || length(weights)!=nobs || any(weights<0) ||
+            length(offset)!=nobs || any(!is.finite(offset))) stop("invalid chunk rows, weights, offsets, or values",call.=FALSE)
+        mustart <- etastart <- NULL
+        withCallingHandlers(eval(family$initialize),warning=function(w) {
+            message <- conditionMessage(w)
+            if(message %in% state$initialization.warnings) invokeRestart("muffleWarning")
+            state$initialization.warnings <- c(state$initialization.warnings,message)
+        })
+        list(X=x,y=as.numeric(y),weights=as.numeric(weights),offset=as.numeric(offset),
+             trials=n,mustart=mustart)
     }
-
-    # R callbacks are only used when fam_code == -1.  For tier-1 families the
-    # C++ path never invokes them, but Rcpp still requires Function values.
-    valideta <- if (is.null(family$valideta)) function(eta) TRUE else family$valideta
-    validmu  <- if (is.null(family$validmu))  function(mu)  TRUE else family$validmu
-
-    res <- fit_streaming_glm(
-        chunk_callback = chunk_callback,
-        n_chunks       = n_chunks,
-        p              = as.integer(p),
-        type           = method,
-        tol            = tol,
-        maxit          = as.integer(maxit),
-        fam_code       = as.integer(fam_code),
-        var            = family$variance,
-        mu_eta         = family$mu.eta,
-        linkinv        = family$linkinv,
-        dev_resids     = family$dev.resids,
-        valideta       = valideta,
-        validmu        = validmu,
-        start          = start_vec,
-        fam_params     = fam_par,
-        firth          = firth
-    )
-
-    # C++ always reports Pearson-based dispersion; override to 1 for
-    # poisson / binomial.  Quasi-binomial / quasi-poisson share C++ family
-    # codes with binomial / poisson but keep the estimated dispersion.
-    # NB families also use the Pearson estimate (same convention as
-    # glm() + MASS::negative.binomial in summary()).
-    dispersion <- res$dispersion
-    is_fixed_disp <- family$family %in% c("poisson", "binomial")
-    if (is_fixed_disp) dispersion <- 1
-    if (!identical(dispersion, res$dispersion)) {
-        if (is.finite(res$dispersion) && res$dispersion > 0)
-            res$se <- res$se / sqrt(res$dispersion)
-        if (is.finite(dispersion) && dispersion > 0)
-            res$se <- res$se * sqrt(dispersion)
+    fetch <- function(k) {
+        if(k == 1L) state$passes <- state$passes+1L
+        state$reads <- state$reads+1L
+        z <- initialize(source$callback(k))
+        if(is.null(state$p)) { state$p <- ncol(z$X); state$columns <- colnames(z$X) }
+        if(ncol(z$X)!=state$p || !identical(colnames(z$X),state$columns)) stop("chunk columns changed from the source schema",call.=FALSE)
+        if(state$rows[k] != 0L && state$rows[k] != nrow(z$X)) stop("chunk size changed between passes",call.=FALSE)
+        state$rows[k] <- nrow(z$X)
+        z
     }
-
-    has_intercept <- isTRUE(res$has_intercept)
-    intercept_mask <- as.logical(res$intercept_mask)
-
-    # Names
-    if (is.null(cnames)) {
-        if (has_intercept) {
-            ix <- which(intercept_mask)
-            cnames <- character(p)
-            cnames[ix]  <- "(Intercept)"
-            cnames[-ix] <- paste0("X", seq_len(p - length(ix)))
-        } else {
-            cnames <- paste0("X", seq_len(p))
+    # One validation pass also constructs the usual family-initialized WLS start.
+    a <- rhs <- low <- high <- NULL; nobs <- sumw <- sumwy <- 0; has.offset <- FALSE
+    for(k in seq_len(n_chunks)) {
+        z <- fetch(k); x <- z$X; w <- z$weights
+        has.offset <- has.offset || any(z$offset != 0)
+        if(is.null(a)) {
+            a <- matrix(0,ncol(x),ncol(x)); rhs <- numeric(ncol(x))
+            low <- rep(Inf,ncol(x)); high <- rep(-Inf,ncol(x))
         }
+        low <- pmin(low,apply(x,2,min)); high <- pmax(high,apply(x,2,max))
+        eta <- family$linkfun(z$mustart); dm <- family$mu.eta(eta)
+        ww <- w*dm^2/family$variance(z$mustart); ww[w==0] <- 0
+        zz <- eta-z$offset+(z$y-z$mustart)/dm; zz[w==0] <- 0
+        a <- a+crossprod(x,ww*x); rhs <- rhs+drop(crossprod(x,ww*zz))
+        nobs <- nobs+sum(w>0); sumw <- sumw+sum(w); sumwy <- sumwy+sum(w*z$y)
     }
-    beta <- as.numeric(res$coefficients); names(beta) <- cnames
-    se   <- as.numeric(res$se);           names(se)   <- cnames
-    cov_unscaled <- res$cov.unscaled
-    rownames(cov_unscaled) <- colnames(cov_unscaled) <- cnames
-
-    out <- list(
-        coefficients      = beta,
-        se                = se,
-        cov.unscaled      = cov_unscaled,
-        fitted.values     = NULL,
-        linear.predictors = NULL,
-        deviance          = res$deviance,
-        null.deviance     = res$null.deviance,
-        df.null           = res$df.null,
-        df.residual       = res$df.residual,
-        rank              = res$rank,
-        iter              = res$iter,
-        converged         = res$converged,
-        family            = family,
-        dispersion        = dispersion,
-        n                 = res$n,
-        intercept         = has_intercept,
-        prior.weights     = NULL,
-        y                 = NULL,
-        x                 = NULL,
-        call              = match.call()
-    )
-    if (firth) {
-        out$firth              <- TRUE
-        out$penalized.deviance <- res[["penalized.deviance"]]
-        out$log.det.XtWX       <- res[["log.det.XtWX"]]
+    p <- state$p
+    if(nobs <= p) stop("streaming requires more positive-weight observations than coefficients",call.=FALSE)
+    is.int <- low == high & low != 0
+    if(is.null(start)) start <- tryCatch(drop(solve(a,rhs)),error=function(e) stop("streaming design is rank deficient",call.=FALSE))
+    if(length(start)!=p || any(!is.finite(start))) stop("invalid starting coefficients",call.=FALSE)
+    res <- fit_streaming_glm(fetch,n_chunks,as.integer(p),method,tol,as.integer(maxit),fc,
+        family$variance,family$mu.eta,family$linkinv,family$dev.resids,
+        if(is.null(family$valideta)) function(x) TRUE else family$valideta,
+        if(is.null(family$validmu)) function(x) TRUE else family$validmu,
+        as.numeric(start),family_params(family),firth)
+    cn <- state$columns
+    if(is.null(cn)) { cn <- paste0("X",seq_len(p)); cn[is.int] <- paste0("(Intercept)",if(sum(is.int)>1) seq_len(sum(is.int)) else "") }
+    names(res$coefficients) <- cn; dimnames(res$cov.unscaled) <- list(cn,cn)
+    res$family <- family; res$nobs <- nobs; res$df.residual <- nobs-p
+    res$intercept <- any(is.int); res$df.null <- nobs-as.integer(res$intercept)
+    disp <- .fixed_dispersion(family)
+    if(is.na(disp)) disp <- res$pearson/res$df.residual
+    if(firth) disp <- res$bias.dispersion
+    res$dispersion <- disp; res$se <- sqrt(diag(res$cov.unscaled)*disp)
+    res$source <- source; res$fetch <- fetch; res$state <- state
+    res$terms <- source$schema$terms; res$xlevels <- source$schema$xlevels
+    res$contrasts <- source$schema$contrasts
+    res$call <- match.call(); res$firth <- firth; res$solver <- c("llt","ldlt")[method-1L]
+    # Evaluate the likelihood using original binomial trial totals. Gaussian
+    # and Gamma likelihood normalizers depend on global dispersion, so they
+    # are accumulated explicitly rather than summing per-chunk AIC estimates.
+    ll <- 0; null.dev <- 0
+    for(k in seq_len(n_chunks)) {
+        z <- fetch(k); mu <- family$linkinv(drop(z$X%*%res$coefficients)+z$offset)
+        null.mu <- if(res$intercept) rep(sumwy/sumw,length(mu)) else family$linkinv(z$offset)
+        null.dev <- null.dev+sum(family$dev.resids(z$y,null.mu,z$weights))
+        w <- z$weights; y <- z$y; keep <- w>0; ff <- family$family
+        if(ff == "gaussian") ll <- ll+sum(dnorm(y[keep],mu[keep],sqrt(res$deviance/nobs/w[keep]),log=TRUE))
+        else if(ff == "Gamma") ll <- ll+sum(w[keep]*dgamma(y[keep],shape=sumw/res$deviance,scale=mu[keep]*res$deviance/sumw,log=TRUE))
+        else if(ff == "inverse.gaussian") ll <- ll-.5*sum(w[keep]*(1+log(res$deviance/sumw*2*pi)+3*log(y[keep])))
+        else ll <- ll - .family_aic(family,y,z$trials,mu,w,sum(family$dev.resids(y,mu,w)))/2
     }
-    class(out) <- if (firth) c("fastglm_firth", "fastglm") else "fastglm"
-    out
+    if(family$family %in% c("gaussian","Gamma","inverse.gaussian")) res$aic <- -2*ll+2*(p+1L)
+    else res$aic <- -2*ll+2*p
+    # An intercept with offsets is a one-parameter GLM, not a weighted mean.
+    res$null.deviance <- null.dev
+    if(res$intercept && has.offset) {
+        nullfetch <- function(k) { z <- fetch(k); z$X <- matrix(1,length(z$y),1L); z }
+        eta0 <- family$linkfun(sumwy/sumw)
+        nf <- fit_streaming_glm(nullfetch,n_chunks,1L,2L,tol,as.integer(maxit),fc,
+            family$variance,family$mu.eta,family$linkinv,family$dev.resids,
+            if(is.null(family$valideta)) function(x) TRUE else family$valideta,
+            if(is.null(family$validmu)) function(x) TRUE else family$validmu,
+            as.numeric(eta0),family_params(family),FALSE)
+        res$null.deviance <- nf$deviance
+    }
+    res$passes <- state$passes; res$chunk.reads <- state$reads
+    if(!res$converged) warning("streaming GLM did not converge",call.=FALSE)
+    class(res) <- c("fastglm_stream",if(firth) "fastglm_firth","fastglm")
+    res
 }

@@ -22,10 +22,8 @@ test_that("native NB log link agrees with glm() on MASS::negative.binomial", {
                      tolerance = 1e-8,
                      info = paste0("NB log link, theta = ", theta))
         expect_equal(ffit$deviance, gfit$deviance, tolerance = 1e-8)
-        # fastglm follows summary.glm()'s convention: NB uses the Pearson
-        # dispersion estimate (theta is *known* on the family object, but
-        # summary.glm doesn't bake that in).
-        expect_equal(ffit$dispersion, summary(gfit)$dispersion,
+        # A fixed theta specifies the full NB likelihood and dispersion is one.
+        expect_equal(ffit$dispersion, 1,
                      tolerance = 1e-8)
     }
 })
@@ -67,8 +65,8 @@ test_that("NB SE / vcov are unaffected by Pearson-disp override (disp = 1)", {
     d   <- sim_nb_data(n = 500, p = 3, theta = 2)
     fam <- MASS::negative.binomial(theta = 2)
     ffit <- fastglm(d$X, d$y, family = fam, method = 2)
-    gfit <- glm(d$y ~ d$X[, -1], family = fam)
+    gfit <- glm(d$y ~ d$X[, -1], family = fam, control = list(epsilon = 1e-12))
     # Coefficient SEs should match those of glm() to high precision.
-    expect_equal(unname(ffit$se), unname(sqrt(diag(vcov(gfit)))),
+    expect_equal(unname(ffit$se), unname(sqrt(diag(vcov(gfit, dispersion = 1)))),
                  tolerance = 1e-7)
 })

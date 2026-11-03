@@ -20,24 +20,26 @@ fastglm(x, ...)
   tol = 1e-08,
   maxit = 100L,
   firth = FALSE,
+  inference = c("full", "diagonal", "none"),
+  retain.data = TRUE,
   ...
 )
 }
 \arguments{
 \item{x}{input model matrix. Must be a matrix object}
 
-\item{...}{not used}
+\item{...}{additional arguments}
 
 \item{y}{numeric response vector of length nobs.}
 
-\item{family}{a description of the error distribution and link function to be used in the model. 
-For \code{fastglm} this can be a character string naming a family function, a family function or the 
-result of a call to a family function. For \code{fastglmPure} only the third option is supported. 
+\item{family}{a description of the error distribution and link function to be used in the model.
+For \code{fastglm} this can be a character string naming a family function, a family function or the
+result of a call to a family function. For \code{fastglmPure} only the third option is supported.
 (See \code{\link[stats]{family}} for details of family functions.)}
 
 \item{weights}{an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.}
 
-\item{offset}{this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
+\item{offset}{this can be used to specify an a priori known component to be included in the linear predictor during fitting.
 This should be a numeric vector of length equal to the number of cases}
 
 \item{start}{starting values for the parameters in the linear predictor.}
@@ -46,7 +48,8 @@ This should be a numeric vector of length equal to the number of cases}
 
 \item{mustart}{values for the vector of means.}
 
-\item{method}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
+\item{method}{a decomposition name (`qr`, `qr_unpivoted`, `llt`, `ldlt`,
+  `qr_full`, `svd`, or `auto`) or an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 2 for the LLT Cholesky, or 3 for the LDLT Cholesky}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
@@ -54,9 +57,15 @@ This should be a numeric vector of length equal to the number of cases}
 \item{maxit}{maximum number of IRLS iterations. Should be an integer}
 
 \item{firth}{logical; if `TRUE` apply the Kosmidis--Firth mean
-bias-reducing adjusted score.  Supported for all standard GLM families
+bias-reducing adjusted score. Supported for unmodified binomial, Poisson,
+Gaussian, Gamma, inverse Gaussian, and fixed-theta negative-binomial families
 on dense, sparse, and `big.matrix` designs, and with any decomposition
 method.}
+
+\item{inference}{retain full covariance, diagonal standard errors, or no inference.
+The no-inference option skips the final covariance calculation.}
+
+\item{retain.data}{retain the design and response for subsequent inference.}
 }
 \value{
 A list with the elements
