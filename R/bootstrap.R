@@ -1,4 +1,4 @@
-#' Refit bootstrap uncertainty for GLMs and count models
+#' Refit bootstrap uncertainty for GLMs, count models, and ordinal models
 #'
 #' Repeatedly resamples observations or independent clusters, or generates new
 #' responses from the fitted model, and refits the regression. A statistic such
@@ -18,6 +18,9 @@
 #'   number state. Each replicate has its own seed, independent of scheduling.
 #' @param workers number of independent R processes. Streaming sources use one
 #'   process because database connections may not be transferable.
+#'   A custom statistic must capture external objects, such as new prediction
+#'   data, in its function environment; worker processes do not inherit objects
+#'   from the calling session's global environment.
 #' @param level confidence level for percentile intervals.
 #' @param control named list of arguments passed to each fitting function,
 #'   such as `tol`, `maxit`, or `outer.maxit`.
@@ -38,6 +41,30 @@
 #'   multiplicities, requiring memory proportional to the number of rows;
 #'   neither procedure collects the full streaming design matrix.
 #'
+#'   For ordinal fits, pair and cluster resampling copy stored rows, including
+#'   their frequency weights and grouped counts; they do not resample the
+#'   individuals represented by a frequency row separately. Parametric
+#'   resampling draws category counts with each row's effective integer total,
+#'   then refits those counts with unit weights. The declared outcome levels,
+#'   design columns, and offsets are preserved. Formula metadata is retained for
+#'   statistics that predict on new data. Ordinal optimizer arguments may be
+#'   changed through `control`, but the estimator, design, response, weights,
+#'   and category order may not be overridden there.
+#'   Stored zero-frequency rows remain sampling units in pairs and cluster
+#'   resampling. Ordinal cluster identifiers may match retained rows or rows
+#'   before missing-value omission, after any subset; every retained sampling
+#'   row must have a cluster identifier. Ordinal results record `rng.kind`
+#'   alongside replicate seeds for reproducing the random-number stream.
+#'
+#'   Ordinal point replicates and category diagnostics are retained even when a
+#'   refit has empty categories or fails to converge, provided the statistic can
+#'   be evaluated. Any empty category in the original fit or a replicate makes
+#'   the ordinal uncertainty summaries unavailable, including when the pattern
+#'   of empty categories changes. This conservative policy avoids silently
+#'   treating a change in the fitted category model as regular full-parameter
+#'   inference. It also applies to custom statistics; point replicates remain
+#'   available for inspection.
+#'
 #'   Every failed or nonconverged refit is recorded. If any replicate fails,
 #'   standard errors and intervals are returned as missing rather than silently
 #'   conditioning inference on the successful fits. Inspect `diagnostics` and
@@ -51,7 +78,8 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
                               cluster=NULL,seed=NULL,workers=1L,level=.95,
                               control=list()) {
     if(inherits(object,"fastglm_ordinal"))
-        stop("ordinal bootstrap inference is not implemented",call.=FALSE)
+        return(.ordinal_bootstrap(object,R,statistic,type,cluster,seed,workers,level,control,
+                                  call=match.call()))
     type<-match.arg(type);.check_iterations(1e-8,R);.check_iterations(1e-8,workers)
     if(R<2L) stop("'R' must be at least two",call.=FALSE)
     if(!isTRUE(object$converged)) stop("bootstrap requires a converged original fit",call.=FALSE)

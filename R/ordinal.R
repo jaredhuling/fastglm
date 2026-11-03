@@ -3,7 +3,8 @@
 #' Fits a cumulative-logit model with common slopes and freely estimated
 #' thresholds, by maximum likelihood or mean bias reduction. Positive slopes
 #' shift probability toward higher outcome categories.
-#' @param x a formula or a finite dense numeric matrix of location predictors.
+#' @param x a formula, an object from [fastglm_ordinal_prepare()], or a finite
+#'   dense numeric matrix of location predictors.
 #'   A matrix must omit the intercept; formula fits remove the model-matrix
 #'   intercept because the thresholds already specify location.
 #' @param y an ordered factor, a factor or character response with an explicit
@@ -18,6 +19,7 @@
 #' @param levels category labels in increasing order. Numeric responses are
 #'   interpreted as codes from one to the number of labels.
 #' @param firth use mean bias reduction through adjusted score equations.
+#'   `NULL` in a prepared-design fit uses that design's default.
 #' @param tol tolerance for the remaining change in cumulative linear
 #'   predictors and the standardized adjusted score.
 #' @param maxit maximum fitting iterations.
@@ -41,7 +43,9 @@
 #'
 #'   The covariance uses inverse expected Fisher information at the fitted
 #'   estimate. It gives a first-order model-based approximation; this interface
-#'   does not provide ordinal penalized-profile or robust inference. Mean bias
+#'   does not provide ordinal penalized-profile inference. Robust covariance
+#'   is available through `fastglm_vcov()` or `vcov(type="HC0")` for converged
+#'   fits with every declared category observed. Mean bias
 #'   reduction solves the original threshold/common-slope adjusted equations.
 #'   It does not maximize a log-determinant penalized ordinal likelihood.
 #'
@@ -79,6 +83,13 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
                                     block.size=2048L,control=list(),...) {
     if(length(list(...))) stop("unused ordinal fitting arguments",call.=FALSE)
     if(missing(y)) stop("an ordinal response is required",call.=FALSE)
+    fit <- .ordinal_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,block.size,control)
+    fit$call <- match.call()
+    fit$call[[1L]] <- quote(fastglm::fastglm_ordinal)
+    fit
+}
+
+.ordinal_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache=NULL) {
     if(!is.matrix(x) || !is.numeric(x))
         stop("ordinal fitting currently requires a dense numeric matrix or formula",call.=FALSE)
     if(is.factor(y) && !is.ordered(y) && is.null(levels))
@@ -86,7 +97,7 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
     if(ncol(x)>0L && is.null(colnames(x))) colnames(x) <- paste0("x",seq_len(ncol(x)))
     if(anyNA(colnames(x)) || any(!nzchar(colnames(x))) || anyDuplicated(colnames(x)))
         stop("ordinal predictor column names must be distinct and nonmissing",call.=FALSE)
-    fit <- .ordinal_fit_core(x,y,weights,offset,levels,firth,tol,maxit,block.size,control)
+    fit <- .ordinal_fit_core(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache)
     q <- length(fit$alpha)
     names(fit$coefficients) <- c(paste0("threshold:",names(fit$alpha)),names(fit$beta))
     dimnames(fit$mapped.covariance) <- rep(list(names(fit$coefficients)),2L)
@@ -96,8 +107,6 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
         duplicated(fit$threshold.map,fromLast=TRUE)
     fit$x <- x; fit$y <- y; fit$design.columns <- colnames(x)
     fit$nobs.rows <- fit$nobs; fit$nobs <- fit$frequency
-    fit$call <- match.call()
-    fit$call[[1L]] <- quote(fastglm::fastglm_ordinal)
     class(fit) <- "fastglm_ordinal"
     fit
 }
@@ -140,6 +149,10 @@ fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
 #' @param evaluate evaluate the updated call or return it for inspection.
 #' @exportS3Method update fastglm_ordinal
 update.fastglm_ordinal <- function(object,formula.,...,evaluate=TRUE) {
+    if(!is.null(object$batch.response))
+        stop("update is unavailable for ordinal batch fits; refit the response with fastglm_ordinal(prepared, y, ...)",call.=FALSE)
+    if(isTRUE(object$prepared) && !missing(formula.))
+        stop("formula changes require preparing the revised ordinal design again",call.=FALSE)
     call <- object$call
     if(!missing(formula.)) {
         if(is.null(object$terms)) stop("formula updates require an ordinal formula fit",call.=FALSE)
@@ -177,22 +190,63 @@ coef.fastglm_ordinal <- function(object,component=c("all","location","threshold"
 }
 
 #' @rdname ordinal-methods
+#' @param type covariance convention: \code{"model"} uses expected Fisher
+#'   information; \code{"HC0"} and \code{"HC1"} use the ordinary-score sandwich
+#'   described in \code{fastglm_vcov()}.
+#' @param cluster optional cluster identifiers for robust covariance.
+#' @param cadjust apply the cluster-count correction for robust covariance.
+#' @param block.size number of rows processed together for robust covariance.
 #' @export
-vcov.fastglm_ordinal <- function(object,component=c("all","location","threshold"),...) {
+vcov.fastglm_ordinal <- function(object,component=c("all","location","threshold"),
+                                type=c("model","HC0","HC1"),cluster=NULL,
+                                cadjust=TRUE,block.size=8192L,...) {
+    if(length(list(...))) stop("unused ordinal covariance arguments",call.=FALSE)
     .ordinal_check_inference(object)
+    component <- match.arg(component); type <- match.arg(type)
+    if(type!="model") {
+        v <- fastglm_vcov(object,type=type,cluster=cluster,cadjust=cadjust,block.size=block.size)
+        i <- .ordinal_indices(object,component)
+        if(component=="all") return(v)
+        out <- v[i,i,drop=FALSE]
+        for(nm in setdiff(names(attributes(v)),c("dim","dimnames"))) attr(out,nm) <- attr(v,nm)
+        return(out)
+    }
+    if(!is.null(cluster)) stop("cluster covariance requires type = 'HC0' or 'HC1'",call.=FALSE)
     v <- object$mapped.covariance
     tied <- which(object$tied.thresholds)
     if(length(tied)) { v[tied,] <- NA_real_; v[,tied] <- NA_real_ }
-    i <- .ordinal_indices(object,match.arg(component))
+    i <- .ordinal_indices(object,component)
     v <- v[i,i,drop=FALSE]
     attr(v,"covariance.scope") <- if(object$boundary) "reduced category model" else "expected Fisher information"
     v
 }
 
+.ordinal_summary_covariance <- function(object,vcov.) {
+    if(is.null(vcov.)) return(vcov(object))
+    .ordinal_check_inference(object)
+    if(object$boundary) stop("supplied summary covariance is unsupported with collapsed ordinal categories",call.=FALSE)
+    b <- coef(object); d <- length(b)
+    if(!is.matrix(vcov.) || !is.numeric(vcov.) || is.complex(vcov.) ||
+       !identical(dim(vcov.),c(d,d)) || any(!is.finite(vcov.)) ||
+       !isSymmetric(vcov.,tol=1e-8) || any(diag(vcov.)<0))
+        stop("supply a finite symmetric full ordinal covariance with nonnegative variances",call.=FALSE)
+    if(!is.null(colnames(vcov.)) || !is.null(rownames(vcov.))) {
+        if(anyDuplicated(colnames(vcov.)) || anyDuplicated(rownames(vcov.)) ||
+           !setequal(colnames(vcov.),names(b)) || !setequal(rownames(vcov.),names(b)))
+            stop("supplied covariance names do not match the ordinal parameters",call.=FALSE)
+        vcov. <- vcov.[names(b),names(b),drop=FALSE]
+    }
+    vcov.
+}
+
+#' @rdname ordinal-methods
+#' @param vcov. optional full coefficient covariance for the summary. Defaults
+#'   to model-based expected Fisher information.
+#' @method summary fastglm_ordinal
 #' @exportS3Method summary fastglm_ordinal
-summary.fastglm_ordinal <- function(object,...) {
+summary.fastglm_ordinal <- function(object,vcov.=NULL,...) {
     b <- coef(object); se <- rep(NA_real_,length(b))
-    if(isTRUE(object$converged)) se <- sqrt(diag(vcov(object)))
+    if(!is.null(vcov.) || isTRUE(object$converged)) se <- sqrt(diag(.ordinal_summary_covariance(object,vcov.)))
     z <- b/se
     tab <- cbind(Estimate=b,"Std. Error"=se,"z value"=z,"Pr(>|z|)"=2*pnorm(-abs(z)))
     q <- length(object$alpha)
@@ -201,6 +255,7 @@ summary.fastglm_ordinal <- function(object,...) {
         convergence.reason=object$convergence.reason,iterations=object$iterations,
         firth=object$firth,frequency=object$frequency,nobs.rows=object$nobs.rows,
         loglik=object$loglik,boundary=object$boundary,
+        covariance.type=if(is.null(vcov.)) "expected Fisher information" else "supplied covariance",
         collapsed.categories=object$levels[object$collapsed.categories],
         predictor.step=object$predictor.step,scaled.score=object$scaled.score),
         class="summary.fastglm_ordinal")
@@ -213,6 +268,7 @@ print.summary.fastglm_ordinal <- function(x,...) {
         if(x$firth) "mean bias reduction" else "maximum likelihood","\n",sep="")
     if(nrow(x$location)) { cat("\nLocation coefficients (positive means higher outcomes):\n"); printCoefmat(x$location,...) }
     cat("\nThresholds:\n"); printCoefmat(x$thresholds,P.values=FALSE,has.Pvalue=FALSE,...)
+    if(isTRUE(x$converged)) cat("\nUncertainty:",x$covariance.type,"\n")
     cat("\nFrequency total:",x$frequency,"  Positive-frequency rows:",x$nobs.rows,
         "\nConverged:",x$converged," (",x$convergence.reason,"); iterations:",x$iterations,"\n")
     if(x$boundary) cat("Empty interior categories:",paste(x$collapsed.categories,collapse=", "),
@@ -287,6 +343,8 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,...) {
 }
 
 .ordinal_prediction_design <- function(object,newdata=NULL,offset=NULL) {
+    if(!is.null(newdata) && isTRUE(object$prediction.offset.required) && is.null(offset))
+        stop("supply an explicit prediction offset after changing prepared ordinal offsets",call.=FALSE)
     if(is.null(newdata)) { x <- object$x; off <- object$offset }
     else if(!is.null(object$terms)) {
         tt <- delete.response(object$terms)
@@ -307,7 +365,8 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,...) {
     if(!is.null(colnames(x)) && length(object$design.columns)) {
         if(anyDuplicated(colnames(x)) || !setequal(colnames(x),object$design.columns))
             stop("ordinal prediction columns do not match the fitted design",call.=FALSE)
-        x <- x[,object$design.columns,drop=FALSE]
+        if(!identical(colnames(x),object$design.columns))
+            x <- x[,object$design.columns,drop=FALSE]
     }
     if(!is.null(offset)) off <- offset
     if(is.null(off)) off <- numeric(nrow(x))
@@ -317,26 +376,55 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,...) {
     list(x=x,offset=off)
 }
 
-.ordinal_probability_block <- function(object,x,offset) {
+.ordinal_prediction_scale <- function(x,center,scale) {
+    if(!ncol(x)) return(x)
+    out <- matrix(NA_real_,nrow(x),ncol(x),dimnames=dimnames(x))
+    for(j in seq_len(ncol(x))) out[,j] <- (x[,j]-center[j])/scale[j]
+    out
+}
+
+.ordinal_probability_block <- function(object,x,offset,what="all",derivatives=TRUE) {
     p <- length(object$beta); a <- object$working$alpha; q <- length(a)
-    xx <- if(p) sweep(sweep(x,2,object$working$center,"-"),2,object$working$scale,"/") else x
+    xx <- .ordinal_prediction_scale(x,object$working$center,object$working$scale)
     location <- streaming_qr_eta(xx,object$working$beta,offset)
-    eta <- outer(-location,a,"+")
-    cumulative <- plogis(eta)
-    derivative <- cumulative*plogis(-eta)
-    probability <- matrix(0,nrow(x),q+1L)
-    probability[,1L] <- cumulative[,1L]
-    probability[,q+1L] <- plogis(-eta[,q])
+    n <- nrow(x); full <- what=="all"
+    want.probability <- full || what=="probability"
+    threshold.names <- if(!is.null(names(a))) list(NULL,names(a)) else NULL
+    cumulative <- if(full || what=="cumulative") matrix(NA_real_,n,q,dimnames=threshold.names) else NULL
+    survival <- if(full) matrix(NA_real_,n,q,dimnames=threshold.names) else NULL
+    derivative <- if(derivatives) matrix(NA_real_,n,q,dimnames=threshold.names) else NULL
+    probability <- if(want.probability) matrix(NA_real_,n,q+1L) else NULL
     softplus <- function(z) pmax(z,0)+log1p(exp(-abs(z)))
-    if(q>1L) for(j in 2:q) {
-        loggap <- log(-expm1(a[j-1L]-a[j]))
-        probability[,j] <- exp(-softplus(-eta[,j])+loggap-softplus(eta[,j-1L]))
+    previous.survival <- previous.eta <- NULL
+    for(j in seq_len(q)) {
+        eta <- a[j]-location
+        lower <- plogis(eta)
+        upper <- if(want.probability || full || derivatives) plogis(-eta) else NULL
+        if(!is.null(cumulative)) cumulative[,j] <- lower
+        if(full) survival[,j] <- upper
+        if(derivatives) derivative[,j] <- lower*upper
+        if(want.probability) {
+            if(j==1L) probability[,1L] <- lower
+            else {
+                gap <- -expm1(a[j-1L]-a[j])
+                value <- lower*previous.survival*gap
+                # This exact product avoids subtracting cumulative probabilities.
+                # R's logistic tails can become zero before exp() underflows;
+                # preserve the log calculation for all subnormal probabilities.
+                tiny <- which(value < .Machine$double.xmin)
+                if(length(tiny)) value[tiny] <- exp(-softplus(-eta[tiny])+log(gap)-softplus(previous.eta[tiny]))
+                probability[,j] <- value
+            }
+            if(j==q) probability[,q+1L] <- upper
+            previous.survival <- upper; previous.eta <- eta
+        }
     }
-    list(x=xx,probability=probability,cumulative=cumulative,derivative=derivative)
+    list(x=if(full || derivatives) xx else NULL,probability=probability,
+         cumulative=cumulative,survival=survival,derivative=derivative)
 }
 
 .ordinal_gradient <- function(parts,j,type) {
-    q <- ncol(parts$cumulative); p <- ncol(parts$x); n <- nrow(parts$x)
+    q <- ncol(parts$derivative); p <- ncol(parts$x); n <- nrow(parts$x)
     g <- matrix(0,n,q+p)
     if(type=="cumulative") {
         d <- parts$derivative[,j]; g[,j] <- d
@@ -382,15 +470,19 @@ predict.fastglm_ordinal <- function(object,newdata=NULL,
     n <- nrow(design$x); K <- length(object$levels); q <- length(object$effective$alpha)
     calc.type <- if(type=="class") "probability" else type
     labels <- if(calc.type=="cumulative") object$levels[-K] else object$levels
-    fit <- se <- if(type=="link") rep(NA_real_,n) else matrix(NA_real_,n,length(labels),
-        dimnames=list(rownames(design$x),labels))
+    fit <- if(type=="link") rep(NA_real_,n) else if(type=="class") rep(NA_integer_,n) else
+        matrix(NA_real_,n,length(labels),dimnames=list(rownames(design$x),labels))
+    se <- if(se.fit) fit else NULL
+    probability.map <- match(seq_len(K),object$retained.categories)
+    complete.categories <- length(object$retained.categories)==K
     .design_blocks(design$x,function(z,i) {
         off <- design$offset[i]
         if(!is.numeric(z) || is.complex(z)) stop("ordinal prediction requires a real numeric design",call.=FALSE)
         if(any(is.infinite(z)) || any(is.infinite(off))) stop("ordinal prediction inputs must be finite or missing",call.=FALSE)
         ok <- rowSums(!is.finite(z))==0L & is.finite(off)
         if(!any(ok)) return(invisible(NULL))
-        rows <- i[ok]; z <- z[ok,,drop=FALSE]; off <- off[ok]
+        rows <- i
+        if(!all(ok)) {rows <- i[ok]; z <- z[ok,,drop=FALSE]; off <- off[ok]}
         if(type=="link") {
             fit[rows] <<- streaming_qr_eta(z,object$beta,off)
             if(se.fit) {
@@ -400,26 +492,31 @@ predict.fastglm_ordinal <- function(object,newdata=NULL,
             }
             return(invisible(NULL))
         }
-        parts <- .ordinal_probability_block(object,z,off)
+        parts <- .ordinal_probability_block(object,z,off,what=calc.type,derivatives=se.fit)
+        if(type=="class") {
+            fit[rows] <<- object$retained.categories[max.col(parts$probability,ties.method="first")]
+            return(invisible(NULL))
+        }
         if(calc.type=="probability") {
-            value <- matrix(0,nrow(z),K)
-            value[,object$retained.categories] <- parts$probability
-            map <- match(seq_len(K),object$retained.categories)
+            if(complete.categories) value <- parts$probability else {
+                value <- matrix(0,nrow(z),K)
+                value[,object$retained.categories] <- parts$probability
+            }
+            map <- probability.map
         } else {
             map <- object$threshold.map
-            value <- parts$cumulative[,map,drop=FALSE]
+            value <- if(complete.categories) parts$cumulative else parts$cumulative[,map,drop=FALSE]
         }
         fit[rows,] <<- value
         if(se.fit) for(j in seq_along(map)) if(!is.na(map[j])) {
             g <- .ordinal_gradient(parts,map[j],calc.type)
-            se[rows,j] <<- sqrt(pmax(0,.quad_rows(g,object$working$covariance)))
+            variance <- if(nrow(g)<=8192L) rowSums((g%*%object$working$covariance)*g) else
+                .quad_rows(g,object$working$covariance)
+            se[rows,j] <<- sqrt(pmax(0,variance))
         }
     },object$block.size)
     if(type=="class") {
-        code <- rep(NA_integer_,n)
-        ok <- complete.cases(fit)
-        if(any(ok)) code[ok] <- max.col(fit[ok,,drop=FALSE],ties.method="first")
-        fit <- ordered(object$levels[code],levels=object$levels)
+        fit <- ordered(object$levels[fit],levels=object$levels)
     }
     if(type=="link" || type=="class") names(fit) <- rownames(design$x)
     if(is.null(newdata) && !is.null(object$na.action)) {

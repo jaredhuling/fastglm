@@ -74,12 +74,16 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #' Computes the sandwich meat in row blocks, optionally accumulating scores
 #' by cluster. Cluster storage is proportional to the number of distinct
 #' clusters times the number of coefficients. Streaming fits reread the source.
-#' @param object a fitted fastglm GLM, count model, or two-part model.
-#' @param type HC0, HC1, HC2, or HC3 correction. Cluster covariance and count
-#'   models support HC0 and HC1. The default is HC3 for GLMs and HC0 for count
-#'   and two-part models.
+#' @param object a fitted fastglm GLM, count, two-part, or ordinal model.
+#' @param type HC0, HC1, HC2, or HC3 correction. Cluster covariance, count,
+#'   two-part, and ordinal models support HC0 and HC1. The default is HC3 for
+#'   GLMs and HC0 for count, two-part, and ordinal models.
 #' @param cluster optional cluster identifiers; for streaming fits, a function
-#'   of chunk index returning identifiers in the source row order.
+#'   of chunk index returning identifiers in the source row order. For ordinal
+#'   fits, supply one identifier per retained row, or per row before missing-value
+#'   omission after any formula subset. Each represented individual in a grouped
+#'   frequency row belongs to that row's cluster; split the row if its members
+#'   belong to different clusters.
 #' @param cadjust multiply clustered covariance by `G/(G-1)`.
 #' @param block.size maximum number of design rows processed at once.
 #' @param full include the estimated negative-binomial size parameter when
@@ -91,14 +95,40 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #'   on dispersion; removing its common dispersion multiplier preserves the
 #'   fitted mean parameters and their sandwich covariance. These approximations
 #'   require independent observations, or independent clusters when supplied,
-#'   and identifiable interior parameters. They are not implemented for
-#'   bias-adjusted scores. See [fastglm_bootstrap()] for refit-based uncertainty.
+#'   and identifiable interior parameters. For GLM, count, and two-part models,
+#'   sandwich covariance for bias-adjusted scores is not implemented.
+#'
+#'   For ordinal fits, the covariance uses the inverse observed negative
+#'   Jacobian of the ordinary likelihood score, rather than inverse expected
+#'   Fisher information. Independent-observation meat sums individual score
+#'   outer products linearly in the effective category frequencies. Cluster meat
+#'   instead sums individual scores within each cluster before taking outer
+#'   products. Thus a frequency row represents repeated independent individuals
+#'   unless a cluster identifier groups them together. With total frequency
+#'   \eqn{N}, parameter count \eqn{d}, and positive-frequency cluster count
+#'   \eqn{G}, HC1 multiplies independent covariance by \eqn{N/(N-d)} and
+#'   cluster covariance by \eqn{(N-1)/(N-d)}; \code{cadjust = TRUE} additionally
+#'   applies \eqn{G/(G-1)} to cluster covariance. Every declared category must
+#'   have positive frequency, and the fit must have converged.
+#'
+#'   For mean-bias-reduced ordinal fits, this is explicitly a first-order
+#'   ordinary-score sandwich evaluated at the bias-reduced estimate, not the
+#'   covariance of the exact adjusted equations. Its asymptotic interpretation
+#'   requires an interior regular limit, fixed parameter dimension, nonsingular
+#'   limiting score derivative, an appropriate independent-observation or
+#'   independent-cluster central limit theorem, and a score adjustment negligible
+#'   relative to the square root of the sample size. Finite estimates under
+#'   separation do not establish those conditions. This convention does not
+#'   promise finite-sample calibration or bias reduction under misspecification.
+#'   See [fastglm_bootstrap()] for refit-based uncertainty.
 #' @returns A coefficient covariance matrix.
 #' @export
 fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
                           cadjust=TRUE,block.size=8192L,full=FALSE) {
-    if(inherits(object,"fastglm_ordinal"))
-        stop("robust covariance is not implemented for ordinal fits; vcov() provides model-based uncertainty",call.=FALSE)
+    if(inherits(object,"fastglm_ordinal")) {
+        if(missing(type)) type <- "HC0"
+        return(.ordinal_robust_vcov(object,type,cluster,cadjust,block.size))
+    }
     if(.count_inference_model(object)) {
         if(missing(type)) type <- "HC0"
         type <- match.arg(type,c("HC0","HC1","HC2","HC3"))

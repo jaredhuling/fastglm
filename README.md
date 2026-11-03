@@ -500,11 +500,15 @@ and bootstrap uncertainty.
 `fastglm_ordinal()` fits cumulative-logit proportional-odds models through a
 formula or a dense matrix, with optional mean bias reduction using
 `firth=TRUE`. Predictions describe category probabilities, and
-`fastglm_average()` summarizes their averages and contrasts. Empty interior
-categories are mapped back to the declared scale with coincident thresholds
-and explicit uncertainty limits. The [ordinal-outcome
+`fastglm_average()` summarizes their averages and contrasts. Prepared ordinal
+designs reuse common predictor setup across lists of responses. Simulation, probability-based residuals,
+and optional broom methods support model assessment and reporting. Robust
+covariance and refitting bootstrap uncertainty are available for regular
+fits, with category and convergence diagnostics. Empty interior categories
+are mapped back to the declared scale with coincident thresholds and
+explicit uncertainty limits. The [ordinal-outcome
 vignette](vignettes/ordinal-fastglm.Rmd) explains the coefficient convention,
-frequency weights, category boundaries, and model-based inference.
+frequency weights, repeated fitting, category boundaries, and inference options.
 
 ### Firth bias-reduced GLMs
 

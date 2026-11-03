@@ -3,7 +3,7 @@
 \name{fastglm_bootstrap}
 \alias{fastglm_bootstrap}
 \alias{print.fastglm_bootstrap}
-\title{Refit bootstrap uncertainty for GLMs and count models}
+\title{Refit bootstrap uncertainty for GLMs, count models, and ordinal models}
 \usage{
 fastglm_bootstrap(
   object,
@@ -38,7 +38,10 @@ source, supply a function returning the identifiers in each chunk.}
 number state. Each replicate has its own seed, independent of scheduling.}
 
 \item{workers}{number of independent R processes. Streaming sources use one
-process because database connections may not be transferable.}
+process because database connections may not be transferable.
+A custom statistic must capture external objects, such as new prediction
+data, in its function environment; worker processes do not inherit objects
+from the calling session's global environment.}
 
 \item{level}{confidence level for percentile intervals.}
 
@@ -78,6 +81,30 @@ Pair resampling treats rows as independent sampling units. Cluster
   fixed block seeds. Pair and cluster resampling also retain row indices or
   multiplicities, requiring memory proportional to the number of rows;
   neither procedure collects the full streaming design matrix.
+
+  For ordinal fits, pair and cluster resampling copy stored rows, including
+  their frequency weights and grouped counts; they do not resample the
+  individuals represented by a frequency row separately. Parametric
+  resampling draws category counts with each row's effective integer total,
+  then refits those counts with unit weights. The declared outcome levels,
+  design columns, and offsets are preserved. Formula metadata is retained for
+  statistics that predict on new data. Ordinal optimizer arguments may be
+  changed through `control`, but the estimator, design, response, weights,
+  and category order may not be overridden there.
+  Stored zero-frequency rows remain sampling units in pairs and cluster
+  resampling. Ordinal cluster identifiers may match retained rows or rows
+  before missing-value omission, after any subset; every retained sampling
+  row must have a cluster identifier. Ordinal results record `rng.kind`
+  alongside replicate seeds for reproducing the random-number stream.
+
+  Ordinal point replicates and category diagnostics are retained even when a
+  refit has empty categories or fails to converge, provided the statistic can
+  be evaluated. Any empty category in the original fit or a replicate makes
+  the ordinal uncertainty summaries unavailable, including when the pattern
+  of empty categories changes. This conservative policy avoids silently
+  treating a change in the fitted category model as regular full-parameter
+  inference. It also applies to custom statistics; point replicates remain
+  available for inspection.
 
   Every failed or nonconverged refit is recorded. If any replicate fails,
   standard errors and intervals are returned as missing rather than silently

@@ -89,6 +89,108 @@ contact_difference
 
 This contrast compares high with low contact while keeping the observed distribution of influence and housing type fixed. Each estimate is a difference in the probability of the named satisfaction category. The differences sum to zero because both sets of probabilities sum to one. These are model-based descriptive comparisons, with uncertainty conditional on the supplied predictor distribution. The reported intervals use a normal approximation and are not truncated to the range of possible probability differences.
 
+# Sampling uncertainty and model assumptions
+
+The expected-information standard errors above use the fitted categorical distribution to describe sampling variation. Each observation also contributes a score, which measures how its log likelihood changes as the parameters change. A sandwich covariance combines the observed sensitivity of the score equations with the variation in these individual contributions, as described by [Zeileis (2006)](https://www.jstatsoft.org/article/view/v016i09). This permits a first-order variance estimate under distributional misspecification, provided observations are independent and the fitted parameter has a regular, identifiable population target. Robust standard errors do not correct an incorrect mean or probability model.
+
+```{r}
+V_robust <- fastglm_vcov(fit_br,type="HC0")
+cbind(model_based=sqrt(diag(vcov(fit_br))),
+      sandwich=sqrt(diag(V_robust)))
+fastglm_average(fit_br,weights=housing$Freq,vcov.=V_robust)
+```
+
+The frequencies represent individual residents. Consequently, the independent-observation calculation accumulates score variability at the resident level, including when residents with the same recorded values share a row. A row with frequency ten contributes ten individual observations to this calculation. For mean-bias-reduced fits, the sandwich uses ordinary likelihood scores and their observed derivative at the bias-reduced estimate. With a fixed number of parameters and a regular, identifiable limit, the score adjustment becomes small relative to sampling variation as the sample size increases. This first-order convention differs from differentiating the complete adjusted equations and does not supply a finite-sample coverage guarantee. The returned covariance records this convention.
+
+When observations belong to independent clusters, `cluster` supplies the cluster identifier for each fitted row. The calculation then uses the sum of score contributions within each cluster, following the construction described by [Zeileis, Köll, and Graham (2020)](https://www.jstatsoft.org/article/view/v095i01). All observations represented by a frequency row must belong to its stated cluster. A large number of independent clusters is needed for the usual approximation; repeated observations within a few clusters do not substitute for additional clusters. Cluster covariance is available through `fastglm_vcov(fit, type="HC0", cluster=cluster_id)`. The current robust interface requires positive observed frequency in every declared category.
+
+A refitting bootstrap describes variation by constructing new response datasets and fitting the model again. In the following parametric bootstrap, predictors and offsets remain fixed, while satisfaction counts are sampled from the fitted category probabilities. The statistic records the common slopes after each refit.
+
+```{r}
+boot_location <- fastglm_bootstrap(
+    fit_br,R=199,type="parametric",seed=61103,
+    statistic=function(fit) coef(fit,component="location"))
+cbind(estimate=boot_location$estimate,
+      std.error=boot_location$std.error,
+      boot_location$conf.int)
+table(boot_location$diagnostics$converged)
+```
+
+This calculation assumes the fitted response model. The alternatives `type="pairs"` and `type="cluster"` resample stored rows or whole independent clusters, respectively. Row resampling preserves the counts and weights attached to each sampled row; it therefore describes a different sampling scheme from resampling individual residents represented by frequencies. The analyst must choose the scheme that corresponds to the study design. Formula transformations and factor coding are held fixed during refitting.
+
+Each replicate records convergence, empty categories, and changes in the category boundary. Failed fits and changes to the declared category representation can invalidate a regular bootstrap interpretation. The implementation retains finite point replicates and their diagnostics, while standard errors and intervals are unavailable if a fit fails or the original sample or any replicate has an empty category. The percentile intervals illustrated here also have simulation error; a larger number of replicates is appropriate when reporting interval endpoints.
+
+# Simulated responses
+
+Simulation from the fitted distribution can help assess the range of category patterns implied by a model. The housing frequencies give the number of residents at each recorded predictor row. `simulate()` therefore returns a list of count matrices, with a simulated count for each satisfaction category at each row.
+
+```{r}
+simulated <- simulate(fit_br,nsim=2,seed=61104)
+head(simulated[[1]])
+all(rowSums(simulated[[1]])==housing$Freq)
+```
+
+These counts already include the fitting frequencies. Refitting a simulated count matrix uses unit weights, because applying the original weights again would count the same residents twice. For an individual response with unit frequency in each row, `simulate()` instead returns a data frame of ordered factors. Both forms preserve the declared category order. Simulation conditions on the fitted parameters and does not itself account for estimation uncertainty.
+
+# Repeated responses with common predictors
+
+Several ordered outcomes can share the same predictors, and simulation studies often fit many responses on a fixed design. A prepared ordinal design retains the predictor matrix and its formula transformations, so these calculations can be reused across responses. Each model still estimates its own thresholds and common slopes and has its own convergence assessment.
+
+The following preparation uses the housing predictors for both the observed satisfaction response and the two simulated count matrices above. The observed response uses the resident frequencies as weights. The simulated matrices already contain those frequencies and therefore use unit weights.
+
+```{r}
+prepared <- fastglm_ordinal_prepare(
+    ~Infl+Type+Cont,data=housing,
+    levels=levels(housing$Sat),firth=TRUE)
+prepared_original <- fastglm_ordinal(
+    prepared,housing$Sat,weights=housing$Freq,tol=1e-10)
+all.equal(coef(prepared_original),coef(fit_br),tolerance=1e-8)
+
+repeated <- fastglm_ordinal_batch(
+    prepared,simulated,weights=rep(1,nrow(housing)),tol=1e-10)
+vapply(repeated,function(fit) fit$converged,logical(1))
+predict(repeated[[1]],newdata=profiles)
+```
+
+The saved preparation includes centering, scaling, and rank checks. These depend on the predictors and each row's effective frequency, which is its individual frequency weight or the sum of its category counts times its weight. In this example, the effective row frequencies are the same for the observed and simulated responses. Changes to the predictor matrix, effective row frequencies, or standardization control rebuild the saved calculations. Offsets and the allocation of a fixed row total among categories can change while this preparation remains applicable. Category mappings, starting values, and parameter-dependent information are calculated separately for each fit.
+
+Prepared designs can also be saved and restored as R objects. This permits reuse across sessions without retaining a connection to a native fitting process. The following serialization reproduces the first refit using the restored preparation.
+
+```{r}
+restored <- unserialize(serialize(prepared,NULL))
+restored_fit <- fastglm_ordinal(
+    restored,simulated[[1]],weights=rep(1,nrow(housing)),tol=1e-10)
+all.equal(coef(restored_fit),coef(repeated[[1]]),tolerance=1e-10)
+```
+
+`saveRDS()` and `readRDS()` provide the corresponding file-based operation. Formula expressions that refer to external functions or objects still require those dependencies when constructing a new prediction design. Batch fitting currently processes a list of responses sequentially and retains the full fitted models. An individual response can be refitted with `fastglm_ordinal(prepared, response, ...)`; changing the formula requires preparing the revised design again. Preparation retains a dense design and, when standardization is used, its standardized values; its memory requirement therefore continues to grow with the number of rows and predictors.
+
+# Residual diagnostics
+
+A residual for ordered outcomes should preserve the direction of discrepancy without imposing numerical distances between categories. The probability-scale residual of [Li and Shepherd (2012)](https://doi.org/10.1093/biomet/asr073) compares the fitted probability below the observed category with the fitted probability above it. Its value is positive when the observed category is high relative to the fitted distribution, and negative when it is low.
+
+```{r}
+probability_residual <- residuals(fit_br)
+head(cbind(probability_scale=probability_residual,
+           residuals(fit_br,type="cumulative")))
+by(seq_len(nrow(housing)),housing$Infl,function(i)
+    weighted.mean(probability_residual[i],housing$Freq[i],na.rm=TRUE))
+```
+
+The residuals lie between minus one and one. For a count-matrix response, the probability-scale residual is the mean of the individual residuals within that row. Cumulative residuals compare observed and fitted proportions through each threshold, which can help locate discrepancies in different parts of the outcome distribution. Zero-frequency rows have missing residuals. These are descriptive checks: ordinal probability-scale residuals are generally neither normal nor uniform, and cumulative residual columns are dependent.
+
+For reporting and further analysis, optional `broom` methods retain the distinction between common slopes and thresholds. Exponentiation applies to the slopes and their intervals, yielding common odds ratios; threshold estimates and coefficient standard errors remain on the logit scale.
+
+```{r}
+if(requireNamespace("broom",quietly=TRUE)) {
+    broom::tidy(fit_br,component="location",conf.int=TRUE,exponentiate=TRUE)
+    broom::glance(fit_br)
+    broom::augment(fit_br,newdata=profiles,se_fit=TRUE)
+}
+```
+
+The `.fitted` matrix column from `augment()` contains one probability per category, and `.class` gives the category with the largest fitted probability. Training-data augmentation also includes probability-scale residuals. Supplied covariance matrices can be used in `summary()`, `broom::tidy()`, and average probability contrasts, while the prediction standard errors in this example use expected Fisher information.
+
 # Empty categories and the declared outcome scale
 
 An outcome category can be absent from a sample even when it belongs to the intended scale. Removing an empty endpoint before bias reduction changes that scale. The following example retains an unobserved low category.
@@ -125,4 +227,4 @@ The current interface supports the cumulative logit link, freely estimated thres
 
 `logLik()` reports the ordinary categorical frequency likelihood at the returned estimate, omitting constants introduced by grouping observations. In contrast, `deviance()` compares the fit with a saturated model for the supplied response rows, so the grouped deviance depends on that grouping. For bias-reduced estimates, the reported likelihood is evaluated at those estimates rather than maximized by them.
 
-Inference currently uses expected Fisher information and normal approximations. Robust covariance, ordinal bootstrap inference, and ordinal profile intervals are not supplied by this interface. Nonconverged fits retain their diagnostics and point predictions, while methods requiring a covariance refuse to report uncertainty. These distinctions are useful when deciding whether a fitted distribution is sufficiently well determined for the intended interpretation.
+Model-based inference uses expected Fisher information and normal approximations. Robust covariance and refitting bootstrap calculations have the regularity and category-support requirements described above. Ordinal profile intervals are not supplied. Nonconverged fits retain their diagnostics and point predictions, while methods requiring a covariance refuse to report uncertainty. These distinctions are useful when deciding whether a fitted distribution is sufficiently well determined for the intended interpretation.

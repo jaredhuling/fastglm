@@ -38,8 +38,6 @@ test_that("ordinal formula and matrix fits have consistent model methods", {
     diagnostics <- fastglm_diagnostics(formula.fit)
     expect_true(diagnostics$converged)
     expect_lt(diagnostics$remaining.predictor.step,1e-10)
-    expect_error(fastglm_vcov(formula.fit),"robust covariance is not implemented")
-    expect_error(fastglm_bootstrap(formula.fit,R=2),"ordinal bootstrap inference")
 })
 
 test_that("ordinal prediction preserves offsets, missing rows, and declared order", {

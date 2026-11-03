@@ -3,13 +3,12 @@
 # is equivariant. A log-spacing transformation would change its target.
 .ordinal_fit_core <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
                               firth=FALSE,tol=1e-8,maxit=200L,
-                              block.size=2048L,control=list()) {
-    if(!is.matrix(x) || !is.numeric(x) || is.complex(x) || any(!is.finite(x)))
+                              block.size=2048L,control=list(),cache=NULL) {
+    if(!is.matrix(x) || !is.numeric(x) || is.complex(x))
         stop("ordinal fitting requires a finite dense numeric matrix without a location intercept",call.=FALSE)
     n<-nrow(x);p<-ncol(x)
     if(!n) stop("ordinal fitting requires observations",call.=FALSE)
     if(p && is.null(colnames(x))) colnames(x)<-paste0("x",seq_len(p))
-    storage.mode(x)<-"double"
     response<-.ordinal_response_data(y,weights,levels,firth)
     if(response$n!=n) stop("ordinal response length does not match the design",call.=FALSE)
     if(is.null(offset)) offset<-numeric(n)
@@ -35,32 +34,10 @@
         if(!is.logical(ctl[[nm]]) || length(ctl[[nm]])!=1L || is.na(ctl[[nm]]))
             stop("invalid ordinal optimizer flag: ",nm,call.=FALSE)
 
-    totals<-response$totals;frequency<-sum(totals);good<-totals>0
-    center<-numeric(p);scale<-rep(1,p);xx<-x
-    if(p) {
-        # Rank is assessed after centering and scaling, so a change of predictor
-        # units or location does not by itself imply an unidentified model.
-        # Exclude zero-frequency rows before squaring or scaling: an irrelevant
-        # finite extreme value must not produce Inf * 0 in these moments.
-        active<-if(all(good)) x else x[good,,drop=FALSE]
-        center<-colSums(active*(totals[good]/frequency))
-        centered<-sweep(active,2,center,"-")
-        scale<-sqrt(colSums(centered^2*(totals[good]/frequency)))
-        if(any(!is.finite(scale)|scale<=0))
-            stop("the ordinal location design contains a redundant constant column or cannot be scaled",call.=FALSE)
-        standardized<-sweep(centered,2,scale,"/")
-        if(qr(cbind(1,standardized))$rank!=p+1L)
-            stop("the ordinal location design must be full rank with a separate threshold intercept",call.=FALSE)
-        if(ctl$standardize) {
-            if(all(good)) xx<-standardized else {
-                xx<-matrix(0,n,p,dimnames=dimnames(x))
-                xx[good,]<-standardized
-            }
-        } else {
-            center<-numeric(p);scale<-rep(1,p)
-            xx[!good,]<-0
-        }
-    }
+    totals<-response$totals
+    setup<-.ordinal_design_setup(x,totals,ctl$standardize,cache)
+    frequency<-setup$frequency;good<-setup$positive
+    center<-setup$center;scale<-setup$scale;xx<-setup$x
     # Native block products can touch every row even though score accumulation
     # skips empty ones. Keep their working inputs benign; retain original offsets
     # and the public design separately for subsequent prediction.
@@ -140,6 +117,59 @@
          last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,
          loglik=fit$loglik,rank=d,df.residual=frequency-d,nobs=sum(good),
          frequency=frequency,weights=response$weights,offset=offset,response=response,category=response,
+         preparation.reused=setup$reused,
          firth=firth,method=if(firth) "meanBR" else "ML",control=ctl,
          tol=tol,maxit=as.integer(maxit),block.size=as.integer(block.size))
+}
+
+.ordinal_design_setup <- function(x,totals,standardize,cache=NULL) {
+    key<-list(x=x,totals=totals,standardize=standardize)
+    entry<-if(is.environment(cache)) cache$entry
+    if(!is.null(entry) && identical(entry$key,key)) {
+        # Refresh references after deserialization or an equal replacement, so
+        # future comparisons need not rescan an equivalent copied matrix.
+        cache$entry<-list(key=key,value=entry$value)
+        value<-entry$value;value$reused<-TRUE
+        return(value)
+    }
+    # Retaining X in the key lets R's copy-on-write rules distinguish a changed
+    # matrix. Unchanged references do not require another scan of all entries.
+    if(is.null(entry) || !identical(entry$key$x,x)) {
+        if(!is.matrix(x) || !is.numeric(x) || is.complex(x) || any(!is.finite(x)))
+            stop("ordinal fitting requires a finite dense numeric matrix without a location intercept",call.=FALSE)
+    }
+    n<-nrow(x);p<-ncol(x);frequency<-sum(totals);good<-totals>0
+    center<-numeric(p);scale<-rep(1,p);xx<-x
+    if(p) {
+        # Rank is assessed after centering and scaling, so a change of units or
+        # origin does not by itself imply nonidentifiability. Zero-frequency
+        # rows must be excluded before squaring finite extreme values.
+        active<-if(all(good)) x else x[good,,drop=FALSE]
+        center<-colSums(active*(totals[good]/frequency))
+        centered<-sweep(active,2,center,"-")
+        scale<-sqrt(colSums(centered^2*(totals[good]/frequency)))
+        if(any(!is.finite(scale)|scale<=0))
+            stop("the ordinal location design contains a redundant constant column or cannot be scaled",call.=FALSE)
+        standardized<-sweep(centered,2,scale,"/")
+        if(qr(cbind(1,standardized))$rank!=p+1L)
+            stop("the ordinal location design must be full rank with a separate threshold intercept",call.=FALSE)
+        if(standardize) {
+            if(all(good)) xx<-standardized else {
+                xx<-matrix(0,n,p,dimnames=dimnames(x))
+                xx[good,]<-standardized
+            }
+        } else {
+            center<-numeric(p);scale<-rep(1,p)
+            if(any(!good)) xx[!good,]<-0
+        }
+    }
+    if(is.integer(xx)) storage.mode(xx)<-"double"
+    value<-list(x=xx,center=center,scale=scale,positive=good,frequency=frequency,reused=FALSE)
+    # Publish key and value together only after every check succeeds. A failed
+    # change cannot pair an invalid new key with an older prepared design.
+    if(is.environment(cache)) {
+        cache$entry<-list(key=key,value=value)
+        cache$builds<-if(is.null(cache$builds)) 1L else cache$builds+1L
+    }
+    value
 }
