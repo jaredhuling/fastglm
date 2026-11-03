@@ -69,6 +69,16 @@
     NA_real_
 }
 
+# Log of sum(w*y*exp(-offset)), optionally combined with preceding blocks.
+# Evaluating the sum on the log scale also handles very small Gamma responses.
+.gamma_log_null_total <- function(y,weights,offset,previous=-Inf) {
+    keep <- weights>0
+    terms <- c(previous,log(weights[keep])+log(y[keep])-offset[keep])
+    largest <- max(terms)
+    if(!is.finite(largest)) return(largest)
+    largest+log(sum(exp(terms-largest)))
+}
+
 .finish_glm <- function(res, offset, intercept = res$intercept, null = TRUE) {
     fam <- res$family; y <- res$y; w <- res$prior.weights
     positive <- w > 0
@@ -103,10 +113,15 @@
     } else { res$cov.unscaled <- NULL; res$se <- NULL }
     if (null) {
         if (intercept && any(offset != offset[1L])) {
-            nf <- stats::glm.fit(matrix(1, length(y), 1L), y, weights = w,
-                                 offset = offset, family = fam,
-                                 control = stats::glm.control(maxit = 100))
-            res$null.deviance <- nf$deviance
+            if(family_code(fam)==10L) {
+                null.intercept <- .gamma_log_null_total(y,w,offset)-log(sum(w))
+                res$null.deviance <- sum(fam$dev.resids(y,exp(offset+null.intercept),w))
+            } else {
+                nf <- stats::glm.fit(matrix(1, length(y), 1L), y, weights = w,
+                                     offset = offset, family = fam,
+                                     control = stats::glm.control(maxit = 100))
+                res$null.deviance <- nf$deviance
+            }
         } else {
             mu0 <- if (intercept) sum(w * y) / sum(w) else fam$linkinv(offset)
             res$null.deviance <- sum(fam$dev.resids(y, mu0, w))

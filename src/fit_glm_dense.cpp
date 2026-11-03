@@ -228,6 +228,7 @@ List bigfastglm(XPtr<BigMatrix> Xs,
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;
         out["bias.dispersion"] = solver->get_bias_dispersion();
+        solver->append_bias_diagnostics(out, Rcpp::as<double>(out["bias.dispersion"]), inference);
         out["firth"]              = true;
     }
 
@@ -327,6 +328,7 @@ List fit_sparse_glm(SEXP x_sparse,
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;
         out["bias.dispersion"] = solver.get_bias_dispersion();
+        solver.append_bias_diagnostics(out, Rcpp::as<double>(out["bias.dispersion"]), inference);
         out["firth"]              = true;
     }
     return out;

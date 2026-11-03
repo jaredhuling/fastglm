@@ -74,6 +74,10 @@ protected:
     MatrixXd A_prev;                // (X'WX)^{-1} from previous IRLS iteration (lagged leverages)
     bool     A_prev_available;
     fglm::GammaWeightGroups dispersion_weight_groups;
+    VectorXd gamma_adjustment;
+    double gamma_step_phi = 1;
+    bool gamma_step_failed = false;
+    bool gamma_initial_consistent = false;
     
     
     FullPivHouseholderQR<MatrixXd> FPQR;
@@ -260,10 +264,19 @@ protected:
     // before the penalized score reaches zero.  Override converged() to test
     // the coefficient change ||Δβ||_∞ instead, which is the convergence
     // criterion every reference Firth implementation (logistf, brglm) uses.
+    bool failed() const override { return gamma_step_failed; }
+
     bool converged() override
     {
         if (firth_) {
-            return (beta - beta_prev).cwiseAbs().maxCoeff() < tol;
+            if (gamma_step_failed || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
+            if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
+                const double phi = compute_firth_phi();
+                const VectorXd score = X.adjoint() *
+                    (weights.array()*(Y.array()/mu.array()-1)).matrix() + phi*gamma_adjustment;
+                return information_solve(score).cwiseAbs().maxCoeff() < tol;
+            }
+            return true;
         }
         return std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol;
     }
@@ -286,8 +299,87 @@ protected:
         return as<bool>(validmu(mu));
     }
 
+    // Solve the expected-information system without rebuilding its factor.
+    VectorXd information_solve(const VectorXd& rhs)
+    {
+        if (prepared_info) return prepared_info->solve(rhs);
+        if (type == 2) return Ch.solve(rhs);
+        if (type == 3) return ChD.solve(rhs);
+        if (type == 5) {
+            VectorXd v = bSVD.matrixV().adjoint()*rhs;
+            for (int j=0;j<v.size();++j)
+                v[j] = j < rank ? v[j]/std::pow(bSVD.singularValues()[j],2) : 0;
+            return bSVD.matrixV()*v;
+        }
+        MatrixXd R;
+        if (type == 0) R = PQR.matrixQR().topLeftCorner(rank,rank).template triangularView<Upper>();
+        else if (type == 1) R = QR.matrixQR().topLeftCorner(rank,rank).template triangularView<Upper>();
+        else R = FPQR.matrixQR().topLeftCorner(rank,rank).template triangularView<Upper>();
+        VectorXd b = (type == 0 || type == 4) ? VectorXd(Pmat.transpose()*rhs) : rhs;
+        VectorXd first = R.transpose().triangularView<Lower>().solve(b.head(rank));
+        VectorXd result = VectorXd::Zero(nvars);
+        result.head(rank) = R.triangularView<Upper>().solve(first);
+        return (type == 0 || type == 4) ? VectorXd(Pmat*result) : result;
+    }
+
+    VectorXd information_diagonal()
+    {
+        if (prepared_info) return prepared_info->lower.array().square().rowwise().sum().matrix();
+        if (type == 2) {
+            MatrixXd lower = Ch.matrixL();
+            return lower.array().square().rowwise().sum().matrix();
+        }
+        if (type == 3) return XtWX_buf.diagonal();
+        if (type == 5) return bSVD.matrixV().array().square().matrix()*bSVD.singularValues().array().square().matrix();
+        MatrixXd R;
+        if (type == 0) R = PQR.matrixQR().topLeftCorner(nvars,nvars).triangularView<Upper>();
+        else if (type == 1) R = QR.matrixQR().topLeftCorner(nvars,nvars).triangularView<Upper>();
+        else R = FPQR.matrixQR().topLeftCorner(nvars,nvars).triangularView<Upper>();
+        VectorXd d = R.array().square().colwise().sum().transpose().matrix();
+        return (type == 0 || type == 4) ? VectorXd(Pmat*d) : d;
+    }
+
+    double information_quadratic(const VectorXd& delta)
+    {
+        if (prepared_info) return (prepared_info->lower.transpose()*delta).squaredNorm();
+        if (type == 2) return (Ch.matrixL().transpose()*delta).squaredNorm();
+        if (type == 3) return delta.dot(XtWX_buf.selfadjointView<Lower>()*delta);
+        if (type == 5)
+            return (bSVD.singularValues().array()*(bSVD.matrixV().adjoint()*delta).array()).square().sum();
+        VectorXd d = (type == 0 || type == 4) ? VectorXd(Pmat.transpose()*delta) : delta;
+        if (type == 0) return (PQR.matrixQR().topLeftCorner(nvars,nvars).triangularView<Upper>()*d).squaredNorm();
+        if (type == 1) return (QR.matrixQR().topLeftCorner(nvars,nvars).triangularView<Upper>()*d).squaredNorm();
+        return (FPQR.matrixQR().topLeftCorner(nvars,nvars).triangularView<Upper>()*d).squaredNorm();
+    }
+
     virtual void run_step_halving(int &iterr) override
     {
+        if (firth_ && fam_code == fglm::FAM_GAMMA_LOG && (iterr > 0 || gamma_initial_consistent) &&
+            gamma_adjustment.size() == nvars) {
+            // At fixed phi this objective has gradient -2 times the adjusted
+            // coefficient score. Armijo decrease prevents large scoring
+            // overshoots without imposing a joint penalized likelihood.
+            const double quadratic = information_quadratic(beta-beta_prev);
+            double fraction = 1;
+            int halves = 0;
+            while (true) {
+                const double change = dev-devold -
+                    2*gamma_step_phi*gamma_adjustment.dot(beta-beta_prev);
+                const double rounding = 64*std::numeric_limits<double>::epsilon()*
+                    (1+std::abs(dev)+std::abs(devold));
+                if (std::isfinite(dev) && valideta_check() && validmu_check() &&
+                    change <= -0.2*fraction*quadratic + rounding) break;
+                if (++halves > 50) {
+                    gamma_step_failed = true;
+                    beta = beta_prev; update_eta(); update_mu();
+                    update_dev_resids_dont_update_old();
+                    break;
+                }
+                step_halve(); fraction *= 0.5;
+                update_dev_resids_dont_update_old();
+            }
+            return;
+        }
         // Firth: penalized dev is std_dev - log|X'WX| where the log-det term
         // is computed at the *previous* beta inside solve_wls_firth.  That
         // one-step lag can briefly inflate the penalized dev and trigger
@@ -522,6 +614,9 @@ protected:
         beta_prev = beta;
 
         double phi = compute_firth_phi();
+        gamma_step_phi = phi;
+        if (fam_code == fglm::FAM_GAMMA_LOG && prepared_info && gamma_adjustment.size() == 0)
+            gamma_adjustment = prepared_info->adjustment;
 
         if (prepared_info && (fam_code == 0 || fam_code == 10)) {
             Xtwz_buf.noalias() = X.adjoint() * (w.array().square() * z.array()).matrix();
@@ -545,6 +640,19 @@ protected:
 
         // --- Streaming path (big.matrix + Cholesky) ---
         if (use_streaming) {
+            if (fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) {
+                fglm::accumulate_xtwx_streamed(X,w,XtWX_buf);
+                if (type == 2) {
+                    Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                    if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
+                        Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                } else {
+                    ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                    if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                        Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                }
+                compute_log_det_XtWX(); update_A_prev(); factor_ready = true;
+            }
             const bool reuse_factor = constant_weights && factor_ready;
             if (!A_prev_available || fam_code == fglm::FAM_GAUSSIAN_IDENTITY) {
                 if (!reuse_factor) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
@@ -578,6 +686,8 @@ protected:
             }
             factor_ready = true;
             rank = nvars;
+            if (fam_code == fglm::FAM_GAMMA_LOG && streaming_gamma_adjustment.size() == nvars)
+                gamma_adjustment = streaming_gamma_adjustment;
             return;
         }
 
@@ -629,6 +739,8 @@ protected:
             if (constant_weights) constant_leverages = h_lev;
         }
 
+        if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == 0)
+            gamma_adjustment.noalias() = 0.5 * X.adjoint() * h_lev;
         VectorXd zstar;
         apply_firth_xi(h_lev, d2mu, phi, zstar);
 
@@ -1050,6 +1162,11 @@ public:
         beta = start_;
         eta = eta_;
         mu = mu_;
+        if (firth_ && fam_code == fglm::FAM_GAMMA_LOG) {
+            const Eigen::VectorXd mapped = X*beta + offset;
+            gamma_initial_consistent = (mapped-eta).cwiseAbs().maxCoeff() <=
+                16*std::numeric_limits<double>::epsilon()*(1+eta.cwiseAbs().maxCoeff());
+        }
         //eta.array() += offset.array();
         
         //update_var_mu();
@@ -1089,6 +1206,51 @@ public:
     // report them back to R.
     double get_log_det_XtWX() const { return log_det_XtWX_; }
     double get_bias_dispersion() { return compute_firth_phi(); }
+    void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
+    {
+        const std::string reason = gamma_step_failed ? "step_halving_failed" :
+            (conv ? "converged" : "iteration_limit");
+        out["convergence.reason"] = reason;
+        if (!inference && !constant_weights) return;
+        VectorXd score;
+        if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
+            score = X.adjoint()*(weights.array()*(Y.array()/mu.array()-1)/phi).matrix() + gamma_adjustment;
+        } else if (fam_code == fglm::FAM_GAUSSIAN_IDENTITY) {
+            score = X.adjoint()*(weights.array()*(Y.array()-mu.array())/phi).matrix();
+        } else {
+            if (!inference) { update_var_mu(); update_mu_eta(); update_w(); }
+            VectorXd h;
+            if (prepared_info) h = prepared_info->leverage;
+            else if (constant_leverages.size() == nobs) h = constant_leverages;
+            else if (use_streaming) {
+                update_A_prev();
+                h.resize(nobs);
+                const int block = fglm::default_chunk_rows();
+                for (int r=0;r<nobs;r+=block) {
+                    int k=std::min(block,nobs-r);
+                    MatrixXd xa = X.middleRows(r,k)*A_prev;
+                    h.segment(r,k) = ((xa.array()*X.middleRows(r,k).array()).rowwise().sum()*
+                        w.segment(r,k).array().square()).matrix();
+                }
+            } else compute_leverages_dense(h);
+            ArrayXd d2mu(nobs); compute_d2mu(d2mu);
+            VectorXd contribution = VectorXd::Zero(nobs);
+            for (int i=0;i<nobs;++i) if (weights[i] > 0 && mu_eta[i] != 0)
+                contribution[i] = weights[i]*mu_eta[i]*(Y[i]-mu[i])/(phi*var_mu[i]) +
+                    h[i]*d2mu[i]/(2*mu_eta[i]);
+            score = X.adjoint()*contribution;
+        }
+        VectorXd information = information_diagonal()/phi;
+        const double dev = Rcpp::as<double>(out["deviance"]);
+        fglm::GammaDispersionTerms terms;
+        if (fam_code >= 10 && fam_code <= 12) {
+            if (dispersion_weight_groups.empty()) dispersion_weight_groups = fglm::gamma_weight_groups(weights);
+            terms.add(dispersion_weight_groups,phi);
+        }
+        double ds, ds_scaled;
+        fglm::dispersion_diagnostics(fam_code,dev,(weights.array()>0).count(),rank,phi,terms,ds,ds_scaled);
+        fglm::append_adjusted_diagnostics(out,score,information,ds,ds_scaled,reason);
+    }
     bool   get_firth()        const { return firth_; }
 
 };

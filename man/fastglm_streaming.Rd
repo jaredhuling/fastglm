@@ -39,7 +39,9 @@ See [stats::family()].}
 Cholesky. QR / SVD methods are not supported in streaming mode.}
 
 \item{tol}{convergence tolerance on the relative change in deviance
-(or sup-norm of coefficient update when `firth = TRUE`).}
+(or sup-norm of coefficient update when `firth = TRUE`). Gamma-log
+bias-reduced fits also check the remaining adjusted-score update and
+relative change in dispersion.}
 
 \item{maxit}{maximum number of IRLS iterations.}
 

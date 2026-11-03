@@ -100,7 +100,7 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
     double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
             : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
 
-    return List::create(
+    List out = List::create(
         _["coefficients"]      = b,
         _["se"]                = se,
         _["fitted.values"]     = m,
@@ -117,4 +117,6 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         _["cov.unscaled"]      = vc,
         _["bias.dispersion"]   = solver.get_bias_dispersion(),
         _["firth"]             = true);
+    solver.append_bias_diagnostics(out, Rcpp::as<double>(out["bias.dispersion"]), inference);
+    return out;
 }

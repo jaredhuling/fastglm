@@ -39,6 +39,14 @@
 
 ## Numerical corrections
 
+* Safeguarded Gamma-log mean bias reduction against initial coefficient steps
+  that overshoot the adjusted-score solution. Firth diagnostics now distinguish
+  ordinary and adjusted coefficient scores, report the adjusted dispersion
+  score where applicable, and retain the solver's convergence reason.
+  Source initialization uses consistent fitted means and derivatives for very
+  small responses. Gamma-log null models with offsets use their explicit score
+  solution, avoiding a separate unstable intercept-only iteration.
+
 * Stabilized negative-binomial theta scores and likelihood calculations near
   the Poisson limit. Boundary theta estimates have explicitly unavailable
   theta standard errors; `SE.theta` elsewhere uses joint observed information.
@@ -74,6 +82,10 @@
   propagates source errors. Grouped-binomial likelihoods retain trial totals.
 
 ## Performance and verification
+
+* Replaced numerical differentiation in joint count-model information with
+  analytic derivatives, retaining coefficient--theta dependence, mixture
+  cross-component terms, and the existing covariance validity checks.
 
 * Reused constant Firth information matrices in sparse, mapped, and callback
   fits. Gamma-log fitting also reuses the common adjustment after its initial

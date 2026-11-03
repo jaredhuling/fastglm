@@ -36,6 +36,8 @@ protected:
     bool conv;
     
     
+    virtual bool failed() const { return false; }
+
     virtual bool converged()
     {
         if (std::abs(dev - devold)/(0.1 + std::abs(dev)) < tol)
@@ -186,7 +188,8 @@ public:
             update_dev_resids();
             
             run_step_halving(i);
-            
+            if (failed()) break;
+
             if (!std::isfinite(dev) && i == 0)
             {
                 stop("cannot find valid starting values: please specify some");

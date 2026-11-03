@@ -24,7 +24,9 @@
 #' @param method integer; `2` for LLT Cholesky (default) or `3` for LDLT
 #'   Cholesky. QR / SVD methods are not supported in streaming mode.
 #' @param tol convergence tolerance on the relative change in deviance
-#'   (or sup-norm of coefficient update when `firth = TRUE`).
+#'   (or sup-norm of coefficient update when `firth = TRUE`). Gamma-log
+#'   bias-reduced fits also check the remaining adjusted-score update and
+#'   relative change in dispersion.
 #' @param maxit maximum number of IRLS iterations.
 #' @param firth logical; if `TRUE` apply Firth bias reduction using
 #'   lagged leverages from the previous IRLS iteration.  At convergence
@@ -122,6 +124,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     }
     # One validation pass also constructs the usual family-initialized WLS start.
     a <- rhs <- low <- high <- NULL; nobs <- sumw <- sumwy <- 0; has.offset <- FALSE
+    gamma.null.total <- -Inf
     for(k in seq_len(n_chunks)) {
         z <- fetch(k); x <- z$X; w <- z$weights
         has.offset <- has.offset || any(z$offset != 0)
@@ -130,11 +133,14 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
             low <- rep(Inf,ncol(x)); high <- rep(-Inf,ncol(x))
         }
         low <- pmin(low,apply(x,2,min)); high <- pmax(high,apply(x,2,max))
-        eta <- family$linkfun(z$mustart); dm <- family$mu.eta(eta)
-        ww <- w*dm^2/family$variance(z$mustart); ww[w==0] <- 0
-        zz <- eta-z$offset+(z$y-z$mustart)/dm; zz[w==0] <- 0
+        eta <- family$linkfun(z$mustart); mu <- family$linkinv(eta)
+        dm <- family$mu.eta(eta)
+        ww <- if(fc==10L) w else w*dm^2/family$variance(mu)
+        ww[w==0] <- 0
+        zz <- eta-z$offset+(z$y-mu)/dm; zz[w==0] <- 0
         a <- a+crossprod(x,ww*x); rhs <- rhs+drop(crossprod(x,ww*zz))
         nobs <- nobs+sum(w>0); sumw <- sumw+sum(w); sumwy <- sumwy+sum(w*z$y)
+        if(fc==10L) gamma.null.total <- .gamma_log_null_total(z$y,w,z$offset,gamma.null.total)
     }
     p <- state$p
     if(nobs <= p) stop("streaming requires more positive-weight observations than coefficients",call.=FALSE)
@@ -165,7 +171,8 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     ll <- 0; null.dev <- 0
     for(k in seq_len(n_chunks)) {
         z <- fetch(k); mu <- family$linkinv(drop(z$X%*%res$coefficients)+z$offset)
-        null.mu <- if(res$intercept) rep(sumwy/sumw,length(mu)) else family$linkinv(z$offset)
+        null.mu <- if(res$intercept && fc==10L) exp(z$offset+gamma.null.total-log(sumw)) else
+            if(res$intercept) rep(sumwy/sumw,length(mu)) else family$linkinv(z$offset)
         null.dev <- null.dev+sum(family$dev.resids(z$y,null.mu,z$weights))
         w <- z$weights; y <- z$y; keep <- w>0; ff <- family$family
         if(ff == "gaussian") ll <- ll+sum(dnorm(y[keep],mu[keep],sqrt(res$deviance/nobs/w[keep]),log=TRUE))
@@ -177,7 +184,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     else res$aic <- -2*ll+2*p
     # An intercept with offsets is a one-parameter GLM, not a weighted mean.
     res$null.deviance <- null.dev
-    if(res$intercept && has.offset) {
+    if(res$intercept && has.offset && fc!=10L) {
         nullfetch <- function(k) { z <- fetch(k); z$X <- matrix(1,length(z$y),1L); z }
         eta0 <- family$linkfun(sumwy/sumw)
         nf <- fit_streaming_glm(nullfetch,n_chunks,1L,2L,tol,as.integer(maxit),fc,
