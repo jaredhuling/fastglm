@@ -5,7 +5,7 @@
 \alias{fastglm_ordinal}
 \alias{fastglm_ordinal.default}
 \alias{fastglm_ordinal.formula}
-\title{Fit a proportional-odds model for ordered outcomes}
+\title{Fit a cumulative-link model for ordered outcomes}
 \usage{
 \method{fastglm_ordinal}{fastglm_ordinal_design}(
   x,
@@ -18,6 +18,7 @@
   maxit = 200L,
   block.size = 2048L,
   control = list(),
+  link = NULL,
   ...
 )
 
@@ -34,6 +35,7 @@ fastglm_ordinal(x, ...)
   maxit = 200L,
   block.size = 2048L,
   control = list(),
+  link = "logit",
   ...
 )
 
@@ -52,6 +54,7 @@ fastglm_ordinal(x, ...)
   block.size = 2048L,
   control = list(),
   model = TRUE,
+  link = "logit",
   ...
 )
 }
@@ -70,7 +73,7 @@ responses. For count matrices, counts times weights must be integers.
 Frequencies are used without normalization.}
 
 \item{offset}{a location offset: the model is
-\verb{logit Pr(Y <= j) = alpha[j] - x beta - offset}.}
+\verb{link\{Pr(Y <= j)\} = alpha[j] - x beta - offset}.}
 
 \item{levels}{category labels in increasing order. Numeric responses are
 interpreted as codes from one to the number of labels.}
@@ -89,6 +92,10 @@ kernel. The input design is retained in memory.}
 \item{control}{named optimizer controls: \code{score.tol}, \code{step.tol},
 \code{max.step}, \code{max.halves}, \code{condition.tol}, \code{standardize}, and \code{trace}.}
 
+\item{link}{cumulative link: \code{"logit"} (proportional odds), \code{"probit"},
+or \code{"cloglog"} (complementary log-log). Prepared fits use their saved
+link when \code{NULL} is supplied.}
+
 \item{...}{additional arguments to the default or formula method.}
 
 \item{data, subset, na.action, contrasts}{formula and model-frame arguments.}
@@ -103,14 +110,14 @@ mapping, covariance, convergence diagnostics, and retained design.
 positive total frequency.
 }
 \description{
-Fits a cumulative-logit model with common slopes and freely estimated
+Fits a cumulative-link model with common slopes and freely estimated
 thresholds, by maximum likelihood or mean bias reduction. Positive slopes
 shift probability toward higher outcome categories.
 }
 \details{
 Thresholds are estimated in increasing order. The same location
-slopes apply to all cumulative probabilities. Only the logit link and
-full-rank location designs are currently supported. Sparse matrices and
+slopes apply to all cumulative probabilities. Full-rank location designs
+are required. Sparse matrices and
 repeatable sources are not accepted by this interface.
 
 An empty interior category is removed from the numerical fit and then

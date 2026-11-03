@@ -2,7 +2,7 @@
 % Please edit documentation in R/ordinal-po-test.R
 \name{fastglm_po_test}
 \alias{fastglm_po_test}
-\title{Test the proportional-odds assumption}
+\title{Test common slopes in a cumulative-link model}
 \usage{
 fastglm_po_test(
   object,
@@ -12,51 +12,64 @@ fastglm_po_test(
   y = NULL,
   weights = NULL,
   offset = NULL,
-  control = list()
+  control = list(),
+  by.term = FALSE
 )
 }
 \arguments{
-\item{object}{a `fastglm_ordinal` fit retaining its design and outcomes.
+\item{object}{a \code{fastglm_ordinal} fit retaining its design and outcomes.
 Its original coefficient estimates are not used in the test. The requested
 null is refitted and must converge, including if the original fit did not.}
 
 \item{terms}{formula terms, or named matrix columns, to test jointly.
 The default tests all location predictors.}
 
-\item{null.estimation}{`"ML"` (default) or `"meanBR"`. The latter evaluates
+\item{null.estimation}{\code{"ML"} (default) or \code{"meanBR"}. The latter evaluates
 the ordinary efficient score at a mean-bias-reduced null fit, with explicit
 projection of the ordinary nuisance score. It can supply a finite null
 under separation, but does not guarantee convergence or small-sample accuracy.}
 
-\item{newdata, y, weights, offset}{assessment data as in [fastglm_ordinal_assess()].}
+\item{newdata, y, weights, offset}{assessment data as in \code{\link[=fastglm_ordinal_assess]{fastglm_ordinal_assess()}}.}
 
-\item{control}{named list containing `tol` and/or `maxit` for the null refit.}
+\item{control}{named list containing \code{tol} and/or \code{maxit} for the null refit.}
+
+\item{by.term}{also test each selected formula term or matrix column
+separately. All tests share one null refit and one information calculation.
+Each term-specific alternative relaxes only that term's common-slope
+restriction, retaining common slopes for the remaining predictors.}
 }
 \value{
-A `fastglm_po_test` object inheriting from `fastglm_test` and `htest`,
-  with numeric statistic, degrees of freedom, p-value, availability, null
-  estimation method, tested terms, and detailed fitting diagnostics.
+A \code{fastglm_po_test} object inheriting from \code{fastglm_test} and \code{htest},
+with numeric statistic, degrees of freedom, p-value, availability, null
+estimation method, tested terms, and detailed fitting diagnostics.
+With \code{by.term=TRUE}, a \code{fastglm_test_list} containing the joint and
+term-specific tests in \verb{$tests}, with print and data-frame methods.
 }
 \description{
 Computes the expected-information score test directly, without calculating
 prediction losses or calibration summaries. Print the result for a compact
-test table, or use `as.data.frame()` or `broom::tidy()` for reporting.
+test table, or use \code{as.data.frame()} or \code{broom::tidy()} for reporting.
 }
 \details{
 Both choices use expected information and an asymptotic chi-square
-  reference. Mean bias reduction gives a first-order equivalent score test
-  under a regular interior null with fixed predictor and category dimensions.
-  The nuisance projection is essential because the ordinary nuisance score
-  is nonzero at a bias-reduced root. This is not an adjusted-score test with
-  established higher-order accuracy. It can be conservative in small samples.
-  The method never switches null estimators automatically.
+reference. Mean bias reduction gives a first-order equivalent score test
+under a regular interior null with fixed predictor and category dimensions.
+The nuisance projection is essential because the ordinary nuisance score
+is nonzero at a bias-reduced root. This is not an adjusted-score test with
+established higher-order accuracy. It can be conservative in small samples.
+The method never switches null estimators automatically.
+The fitted link is retained. For logit models the hypothesis is proportional
+odds; for probit and complementary log-log models it is the common-slope
+restriction on that link's scale.
 
-  Empty categories and deficient predictor rank remain unsupported. A
-  sufficient separation check identifies two-valued predictors with a level
-  observed only in an endpoint category. It does not detect all forms of
-  separation; other unsuccessful null fits retain their convergence details.
-  See [fastglm_ordinal_assess()] for the hypothesis, assumptions, and frequency
-  conventions, and [fastglm-test-methods] for result extraction.
+Empty categories and deficient predictor rank remain unsupported. A
+sufficient separation check identifies two-valued predictors with a level
+observed only in an endpoint category. It does not detect all forms of
+separation; other unsuccessful null fits retain their convergence details.
+See \code{\link[=fastglm_ordinal_assess]{fastglm_ordinal_assess()}} for the hypothesis, assumptions, and frequency
+conventions, and \link{fastglm-test-methods} for result extraction.
+With \code{by.term=TRUE}, term-specific p-values are unadjusted for multiple
+testing. The joint test remains the single test of all selected terms.
 }
 \examples{
 fit <- fastglm_ordinal(Sat ~ Infl + Type + Cont, MASS::housing,
@@ -66,8 +79,8 @@ as.data.frame(fastglm_po_test(fit, terms = "Type"))
 }
 \references{
 Kosmidis, I. (2014). Improved estimation in cumulative link
-  models. Journal of the Royal Statistical Society, Series B, 76, 169--196.
-  \doi{10.1111/rssb.12025}. The present meanBR option uses the ordinary
-  projected score at a bias-reduced null, rather than the larger-model
-  adjusted-score statistic discussed in Section 12 of that article.
+models. Journal of the Royal Statistical Society, Series B, 76, 169--196.
+\doi{10.1111/rssb.12025}. The present meanBR option uses the ordinary
+projected score at a bias-reduced null, rather than the larger-model
+adjusted-score statistic discussed in Section 12 of that article.
 }

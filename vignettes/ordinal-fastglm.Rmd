@@ -1,9 +1,9 @@
 ---
-title: "Ordered outcomes and proportional odds with fastglm"
+title: "Ordered outcomes and cumulative-link models with fastglm"
 author: "Jared Huling"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Ordered outcomes and proportional odds with fastglm}
+  %\VignetteIndexEntry{Ordered outcomes and cumulative-link models with fastglm}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -13,11 +13,11 @@ knitr::opts_chunk$set(collapse=TRUE,comment="#>",message=FALSE)
 library(fastglm)
 ```
 
-Outcomes such as satisfaction or symptom severity have a natural ordering, but the differences between their categories need not have a numerical interpretation. Treating three severity levels as the numbers one, two, and three imposes equal spacing. An ordinal model instead estimates the probabilities of the ordered categories. We illustrate a proportional-odds model, examine how mean bias reduction changes its estimation, and use category probabilities to summarize associations.
+Outcomes such as satisfaction or symptom severity have a natural ordering, but the differences between their categories need not have a numerical interpretation. Treating three severity levels as the numbers one, two, and three imposes equal spacing. An ordinal model instead estimates the probabilities of the ordered categories. We begin with a proportional-odds model, examine how mean bias reduction changes its estimation, and use category probabilities to summarize associations. Alternative cumulative links allow the probability model to reflect different distributional shapes.
 
 # The cumulative-logit model
 
-For categories numbered from lowest to highest, the model fitted by `fastglm_ordinal()` is
+For categories numbered from lowest to highest, the default model fitted by `fastglm_ordinal()` is
 
 \[
 \operatorname{logit}\{\Pr(Y_i\leq j\mid x_i)\}
@@ -56,6 +56,38 @@ fastglm_diagnostics(fit_br)
 ```
 
 The exponentiated slopes are common odds ratios. The fitted probabilities below often provide a more direct description of the outcome distribution. The convergence diagnostics report the remaining change proposed by the estimating equations; a returned coefficient vector alone does not establish that those equations were solved. The reciprocal information condition number describes numerical conditioning in the fitting coordinates: values near zero indicate that the information matrix is close to singular. This check concerns the stability of the coefficient calculations, whereas the scores and remaining changes assess whether the fitting equations have been solved.
+
+Housing type has several coefficients. A joint Wald test assesses whether those coefficients are all zero in the specified proportional-odds model. A separate contrast compares high with medium perceived influence.
+
+```{r}
+fastglm_wald_test(fit_br,terms="Type")
+fastglm_wald_test(fit_br,contrast=c(InflHigh=1,InflMedium=-1))
+```
+
+These tests use the estimated coefficient covariance and a first-order chi-square approximation. The same interface accepts an eligible robust covariance through `vcov.`. For mean bias reduction, finite estimates permit the calculation but do not establish small-sample accuracy. Testing whether regression coefficients are zero addresses their contribution to the fitted model; the common-slope tests later in this vignette address whether their effects differ across thresholds.
+
+## Alternative cumulative links
+
+The cumulative-logit model uses the logistic distribution to translate a threshold and predictor value into a cumulative probability. More generally, the model is
+\[
+\Pr(Y_i\leq j\mid x_i)=G(\alpha_j-x_i^\mathsf{T}\beta-o_i).
+\]
+The probit link uses the standard normal distribution for \(G\). The complementary log-log link uses \(G(\eta)=1-\exp\{-\exp(\eta)\}\), whose asymmetric shape allows cumulative probabilities to approach zero and one at different rates. All three links retain ordered thresholds and common slopes. Positive slopes shift probability toward higher outcomes under the same sign convention.
+
+```{r}
+fit_probit <- update(fit_br,link="probit")
+fit_cloglog <- update(fit_br,link="cloglog")
+link_models <- list(logit=fit_br,probit=fit_probit,cloglog=fit_cloglog)
+link_averages <- do.call(rbind,lapply(names(link_models),function(link) {
+    data.frame(link=link,fastglm_average(link_models[[link]],weights=housing$Freq))
+}))
+rownames(link_averages) <- NULL
+link_averages
+```
+
+The fits are compared through their category probabilities because their coefficient scales differ. Exponentiated coefficients have the common-odds-ratio interpretation for the logit link. Reversing the outcome order changes a complementary-log-log model, so the declared ordering should reflect the substantive outcome scale.
+
+Mean bias reduction uses the first and second derivatives of the selected cumulative distribution in the adjusted equations of Kosmidis (2014). It targets bias in that link's threshold and slope parameters. The same link is retained by prepared fits, refitting bootstrap calculations, predictions, marginal effects, and model assessment. `fastglm_po_test()` tests the common-slope restriction on the fitted link scale; for probit and complementary log-log models its printed heading identifies that interpretation. These score and Wald tests retain their first-order inferential scope.
 
 # Probabilities and average contrasts
 
@@ -279,6 +311,16 @@ The joint p-value is `r signif(po_test$p.value,3)`, and the housing-type p-value
 
 This selected-term test still assumes that the other terms satisfy proportional odds. It does not fit a model with unrestricted threshold-specific effects for those terms. For a matrix fit, `terms` selects named predictor columns. Within `fastglm_ordinal_assess()`, the corresponding argument is `po.terms`. Frequency weights, grouped category counts, and location offsets follow the same conventions as fitting, without expanding grouped observations.
 
+When several terms are of interest, `by.term=TRUE` provides both the joint test and a separate test for each selected term. The calculations share the null fit and its information, which avoids repeated fitting and passes through the predictor data.
+
+```{r}
+po_terms <- fastglm_po_test(fit_br,by.term=TRUE)
+po_terms
+as.data.frame(po_terms)
+```
+
+Each term-specific alternative relaxes only that term's common-slope restriction. The reported p-values are unadjusted for multiple testing; the joint test provides a single assessment of all selected restrictions. Individual results remain accessible through `po_terms$tests`, including explanations for unavailable comparisons.
+
 The chi-square approximation requires independent observations and a correctly specified, identifiable null model with positive category probabilities. It can be inaccurate in small or sparse samples. If a declared category is empty, the design is deficient, the ML null does not converge, or the expected information cannot be used reliably, `available` is false and the statistic and p-value are missing; `reason` and `detail` explain the failure. A finite bias-reduced fit therefore does not guarantee that this ML-based test is available. The function does not silently remove categories or switch tests.
 
 When assessment outcomes are supplied through `newdata` and `y`, the test refits its null to those outcomes using the complete rows with positive frequency. It then assesses proportional odds in that evaluation population. This differs from the prediction scores above, which assess predictions from the original fitted coefficients. Neither calculation establishes independence or correct specification of omitted predictors.
@@ -352,7 +394,7 @@ The warning identifies the reduction, and the fitted object records the mapping.
 
 The numerical kernel evaluates likelihoods, scores, and information in C++. It processes probability calculations in blocks and avoids constructing a separate regression-design row for each observation and threshold. The dense input design is still retained in memory. Increasing the number of predictors or categories also increases the size of the parameter information matrix.
 
-The current interface supports the cumulative logit link, freely estimated thresholds, common slopes, offsets, and frequency data. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. Sparse and repeatable-source fitting, alternative ordinal links, and nonparallel slopes require additional implementations.
+The current interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, common slopes, offsets, and frequency data. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. Sparse and repeatable-source fitting and nonparallel slopes require additional implementations.
 
 `logLik()` reports the ordinary categorical frequency likelihood at the returned estimate, omitting constants introduced by grouping observations. In contrast, `deviance()` compares the fit with a saturated model for the supplied response rows, so the grouped deviance depends on that grouping. For bias-reduced estimates, the reported likelihood is evaluated at those estimates rather than maximized by them.
 

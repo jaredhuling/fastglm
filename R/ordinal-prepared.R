@@ -12,6 +12,7 @@
 #'   preparation. Predictors must be complete; missing rows are not removed.
 #' @param levels optional default outcome labels in increasing order.
 #' @param firth default for mean bias reduction in subsequent fits.
+#' @param link default cumulative link, as in [fastglm_ordinal()].
 #' @details The cache contains ordinary R objects and can be saved with
 #'   `saveRDS()`. Changing the design, effective row totals, or the
 #'   `standardize` optimizer control rebuilds the relevant setup. For grouped
@@ -26,7 +27,8 @@
 #'   by repeated fits; each fitted model retains its own response and the common
 #'   original design, without copying the cached transformed design into the fit.
 #' @export
-fastglm_ordinal_prepare <- function(x,data=NULL,weights=NULL,offset=NULL,levels=NULL,firth=FALSE) {
+fastglm_ordinal_prepare <- function(x,data=NULL,weights=NULL,offset=NULL,levels=NULL,firth=FALSE,link="logit") {
+    link <- c("logit","probit","cloglog")[.ordinal_link_code(link)+1L]
     if(!is.logical(firth) || length(firth)!=1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE",call.=FALSE)
     call <- match.call(); tt <- mf <- NULL; coding <- assignment <- NULL
@@ -66,7 +68,7 @@ fastglm_ordinal_prepare <- function(x,data=NULL,weights=NULL,offset=NULL,levels=
             stop("prepared ordinal levels must contain distinct nonmissing category labels",call.=FALSE)
     }
     offset <- as.numeric(offset); weights <- as.numeric(weights)
-    structure(list(x=x,weights=weights,offset=offset,levels=levels,firth=firth,
+    structure(list(x=x,weights=weights,offset=offset,levels=levels,firth=firth,link=link,
         terms=tt,design.assign=assignment,xlevels=if(!is.null(tt)) stats::.getXlevels(tt,mf),contrasts=coding,
         design.columns=colnames(x),offset.expression=if(!is.null(tt)) call$offset,
         offset.reference=offset,cache=new.env(parent=emptyenv()),call=call),
@@ -77,7 +79,7 @@ fastglm_ordinal_prepare <- function(x,data=NULL,weights=NULL,offset=NULL,levels=
 #' @export
 fastglm_ordinal.fastglm_ordinal_design <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
                                                   firth=NULL,tol=1e-8,maxit=200L,
-                                                  block.size=2048L,control=list(),...) {
+                                                  block.size=2048L,control=list(),link=NULL,...) {
     if(length(list(...))) stop("unused ordinal fitting arguments",call.=FALSE)
     if(missing(y)) stop("an ordinal response is required",call.=FALSE)
     design <- x
@@ -88,9 +90,10 @@ fastglm_ordinal.fastglm_ordinal_design <- function(x,y,weights=NULL,offset=NULL,
     if(is.null(offset)) offset <- design$offset
     if(is.null(levels)) levels <- design$levels
     if(is.null(firth)) firth <- design$firth
+    if(is.null(link)) link <- .ordinal_link(design)
     if(!is.environment(design$cache)) design$cache <- new.env(parent=emptyenv())
     fit <- .ordinal_fit_matrix(design$x,y,weights,offset,levels,firth,tol,maxit,block.size,
-                               control,design$cache)
+                               control,design$cache,link)
     for(key in c("terms","design.assign","xlevels","contrasts","offset.expression")) fit[[key]] <- design[[key]]
     fit$prediction.offset.required <- !is.null(design$terms) && !original.offset
     fit$prepared <- TRUE
@@ -116,11 +119,12 @@ fastglm_ordinal.fastglm_ordinal_design <- function(x,y,weights=NULL,offset=NULL,
 #' @param levels common outcome labels or a list with one category order per
 #'   response. `NULL` uses the prepared default or each response's own labels.
 #' @param firth default to the prepared design's setting, or `FALSE` for a matrix.
+#' @param link default to the prepared link, or `"logit"` for a matrix.
 #' @param tol,maxit,block.size,control ordinal fitting controls; see [fastglm_ordinal()].
 #' @returns A list of `fastglm_ordinal` fits, with the response list's names.
 #' @export
 fastglm_ordinal_batch <- function(design,y,weights=NULL,offset=NULL,levels=NULL,firth=NULL,
-                                  tol=1e-8,maxit=200L,block.size=2048L,control=list()) {
+                                  tol=1e-8,maxit=200L,block.size=2048L,control=list(),link=NULL) {
     if(!inherits(design,"fastglm_ordinal_design")) design <- fastglm_ordinal_prepare(design)
     if(!is.list(y) || is.data.frame(y))
         stop("'y' must be a list of ordinal responses; a count matrix is one response",call.=FALSE)
@@ -134,7 +138,7 @@ fastglm_ordinal_batch <- function(design,y,weights=NULL,offset=NULL,levels=NULL,
         fit <- fastglm_ordinal.fastglm_ordinal_design(design,y[[j]],
             weights=take(weights,j),offset=take(offset,j),
             levels=if(is.list(levels)) levels[[j]] else levels,firth=firth,
-            tol=tol,maxit=maxit,block.size=block.size,control=control)
+            tol=tol,maxit=maxit,block.size=block.size,control=control,link=link)
         fit$batch.response <- j
         fit
     })

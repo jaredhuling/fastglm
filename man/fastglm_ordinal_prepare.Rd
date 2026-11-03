@@ -10,7 +10,8 @@ fastglm_ordinal_prepare(
   weights = NULL,
   offset = NULL,
   levels = NULL,
-  firth = FALSE
+  firth = FALSE,
+  link = "logit"
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ preparation. Predictors must be complete; missing rows are not removed.}
 \item{levels}{optional default outcome labels in increasing order.}
 
 \item{firth}{default for mean bias reduction in subsequent fits.}
+
+\item{link}{default cumulative link, as in [fastglm_ordinal()].}
 }
 \value{
 A `fastglm_ordinal_design` object. Its `cache` environment is shared

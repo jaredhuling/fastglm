@@ -45,13 +45,14 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
         build <- function(j) {
             mf <- model.frame(stats::formula(f,lhs=1L,rhs=j),prototype,na.action=na.fail)
             tt <- attr(mf,"terms");xx <- model.matrix(tt,mf)
-            list(terms=tt,xlevels=.getXlevels(tt,mf),contrasts=attr(xx,"contrasts"),columns=colnames(xx))
+            list(terms=tt,xlevels=.getXlevels(tt,mf),contrasts=attr(xx,"contrasts"),
+                 columns=colnames(xx),assign=attr(xx,"assign"))
         }
         schema <- build(1L)
         if(length(f)[2L]==2L) {
             parts <- list(count=schema,zero=build(2L))
             schema <- lapply(names(schema),function(nm) lapply(parts,`[[`,nm))
-            names(schema) <- c("terms","xlevels","contrasts","columns")
+            names(schema) <- names(parts$count)
         } else if(length(offset)>1L) stop("two offset columns require a two-component formula",call.=FALSE)
         schema$formula <- f
         schema$offset <- offset

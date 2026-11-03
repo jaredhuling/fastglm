@@ -199,7 +199,9 @@ print.fastglm_prediction <- function(x,digits=max(3L,getOption("digits")-3L),max
 #' results. Data-frame and optional broom methods provide a single row for
 #' reporting, including unavailable tests and their explanations.
 #' @param x a test returned by [fastglm_po_test()], the proportional-odds test
-#'   component of [fastglm_ordinal_assess()], or [fastglm_profile_test()].
+#'   component of [fastglm_ordinal_assess()], [fastglm_wald_test()], or
+#'   [fastglm_profile_test()]. Collections from `fastglm_po_test(by.term=TRUE)`
+#'   print a table and extract one row per hypothesis.
 #' @param digits number of significant digits used for display.
 #' @param row.names optional row names for the extracted data frame.
 #' @param optional logical, passed to the data-frame constructor.
@@ -235,6 +237,8 @@ print.fastglm_test <- function(x,digits=max(3L,getOption("digits")-3L),...) {
     if(length(x$terms)) .fastglm_print_field("Terms",x$terms)
     if(!is.null(x$null.estimation)) .fastglm_print_field("Null fit",switch(x$null.estimation,
         ML="maximum likelihood",meanBR="mean bias reduction",x$null.estimation))
+    .fastglm_print_field("Estimation",x$estimation)
+    .fastglm_print_field("Covariance",x$covariance.type)
     if(!is.null(x$frequency)) .fastglm_print_field("Sample",paste0(format(x$frequency,trim=TRUE),
         " observations represented by ",x$observations," rows"))
     tab <- as.data.frame(x,details=TRUE)
@@ -246,8 +250,13 @@ print.fastglm_test <- function(x,digits=max(3L,getOption("digits")-3L),...) {
         .fastglm_print_field("Status","Unavailable")
         .fastglm_print_field("Reason",tab$detail)
     }
-    if(length(x$estimate)) .fastglm_print_coefficients(cbind(Estimate=x$estimate,Null=x$null.value),
-        "Tested coefficients",digits)
+    if(length(x$estimate)) {
+        estimates <- cbind(Estimate=x$estimate)
+        if(length(x$std.error)) estimates <- cbind(estimates,`Std. Error`=x$std.error)
+        estimates <- cbind(estimates,Null=x$null.value)
+        .fastglm_print_coefficients(estimates,if(is.null(x$contrast)) "Tested coefficients" else
+            "Tested contrasts",digits,P.values=FALSE,has.Pvalue=FALSE)
+    }
     if(length(x$note)) {cat("\n"); .fastglm_print_field("Note",x$note)}
     invisible(x)
 }
@@ -255,6 +264,35 @@ print.fastglm_test <- function(x,digits=max(3L,getOption("digits")-3L),...) {
 #' @rdname fastglm-test-methods
 #' @exportS3Method broom::tidy fastglm_test
 tidy.fastglm_test <- function(x,...) as.data.frame(x,...)
+
+#' @rdname fastglm-test-methods
+#' @export
+as.data.frame.fastglm_test_list <- function(x,row.names=NULL,optional=FALSE,details=FALSE,...) {
+    tables <- lapply(seq_along(x$tests),function(j) data.frame(hypothesis=names(x$tests)[j],
+        as.data.frame(x$tests[[j]],details=details),check.names=!optional))
+    out <- do.call(rbind,tables)
+    rownames(out) <- row.names
+    out
+}
+
+#' @rdname fastglm-test-methods
+#' @export
+print.fastglm_test_list <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header(x$method)
+    .fastglm_print_field("Null fit",switch(x$null.estimation,ML="maximum likelihood",meanBR="mean bias reduction"))
+    tab <- as.data.frame(x,details=TRUE)
+    display <- tab[c("hypothesis","statistic","df","p.value","available")]
+    names(display) <- c("Hypothesis","Statistic","df","p-value","Available")
+    cat("\n"); .fastglm_print_table(display,digits,p.columns="p-value")
+    for(j in which(!tab$available)) .fastglm_print_field(tab$hypothesis[j],tab$detail[j])
+    cat("\n"); .fastglm_print_field("Note",x$note)
+    invisible(x)
+}
+
+#' @rdname fastglm-test-methods
+#' @exportS3Method broom::tidy fastglm_test_list
+tidy.fastglm_test_list <- function(x,...) as.data.frame(x,...)
 
 #' @exportS3Method print summary.fastglm
 print.summary.fastglm <- function(x,digits=max(3L,getOption("digits")-3L),

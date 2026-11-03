@@ -8,7 +8,8 @@
 # Only block-sized arrays are formed; category scores have at most two nonzero
 # threshold entries, so no observations-by-categories stacked design is needed.
 .ordinal_sandwich_block <- function(x,alpha,beta,offset,codes,counts,weights,
-                                    frequency=1,independent=TRUE) {
+                                    frequency=1,independent=TRUE,link="logit") {
+    if(link!="logit") return(.ordinal_link_sandwich(x,alpha,beta,offset,codes,counts,weights,frequency,independent,link))
     n<-nrow(x);p<-ncol(x);q<-length(alpha);d<-q+p
     eta<-outer(-streaming_qr_eta(x,beta,offset),alpha,"+")
     cumulative<-plogis(eta);survival<-plogis(-eta)
@@ -139,7 +140,7 @@
         counts<-if(category$grouped) category$counts[i,,drop=FALSE] else matrix(numeric(),0,0)
         z<-.ordinal_sandwich_block(x,object$working$alpha,object$working$beta,object$offset[i],
             if(category$grouped) integer() else category$codes[i],counts,category$weights[i],
-            frequency=N,independent=is.null(cluster))
+            frequency=N,independent=is.null(cluster),link=.ordinal_link(object))
         information<<-information+z$information
         if(is.null(cluster)) meat<<-meat+z$meat else {
             summed<-rowsum(z$rows,as.character(cluster[i]),reorder=FALSE)
@@ -175,7 +176,7 @@
     attr(v,"covariance.type")<-type
     attr(v,"covariance.scope")<-if(isTRUE(object$firth))
         "first-order ordinary-score sandwich at mean-bias-reduced estimate" else "ordinary-score sandwich"
-    attr(v,"estimating.equations")<-"ordinary cumulative-logit likelihood scores"
+    attr(v,"estimating.equations")<-paste0("ordinary cumulative-",.ordinal_link(object)," likelihood scores")
     attr(v,"bread")<-"inverse observed negative score Jacobian"
     attr(v,"frequency.total")<-N
     attr(v,"clusters")<-G

@@ -1,9 +1,10 @@
-# Fit cumulative logits in their threshold/common-slope coordinates. Centering
+# Fit cumulative links in their threshold/common-slope coordinates. Centering
 # and scaling are linear changes of coordinates, under which mean bias reduction
 # is equivariant. A log-spacing transformation would change its target.
 .ordinal_fit_core <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
                               firth=FALSE,tol=1e-8,maxit=200L,
-                              block.size=2048L,control=list(),cache=NULL) {
+                              block.size=2048L,control=list(),cache=NULL,link="logit") {
+    link.code <- .ordinal_link_code(link); link <- c("logit","probit","cloglog")[link.code+1L]
     if(!is.matrix(x) || !is.numeric(x) || is.complex(x))
         stop("ordinal fitting requires a finite dense numeric matrix without a location intercept",call.=FALSE)
     n<-nrow(x);p<-ncol(x)
@@ -48,10 +49,10 @@
     # Half-count starts are empirical, including when an endpoint is empty.
     # Calculate the two log terms separately to avoid rounding probabilities
     # exactly to one at large total frequencies.
-    alpha<-log(cumulative+.5)-log(remaining+.5)+sum(offset[good]*(totals[good]/frequency))
+    alpha<-.ordinal_start_thresholds(cumulative,remaining,link)+sum(offset[good]*(totals[good]/frequency))
     fit<-ordinal_native_fit(xx,response$codes,response$counts,response$weights,
         working.offset,K,c(alpha,numeric(p)),firth,ctl$score.tol,ctl$step.tol,as.integer(maxit),
-        as.integer(block.size),ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace)
+        as.integer(block.size),ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
 
     # Original effective coordinates = T times the centered/scaled coordinates.
     # Form the inverse analytically: solve(T) can reject a valid transformation
@@ -118,7 +119,7 @@
          loglik=fit$loglik,rank=d,df.residual=frequency-d,nobs=sum(good),
          frequency=frequency,weights=response$weights,offset=offset,response=response,category=response,
          preparation.reused=setup$reused,
-         firth=firth,method=if(firth) "meanBR" else "ML",control=ctl,
+         firth=firth,link=link,method=if(firth) "meanBR" else "ML",control=ctl,
          tol=tol,maxit=as.integer(maxit),block.size=as.integer(block.size))
 }
 

@@ -312,8 +312,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // ordinal_native_evaluate
-Rcpp::List ordinal_native_evaluate(Rcpp::NumericMatrix x, Rcpp::IntegerVector y, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericVector offset, int categories, Rcpp::NumericVector coefficients, bool firth, int block_size, double condition_tol);
-RcppExport SEXP _fastglm_ordinal_native_evaluate(SEXP xSEXP, SEXP ySEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP categoriesSEXP, SEXP coefficientsSEXP, SEXP firthSEXP, SEXP block_sizeSEXP, SEXP condition_tolSEXP) {
+Rcpp::List ordinal_native_evaluate(Rcpp::NumericMatrix x, Rcpp::IntegerVector y, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericVector offset, int categories, Rcpp::NumericVector coefficients, bool firth, int block_size, double condition_tol, int link);
+RcppExport SEXP _fastglm_ordinal_native_evaluate(SEXP xSEXP, SEXP ySEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP categoriesSEXP, SEXP coefficientsSEXP, SEXP firthSEXP, SEXP block_sizeSEXP, SEXP condition_tolSEXP, SEXP linkSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -327,13 +327,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
     Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
     Rcpp::traits::input_parameter< double >::type condition_tol(condition_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(ordinal_native_evaluate(x, y, counts, weights, offset, categories, coefficients, firth, block_size, condition_tol));
+    Rcpp::traits::input_parameter< int >::type link(linkSEXP);
+    rcpp_result_gen = Rcpp::wrap(ordinal_native_evaluate(x, y, counts, weights, offset, categories, coefficients, firth, block_size, condition_tol, link));
     return rcpp_result_gen;
 END_RCPP
 }
 // ordinal_native_fit
-Rcpp::List ordinal_native_fit(Rcpp::NumericMatrix x, Rcpp::IntegerVector y, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericVector offset, int categories, Rcpp::NumericVector start, bool firth, double score_tol, double step_tol, int maxit, int block_size, double max_step, int max_halves, double condition_tol, bool trace);
-RcppExport SEXP _fastglm_ordinal_native_fit(SEXP xSEXP, SEXP ySEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP categoriesSEXP, SEXP startSEXP, SEXP firthSEXP, SEXP score_tolSEXP, SEXP step_tolSEXP, SEXP maxitSEXP, SEXP block_sizeSEXP, SEXP max_stepSEXP, SEXP max_halvesSEXP, SEXP condition_tolSEXP, SEXP traceSEXP) {
+Rcpp::List ordinal_native_fit(Rcpp::NumericMatrix x, Rcpp::IntegerVector y, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericVector offset, int categories, Rcpp::NumericVector start, bool firth, double score_tol, double step_tol, int maxit, int block_size, double max_step, int max_halves, double condition_tol, bool trace, int link);
+RcppExport SEXP _fastglm_ordinal_native_fit(SEXP xSEXP, SEXP ySEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP categoriesSEXP, SEXP startSEXP, SEXP firthSEXP, SEXP score_tolSEXP, SEXP step_tolSEXP, SEXP maxitSEXP, SEXP block_sizeSEXP, SEXP max_stepSEXP, SEXP max_halvesSEXP, SEXP condition_tolSEXP, SEXP traceSEXP, SEXP linkSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -353,7 +354,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type max_halves(max_halvesSEXP);
     Rcpp::traits::input_parameter< double >::type condition_tol(condition_tolSEXP);
     Rcpp::traits::input_parameter< bool >::type trace(traceSEXP);
-    rcpp_result_gen = Rcpp::wrap(ordinal_native_fit(x, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace));
+    Rcpp::traits::input_parameter< int >::type link(linkSEXP);
+    rcpp_result_gen = Rcpp::wrap(ordinal_native_fit(x, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -457,8 +459,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_fit_glm_nb", (DL_FUNC) &_fastglm_fit_glm_nb, 22},
     {"_fastglm_fit_glm_truncated", (DL_FUNC) &_fastglm_fit_glm_truncated, 12},
     {"_fastglm_fit_glm_zi", (DL_FUNC) &_fastglm_fit_glm_zi, 27},
-    {"_fastglm_ordinal_native_evaluate", (DL_FUNC) &_fastglm_ordinal_native_evaluate, 10},
-    {"_fastglm_ordinal_native_fit", (DL_FUNC) &_fastglm_ordinal_native_fit, 16},
+    {"_fastglm_ordinal_native_evaluate", (DL_FUNC) &_fastglm_ordinal_native_evaluate, 11},
+    {"_fastglm_ordinal_native_fit", (DL_FUNC) &_fastglm_ordinal_native_fit, 17},
     {"_fastglm_streaming_qr_eta", (DL_FUNC) &_fastglm_streaming_qr_eta, 3},
     {"_fastglm_streaming_qr_update", (DL_FUNC) &_fastglm_streaming_qr_update, 4},
     {"_fastglm_streaming_qr_finish", (DL_FUNC) &_fastglm_streaming_qr_finish, 1},
