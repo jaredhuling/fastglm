@@ -1,0 +1,10 @@
+The matched 44-cell panel contains 40 converged and timed fits; 40 returned fits pass the accuracy checks.
+Failures remain in summary.csv with their messages and without timing claims.
+The near-collinear QR cases are retained individually:
+  Gaussian: converged, 1 iterations, predictor error 4.05e-10.
+  Logistic: converged, 3 iterations, predictor error 3.31e-10.
+  Firth logistic: converged, 5 iterations, predictor error 8.27e-09.
+  Firth Gamma: converged, 9 iterations, predictor error 4.17e-09.
+QR Firth verifies the remaining fitted-predictor step, joint adjusted-score RMS, and dispersion stationarity. LLT Firth and the dense reference retain their coefficient-based stopping rules. Equal tolerance values therefore do not imply identical stopping criteria.
+These are three-repetition timings on one machine. They describe these designs and do not establish a universal solver ranking.
+memory.csv retains earlier ordinary-Gaussian measurements with separate provenance in memory-metadata.rds; it was not rerun in this timing refresh.

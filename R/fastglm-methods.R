@@ -424,7 +424,7 @@ predict.fastglm <- function(object, newdata = NULL,
             if (any(nonestimable)) warning("prediction is not estimable for some rows of the rank-deficient design", call. = FALSE)
         }
         if (!all(good)) x <- x[, good, drop = FALSE]
-        eta <- drop(x %*% b[good]) + design$offset
+        eta <- .model_eta(x, object, design$offset)
         v <- dispersion * object$cov.unscaled[good, good, drop = FALSE]
         if (type == "terms") {
             if (is.null(object$terms)) stop("term prediction requires a formula fit", call. = FALSE)
@@ -443,7 +443,7 @@ predict.fastglm <- function(object, newdata = NULL,
         } else {
             eta[nonestimable] <- NA_real_
             out <- eta
-            if (se.fit) se <- sqrt(pmax(0, .quad_rows(x, v)))
+            if (se.fit) se <- sqrt(pmax(0, dispersion * .model_quad_rows(x, object)))
             if (se.fit) se[nonestimable] <- NA_real_
             if (type == "response") {
                 if (se.fit) se <- se * abs(object$family$mu.eta(eta))

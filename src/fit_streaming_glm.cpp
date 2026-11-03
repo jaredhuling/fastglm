@@ -5,6 +5,7 @@
 #include "../inst/include/families.h"
 #include "../inst/include/chunk_source.h"
 #include "../inst/include/bias_reduction.h"
+#include "../inst/include/streaming_qr.h"
 
 #include <stdexcept>
 #include <string>
@@ -433,8 +434,206 @@ static MatrixXd spd_inverse(int type, const MatrixXd& A)
     return chol.solve(MatrixXd::Identity(p, p));
 }
 
+// A pass through an incrementally factorized weighted design. Lagged
+// leverages use the previous QR factor and the previous working weights,
+// as in Zietkiewicz and Kosmidis (2024), section 3.5.
+static double stream_qr_pass(Function& callback,int n_chunks,int p,
+    const VectorXd& beta,const FamilyOps& fam,fglm::StreamingQR& current,
+    const fglm::StreamingQR* previous,const VectorXd* previous_beta,
+    bool firth,double phi,double* phi_out,VectorXd* gamma_adjustment,
+    std::vector<bool>* intercept_mask=nullptr,int* n_total_out=nullptr)
+{
+    const bool gamma=fam.code==fglm::FAM_GAMMA_LOG;
+    const bool constant=gamma || fam.code==fglm::FAM_GAUSSIAN_IDENTITY;
+    const bool cached=constant && previous!=nullptr;
+    if(cached) current.project_with(*previous); else current.reset(p);
+    const bool build_gamma=firth && gamma && previous && gamma_adjustment->size()==0;
+    if(build_gamma) gamma_adjustment->setZero(p);
+    double dev=0; int n_total=0,n_positive=0;
+    fglm::GammaDispersionTerms dispersion;
+    for(int k=1;k<=n_chunks;++k) {
+        Chunk c=pull_chunk(callback,k,p);
+        n_total+=c.y.size(); n_positive+=(c.w.array()>0).count();
+        ArrayXd eta=fglm::qr_linear_predictor(c.X,beta,c.off).array(),mu,dmu,variance;
+        if(!fam.valideta(eta)) throw std::domain_error("invalid linear predictor in streaming QR pass");
+        fam.linkinv(eta,mu);
+        if(!fam.validmu(mu)) throw std::domain_error("invalid mean in streaming QR pass");
+        fam.mu_eta(eta,dmu); fam.variance(mu,variance);
+        dev+=fam.dev_resids_sum(c.y.array(),mu,c.w.array());
+        VectorXd working=constant ? c.w : (c.w.array()*dmu.square()/variance).matrix();
+        VectorXd z=(eta-c.off.array()+(c.y.array()-mu)/dmu).matrix();
+        for(int i=0;i<c.y.size();++i) if(c.w[i]==0) { working[i]=0; z[i]=0; }
+        if(!working.allFinite() || (working.array()<0).any() || !z.allFinite())
+            throw std::domain_error("non-finite working values in streaming QR pass");
+        if(firth && previous && fam.code!=fglm::FAM_GAUSSIAN_IDENTITY && (!gamma || build_gamma)) {
+            MatrixXd basis=previous->row_basis(c.X);
+            VectorXd leverage_weight=working;
+            if(!constant && previous_beta) {
+                ArrayXd eta0=fglm::qr_linear_predictor(c.X,*previous_beta,c.off).array(),mu0,dm0,var0;
+                fam.linkinv(eta0,mu0); fam.mu_eta(eta0,dm0); fam.variance(mu0,var0);
+                leverage_weight=(c.w.array()*dm0.square()/var0).matrix();
+                for(int i=0;i<c.y.size();++i) if(c.w[i]==0) leverage_weight[i]=0;
+            }
+            VectorXd h=(basis.array().square().rowwise().sum()*leverage_weight.array()).matrix();
+            if(gamma) gamma_adjustment->noalias()+=basis.adjoint()*(0.5*h);
+            else {
+                ArrayXd second; fam.d2mu_deta2(eta,mu,dmu,second);
+                for(int i=0;i<c.y.size();++i) if(working[i]>0 && dmu[i]!=0)
+                    z[i]+=phi*h[i]*second[i]/(2*dmu[i]*working[i]);
+            }
+        }
+        current.add(c.X,z,working);
+        if(firth && fam.code>=10 && fam.code<=12)
+            dispersion.add(fglm::gamma_weight_groups(c.w),phi);
+        if(intercept_mask) for(int j=0;j<p;++j)
+            if((c.X.col(j).array()!=c.X(0,j)).any()) (*intercept_mask)[j]=false;
+    }
+    current.finish();
+    if(firth && gamma && previous) current.qty.noalias()+=phi*(*gamma_adjustment);
+    if(n_total_out) *n_total_out=n_total;
+    if(phi_out) {
+        *phi_out=1;
+        if(firth && !fam.is_unit_dispersion()) {
+            if(n_positive<=p) Rcpp::stop("bias reduction requires positive residual degrees of freedom");
+            if(fam.code>=10 && fam.code<=12) {
+                const double step=dispersion.numerator(dev,p,phi)*phi/dispersion.d2;
+                *phi_out=phi*std::exp(std::max(-std::log(2.0),std::min(std::log(2.0),step)));
+            } else *phi_out=dev/(n_positive-p);
+        }
+    }
+    return dev;
+}
+
+struct QRStationarity {
+    double predictor_step=NA_REAL, score_rms=NA_REAL;
+    double dispersion_step=NA_REAL, dispersion_score_rms=NA_REAL;
+    bool fixed_dispersion=true;
+    bool refined=false;
+    bool satisfied(double tol) const {
+        return std::isfinite(predictor_step) && predictor_step<=tol &&
+            std::isfinite(score_rms) && score_rms<=tol &&
+            (fixed_dispersion || (std::isfinite(dispersion_step) && dispersion_step<=tol &&
+                std::isfinite(dispersion_score_rms) && dispersion_score_rms<=tol));
+    }
+};
+
+// Verify the remaining adjusted score at the reported coefficients, using the
+// current information factor and current leverages (never the lagged update).
+// If sqrt(W) X D^-1 P = Q R, q = R^-T P' D^-1 phi U* is accumulated directly
+// as (X D^-1 P R^-1)' phi u*. Its information step is D^-1 P R^-1 q.
+// Both the fitted-link step and ||q||/sqrt(n phi) are invariant to nonsingular
+// changes of coefficient coordinates. Marginal score standardization is not.
+static QRStationarity stream_qr_stationarity(Function& callback,int n_chunks,int p,
+    const VectorXd& beta,const FamilyOps& fam,const fglm::StreamingQR& qr,double phi,double tol)
+{
+    QRStationarity result;
+    result.fixed_dispersion=fam.is_unit_dispersion();
+    result.refined=std::numeric_limits<double>::epsilon()*qr.condition_bound()>tol;
+    fglm::StreamingQR refined;
+    if(result.refined) {
+        // The original QR is backward stable, but X R^-1 can amplify its small
+        // backward error in near-dependent directions. Re-factor this already
+        // well-conditioned basis for verification, retaining only a p by p
+        // factor. Accurate triangular arithmetic preserves the original design.
+        refined.reset(p);
+        for(int k=1;k<=n_chunks;++k) {
+            Chunk c=pull_chunk(callback,k,p);
+            ArrayXd eta=fglm::qr_linear_predictor(c.X,beta,c.off).array(),mu,dmu,variance;
+            fam.linkinv(eta,mu); fam.mu_eta(eta,dmu); fam.variance(mu,variance);
+            VectorXd working=(c.w.array()*dmu.square()/variance).matrix();
+            if(fam.code==fglm::FAM_GAMMA_LOG || fam.code==fglm::FAM_GAUSSIAN_IDENTITY) working=c.w;
+            for(int i=0;i<c.y.size();++i) if(c.w[i]==0) working[i]=0;
+            refined.add(qr.accurate_row_basis(c.X),VectorXd::Zero(c.y.size()),working);
+        }
+        refined.finish();
+    }
+    VectorXd q=VectorXd::Zero(p);
+    double dev=0; int n_positive=0;
+    fglm::GammaDispersionTerms dispersion;
+    for(int k=1;k<=n_chunks;++k) {
+        Chunk c=pull_chunk(callback,k,p);
+        ArrayXd eta=fglm::qr_linear_predictor(c.X,beta,c.off).array(),mu,dmu,variance,second;
+        fam.linkinv(eta,mu); fam.mu_eta(eta,dmu); fam.variance(mu,variance);
+        if(!fam.valideta(eta) || !fam.validmu(mu)) return result;
+        MatrixXd basis=result.refined ? refined.row_basis(qr.accurate_row_basis(c.X)) : qr.row_basis(c.X);
+        ArrayXd contribution=c.w.array()*dmu*(c.y.array()-mu)/variance;
+        if(fam.code!=fglm::FAM_GAUSSIAN_IDENTITY) {
+            fam.d2mu_deta2(eta,mu,dmu,second);
+            ArrayXd working=c.w.array()*dmu.square()/variance;
+            if(fam.code==fglm::FAM_GAMMA_LOG) working=c.w.array();
+            ArrayXd h=basis.array().square().rowwise().sum()*working;
+            for(int i=0;i<c.y.size();++i) if(c.w[i]>0 && dmu[i]!=0)
+                contribution[i]+=phi*h[i]*second[i]/(2*dmu[i]);
+        }
+        for(int i=0;i<c.y.size();++i) if(c.w[i]==0) contribution[i]=0;
+        q.noalias()+=basis.adjoint()*contribution.matrix();
+        n_positive+=(c.w.array()>0).count();
+        dev+=fam.dev_resids_sum(c.y.array(),mu,c.w.array());
+        if(fam.code>=10 && fam.code<=12)
+            dispersion.add(fglm::gamma_weight_groups(c.w),phi);
+    }
+    if(n_positive<=0 || (!result.fixed_dispersion && n_positive<=p) || !(phi>0) || !q.allFinite()) return result;
+    result.score_rms=q.stableNorm()/std::sqrt(n_positive*phi);
+    if(!result.fixed_dispersion) {
+        const bool gamma=fam.code>=10 && fam.code<=12;
+        const double numerator=gamma ? dispersion.numerator(dev,p,phi) : dev-(n_positive-p)*phi;
+        const double d2=gamma ? dispersion.d2 : n_positive*phi*phi;
+        result.dispersion_step=std::abs(numerator*phi/d2);
+        result.dispersion_score_rms=std::abs(numerator)/std::sqrt(2*d2*n_positive);
+    }
+    // A second, linear-cost pass evaluates the step rather than an upper bound.
+    // Compensated products protect cancelling step coefficients as well as beta.
+    VectorXd step=result.refined ? refined.solve_transformed(q) : qr.solve_transformed(q);
+    if(!step.allFinite()) return result;
+    result.predictor_step=0;
+    for(int k=1;k<=n_chunks;++k) {
+        Chunk c=pull_chunk(callback,k,p);
+        MatrixXd design=result.refined ? qr.accurate_row_basis(c.X) : c.X;
+        VectorXd change=fglm::qr_linear_predictor(design,step,VectorXd::Zero(c.y.size()));
+        for(int i=0;i<c.y.size();++i) if(c.w[i]>0) {
+            if(!std::isfinite(change[i])) {result.predictor_step=NA_REAL;return result;}
+            result.predictor_step=std::max(result.predictor_step,std::abs(change[i]));
+        }
+    }
+    return result;
+}
+
 }  // anonymous namespace
 
+
+// [[Rcpp::export]]
+NumericVector streaming_qr_eta(NumericMatrix x,NumericVector beta,NumericVector offset)
+{
+    if(x.ncol()!=beta.size() || x.nrow()!=offset.size())
+        Rcpp::stop("incompatible streaming QR predictor dimensions");
+    return wrap(fglm::qr_linear_predictor(as<MatrixXd>(x),as<VectorXd>(beta),as<VectorXd>(offset)));
+}
+
+// [[Rcpp::export]]
+List streaming_qr_update(NumericMatrix x,NumericVector z,NumericVector weights,
+                         Nullable<List> state=R_NilValue)
+{
+    if(x.ncol()<1 || z.size()!=x.nrow() || weights.size()!=x.nrow())
+        Rcpp::stop("incompatible streaming QR block dimensions");
+    fglm::StreamingQR qr;
+    if(state.isNotNull()) {
+        List old(state.get());
+        qr.raw_R=as<MatrixXd>(old["R"]);qr.raw_qty=as<VectorXd>(old["qty"]);
+    } else qr.reset(x.ncol());
+    if(qr.raw_R.rows()!=x.ncol() || qr.raw_R.cols()!=x.ncol() || qr.raw_qty.size()!=x.ncol())
+        Rcpp::stop("incompatible streaming QR state dimensions");
+    qr.add(as<MatrixXd>(x),as<VectorXd>(z),as<VectorXd>(weights));
+    return List::create(_["R"]=qr.raw_R,_["qty"]=qr.raw_qty);
+}
+
+// [[Rcpp::export]]
+List streaming_qr_finish(List state)
+{
+    fglm::StreamingQR qr;
+    qr.raw_R=as<MatrixXd>(state["R"]);qr.raw_qty=as<VectorXd>(state["qty"]);
+    qr.finish();
+    return List::create(_["coefficients"]=qr.solve(),_["qr"]=qr.factor());
+}
 
 // [[Rcpp::export]]
 List fit_streaming_glm(Function chunk_callback,
@@ -455,8 +654,8 @@ List fit_streaming_glm(Function chunk_callback,
                        bool     firth = false)
 {
     if (n_chunks < 1) Rcpp::stop("n_chunks must be >= 1");
-    if (type != 2 && type != 3)
-        Rcpp::stop("for streaming fits, 'method' must be 2 (LLT) or 3 (LDLT).");
+    if (type != 0 && type != 2 && type != 3)
+        Rcpp::stop("for streaming fits, 'method' must be 0 (QR), 2 (LLT), or 3 (LDLT).");
 
     fglm::FamilyParams fp;
     if (fam_params.isNotNull()) {
@@ -482,8 +681,11 @@ List fit_streaming_glm(Function chunk_callback,
     VectorXd Xtwz(p);
     std::vector<bool> intercept_mask(p, true);
 
+    fglm::StreamingQR qr;
+    VectorXd initial_adjustment;
     int n_total = 0;
-    double dev_curr = stream_pass(chunk_callback, n_chunks, p, beta, fam,
+    double dev_curr = type==0 ? stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,
+        false,1,nullptr,&initial_adjustment,&intercept_mask,&n_total) : stream_pass(chunk_callback, n_chunks, p, beta, fam,
                                   /*accumulate=*/!firth,
                                   /*XtWX_out=*/&XtWX, /*Xtwz_out=*/&Xtwz,
                                   &intercept_mask, &n_total);
@@ -502,8 +704,93 @@ List fit_streaming_glm(Function chunk_callback,
     VectorXd gamma_adjustment;
 
     bool gamma_step_failed = false;
+    QRStationarity qr_stationarity;
+    bool qr_stationarity_current=false;
     const bool safeguarded_gamma = firth && fam.code == fglm::FAM_GAMMA_LOG;
-    if (safeguarded_gamma) {
+    if(type==0) {
+        fglm::StreamingQR previous=qr;
+        VectorXd leverage_beta=beta;
+        if(safeguarded_gamma) {
+            double phi_next=phi_prev;
+            dev_curr=stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,&previous,&leverage_beta,
+                true,phi_prev,&phi_next,&gamma_adjustment);
+            for(iter=1;iter<=maxit;++iter) {
+                VectorXd proposed=qr.solve(),delta=proposed-beta;
+                const VectorXd direction=previous.coefficient_coordinates(delta);
+                // This inexpensive update check schedules exact verification
+                // only; neither it nor a small observed step declares convergence.
+                if(direction.stableNorm()/std::sqrt(n_total*phi_prev)<=tol &&
+                    std::abs(phi_next-phi_prev)/phi_prev<=tol) {
+                    qr_stationarity=stream_qr_stationarity(chunk_callback,n_chunks,p,beta,fam,qr,phi_prev,tol);
+                    qr_stationarity_current=true;
+                    if(qr_stationarity.satisfied(tol)) {converged=true;break;}
+                }
+                const double quadratic=direction.squaredNorm(),phi_proposed=phi_next;
+                double fraction=1,dev_new=0,phi_after=phi_proposed; int halves=0;
+                while(true) {
+                    bool valid=true;
+                    try {
+                        dev_new=stream_qr_pass(chunk_callback,n_chunks,p,proposed,fam,qr,&previous,&leverage_beta,
+                            true,phi_proposed,&phi_after,&gamma_adjustment);
+                    } catch(const std::domain_error&) { valid=false;dev_new=std::numeric_limits<double>::infinity(); }
+                    const double change=dev_new-dev_curr-2*phi_prev*gamma_adjustment.dot(
+                        previous.coefficient_coordinates(proposed-beta));
+                    const double rounding=64*std::numeric_limits<double>::epsilon()*(1+std::abs(dev_new)+std::abs(dev_curr));
+                    if(valid && std::isfinite(dev_new) && change<=-0.2*fraction*quadratic+rounding) break;
+                    if(++halves>50) {gamma_step_failed=true;break;}
+                    fraction*=0.5; proposed=beta+fraction*delta;
+                }
+                if(gamma_step_failed) break;
+                beta=proposed; phi_prev=phi_proposed; phi_next=phi_after; dev_curr=dev_new;
+                qr_stationarity_current=false;
+                Rcpp::checkUserInterrupt();
+            }
+        } else for(iter=1;iter<=maxit;++iter) {
+            double phi_new=phi_prev;
+            if(firth) dev_curr=stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,&previous,&leverage_beta,
+                true,phi_prev,&phi_new,&gamma_adjustment);
+            VectorXd proposed=qr.solve();
+            if(firth) {
+                const VectorXd direction=qr.coefficient_coordinates(proposed-beta);
+                if(direction.stableNorm()/std::sqrt(n_total*phi_prev)<=tol &&
+                    std::abs(phi_new-phi_prev)/phi_prev<=tol) {
+                    qr_stationarity=stream_qr_stationarity(chunk_callback,n_chunks,p,beta,fam,qr,phi_prev,tol);
+                    qr_stationarity_current=true;
+                    if(qr_stationarity.satisfied(tol)) {converged=true;break;}
+                }
+                previous=qr; leverage_beta=beta;
+                beta=proposed;phi_prev=phi_new;
+                qr_stationarity_current=false;
+            } else {
+                double dev_new=0; bool valid=false; int halves=0;
+                do {
+                    try {
+                        dev_new=stream_qr_pass(chunk_callback,n_chunks,p,proposed,fam,qr,nullptr,nullptr,
+                            false,1,nullptr,&gamma_adjustment);
+                        valid=std::isfinite(dev_new);
+                    } catch(const std::domain_error&) {valid=false;dev_new=std::numeric_limits<double>::infinity();}
+                    if(valid && dev_new<=dev_curr*(1+tol)) break;
+                    if(++halves>25) break;
+                    proposed=0.5*(proposed+beta);
+                } while(true);
+                if(!valid || dev_new>dev_curr*(1+tol)) Rcpp::stop("streaming QR step halving failed");
+                const double change=std::abs(dev_new-dev_curr)/(0.1+std::abs(dev_new));
+                beta=proposed;dev_curr=dev_new;
+                if(change<tol) {converged=true;break;}
+            }
+            Rcpp::checkUserInterrupt();
+        }
+        const bool qr_constant=fam.code==fglm::FAM_GAMMA_LOG || fam.code==fglm::FAM_GAUSSIAN_IDENTITY;
+        if(firth && !qr_constant && !qr_stationarity_current)
+            stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,false,1,nullptr,&gamma_adjustment);
+        if(firth && !qr_stationarity_current)
+            qr_stationarity=stream_qr_stationarity(chunk_callback,n_chunks,p,beta,fam,qr,phi_prev,tol);
+        // The scheduling gate is not part of the convergence definition. A
+        // final exact check can certify the last allowed accepted iterate.
+        if(firth && !gamma_step_failed && qr_stationarity.satisfied(tol)) converged=true;
+        log_det_XtWX=qr.logdet();
+    }
+    if (type!=0 && safeguarded_gamma) {
         double phi_next = phi_prev;
         dev_curr = stream_pass_firth(chunk_callback,n_chunks,p,beta,fam,nullptr,
             phi_prev,&XtWX,&Xtwz,nullptr,&phi_next,&constant_information,&gamma_adjustment);
@@ -562,7 +849,7 @@ List fit_streaming_glm(Function chunk_callback,
         }
     }
 
-    if (!safeguarded_gamma)     for (iter = 1; iter <= maxit; ++iter) {
+    if (type!=0 && !safeguarded_gamma) for (iter = 1; iter <= maxit; ++iter) {
         double std_dev, phi_new = phi_prev;
         if (firth) {
             std_dev = stream_pass_firth(chunk_callback, n_chunks, p, beta, fam,
@@ -650,11 +937,11 @@ List fit_streaming_glm(Function chunk_callback,
 
     // Changing working weights require information at the reported beta.
     // Constant information is already exact there; reuse it without a pass.
-    if (firth && !constant_information) stream_pass(chunk_callback, n_chunks, p, beta, fam,
+    if (type!=0 && firth && !constant_information) stream_pass(chunk_callback, n_chunks, p, beta, fam,
                 /*accumulate=*/true, &XtWX, &Xtwz, nullptr, nullptr);
 
     // cov.unscaled = (X'WX)^{-1}.
-    MatrixXd cov_unscaled = spd_inverse(type, XtWX);
+    MatrixXd cov_unscaled = type==0 ? qr.covariance() : spd_inverse(type, XtWX);
 
     // Final pass: total weighted y, total weights, deviance, null deviance,
     // Pearson chi-square (for dispersion).
@@ -684,7 +971,8 @@ List fit_streaming_glm(Function chunk_callback,
             Chunk c = pull_chunk(chunk_callback, k, p);
             const int n_k = c.y.size();
 
-            ArrayXd eta = (c.X * beta).array() + c.off.array();
+            ArrayXd eta = type==0 ? fglm::qr_linear_predictor(c.X,beta,c.off).array() :
+                ((c.X * beta).array() + c.off.array()).eval();
             ArrayXd mu;
             fam.linkinv(eta, mu);
             ArrayXd ya = c.y.array();
@@ -701,8 +989,10 @@ List fit_streaming_glm(Function chunk_callback,
                 if (fam.code != fglm::FAM_GAUSSIAN_IDENTITY &&
                     fam.code != fglm::FAM_GAMMA_LOG) {
                     ArrayXd d2mu; fam.d2mu_deta2(eta,mu,dmu,d2mu);
-                    MatrixXd xa = c.X*cov_unscaled;
-                    ArrayXd h = (xa.array()*c.X.array()).rowwise().sum()*wa*dmu.square()/va;
+                    MatrixXd xa = type==0 ? qr.row_basis(c.X) : MatrixXd(c.X*cov_unscaled);
+                    ArrayXd leverage = type==0 ? xa.array().square().rowwise().sum().eval() :
+                        (xa.array()*c.X.array()).rowwise().sum().eval();
+                    ArrayXd h = leverage*wa*dmu.square()/va;
                     for (int i=0;i<n_k;++i) if (wa[i]>0 && dmu[i]!=0)
                         contribution[i] += h[i]*d2mu[i]/(2*dmu[i]);
                 }
@@ -760,18 +1050,27 @@ List fit_streaming_glm(Function chunk_callback,
         _["has_intercept"] = has_intercept
     );
 
+    if(type==0) out["qr"]=qr.factor();
     if (firth) {
         out["penalized.deviance"] = dev_final - log_det_XtWX;
         out["log.det.XtWX"]       = log_det_XtWX;
         out["bias.dispersion"]    = phi_prev;
         out["firth"]              = true;
-        if (fam.code == fglm::FAM_GAMMA_LOG) adjusted_score += gamma_adjustment;
-        VectorXd information = XtWX.diagonal()/phi_prev;
+        if (fam.code == fglm::FAM_GAMMA_LOG)
+            adjusted_score += type==0 ? qr.original_score(gamma_adjustment) : gamma_adjustment;
+        VectorXd information = type==0 ? qr.information_diagonal()/phi_prev : VectorXd(XtWX.diagonal()/phi_prev);
         double ds, ds_scaled;
         fglm::dispersion_diagnostics(fam.code,dev_final,n_ok,p,phi_prev,final_dispersion_terms,ds,ds_scaled);
         std::string reason = gamma_step_failed ? "step_halving_failed" :
             (converged ? "converged" : "iteration_limit");
         fglm::append_adjusted_diagnostics(out,adjusted_score,information,ds,ds_scaled,reason);
+        if(type==0) {
+            out["remaining.predictor.step"]=qr_stationarity.predictor_step;
+            out["adjusted.score.rms"]=qr_stationarity.score_rms;
+            out["remaining.dispersion.step"]=qr_stationarity.dispersion_step;
+            out["adjusted.dispersion.score.rms"]=qr_stationarity.dispersion_score_rms;
+            out["refined.convergence.verification"]=qr_stationarity.refined;
+        }
     }
 
     return out;

@@ -1,0 +1,17 @@
+"case","implementation","repetition","position","batch","elapsed.batch.seconds","seconds.per.fit","all.valid","all.clean"
+"meanBR-2000","fastglm",1,1,10,0.071,0.0071,TRUE,TRUE
+"meanBR-2000","WeightIt2.1.0 internal",1,2,10,0.239,0.0239,TRUE,TRUE
+"meanBR-2000","WeightIt2.1.0 internal",2,1,10,0.235,0.0235,TRUE,TRUE
+"meanBR-2000","fastglm",2,2,10,0.0489999999999999,0.00489999999999999,TRUE,TRUE
+"meanBR-2000","fastglm",3,1,10,0.0489999999999999,0.00489999999999999,TRUE,TRUE
+"meanBR-2000","WeightIt2.1.0 internal",3,2,10,0.287,0.0287,TRUE,TRUE
+"meanBR-2000","WeightIt2.1.0 internal",4,1,10,0.215,0.0215,TRUE,TRUE
+"meanBR-2000","fastglm",4,2,10,0.0529999999999999,0.00529999999999999,TRUE,TRUE
+"meanBR-20000","fastglm",1,1,10,0.389,0.0389,TRUE,TRUE
+"meanBR-20000","WeightIt2.1.0 internal",1,2,10,2.01,0.201,TRUE,TRUE
+"meanBR-20000","WeightIt2.1.0 internal",2,1,10,1.933,0.1933,TRUE,TRUE
+"meanBR-20000","fastglm",2,2,10,0.424,0.0424,TRUE,TRUE
+"meanBR-20000","fastglm",3,1,10,0.431000000000001,0.0431000000000001,TRUE,TRUE
+"meanBR-20000","WeightIt2.1.0 internal",3,2,10,1.946,0.1946,TRUE,TRUE
+"meanBR-20000","WeightIt2.1.0 internal",4,1,10,1.902,0.1902,TRUE,TRUE
+"meanBR-20000","fastglm",4,2,10,0.434000000000001,0.0434000000000001,TRUE,TRUE

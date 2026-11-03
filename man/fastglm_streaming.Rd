@@ -16,13 +16,13 @@ fastglm_streaming(
 )
 }
 \arguments{
-\item{chunk_callback}{a function. Called as `chunk_callback(k)` for
-`k = 1, ..., n_chunks`. Must return a list with elements
+\item{chunk_callback}{a function. Called as \code{chunk_callback(k)} for
+\verb{k = 1, ..., n_chunks}. Must return a list with elements
 \describe{
-  \item{`X`}{an `n_k x p` numeric matrix (chunk of the design matrix).}
-  \item{`y`}{numeric vector of length `n_k` (response).}
-  \item{`weights`}{optional; numeric vector of length `n_k` of prior weights.}
-  \item{`offset`}{optional; numeric vector of length `n_k` of offsets.}
+\item{\code{X}}{an \verb{n_k x p} numeric matrix (chunk of the design matrix).}
+\item{\code{y}}{numeric vector of length \code{n_k} (response).}
+\item{\code{weights}}{optional; numeric vector of length \code{n_k} of prior weights.}
+\item{\code{offset}}{optional; numeric vector of length \code{n_k} of offsets.}
 }
 Every chunk must have the same number of columns, in the same order. The
 supplied function, called a callback, is called repeatedly during fitting.
@@ -30,35 +30,46 @@ It must return the same rows and values each time a block is requested.}
 
 \item{n_chunks}{integer; the number of chunks to iterate over.}
 
-\item{family}{a `family` object describing the error distribution and link.
-See [stats::family()].}
+\item{family}{a \code{family} object describing the error distribution and link.
+See \code{\link[stats:family]{stats::family()}}.}
 
-\item{start}{optional length-`p` numeric vector of starting coefficients.}
+\item{start}{optional length-\code{p} numeric vector of starting coefficients.}
 
-\item{method}{integer; `2` for LLT Cholesky (default) or `3` for LDLT
-Cholesky. QR / SVD methods are not supported in streaming mode.}
+\item{method}{\code{"llt"} or \code{2} for LLT Cholesky (default), \code{"ldlt"} or
+\code{3} for LDLT Cholesky, or \code{"qr"} or \code{0} for incremental QR. All
+require full column rank across the complete weighted design. The
+\code{"auto"} choice retains the default Cholesky method for streaming fits.}
 
-\item{tol}{convergence tolerance on the relative change in deviance
-(or sup-norm of coefficient update when `firth = TRUE`). Gamma-log
-bias-reduced fits also check the remaining adjusted-score update and
-relative change in dispersion.}
+\item{tol}{convergence tolerance on relative deviance change for ordinary
+fits. Cholesky bias-reduced fits use the largest coefficient update;
+Gamma-log fits also check the remaining adjusted-score update and relative
+dispersion change. QR bias-reduced fits require small remaining changes in
+fitted linear predictors, a small joint information-scaled adjusted score
+per positive-weight row, and dispersion stationarity where applicable.}
 
 \item{maxit}{maximum number of IRLS iterations.}
 
-\item{firth}{logical; if `TRUE` apply Firth bias reduction using
-lagged leverages from the previous IRLS iteration.  At convergence
-the result matches the exact-leverage dense path.}
+\item{firth}{logical; if \code{TRUE} apply Firth bias reduction using
+lagged leverages from the previous IRLS iteration. At convergence,
+the fit solves the same adjusted-score equations as the dense path.}
 }
 \value{
-An object with classes `"fastglm_stream"` and `"fastglm"` containing
-  coefficient estimates and model summaries as in
-  [fastglm()], including `coefficients`, `cov.unscaled`, `deviance`,
-  `iter`, and `converged`. The object retains the function used to read
-  the observations. Prediction and [fastglm_vcov()] call that function
-  again, so the data must remain accessible and unchanged.
+An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing
+coefficient estimates and model summaries as in
+\code{\link[=fastglm]{fastglm()}}, including \code{coefficients}, \code{cov.unscaled}, \code{deviance},
+\code{iter}, and \code{converged}. The object retains the function used to read
+the observations. Prediction and \code{\link[=fastglm_vcov]{fastglm_vcov()}} call that function
+again, so the data must remain accessible and unchanged. QR fits also
+retain a \code{qr} list containing a triangular matrix \code{R}, column permutation
+\code{pivot}, and column scales \code{scale} for the final weighted design.
+QR bias-reduced fits additionally save \code{remaining.predictor.step},
+\code{adjusted.score.rms}, \code{remaining.dispersion.step}, and
+\code{adjusted.dispersion.score.rms}. The dispersion diagnostics are missing
+for fixed-dispersion families. \code{refined.convergence.verification} records
+whether verification required additional precision for the design.
 }
 \description{
-`fastglm_streaming()` fits a GLM while keeping only a block of design rows
+\code{fastglm_streaming()} fits a GLM while keeping only a block of design rows
 and coefficient-sized summary matrices in memory. Reading successive
 blocks this way is called streaming. It permits fitting data that cannot
 be loaded into memory together, at the cost of rereading the observations
@@ -71,14 +82,35 @@ that shorten unsuccessful steps run in C++. For supported standard
 families, the distribution calculations also run in C++; the R function
 is called to supply each block of observations.
 
-Standard errors and `cov.unscaled` come from the final `(X' W X)`
-Cholesky factor, exactly as in the in-memory path.
+Cholesky methods accumulate the weighted crossproduct \verb{X' W X}. The QR
+method instead updates a triangular factor as blocks arrive, avoiding
+crossproducts in initialization, coefficient updates, and covariance
+calculation. It can retain precision for nearly redundant predictors at
+the cost of more arithmetic. Rank is assessed after combining all blocks;
+individual blocks may contain fewer rows than columns or lack factor
+levels. Globally redundant predictors cause an error.
+
+Standard errors and \code{cov.unscaled} use the final weighted design. For QR
+fits, prediction uncertainty, leverage, robust covariance, and default
+average-prediction inference use the triangular factor directly. Supplying
+a covariance matrix explicitly to \code{\link[=fastglm_average]{fastglm_average()}} uses that matrix.
+Storage includes the current block and matrices with dimensions determined
+by the number of coefficients, including a quadratic storage requirement
+in that number. Neither method retains all design rows.
+
+QR bias-reduced convergence checks evaluate the actual adjusted equations
+using current working weights and leverage values. Verification requires
+additional source passes. For poorly conditioned designs, the calculation
+forms and refactors a better-scaled basis before checking these equations.
+A small score alone cannot certify convergence: the remaining predictor
+change and dispersion checks must also pass. Failed step searches retain a
+failure flag.
 }
 \section{Files and databases}{
 
-[fastglm_source_arrow()] reads one Parquet file per block, and
-[fastglm_source_dbi()] reads the rows returned by one database query per
-block. [fastglm_source()] records the factor levels and transformations
+\code{\link[=fastglm_source_arrow]{fastglm_source_arrow()}} reads one Parquet file per block, and
+\code{\link[=fastglm_source_dbi]{fastglm_source_dbi()}} reads the rows returned by one database query per
+block. \code{\link[=fastglm_source]{fastglm_source()}} records the factor levels and transformations
 needed to give the design columns the same meaning in each block.
 }
 
@@ -98,4 +130,9 @@ fit_stream <- fastglm_streaming(chunks, n_chunks = 4, family = binomial())
 fit_full   <- fastglm(X, y, family = binomial(), method = 2)
 max(abs(coef(fit_stream) - coef(fit_full)))
 
+}
+\references{
+Zietkiewicz, P. and Kosmidis, I. (2024). Bounded-memory adjusted
+scores estimation in generalized linear models with large data sets.
+\url{https://arxiv.org/abs/2307.07342}.
 }

@@ -1,0 +1,2 @@
+"n","p","model","condition","method","stage","message"
+1000,6,"Gaussian","well conditioned","llt","timing","less accurate nanosecond times to avoid potential integer overflows"

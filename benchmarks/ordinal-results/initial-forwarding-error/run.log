@@ -1,0 +1,22 @@
+ML-2000 complete; preflight eligible: FALSE 
+ML-20000 complete; preflight eligible: FALSE 
+meanBR-2000 complete; preflight eligible: TRUE 
+meanBR-20000 complete; preflight eligible: TRUE 
+     n method p K   seed         case         implementation eligible
+  2000     ML 3 4  86200      ML-2000                fastglm    FALSE
+  2000     ML 3 4  86200      ML-2000             MASS::polr    FALSE
+ 20000     ML 3 4 104200     ML-20000                fastglm    FALSE
+ 20000     ML 3 4 104200     ML-20000             MASS::polr    FALSE
+  2000 meanBR 3 4  86200  meanBR-2000                fastglm     TRUE
+  2000 meanBR 3 4  86200  meanBR-2000 WeightIt2.1.0 internal     TRUE
+ 20000 meanBR 3 4 104200 meanBR-20000                fastglm     TRUE
+ 20000 meanBR 3 4 104200 meanBR-20000 WeightIt2.1.0 internal     TRUE
+ repetitions.completed median.seconds min.seconds max.seconds
+                     0             NA          NA          NA
+                     0             NA          NA          NA
+                     0             NA          NA          NA
+                     0             NA          NA          NA
+                     4        0.00510      0.0049      0.0071
+                     4        0.02370      0.0215      0.0287
+                     4        0.04275      0.0389      0.0434
+                     4        0.19395      0.1902      0.2010

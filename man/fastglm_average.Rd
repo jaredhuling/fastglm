@@ -15,7 +15,7 @@ fastglm_average(
 )
 }
 \arguments{
-\item{object}{a fitted fastglm GLM, count model, or two-part model.}
+\item{object}{a fitted fastglm GLM, count, two-part, or ordinal model.}
 
 \item{newdata}{optional prediction data.}
 
@@ -29,12 +29,16 @@ of chunk index. Defaults to equal weights.}
 
 \item{vcov.}{optional covariance matrix. Count models require the full
 joint covariance, including theta when estimated; for robust inference use
-`fastglm_vcov(object, full=TRUE)`.}
+`fastglm_vcov(object, full=TRUE)`. Ordinal models require the full
+threshold--location covariance; supplied covariance matrices are supported
+only when no categories were collapsed.}
 
 \item{level}{confidence level for a normal interval.}
 
 \item{type}{prediction target: `"response"` for the marginal mean;
-`"count"` and `"zero"` are also available for two-component models.}
+`"count"` and `"zero"` are also available for two-component models.
+For ordinal fits, `"response"` or `"probability"` gives category
+probabilities and `"cumulative"` gives cumulative probabilities.}
 }
 \value{
 A data frame with estimate, standard error, and confidence limits.
@@ -43,4 +47,7 @@ A data frame with estimate, standard error, and confidence limits.
 Computes averages without retaining individual predictions. For a streaming
 fit, a contrast function can transform each design chunk before prediction.
 Uncertainty conditions on the supplied covariate distribution.
+For ordinal fits, returns an average for each category or cumulative
+probability. With collapsed categories, inference refers to the reduced
+category model and removed-category standard errors are unavailable.
 }

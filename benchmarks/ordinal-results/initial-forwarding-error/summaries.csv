@@ -1,0 +1,9 @@
+"n","method","p","K","seed","case","implementation","eligible","repetitions.completed","median.seconds","min.seconds","max.seconds"
+2000,"ML",3,4,86200,"ML-2000","fastglm",FALSE,0,NA,NA,NA
+2000,"ML",3,4,86200,"ML-2000","MASS::polr",FALSE,0,NA,NA,NA
+20000,"ML",3,4,104200,"ML-20000","fastglm",FALSE,0,NA,NA,NA
+20000,"ML",3,4,104200,"ML-20000","MASS::polr",FALSE,0,NA,NA,NA
+2000,"meanBR",3,4,86200,"meanBR-2000","fastglm",TRUE,4,0.00509999999999999,0.00489999999999999,0.0071
+2000,"meanBR",3,4,86200,"meanBR-2000","WeightIt2.1.0 internal",TRUE,4,0.0237,0.0215,0.0287
+20000,"meanBR",3,4,104200,"meanBR-20000","fastglm",TRUE,4,0.04275,0.0389,0.0434000000000001
+20000,"meanBR",3,4,104200,"meanBR-20000","WeightIt2.1.0 internal",TRUE,4,0.19395,0.1902,0.201
