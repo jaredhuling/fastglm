@@ -1,0 +1,72 @@
+"study","model","n","p","seed","method","reference","coefficient_error","mean_error","mean_scaled_error","covariance_relative_error","standard_error_relative_error","dispersion_relative_error","theta_relative_error","joint_covariance_relative_error","theta_se_conditional_relative_difference","converged","passed"
+"focused","Logistic",10000,100,123,"glm.fit","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"focused","Logistic",10000,100,123,"fastglm QR","glm.fit",1.30451205393456e-15,6.21724893790088e-15,3.10996004714191e-15,2.21806456891238e-07,1.11010949049532e-07,NA,NA,NA,NA,TRUE,TRUE
+"focused","Logistic",10000,100,123,"fastglm LLT","glm.fit",1.22124532708767e-15,6.55031584528842e-15,3.27656504966737e-15,2.21806455473408e-07,1.11010948454406e-07,NA,NA,NA,NA,TRUE,TRUE
+"focused","Logistic",10000,100,123,"fastglm LDLT","glm.fit",1.22124532708767e-15,6.43929354282591e-15,3.22103004882555e-15,2.21806455650637e-07,1.11010948454406e-07,NA,NA,NA,NA,TRUE,TRUE
+"focused","Logistic",10000,100,123,"fastglm auto","glm.fit",9.43689570931383e-16,5.21804821573824e-15,2.61014503956553e-15,2.21806455827866e-07,1.11010948652782e-07,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",1000,30,421001,"glm.fit","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",1000,30,421001,"glm.fit2","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",1000,30,421001,"speedglm.wfit","glm.fit",6.38378239159465e-16,9.99200722162641e-16,5.29495569637651e-16,2.78127358996499e-15,1.57170836413401e-15,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",1000,30,421001,"fastglm auto","glm.fit",7.21644966006352e-16,8.88178419700125e-16,4.70662728566801e-16,2.36605751646352e-08,1.2235681441933e-08,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",1000,30,421002,"glm.fit","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",1000,30,421002,"glm.fit2","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",1000,30,421002,"speedglm.wfit","glm.fit",2.63677968348475e-16,2.88657986402541e-15,8.71035452277247e-16,3.49336188487903e-15,1.88307609689268e-15,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",1000,30,421002,"fastglm auto","glm.fit",3.88578058618805e-16,2.88657986402541e-15,8.71035452277247e-16,1.47449390449822e-08,7.66901983143411e-09,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Negative binomial",1000,4,421003,"MASS::glm.nb","MASS::glm.nb",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Negative binomial",1000,4,421003,"fastglm_nb","MASS::glm.nb",1.13464793116691e-12,8.03823674289106e-12,2.013495181044e-12,1.34017097499491e-11,6.56469985957354e-12,NA,3.6689585494193e-12,6.43730251085117e-10,6.4978084112989e-05,TRUE,TRUE
+"scaling","Hurdle Poisson",1000,3,421004,"pscl::hurdle","pscl::hurdle",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Hurdle Poisson",1000,3,421004,"fastglm_hurdle","pscl::hurdle",7.8301809480763e-12,3.79061226851718e-11,8.04660350355518e-12,1.99968554268214e-07,1.78350086396869e-07,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Zero-inflated Poisson",1000,3,421005,"pscl::zeroinfl","pscl::zeroinfl",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Zero-inflated Poisson",1000,3,421005,"fastglm_zi","pscl::zeroinfl",2.35970625750426e-06,4.96967538987647e-06,1.16966710403055e-06,5.97845491417417e-06,2.98923192483587e-06,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth binomial-logit",1000,6,421006,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth binomial-logit",1000,6,421006,"fastglm auto","brglm2::brglmFit",5.69955194151817e-12,2.30448993221444e-12,1.28593738091147e-12,9.66389939998005e-13,4.83124225296454e-13,0,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Poisson-log",1000,6,421007,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Poisson-log",1000,6,421007,"fastglm auto","brglm2::brglmFit",5.83144643684363e-13,3.75899311677586e-12,1.13778496854479e-12,5.39011864645508e-13,4.11738562724023e-14,0,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gamma-log",1000,6,421008,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gamma-log",1000,6,421008,"fastglm auto","brglm2::brglmFit",1.69489838830472e-11,1.49392054282771e-10,4.23692260185954e-11,1.5288265371893e-14,7.72393370254813e-15,1.52574039143239e-14,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gaussian-identity",1000,6,421009,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gaussian-identity",1000,6,421009,"fastglm auto","brglm2::brglmFit",5.55111512312578e-17,3.33066907387547e-16,1.84544605718606e-16,5.50207185600217e-11,2.75103985910645e-11,5.50205963853236e-11,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",10000,30,430001,"glm.fit","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",10000,30,430001,"glm.fit2","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",10000,30,430001,"speedglm.wfit","glm.fit",4.44089209850063e-16,9.99200722162641e-16,5.70885868542506e-16,1.02835034684153e-14,5.17303515516476e-15,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",10000,30,430001,"fastglm auto","glm.fit",3.60822483003176e-16,7.7715611723761e-16,4.44022342199727e-16,7.2007150344219e-07,3.68704750751577e-07,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",10000,30,430002,"glm.fit","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",10000,30,430002,"glm.fit2","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",10000,30,430002,"speedglm.wfit","glm.fit",6.10622663543836e-16,7.105427357601e-15,2.05517710643037e-15,9.62840614333167e-15,4.82026173167212e-15,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",10000,30,430002,"fastglm auto","glm.fit",5.55111512312578e-16,4.88498130835069e-15,1.41293426067088e-15,3.85355155721997e-09,1.92677570634058e-09,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Negative binomial",10000,4,430003,"MASS::glm.nb","MASS::glm.nb",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Negative binomial",10000,4,430003,"fastglm_nb","MASS::glm.nb",1.36973765663129e-13,1.90514271025677e-12,4.5924372515522e-13,7.36902162009403e-12,3.70179715908263e-12,NA,1.18006062903869e-11,1.44404970272961e-07,7.46193032047042e-06,TRUE,TRUE
+"scaling","Hurdle Poisson",10000,3,430004,"pscl::hurdle","pscl::hurdle",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Hurdle Poisson",10000,3,430004,"fastglm_hurdle","pscl::hurdle",2.1395620553033e-09,2.2810171529386e-08,3.8639153125667e-09,2.09416116595997e-07,1.93310471023817e-07,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Zero-inflated Poisson",10000,3,430005,"pscl::zeroinfl","pscl::zeroinfl",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Zero-inflated Poisson",10000,3,430005,"fastglm_zi","pscl::zeroinfl",6.90094532157515e-07,1.99758717833731e-06,3.78667699176021e-07,9.66484716807025e-07,4.83242475271826e-07,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth binomial-logit",10000,6,430006,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth binomial-logit",10000,6,430006,"fastglm auto","brglm2::brglmFit",5.27106136516409e-13,6.23057161419638e-13,3.46530361852884e-13,1.63136459276589e-13,8.15981540809215e-14,0,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Poisson-log",10000,6,430007,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Poisson-log",10000,6,430007,"fastglm auto","brglm2::brglmFit",5.5303678303531e-13,4.83346696000808e-12,1.35635782461361e-12,5.34528323086974e-13,8.84149799230174e-14,0,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gamma-log",10000,6,430008,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gamma-log",10000,6,430008,"fastglm auto","brglm2::brglmFit",9.26503318510186e-12,8.86011264356057e-11,2.3621542554625e-11,7.18760126958763e-15,3.64688004128671e-15,1.74611160046305e-15,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gaussian-identity",10000,6,430009,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gaussian-identity",10000,6,430009,"fastglm auto","brglm2::brglmFit",4.44089209850063e-16,1.4432899320127e-15,6.8339822020145e-16,1.33040300953157e-11,6.6519329049655e-12,1.33072864659653e-11,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",100000,30,520001,"glm.fit","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",100000,30,520001,"glm.fit2","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",100000,30,520001,"speedglm.wfit","glm.fit",2.55351295663786e-15,2.99760216648792e-15,1.7293291316263e-15,2.9656466693625e-14,1.49297351464475e-14,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Logistic",100000,30,520001,"fastglm auto","glm.fit",1.38777878078145e-15,2.55351295663786e-15,1.47313222323722e-15,1.51823777059002e-07,7.62149749597773e-08,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",100000,30,520002,"glm.fit","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",100000,30,520002,"glm.fit2","glm.fit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",100000,30,520002,"speedglm.wfit","glm.fit",2.77555756156289e-15,2.53130849614536e-14,6.90911713063303e-15,2.34447873667976e-14,1.18937649773855e-14,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Poisson",100000,30,520002,"fastglm auto","glm.fit",1.346145417358e-15,1.82076576038526e-14,4.96971583080621e-15,2.05048053680091e-09,1.03063644275964e-09,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Negative binomial",100000,4,520003,"MASS::glm.nb","MASS::glm.nb",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Negative binomial",100000,4,520003,"fastglm_nb","MASS::glm.nb",9.77232184062871e-13,1.29412036642407e-11,3.12404891177472e-12,1.40275579256187e-10,1.97396298316306e-11,NA,9.0699858132765e-13,4.02680823341727e-09,7.64000371232709e-07,TRUE,TRUE
+"scaling","Hurdle Poisson",100000,3,520004,"pscl::hurdle","pscl::hurdle",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Hurdle Poisson",100000,3,520004,"fastglm_hurdle","pscl::hurdle",7.58542992668199e-07,8.36677223237103e-06,1.26747051598426e-06,2.845305236213e-07,2.35760353298114e-07,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Zero-inflated Poisson",100000,3,520005,"pscl::zeroinfl","pscl::zeroinfl",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Zero-inflated Poisson",100000,3,520005,"fastglm_zi","pscl::zeroinfl",8.88231516699145e-07,3.6550897304366e-06,5.18211263885804e-07,6.39722155936127e-07,1.94189698347757e-07,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth binomial-logit",100000,6,520006,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth binomial-logit",100000,6,520006,"fastglm auto","brglm2::brglmFit",6.13210315858481e-11,8.2454265637466e-11,4.67652271494789e-11,2.37826581884827e-11,1.18913215602675e-11,0,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Poisson-log",100000,6,520007,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Poisson-log",100000,6,520007,"fastglm auto","brglm2::brglmFit",6.49480469405717e-15,8.88178419700125e-14,2.33193078439955e-14,7.11731933525395e-15,1.73533833661567e-15,0,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gamma-log",100000,6,520008,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gamma-log",100000,6,520008,"fastglm auto","brglm2::brglmFit",3.07256997622574e-12,3.05888647744723e-11,7.2910199325137e-12,1.34971687441764e-14,6.7743011994077e-15,5.31963918675668e-15,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gaussian-identity",100000,6,520009,"brglm2::brglmFit","brglm2::brglmFit",0,0,0,0,0,NA,NA,NA,NA,TRUE,TRUE
+"scaling","Firth Gaussian-identity",100000,6,520009,"fastglm auto","brglm2::brglmFit",8.88178419700125e-16,2.80678258413047e-15,1.35950922798368e-15,1.72587848864035e-14,8.6897729885434e-15,1.03828771467582e-15,NA,NA,NA,TRUE,TRUE

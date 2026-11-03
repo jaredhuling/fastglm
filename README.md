@@ -1,161 +1,704 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file. -->
 
+[![CRAN
+version](https://www.r-pkg.org/badges/version/fastglm)](https://cran.r-project.org/package=fastglm)
+[![Downloads](https://cranlogs.r-pkg.org/badges/grand-total/fastglm)](https://cran.r-project.org/package=fastglm)
+
 # fastglm
 
-*fastglm* fits generalized linear models using C++ and RcppEigen. It
-accepts formulas or predictor matrices and provides methods for data
-held in ordinary memory, stored sparsely, accessed from a file, or read
-in blocks as needed.
+The *fastglm* package fits generalized linear models with an emphasis on
+**speed and numerical stability**. Its C++ fitting routines use
+*RcppEigen* for the repeated weighted regressions at the center of GLM
+estimation. Formula and matrix interfaces support familiar R workflows,
+including `summary()`, `coef()`, `vcov()`, `predict()`, `residuals()`,
+and `logLik()`.
 
-The development version also includes negative-binomial, hurdle,
-zero-inflated, zero-truncated, and two-part binomial/Gamma models. New
-interfaces and numerical changes are described in [NEWS](NEWS.md).
+Beyond standard GLMs, *fastglm* provides negative-binomial regression,
+hurdle and zero-inflated count models, zero-truncated regression,
+two-part models for positive continuous outcomes, and Firth mean bias
+reduction. The same package supports sparse matrices, mapped matrices,
+and data read in blocks, making it useful when either repeated fitting
+or data size becomes a computational constraint.
+
+See [NEWS](NEWS.md) for the package's version history.
+
+### Features
+
+- **Fast fitting with a choice of solvers.** Six matrix decomposition
+  methods and an automatic option allow the weighted regressions to be
+  adapted to the design. The timing comparisons below include numerical
+  agreement checks.
+- **Numerical safeguards.** Step-halving shortens unsuccessful updates
+  in ordinary GLM fitting. Pivoted QR identifies redundant predictors,
+  and explicit Cholesky methods report singular or poorly conditioned
+  systems.
+- **Bias reduction and additional response models.** Supported
+  likelihood families can use `firth=TRUE`; logistic Firth fits also
+  support profile intervals and joint tests. Dedicated count and
+  two-part models distinguish zero outcomes from positive responses.
+- **Large-data support.** Sparse `Matrix::dgCMatrix` designs,
+  `bigmemory::big.matrix` objects, and repeatable block readers support
+  different memory and storage needs. Optional Arrow and DBI adapters
+  read Parquet files and database results.
+- **Inference and prediction.** Model-based, robust, and clustered
+  standard errors are available, together with average predictions and
+  contrasts, bootstrap uncertainty, numerical diagnostics, and optional
+  broom methods.
+- **Repeated fits.** Prepared designs reuse common calculations across
+  outcomes. Batch fits support Firth adjustment and independent R
+  workers, with controls for retaining data and computing covariance
+  matrices.
+
+[Installation](#installation) · [Fitting a GLM](#fitting-a-glm) ·
+[Speed](#speed) · [Stability](#stability) · [Extended
+models](#extended-models) · [Benchmarks](#benchmarks)
 
 ## Installation
 
+Install the released version from CRAN or the development version from
+GitHub:
+
 ``` r
-install.packages("fastglm")               # released version
-pak::pak("jaredhuling/fastglm")           # development version
+install.packages("fastglm")
+pak::pak("jaredhuling/fastglm")
 ```
 
-## Fit and predict
+## Fitting a GLM
+
+`fastglm()` accepts a numeric design matrix, a response, and an R
+`family` object. In the `esoph` example, the two response columns
+contain the numbers of cases and controls within each covariate group:
 
 ``` r
 library(fastglm)
-set.seed(1)
-d <- data.frame(x=rnorm(300),exposure=runif(300,.5,2))
-d$y <- rpois(300,d$exposure*exp(.2+.4*d$x))
-fit <- fastglm(y~x+offset(log(exposure)),data=d,family=poisson(),method="auto")
-coef(fit)
-#> (Intercept)           x
-#>   0.1587314   0.4187835
-predict(fit,newdata=d[1:3,],type="response",se.fit=TRUE)
+data(esoph)
+X_esoph <- model.matrix(~ agegp + unclass(tobgp) + unclass(alcgp), data=esoph)
+y_esoph <- cbind(esoph$ncases, esoph$ncontrols)
+
+fit <- fastglm(X_esoph, y_esoph, family=binomial("cloglog"))
+summary(fit)
+#>
+#> Call:
+#> fastglm.default(x = X_esoph, y = y_esoph, family = binomial("cloglog"))
+#>
+#> Coefficients:
+#>                Estimate Std. Error z value Pr(>|z|)
+#> (Intercept)    -4.29199    0.29777 -14.414  < 2e-16 ***
+#> agegp.L         3.30677    0.63456   5.211 1.88e-07 ***
+#> agegp.Q        -1.35525    0.57311  -2.365    0.018 *
+#> agegp.C         0.20296    0.43334   0.468    0.640
+#> agegp^4         0.15056    0.29318   0.514    0.608
+#> agegp^5        -0.23425    0.17855  -1.312    0.190
+#> unclass(tobgp)  0.33276    0.07285   4.568 4.93e-06 ***
+#> unclass(alcgp)  0.80384    0.07538  10.664  < 2e-16 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#>
+#> (Dispersion parameter for binomial family taken to be 1)
+#>
+#>     Null deviance: 367.95  on 87  degrees of freedom
+#> Residual deviance:  96.95  on 80  degrees of freedom
+#> AIC: 228
+#>
+#> Number of Fisher Scoring iterations: 6
+```
+
+A formula and data frame can also be supplied directly. Formula fits
+retain factor coding, contrasts, and offsets for subsequent prediction:
+
+``` r
+fit_formula <- fastglm(
+    cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + unclass(alcgp),
+    data=esoph, family=binomial("cloglog"))
+predict(fit_formula, newdata=esoph[1:3,], type="response", se.fit=TRUE)
 #> $fit
-#>         1         2         3
-#> 1.5519430 2.3962107 0.5956959
+#>           1           2           3
+#> 0.002726560 0.003800978 0.005297651
 #>
 #> $se.fit
-#>          1          2          3
-#> 0.10413714 0.11213707 0.04453878
+#>           1           2           3
+#> 0.002746056 0.003805832 0.005300085
 #>
 #> $residual.scale
 #> [1] 1
 ```
 
-A prebuilt design matrix can be passed as `fastglm(X, y, family)`. The
-fitting method also works through `glm(..., method=fastglm_fit)`.
+The fitting function can still be supplied to base R’s `glm()`:
 
-`method="auto"` rescales predictor columns and selects a numerical
-method for the weighted regressions used during fitting. It first
-attempts Cholesky, then uses pivoted QR if it detects redundant or
-nearly redundant predictors. Both are matrix decompositions: ways of
-arranging the regression calculation to obtain a solution. The six
-explicit methods remain available by name or integer. Sparse and
-file-backed designs use Cholesky and require that each coefficient can
-be estimated separately from the others.
+``` r
+glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + unclass(alcgp),
+    data=esoph, family=binomial("cloglog"), method=fastglm_fit)
+```
+
+`fastglmPure()` exposes the lower-level fit without the final
+dispersion, AIC, and null-deviance calculations performed by
+`fastglm()`. For workflows that only need coefficient estimates,
+`fastglm(..., inference="none")` skips the final covariance calculation.
+Prepared designs, described below, are useful when several outcomes
+share the same predictors.
+
+## Decomposition methods
+
+Iteratively reweighted least squares (IRLS) fits a GLM through a
+sequence of weighted linear regressions. A matrix decomposition arranges
+each regression calculation so that its coefficients can be solved
+numerically. *fastglm* provides six explicit methods through *RcppEigen*
+(Bates and Eddelbuettel, 2013), together with an automatic choice:
+
+| Name | Integer | Decomposition or selection rule |
+|:---|:--:|:---|
+| `"qr"` | `0` | Column-pivoted Householder QR; the default for dense `fastglm()` fits |
+| `"qr_unpivoted"` | `1` | Householder QR without column pivoting |
+| `"llt"` | `2` | LLT Cholesky |
+| `"ldlt"` | `3` | LDLT Cholesky |
+| `"qr_full"` | `4` | Full-pivoted Householder QR |
+| `"svd"` | `5` | Bidiagonal divide-and-conquer singular value decomposition |
+| `"auto"` |  | Scale columns, attempt LLT, and fall back to pivoted QR for a problematic dense system |
+
+Pivoted QR can identify redundant columns, allowing aliased coefficients
+to be reported as `NA`. Cholesky works with the smaller predictor
+crossproduct and can be faster when the design is well conditioned,
+meaning that small numerical errors are not strongly amplified. Explicit
+Cholesky fits require full column rank and report an error when the
+information matrix is singular or ill conditioned. Sparse, mapped, and
+streaming fits currently use Cholesky methods.
+
+``` r
+fastglm(X, y, family=binomial(), method="qr")
+fastglm(X, y, family=binomial(), method="llt")
+fastglm(X, y, family=binomial(), method="auto")
+```
+
+## Speed
+
+The C++ implementation reduces repeated work in fitting and offers
+several ways to solve the weighted regressions. The resulting speed
+advantage depends on the family, the number of rows and columns, the
+solver, and the requested inference. The following comparison uses a
+logistic-regression design with 10,000 observations, 100 predictors, and
+25 timing repetitions per method.
+
+``` r
+set.seed(123)
+n.obs <- 10000
+n.vars <- 100
+X <- matrix(rnorm(n.obs*n.vars, sd=3), n.obs, n.vars)
+y <- as.numeric(drop(X[,1:25] %*% runif(25, -.1, .1)) > rnorm(n.obs))
+
+# Include coefficient covariance computation in each timed fit.
+with_covariance <- function(fit, raw_glm=FALSE) {
+    if (raw_glm) class(fit) <- c("glm", "lm")
+    fit$benchmark.covariance <- vcov(fit)
+    fit
+}
+microbenchmark::microbenchmark(
+    glm.fit = with_covariance(glm.fit(X, y, family=binomial(), intercept=FALSE,
+        control=glm.control(epsilon=1e-10, maxit=100)), raw_glm=TRUE),
+    fastglm_QR = with_covariance(fastglm(X, y, binomial(), method="qr", tol=1e-10)),
+    fastglm_LLT = with_covariance(fastglm(X, y, binomial(), method="llt", tol=1e-10)),
+    fastglm_LDLT = with_covariance(fastglm(X, y, binomial(), method="ldlt", tol=1e-10)),
+    fastglm_auto = with_covariance(fastglm(X, y, binomial(), method="auto", tol=1e-10)),
+    times=25L
+)
+```
+
+These measurements were recorded on **2026-11-03 (UTC)** with *fastglm*
+**0.1.3** and R version 4.5.1 (2025-06-13) on Darwin (arm64). The saved
+environment and individual timings accompany the benchmark script.
+
+<figure>
+<img src="man/figures/README-glm_bench-1.png"
+alt="Current logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians." />
+<figcaption aria-hidden="true">Current logistic-regression fitting times
+for glm.fit and four fastglm solvers. Lower times indicate faster
+fitting; the points mark medians.</figcaption>
+</figure>
+
+The table reports median elapsed time and the largest absolute
+differences from `glm.fit()` in coefficients and fitted probabilities.
+All methods must converge and pass the numerical comparison before they
+are timed. Timed fits include their ordinary covariance calculations.
+
+| Method | Median time (ms) | Max. coefficient difference | Max. fitted-probability difference |
+|:---|---:|:---|:---|
+| glm.fit | 288.47 | 0.00e+00 | 0.00e+00 |
+| fastglm QR | 101.13 | 1.30e-15 | 6.22e-15 |
+| fastglm LLT | 24.49 | 1.22e-15 | 6.55e-15 |
+| fastglm LDLT | 24.56 | 1.22e-15 | 6.44e-15 |
+| fastglm auto | 29.51 | 9.44e-16 | 5.22e-15 |
+
+For this design, the median time for `glm.fit()` was 288.5 ms, compared
+with 24.5 ms for LLT. The coefficient and fitted-probability differences
+are close to floating-point rounding error, so the faster calculation
+retains the same fitted model to numerical precision in this example.
+
+`benchmarks/benchmark-readme.R` regenerates these measurements, checks
+agreement, records the R environment, and builds the figures. The
+[broader comparison](#benchmarks) below evaluates scaling across model
+classes.
+
+## Stability
+
+Fitting can become difficult when a proposed coefficient update produces
+invalid fitted means or moves to a poorer likelihood value. For ordinary
+GLMs, *fastglm* uses a step-halving safeguard following Marschner
+(2011): an unsuccessful update is shortened until an acceptable step is
+found. Its initialization and solver choices also affect the subsequent
+iterations.
+
+A Gamma model using a square-root link provides one example. The
+simulated response is highly skewed, and the fitted mean uses a
+different functional form from the generating model. The calculation
+below uses the same iteration limit and nominal tolerance for both
+fitting methods:
+
+``` r
+set.seed(1)
+X_stability <- matrix(rnorm(10000*100), ncol=100)
+y_stability <- exp(.25*X_stability[,1] - .25*X_stability[,3] +
+                   .5*X_stability[,4] - .5*X_stability[,5] + rnorm(10000)) + .1
+gfit_fast <- fastglm(y_stability ~ X_stability, family=Gamma("sqrt"),
+                     tol=1e-8, maxit=100)
+gfit_base <- suppressWarnings(glm(y_stability ~ X_stability,
+    family=Gamma("sqrt"), control=glm.control(epsilon=1e-8, maxit=100)))
+data.frame(method=c("fastglm", "glm"),
+           converged=c(gfit_fast$converged, gfit_base$converged),
+           iterations=c(gfit_fast$iter, gfit_base$iter),
+           log_likelihood=c(as.numeric(logLik(gfit_fast)), as.numeric(logLik(gfit_base))))
+#>    method converged iterations log_likelihood
+#> 1 fastglm      TRUE         19      -16046.66
+#> 2     glm     FALSE        100      -16068.27
+```
+
+In this run, *fastglm* converged in 19 iterations, while glm reached its
+limit of 100 iterations without convergence.
+
+Convergence status matters when comparing likelihoods or runtimes: an
+unfinished fit is not an alternative estimate of the same quality. The
+[computational stability vignette](vignettes/fastglm.Rmd) includes
+comparisons with `glm2` and `speedglm`, and `fastglm_diagnostics()`
+reports convergence, the chosen solver, aliased coefficients, and
+numerical diagnostics for a fitted model.
+
+## Native C++ families
+
+For recognized family/link combinations, variance, mean derivatives,
+inverse links, and deviance contributions are evaluated directly in C++.
+This reduces repeated calls from the fitting loop back into R. The
+current native combinations are:
+
+| Family | Links |
+|:---|:---|
+| Gaussian | identity, log, inverse |
+| Binomial | logit, probit, complementary log-log, log |
+| Poisson | log, identity, square root |
+| Gamma | log, inverse, identity |
+| Inverse Gaussian | inverse squared (`1/mu^2`), log, identity, inverse |
+| Negative binomial with fixed theta | log, identity, square root |
+| Tweedie with specified variance power | log, identity, inverse, square root |
+
+Quasibinomial and quasipoisson fits share the corresponding mean and
+variance calculations, with dispersion handled separately. Family
+detection checks the supplied functions as well as the family name, so a
+modified family retains its R behavior. Other valid R family/link
+combinations use the supplied R functions. Firth bias reduction has a
+narrower supported scope, described below and in its vignette.
+
+## Sparse, big.matrix, and streaming designs
+
+Different storage formats suit different datasets:
+
+- **`Matrix::dgCMatrix`** stores only nonzero predictor entries. It can
+  be passed directly to `fastglm()`, for example when indicator
+  variables produce a mostly zero design.
+- **`bigmemory::big.matrix`** provides a mapped view of predictors,
+  which may be backed by a file. Fitting reads row blocks without making
+  a complete ordinary R-matrix copy.
+- **`fastglm_streaming()`** repeatedly requests manageable blocks from a
+  supplied function, called a callback. This supports data that need to
+  be read from an external source or constructed as fitting proceeds.
+
+The following example divides one dataset into four blocks and compares
+the fitted coefficients with an in-memory fit:
+
+``` r
+set.seed(321)
+n <- 4000
+X_stream <- cbind(1, matrix(rnorm(n*3), n, 3))
+y_stream <- rbinom(n, 1, plogis(X_stream %*% c(.2, .4, -.2, .3)))
+chunks <- function(k) {
+    rows <- ((k-1)*1000+1):(k*1000)
+    list(X=X_stream[rows,,drop=FALSE], y=y_stream[rows])
+}
+fit_stream <- fastglm_streaming(chunks, n_chunks=4, family=binomial(), tol=1e-10)
+fit_full <- fastglm(X_stream, y_stream, binomial(), method="llt", tol=1e-10)
+max(abs(coef(fit_stream)-coef(fit_full)))
+#> [1] 3.330669e-16
+```
+
+`fastglm_source()` combines a repeatable reader with formula
+information, keeping factor coding and transformations consistent across
+blocks. Optional `fastglm_source_arrow()` and `fastglm_source_dbi()`
+adapters read Parquet files and database queries. Each read must
+reproduce the same observations in the same order throughout fitting and
+inference.
+
+Predictions normally accumulate in a vector. When that output is too
+large, `sink` accepts a function that receives one block of results at a
+time and saves or summarizes it. Here only the mean prediction in each
+block is retained:
+
+``` r
+block_means <- numeric(4)
+predict(fit_stream, type="response",
+        sink=function(value, k) block_means[k] <<- mean(value))
+block_means
+#> [1] 0.5530598 0.5507933 0.5519271 0.5422198
+```
+
+Robust covariance and average predictions can also read the source in
+blocks. Clustered inference additionally stores a contribution vector
+for each group, and collecting all predictions still requires storage
+proportional to the number of observations. The [large-data
+vignette](vignettes/large-data-fastglm.Rmd) explains these memory and
+repeated-read costs, including the Firth calculations reused across
+passes.
+
+## Extended models
+
+### Negative-binomial regression
+
+`fastglm_nb()` estimates negative-binomial regression coefficients
+together with the size parameter theta, which determines variation
+beyond the Poisson variance. Dense fits alternate coefficient and theta
+updates in C++, in the spirit of `MASS::glm.nb()`:
+
+``` r
+set.seed(123)
+n <- 5000
+X_nb <- cbind(1, matrix(rnorm(n*3), n, 3))
+mu_nb <- exp(X_nb %*% c(.5, .4, -.2, .3))
+y_nb <- MASS::rnegbin(n, mu=mu_nb, theta=2)
+f_nb <- fastglm_nb(X_nb, y_nb)
+c(coef(f_nb), theta=f_nb$theta)
+#>         x1         x2         x3         x4      theta
+#>  0.4926199  0.3862258 -0.2200450  0.2991296  1.9923309
+```
+
+Sparse designs and repeatable sources are also supported.
+`vcov(f_nb, full=TRUE)` includes theta jointly with the coefficients,
+and `fastglm_confint_theta()` obtains a profile-likelihood interval by
+varying theta and refitting the coefficients. The [negative-binomial
+stability vignette](vignettes/nb-stability-fastglm.Rmd) examines
+challenging cases and the limit as the model approaches a Poisson
+distribution.
+
+### Hurdle models
+
+A hurdle model combines a binary regression for whether an outcome is
+positive with a zero-truncated regression for its positive count. It is
+useful when the occurrence of an event and its positive frequency need
+separate explanations. `fastglm_hurdle()` supports Poisson and
+negative-binomial count components, corresponding to the models in
+`pscl::hurdle()` (Zeileis, Kleiber, and Jackman, 2008).
+
+``` r
+set.seed(123)
+n <- 5000
+x1 <- rnorm(n)
+x2 <- rnorm(n)
+lambda <- exp(.7 + .4*x1 - .3*x2)
+is_positive <- rbinom(n, 1, plogis(-.4 + .5*x1 + .2*x2))
+positive_counts <- integer(n)
+for (i in seq_len(n)) {
+    repeat {
+        value <- rpois(1, lambda[i])
+        if (value > 0) { positive_counts[i] <- value; break }
+    }
+}
+hurdle_data <- data.frame(y=is_positive*positive_counts, x1=x1, x2=x2)
+f_h <- fastglm_hurdle(y ~ x1+x2 | x1+x2, data=hurdle_data, dist="poisson")
+coef(f_h)
+#> count_(Intercept)          count_x1          count_x2  zero_(Intercept)
+#>         0.6793788         0.4162547        -0.3137229        -0.3767285
+#>           zero_x1           zero_x2
+#>         0.4447325         0.1999711
+```
+
+The formula before `|` specifies the count predictors; the formula after
+it specifies the predictors of a positive outcome. These can differ.
+`fastglm_truncated()` fits the positive-count regression on its own when
+observations are sampled conditional on being above zero.
+
+### Zero-inflated models
+
+A zero-inflated model allows zeros to arise from both an additional zero
+component and the count distribution. This distinction changes the
+meaning of the binary component relative to a hurdle model.
+`fastglm_zi()` fits Poisson or negative-binomial versions using an
+expectation-maximization algorithm: it alternates estimating each
+observation’s component membership with updating the component
+regressions.
+
+``` r
+set.seed(123)
+n <- 5000
+x1 <- rnorm(n)
+x2 <- rnorm(n)
+lambda <- exp(.7 + .4*x1 - .3*x2)
+extra_zero <- rbinom(n, 1, plogis(-.4 + .5*x1 + .2*x2))
+zi_data <- data.frame(y=ifelse(extra_zero==1, 0L, rpois(n, lambda)), x1=x1, x2=x2)
+f_zi <- fastglm_zi(y ~ x1+x2, data=zi_data, dist="poisson")
+coef(f_zi)
+#> count_(Intercept)          count_x1          count_x2  zero_(Intercept)
+#>         0.6647396         0.3965153        -0.3407168        -0.3750258
+#>           zero_x1           zero_x2
+#>         0.4512788         0.1819040
+```
+
+Count-model predictions distinguish the overall response mean, the
+probability of zero, and the means of the fitted components. Prediction
+standard errors combine uncertainty from the relevant parameters. The
+[count-model vignette](vignettes/count-firth-fastglm.Rmd) develops the
+interpretation and inference examples.
+
+### Two-part models for continuous outcomes
+
+`fastglm_twopart()` combines a binary model for a positive outcome with
+a Gamma model for its positive amount. This is useful for outcomes such
+as expenditure that are exactly zero for some observations and positive
+and skewed for others:
+
+``` r
+set.seed(124)
+amounts <- data.frame(x=rnorm(1000))
+is_positive <- rbinom(1000, 1, plogis(-.3 + .4*amounts$x))
+amounts$y <- is_positive*rgamma(1000, shape=2, scale=exp(.5 + .3*amounts$x)/2)
+f_two <- fastglm_twopart(y ~ x, data=amounts)
+predict(f_two, newdata=amounts[1:3,], type="response", se.fit=TRUE)
+#> $fit
+#>         1         2         3
+#> 0.3117496 0.7217822 0.4539835
+#>
+#> $se.fit
+#> [1] 0.03289854 0.03731930 0.03323708
+```
+
+The overall mean combines the probability of a positive outcome with its
+conditional mean amount. The [semicontinuous-outcome
+vignette](vignettes/semicontinuous-fastglm.Rmd) explains this
+interpretation and illustrates average contrasts, clustered inference,
+and bootstrap uncertainty.
+
+### Firth bias-reduced GLMs
+
+`firth=TRUE` adjusts the estimating equations to reduce leading
+small-sample mean bias (Firth, 1993; Kosmidis and Firth, 2009). For
+logistic regression with a logit link and a full-rank design, the
+adjustment also yields finite coefficient estimates under separation,
+where predictors perfectly distinguish successes from failures (Kosmidis
+and Firth, 2021).
+
+``` r
+data(sex2, package="logistf")
+X_firth <- model.matrix(~ age+oc+vic+vicl+vis+dia, data=sex2)
+f_firth <- fastglm(X_firth, sex2$case, binomial(), firth=TRUE,
+                   tol=1e-10, maxit=200)
+coef(f_firth)
+#> (Intercept)         age          oc         vic        vicl         vis
+#>  0.12025405 -1.10598133 -0.06881673  2.26887465 -2.11140819 -0.78831695
+#>         dia
+#>  3.09601183
+```
+
+Mean bias reduction supports the implemented binomial, Poisson,
+Gaussian, Gamma, inverse-Gaussian, and fixed-theta negative-binomial
+family/link combinations. It is available for dense, sparse, mapped, and
+streaming fits using the solvers supported by each format. Gamma fitting
+also adjusts dispersion. Quasi-likelihood and Tweedie families are
+outside the current bias-reduction interface.
+
+For retained dense binomial-logit Firth fits, profile inference
+re-estimates the other coefficients as the coefficient of interest
+varies, retaining the full original bias-reduction penalty. This allows
+confidence intervals to reflect an asymmetric penalized likelihood:
+
+``` r
+profile_ci <- confint(f_firth, parm=c("age", "dia"), method="profile")
+cbind(estimate=coef(f_firth)[rownames(profile_ci)], profile_ci)
+#>      estimate      2.5 %     97.5 %
+#> age -1.105981 -1.9737884 -0.3074251
+#> dia  3.096012  0.7745682  8.0302935
+fastglm_profile_test(f_firth, parm=c("oc", "vic"), null=0)
+#>
+#>  Firth penalized likelihood ratio test (asymptotic chi-square reference)
+#>
+#> data:  f_firth
+#> penalized likelihood ratio = 28.458, df = 2, p-value = 6.615e-07
+#> alternative hypothesis: two.sided
+#> null values:
+#>  oc vic
+#>   0   0
+#> sample estimates:
+#>          oc         vic
+#> -0.06881673  2.26887465
+```
+
+The profile procedures support independent binomial counts and frequency
+weights. Their chi-square reference is an approximation, and failed
+optimizations return diagnostics. The [bias-reduction
+vignette](vignettes/firth-fastglm.Rmd) explains the assumptions and
+compares the results with `logistf` and `brglm2`.
 
 ## Inference and repeated fits
 
-Model methods include `summary()`, `vcov()`, `predict()`, `hatvalues()`,
-`confint()`, and `simulate()`. Formula fits retain the information
-needed to reconstruct factors, contrasts, and offsets. Optional broom
-methods provide tidy coefficient and model summaries.
+`summary()`, `vcov()`, and `predict(..., se.fit=TRUE)` provide
+model-based uncertainty. Robust covariance allows variation beyond the
+fitted variance model; clustered covariance additionally allows
+dependence within specified independent groups:
 
 ``` r
-vcov(fit,type="HC1")
-#>              (Intercept)            x
-#> (Intercept)  0.002755662 -0.001064252
-#> x           -0.001064252  0.002097868
-fastglm_average(fit)
-#>   estimate  std.error conf.low conf.high
-#> 1      1.6 0.07302967 1.456864  1.743136
-fastglm_diagnostics(fit)[c("converged","solver","standardized.score")]
-#> $converged
-#> [1] TRUE
-#>
-#> $solver
-#> [1] "llt"
-#>
-#> $standardized.score
-#> [1] 1.202168e-10
+vcov(fit_formula, type="HC1")
+vcov(fit_formula, cluster=group_id, type="HC1")
+
+# The sandwich interfaces are also available for ordinary GLMs.
+sandwich::vcovHC(fit_formula, type="HC0")
+sandwich::vcovCL(fit_formula, cluster=group_id, type="HC1")
 ```
 
-`fastglm_vcov()` calculates robust standard errors, including standard
-errors for observations correlated within independent groups. It
-processes predictor rows in blocks to limit working memory.
-`fastglm_prepare()` and `fastglm_batch()` reuse a common predictor
-design across outcomes. Gaussian identity fits reuse the matrix
-decomposition because it depends only on predictors and weights. With
-`firth=TRUE`, dense Gaussian-identity, Gamma-log, and
-Poisson-square-root batches can also reuse their decomposition and
-bias-adjustment setup when the default automatic solver or `"llt"` is
-selected. The `workers` argument allows independent fits to run
-concurrently in separate R processes.
+`fastglm_average()` reports average predictions or specified contrasts
+with uncertainty. `fastglm_bootstrap()` provides uncertainty by
+resampling and refitting, with failed fits recorded in its output. The
+supported covariance calculations depend on the model and estimation
+method; the [overview](vignettes/fastglm-overview.Rmd) and
+model-specific vignettes describe those choices.
 
-`inference="none"` skips the final covariance calculation.
-`retain.data=FALSE` omits the design and response from the returned
-object; methods that require them then need new data or a refit.
+### Repeated outcomes with a common design
 
-## Large data
+`fastglm_prepare()` records predictors and common weights or offsets.
+`fastglm_batch()` then fits several responses using that design:
 
-`fastglm_streaming()` fits a model by repeatedly reading manageable
-blocks of observations. A supplied function, called a callback, returns
-the rows requested by the fitting routine. `fastglm_source()` records
-this function and the formula information needed to keep factor coding
-and transformations consistent across blocks. Optional Arrow and DBI
-functions read blocks from Parquet files or database queries. Each read
-must return the same observations in the same order throughout fitting
-and inference.
+``` r
+set.seed(125)
+X_batch <- cbind(1, matrix(rnorm(1000*3), 1000, 3))
+mu_batch <- exp(X_batch %*% c(.2, .3, -.2, .1))
+Y_batch <- cbind(first=rgamma(1000, shape=2, scale=mu_batch/2),
+                 second=rgamma(1000, shape=4, scale=mu_batch/4))
+design <- fastglm_prepare(X_batch, firth=TRUE)
+batch <- fastglm_batch(design, Y_batch, family=Gamma("log"))
+sapply(batch, coef)
+#>                  first     second
+#> (Intercept)  0.1528201  0.2011954
+#> X2           0.2764287  0.2982692
+#> X3          -0.2119394 -0.1813117
+#> X4           0.1212752  0.1062714
+```
 
-Prediction normally collects its results into a single vector. If that
-vector would be too large, the `sink` argument accepts a function that
-receives one block of results at a time and saves or summarizes it. This
-avoids keeping every prediction in memory. Robust covariance and average
-predictions also reread the source, retaining block-sized data,
-coefficient-sized summaries, and small records of block sizes. Clustered
-inference additionally stores a contribution vector for each group.
+Gaussian-identity fits can reuse their matrix decomposition because it
+depends only on predictors and weights. Dense Firth batches with
+Gaussian-identity, Gamma-log, or Poisson-square-root links can also
+reuse their decomposition and bias-adjustment setup with the default
+automatic solver or explicit `"llt"`. Dispersion and response-dependent
+adjustments remain specific to each outcome. Changes to the predictors
+or weights invalidate the saved calculations.
 
-## Additional response models
+`workers` runs independent fits in separate R processes. This can reduce
+elapsed time when the fitting work is large enough to offset process
+startup and data-transfer costs. `inference="none"` skips covariance
+calculation, and `retain.data=FALSE` omits the design and response from
+the returned models; methods requiring those data then need new data or
+a refit.
 
-| Function | Model |
-|:---|:---|
-| `fastglm_nb()` | Negative-binomial regression with estimated theta |
-| `fastglm_hurdle()` | Binary positive-outcome model and truncated Poisson/NB counts |
-| `fastglm_zi()` | Zero-inflated Poisson/NB counts |
-| `fastglm_truncated()` | Positive counts conditional on exceeding zero |
-| `fastglm_twopart()` | Binary positive-outcome model and positive Gamma outcomes |
+## Benchmarks
 
-Count-model predictions distinguish the overall response mean, the
-probability of observing zero, and the mean described by each model
-component. Prediction standard errors combine uncertainty from the
-relevant fitted parameters, including the negative-binomial size
-parameter theta. `fastglm_confint_theta()` calculates an interval by
-varying theta and refitting the other coefficients, a procedure called
-profile likelihood.
+The following study compares model classes across increasing sample
+sizes: ordinary logistic and Poisson fits with `glm.fit`, `glm2`, and
+`speedglm`; negative-binomial regression with `MASS::glm.nb`; hurdle and
+zero-inflated Poisson models with `pscl`; and mean bias reduction with
+`brglm2` using `type="AS_mean"`. Ordinary and Firth GLMs use
+`method="auto"` in *fastglm*, while the dedicated count-model functions
+use their default solvers.
 
-`firth=TRUE` adjusts the estimating equations to reduce small-sample
-mean bias for the supported standard likelihood families. Gamma fitting
-also adjusts estimation of dispersion, which controls variation around
-the fitted mean. For dense binomial-logit Firth fits,
-`confint(fit, method="profile")` calculates profile penalized-likelihood
-intervals, and `fastglm_profile_test()` tests specified coefficient
-values jointly. These procedures support independent binomial counts and
-frequency weights and use an asymptotic chi-square reference. The
-bias-reduction vignette explains the adjustment, inference assumptions,
-and numerical diagnostics.
+For ordinary logistic and Poisson regression, the plotted reference is
+the fastest of the three comparison functions at each sample size. The
+other models use the named reference implementation. The ratio is
+reference time divided by *fastglm* time: a value of two means *fastglm*
+took half as long. Firth families are shown separately because their
+computational requirements differ.
 
-## Documentation and benchmarks
+<figure>
+<img src="man/figures/README-model-benchmarks.png"
+alt="Current fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm." />
+<figcaption aria-hidden="true">Current fitting-time ratios across sample
+sizes, with separate panels for maximum-likelihood models and Firth mean
+bias reduction. Values above one favor fastglm.</figcaption>
+</figure>
 
-The vignettes cover [estimation and
-inference](vignettes/fastglm-overview.Rmd), [large
-data](vignettes/large-data-fastglm.Rmd), [count
-models](vignettes/count-firth-fastglm.Rmd), [semicontinuous
-outcomes](vignettes/semicontinuous-fastglm.Rmd), and [bias
-reduction](vignettes/firth-fastglm.Rmd).
+The following table gives the comparison at 100,000 observations. Each
+median uses five timing repetitions after checking convergence and
+numerical agreement:
 
-`benchmarks/benchmark.R` runs accuracy-checked timing comparisons and
-records the R session. Performance depends on family, design dimensions,
-conditioning, decomposition, and requested inference. The static
-benchmark vignettes retain their original measurement dates; they are
-not measurements of every subsequent development change.
+| Model | Design columns | fastglm (ms) | Reference | Reference (ms) | Time ratio |
+|:---|---:|---:|:---|---:|---:|
+| Logistic | 30 | 65.79 | speedglm.wfit | 171.57 | 2.61 |
+| Poisson | 30 | 63.52 | speedglm.wfit | 227.86 | 3.59 |
+| Negative binomial | 4 | 150.27 | MASS::glm.nb | 575.59 | 3.83 |
+| Hurdle Poisson | 3 | 44.47 | pscl::hurdle | 615.00 | 13.83 |
+| Zero-inflated Poisson | 3 | 337.60 | pscl::zeroinfl | 1244.46 | 3.69 |
+| Firth binomial-logit | 6 | 44.13 | brglm2::brglmFit | 100.52 | 2.28 |
+| Firth Poisson-log | 6 | 41.54 | brglm2::brglmFit | 171.38 | 4.13 |
+| Firth Gamma-log | 6 | 33.21 | brglm2::brglmFit | 1045.05 | 31.47 |
+| Firth Gaussian-identity | 6 | 12.25 | brglm2::brglmFit | 265.66 | 21.68 |
+
+At this sample size, the largest time ratio is 31.5 for Firth Gamma-log.
+Gamma bias-reduction fits combine identical prior-weight
+contributions in the dispersion equation and reuse matrix calculations
+that remain constant during fitting. These reduce repeated distribution
+and matrix calculations while preserving the adjusted estimating
+equations.
+
+These are measurements of the displayed designs and software
+environment. The benchmark script records the individual timings,
+agreement checks, package versions, and fitting controls under
+`benchmarks/readme-results`. The comparisons include ordinary covariance
+calculation; profile confidence intervals and bootstrap refits are
+separate analyses. GLM and Firth comparisons use matrix interfaces, and
+both hurdle and zero-inflated comparisons use formulas. For
+negative-binomial regression, `fastglm_nb()` takes a matrix while
+`MASS::glm.nb()` also constructs its design from a formula. Different
+packages use different convergence criteria, so the numerical
+comparisons accompany the nominal tolerance settings.
+
+The [benchmark vignette](vignettes/benchmarks-fastglm.Rmd) retains the
+earlier, dated study, including sparse and mapped-matrix comparisons.
+Current scripts also cover numerical accuracy
+(`benchmarks/benchmark.R`), model and weight patterns
+(`benchmarks/benchmark-models.R`), large-data Firth fitting
+(`benchmarks/benchmark-firth-backends.R`), and prepared Firth batches
+(`benchmarks/benchmark-prepared-firth.R`).
+
+## References
+
+- Firth, D. (1993). Bias reduction of maximum likelihood estimates.
+  *Biometrika*, 80(1), 27–38.
+  [doi:10.1093/biomet/80.1.27](https://doi.org/10.1093/biomet/80.1.27)
+- Kosmidis, I. and Firth, D. (2009). Bias reduction in exponential
+  family nonlinear models. *Biometrika*, 96(4), 793–804.
+  [doi:10.1093/biomet/asp055](https://doi.org/10.1093/biomet/asp055)
+- Kosmidis, I. and Firth, D. (2021). Jeffreys-prior penalty, finiteness
+  and shrinkage in binomial-response generalized linear models.
+  *Biometrika*, 108(1), 71–82.
+  [doi:10.1093/biomet/asaa052](https://doi.org/10.1093/biomet/asaa052)
+- Marschner, I. C. (2011). glm2: Fitting generalized linear models with
+  convergence problems. *The R Journal*, 3(2), 12–15.
+  [doi:10.32614/RJ-2011-012](https://doi.org/10.32614/RJ-2011-012)
+- Bates, D. and Eddelbuettel, D. (2013). Fast and elegant numerical
+  linear algebra using the RcppEigen package. *Journal of Statistical
+  Software*, 52(5), 1–24.
+  [doi:10.18637/jss.v052.i05](https://doi.org/10.18637/jss.v052.i05)
+- Zeileis, A., Kleiber, C., and Jackman, S. (2008). Regression models
+  for count data in R. *Journal of Statistical Software*, 27(8), 1–25.
+  [doi:10.18637/jss.v027.i08](https://doi.org/10.18637/jss.v027.i08)
+
+Use `citation("fastglm")` for the package citation.
