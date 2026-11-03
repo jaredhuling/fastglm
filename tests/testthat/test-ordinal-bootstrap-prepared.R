@@ -94,7 +94,7 @@ test_that("parametric boundary diagnostics are preserved during setup reuse", {
         expect_identical(cache$builds,1L)
     }
     expect_warning(result <- fastglm_bootstrap(fit,R=3L,type="parametric",seed=833),
-                   "original fit has empty categories")
+                   "original fit has empty interior categories")
     expect_false(result$inference.available)
     expect_true(all(is.finite(result$replicates)))
     expect_true(all(is.na(result$std.error)))

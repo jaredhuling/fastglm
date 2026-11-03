@@ -178,11 +178,24 @@
     diagnostics$collapsed.categories <- I(lapply(collapsed,function(z)object$levels[z]))
     diagnostics$empty.end.categories <- I(lapply(endpoints,function(z)object$levels[z]))
     failed <- !diagnostics$converged | !diagnostics$statistic.ok
-    available <- !length(original.empty) && !any(failed) && all(has.pattern) && !any(has.empty)
+    endpoint.meanbr.parametric <- isTRUE(object$firth) && type=="parametric"
+    original.interior.empty <- object$category$collapsed.categories
+    has.interior.empty <- vapply(collapsed,length,integer(1))>0L
+    category.support <- if(endpoint.meanbr.parametric) {
+        !length(original.interior.empty) && !any(has.interior.empty)
+    } else !length(original.empty) && !any(has.empty)
+    available <- category.support && !any(failed) && all(has.pattern)
     reason <- character()
-    if(length(original.empty)) reason <- c(reason,"the original fit has empty categories")
-    if(any(has.empty)) reason <- c(reason,"one or more refits have empty categories")
-    if(any(changed,na.rm=TRUE)) reason <- c(reason,"the empty-category pattern changed")
+    if(endpoint.meanbr.parametric) {
+        if(length(original.interior.empty))
+            reason <- c(reason,"the original fit has empty interior categories")
+        if(any(has.interior.empty))
+            reason <- c(reason,"one or more refits have empty interior categories")
+    } else {
+        if(length(original.empty)) reason <- c(reason,"the original fit has empty categories")
+        if(any(has.empty)) reason <- c(reason,"one or more refits have empty categories")
+        if(any(changed,na.rm=TRUE)) reason <- c(reason,"the empty-category pattern changed")
+    }
     if(any(failed)) reason <- c(reason,"one or more refits or statistics failed or did not converge")
     se <- setNames(rep(NA_real_,length(estimate)),names(estimate))
     ci <- matrix(NA_real_,length(estimate),2L,dimnames=list(names(estimate),c("lower","upper")))

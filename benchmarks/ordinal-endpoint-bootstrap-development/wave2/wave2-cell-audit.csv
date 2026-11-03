@@ -1,0 +1,13 @@
+"scenario","n","datasets.expected","datasets.observed"
+"moderate_control",120,500,500
+"moderate_control",240,500,500
+"moderate_control",60,500,500
+"rare_lower_endpoint",120,500,500
+"rare_lower_endpoint",240,500,500
+"rare_lower_endpoint",60,500,500
+"rare_lower_two_predictors",180,500,500
+"rare_lower_two_predictors",360,500,500
+"rare_lower_two_predictors",90,500,500
+"rare_upper_endpoint",120,500,500
+"rare_upper_endpoint",240,500,500
+"rare_upper_endpoint",60,500,500

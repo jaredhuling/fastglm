@@ -1,0 +1,10 @@
+       grouped_coefficients grouped_covariance direct_meat reversal_statistic
+ML               2.0393e-12         4.1179e-14  5.8265e-13         1.7764e-14
+meanBR           2.7134e-13         5.2666e-15  3.1264e-13         7.9936e-15
+       minimum_eigenvalue
+ML              0.0022193
+meanBR          0.0022144
+
+Algebra and representation checks only; no size or power study.
+[1] ‘0.1.3’
+[1] "R version 4.5.1 (2025-06-13)"

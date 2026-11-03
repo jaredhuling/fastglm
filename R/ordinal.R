@@ -587,6 +587,11 @@ fitted.fastglm_ordinal <- function(object,...) predict(object,...)
         }
     },object$block.size)
     estimate <- estimate/total; gradient <- gradient/total
+    .ordinal_average_summary(object,estimate,gradient,vcov.,level,type)
+}
+
+.ordinal_average_summary <- function(object,estimate,gradient,vcov.,level,type) {
+    q <- length(object$effective$alpha); p <- length(object$beta)
     if(is.null(vcov.)) covariance <- object$working$covariance
     else {
         if(object$boundary)

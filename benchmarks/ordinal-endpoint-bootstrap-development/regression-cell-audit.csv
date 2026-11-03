@@ -1,0 +1,10 @@
+"scenario","n","rows"
+"rare_lower_endpoint",60,250
+"sparse_interior",60,250
+"moderate_control",60,250
+"rare_lower_endpoint",120,250
+"sparse_interior",120,250
+"moderate_control",120,250
+"rare_lower_endpoint",240,250
+"sparse_interior",240,250
+"moderate_control",240,250

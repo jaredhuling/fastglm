@@ -89,6 +89,34 @@ contact_difference
 
 This contrast compares high with low contact while keeping the observed distribution of influence and housing type fixed. Each estimate is a difference in the probability of the named satisfaction category. The differences sum to zero because both sets of probabilities sum to one. These are model-based descriptive comparisons, with uncertainty conditional on the supplied predictor distribution. The reported intervals use a normal approximation and are not truncated to the range of possible probability differences.
 
+## Continuous predictors and local changes
+
+A continuous predictor also permits a local comparison: the rate at which each category probability changes as the predictor increases. This derivative is often called a marginal effect. Its size can vary across observations even when the model has a common slope, because the probabilities depend on the other predictor values. Averaging these derivatives summarizes the local association over a specified predictor distribution.
+
+The housing predictors above are categorical, so their associations are described by discrete contrasts. For a continuous example, we generate an ordered severity outcome from an exposure and a binary group. The quadratic term allows the association with exposure to vary over its range, and the interaction allows that association to differ between groups.
+
+```{r ordinal-marginal-effects}
+set.seed(110303)
+severity <- data.frame(exposure=runif(500,0,3),
+                       group=factor(rep(c("A","B"),250)))
+location <- with(severity,.7*exposure-.15*exposure^2+
+                  .35*exposure*(group=="B"))
+severity$outcome <- ordered(cut(location+rlogis(nrow(severity)),
+    c(-Inf,.3,1.6,Inf),labels=c("low","moderate","high")))
+severity_fit <- fastglm_ordinal(
+    outcome~exposure+I(exposure^2)+exposure:group,
+    data=severity,firth=TRUE)
+exposure_effect <- fastglm_marginal_effects(
+    severity_fit,"exposure",newdata=severity)
+exposure_effect
+```
+
+The estimates are changes in probability per unit of exposure, averaged over these observations. Multiplying an estimate by a small exposure change approximates the corresponding average probability difference. A full one-unit change can differ appreciably from this local approximation. The effects sum to zero across categories because increases in some category probabilities are accompanied by decreases in others. A positive common slope shifts probability toward higher outcomes, but an intermediate category can gain or lose probability depending on the predictor values.
+
+For formula fits, `variable="exposure"` refers to the original exposure variable. The calculation differentiates its linear term, squared term, and interaction together, using the fitted prediction basis. Matrix fits differentiate the named design column while holding the other columns fixed. Formula derivatives use small centered changes in the predictor; terms must be smooth within each row, and both perturbed values must lie in the transformation's domain. Expressions that recompute sample summaries, such as `I(exposure-mean(exposure))`, are unsupported. Supplying `newdata` is necessary when the original predictor cannot be recovered from the stored model frame. Offsets are held fixed, including offsets expressed as functions of the selected predictor.
+
+The intervals account for uncertainty in the thresholds and slopes through the delta method. They condition on the supplied predictor distribution and averaging weights; frequency weights must be supplied again when those frequencies define the desired average. The `vcov.` argument accepts an alternative coefficient covariance, including an eligible robust covariance from `fastglm_vcov()`. These intervals use a first-order normal approximation and may be unreliable in small or extreme samples.
+
 # Sampling uncertainty and model assumptions
 
 The expected-information standard errors above use the fitted categorical distribution to describe sampling variation. Each observation also contributes a score, which measures how its log likelihood changes as the parameters change. A sandwich covariance combines the observed sensitivity of the score equations with the variation in these individual contributions, as described by [Zeileis (2006)](https://www.jstatsoft.org/article/view/v016i09). This permits a first-order variance estimate under distributional misspecification, provided observations are independent and the fitted parameter has a regular, identifiable population target. Robust standard errors do not correct an incorrect mean or probability model.
@@ -118,7 +146,7 @@ table(boot_location$diagnostics$converged)
 
 This calculation assumes the fitted response model. The alternatives `type="pairs"` and `type="cluster"` resample stored rows or whole independent clusters, respectively. Row resampling preserves the counts and weights attached to each sampled row; it therefore describes a different sampling scheme from resampling individual residents represented by frequencies. The analyst must choose the scheme that corresponds to the study design. Formula transformations and factor coding are held fixed during refitting. Because parametric draws also preserve predictor rows and total row frequencies, their refits reuse design preparation within each worker process. Each replicate still has its own starting thresholds, optimization, and convergence assessment.
 
-Each replicate records convergence, empty categories, and changes in the category boundary. Failed fits and changes to the declared category representation can invalidate a regular bootstrap interpretation. The implementation retains finite point replicates and their diagnostics, while standard errors and intervals are unavailable if a fit fails or the original sample or any replicate has an empty category. The percentile intervals illustrated here also have simulation error; a larger number of replicates is appropriate when reporting interval endpoints.
+Each replicate records convergence, the empty categories, and whether its empty-category pattern differs from the original. An endpoint is the lowest or highest category of the ordered scale. Mean bias reduction keeps its threshold finite when an endpoint is empty, so the same set of model parameters remains available. For a parametric bootstrap with mean bias reduction, the package returns uncertainty summaries when the original fit and every refit contain all interior categories and all refits and statistics succeed. An empty interior category ties adjacent thresholds and changes the fitted model, so the package withholds summaries in that case. Endpoint-empty refits remain visible in the diagnostics. This exception applies only to parametric bootstrap with mean bias reduction; maximum likelihood and pairs or cluster resampling retain the stricter category requirement. Percentile intervals also have simulation error, so a substantive analysis needs enough refits to estimate the interval endpoints adequately.
 
 # Simulated responses
 
@@ -242,7 +270,21 @@ coef(endpoint_fit,component="threshold")
 predict(endpoint_fit)
 ```
 
-Bias reduction retains finite thresholds in this example. Maximum likelihood would require an infinite threshold for the empty endpoint, and the current finite-threshold interface reports that case as unsupported.
+Bias reduction retains finite thresholds in this example. Maximum likelihood would require an infinite threshold for the empty endpoint, which the current implementation does not estimate.
+
+The same endpoint can be empty in a parametric bootstrap refit. This does not remove a threshold from the mean-bias-reduced model. The bootstrap can report uncertainty when the interior category remains represented in every refit:
+
+```{r}
+endpoint_boot <- fastglm_bootstrap(
+    endpoint_fit,R=199,type="parametric",seed=61105)
+endpoint_boot$inference.available
+c(endpoint_empty_refits=mean(lengths(
+    endpoint_boot$diagnostics$empty.end.categories)>0),
+  interior_empty_refits=mean(endpoint_boot$diagnostics$boundary))
+endpoint_boot$conf.int
+```
+
+For this seed, the low category is empty in some refits, but the middle category is present in every refit. The threshold parameters keep the same meaning throughout this bootstrap. If the middle category were absent, its two neighboring thresholds would coincide and the package would withhold the full-model intervals.
 
 An empty interior category has a different consequence. We fit the reduced category model and restore the declared labels with coincident thresholds and zero probability for the removed category. This boundary interpretation follows the empty-category discussion in Kosmidis (2014, Section 8.3).
 
