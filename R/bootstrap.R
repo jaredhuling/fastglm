@@ -56,14 +56,17 @@
 #'   row must have a cluster identifier. Ordinal results record `rng.kind`
 #'   alongside replicate seeds for reproducing the random-number stream.
 #'
-#'   Ordinal point replicates and category diagnostics are retained even when a
+#'   Ordinal point replicates and category diagnostics are retained when a
 #'   refit has empty categories or fails to converge, provided the statistic can
-#'   be evaluated. Any empty category in the original fit or a replicate makes
-#'   the ordinal uncertainty summaries unavailable, including when the pattern
-#'   of empty categories changes. This conservative policy avoids silently
-#'   treating a change in the fitted category model as regular full-parameter
-#'   inference. It also applies to custom statistics; point replicates remain
-#'   available for inspection.
+#'   be evaluated. For mean bias reduction with `type = "parametric"`, empty
+#'   endpoint categories are allowed in the original fit and its refits because
+#'   the fitted thresholds remain finite. The original fit and every refit must
+#'   retain all interior categories, and every refit and statistic must
+#'   succeed. An empty interior category ties adjacent thresholds and changes
+#'   the fitted model, so uncertainty summaries remain unavailable. The same
+#'   empty-category restriction applies to maximum likelihood and to pairs or
+#'   cluster resampling. These rules also apply to custom statistics; point
+#'   replicates remain available for inspection.
 #'
 #'   Every failed or nonconverged refit is recorded. If any replicate fails,
 #'   standard errors and intervals are returned as missing rather than silently

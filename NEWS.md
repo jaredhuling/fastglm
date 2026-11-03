@@ -2,6 +2,10 @@
 
 ## Model interfaces and inference
 
+* Added `fastglm_marginal_effects()` for average derivatives of ordinal category
+  and cumulative probabilities with respect to a continuous predictor. Formula
+  interactions and smooth transformations are differentiated together, with
+  offsets held fixed and delta-method uncertainty for thresholds and slopes.
 * Added ordinal prediction assessment with logarithmic and ranked probability
   scores, cumulative calibration plots, and descriptive threshold-specific
   slope comparisons. Frequency counts contribute individual-observation scores,
@@ -24,8 +28,11 @@
   positive-category requirements. Supplied covariance matrices can be used
   in summaries, tidy output, and average probability contrasts.
 * Added ordinal pairs, cluster, and parametric refitting bootstraps. Replicate
-  diagnostics retain failures and category changes; regular uncertainty
-  summaries are unavailable when refits fail or categories are empty.
+  diagnostics retain failures and category changes. Uncertainty summaries
+  remain unavailable when refits fail or an interior category is empty. For
+  mean bias-reduced parametric bootstraps, empty endpoints are allowed when
+  all interior categories remain represented in the original fit and every
+  refit.
 
 * Added cumulative-logit proportional-odds models through `fastglm_ordinal()`,
   with formula and matrix interfaces, maximum likelihood and mean bias

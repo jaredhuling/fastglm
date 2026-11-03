@@ -135,6 +135,27 @@ test_that("ordinal bootstrap retains boundary point replicates without regular i
     expect_true(all(is.na(p$std.error)))
 })
 
+test_that("only meanBR parametric bootstrap allows empty endpoints", {
+    x <- matrix(numeric(),1L,0L)
+    counts <- matrix(c(0,20,20),1L,dimnames=list(NULL,c("a","b","c")))
+    fit <- fastglm_ordinal(x,counts,firth=TRUE)
+    result <- fastglm_bootstrap(fit,R=29L,type="parametric",seed=110304)
+    expect_true(result$inference.available)
+    expect_true(any(lengths(result$diagnostics$empty.end.categories)>0L))
+    expect_true(all(lengths(result$diagnostics$collapsed.categories)==0L))
+    expect_true(all(is.finite(result$std.error)))
+    expect_true(all(is.finite(result$conf.int)))
+    expect_warning(pairs <- fastglm_bootstrap(fit,R=2L,type="pairs",seed=110304),
+                   "original fit has empty categories")
+    expect_false(pairs$inference.available)
+    counts[1,1] <- 1
+    ml <- fastglm_ordinal(x,counts)
+    expect_warning(boot.ml <- fastglm_bootstrap(ml,R=29L,type="parametric",seed=110304),
+                   "uncertainty summaries are unavailable")
+    expect_false(boot.ml$inference.available)
+    expect_true(any(!boot.ml$diagnostics$converged))
+})
+
 test_that("ordinal ML endpoint failures and nonconvergence remain visible", {
     x <- matrix(numeric(),2L,0L)
     counts <- rbind(c(0,4,2),c(2,4,0));colnames(counts) <- c("a","b","c")
