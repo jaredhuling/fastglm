@@ -116,7 +116,7 @@ cbind(estimate=boot_location$estimate,
 table(boot_location$diagnostics$converged)
 ```
 
-This calculation assumes the fitted response model. The alternatives `type="pairs"` and `type="cluster"` resample stored rows or whole independent clusters, respectively. Row resampling preserves the counts and weights attached to each sampled row; it therefore describes a different sampling scheme from resampling individual residents represented by frequencies. The analyst must choose the scheme that corresponds to the study design. Formula transformations and factor coding are held fixed during refitting.
+This calculation assumes the fitted response model. The alternatives `type="pairs"` and `type="cluster"` resample stored rows or whole independent clusters, respectively. Row resampling preserves the counts and weights attached to each sampled row; it therefore describes a different sampling scheme from resampling individual residents represented by frequencies. The analyst must choose the scheme that corresponds to the study design. Formula transformations and factor coding are held fixed during refitting. Because parametric draws also preserve predictor rows and total row frequencies, their refits reuse design preparation within each worker process. Each replicate still has its own starting thresholds, optimization, and convergence assessment.
 
 Each replicate records convergence, empty categories, and changes in the category boundary. Failed fits and changes to the declared category representation can invalidate a regular bootstrap interpretation. The implementation retains finite point replicates and their diagnostics, while standard errors and intervals are unavailable if a fit fails or the original sample or any replicate has an empty category. The percentile intervals illustrated here also have simulation error; a larger number of replicates is appropriate when reporting interval endpoints.
 
@@ -190,6 +190,44 @@ if(requireNamespace("broom",quietly=TRUE)) {
 ```
 
 The `.fitted` matrix column from `augment()` contains one probability per category, and `.class` gives the category with the largest fitted probability. Training-data augmentation also includes probability-scale residuals. Supplied covariance matrices can be used in `summary()`, `broom::tidy()`, and average probability contrasts, while the prediction standard errors in this example use expected Fisher information.
+
+# Prediction quality and the common-slope assumption
+
+Good numerical convergence establishes that the estimating equations were solved, but the fitted probabilities also need to describe the outcome distribution adequately. Prediction scores summarize discrepancies, while calibration plots indicate where those discrepancies occur. Assessing predictions on observations excluded from fitting helps distinguish predictive performance from agreement with the training sample.
+
+The housing data contain frequency rows rather than individual records. We randomly divide the residents represented by each row between training and evaluation samples, retaining the same predictor coding. The evaluation frequencies are used only after fitting the training model.
+
+```{r}
+set.seed(61105)
+training_frequency <- rbinom(nrow(housing),housing$Freq,.7)
+evaluation_frequency <- housing$Freq-training_frequency
+training_fit <- fastglm_ordinal(
+    Sat~Infl+Type+Cont,data=housing,weights=training_frequency,
+    firth=TRUE,tol=1e-10)
+assessment <- fastglm_ordinal_assess(
+    training_fit,newdata=housing,y=housing$Sat,
+    weights=evaluation_frequency,bins=5)
+assessment$scores
+```
+
+The logarithmic loss penalizes assigning small probabilities to observed categories. The ranked probability score sums the squared discrepancies between predicted cumulative probabilities and the individual indicators of an outcome at or below each threshold. Both are proper prediction scores: their expected values are minimized by the true outcome probabilities; see [Gneiting and Raftery (2007)](https://doi.org/10.1198/016214506000001437). Smaller values indicate better predictions for the same outcome scale and evaluation observations. The normalized ranked probability score divides by the number of thresholds, placing its possible values between zero and one. For grouped counts, the calculation averages individual scores; squaring the difference from a grouped observed proportion would measure a different quantity.
+
+```{r, fig.width=7, fig.height=3.5}
+plot(assessment,type="calibration")
+```
+
+For each threshold, the calibration plot compares the mean predicted probability with the observed proportion at or below that threshold. The bins are equal-width intervals of predicted probability, chosen without reference to the observed outcomes. Points near the diagonal indicate agreement within those bins. Sparse bins can vary considerably, and the frequency column in `assessment$calibration` records the number of observations represented. Empty bins have unavailable observed proportions. These plots are descriptive and can conceal discrepancies within a bin; they do not establish that the full conditional probability model is correct.
+
+The proportional-odds model also assumes that a predictor has the same slope at each threshold. A descriptive comparison fits a separate binary model for an outcome above each threshold, retaining the original predictors and offsets. As illustrated in [Harrell's ordinal regression chapter](https://hbiostat.org/rmsc/ordinal), differences between estimates at different cutoffs can arise from sampling variation even when proportional odds holds. The auxiliary models use mean bias reduction to permit finite estimates in many sparse or separated samples.
+
+```{r, fig.width=8, fig.height=8}
+assumption_check <- fastglm_ordinal_assess(fit_br,proportional.odds=TRUE)
+head(assumption_check$proportional.odds[
+    ,c("category","term","estimate","common.estimate","converged")])
+plot(assumption_check,type="proportional.odds")
+```
+
+Positive auxiliary slopes describe shifts toward higher outcomes, matching the ordinal model's sign convention. Dashed horizontal lines mark the common slopes from the ordinal fit, and the vertical intervals are separate 95% normal intervals for the auxiliary slopes. Variation across thresholds can suggest that the common-slope restriction deserves further investigation. The estimates use overlapping observations and are correlated, so their displayed uncertainty cannot be interpreted as independent tests of equal slopes. The comparison is a graphical diagnostic, with failed threshold fits retained in the returned table; it does not provide a formal proportional-odds test.
 
 # Empty categories and the declared outcome scale
 

@@ -2,6 +2,13 @@
 
 ## Model interfaces and inference
 
+* Added ordinal prediction assessment with logarithmic and ranked probability
+  scores, cumulative calibration plots, and descriptive threshold-specific
+  slope comparisons. Frequency counts contribute individual-observation scores,
+  and supplied evaluation outcomes are kept separate from fitting.
+* Ordinal parametric bootstraps now reuse response-independent design setup
+  within each process while retaining replicate-specific fitting diagnostics.
+
 * Added `fastglm_ordinal_prepare()` and `fastglm_ordinal_batch()` for repeated
   ordinal responses on a common predictor design. Saved centering, scaling,
   and rank checks are reused when predictors and effective row frequencies
@@ -121,6 +128,11 @@
   propagates source errors. Grouped-binomial likelihoods retain trial totals.
 
 ## Performance and verification
+
+* Added a reproducible ordinal uncertainty development study comparing
+  model-based, sandwich, and bootstrap intervals across small samples, rare
+  categories, correlated predictors, and independent clusters. Results retain
+  unavailable intervals and failures separately from conditional coverage.
 
 * Added a reproducible ordinal development study spanning small samples,
   rare categories, separation, correlated predictors, grouped frequencies,
