@@ -27,7 +27,9 @@ writes each result block. Its return value is ignored.}
 \item{...}{additional prediction arguments.}
 }
 \value{
-Predictions, or invisibly the number of chunks delivered to a sink.
+Predictions (a `fastglm_prediction` list when `se.fit=TRUE`), or
+  invisibly the number of chunks delivered to a sink. Each prediction block
+  supplied to a sink uses the same structure. See \link{fastglm-prediction-methods}.
 }
 \description{
 Prediction for a large dataset can create a vector too large to retain in

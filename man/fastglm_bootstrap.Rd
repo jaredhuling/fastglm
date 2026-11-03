@@ -17,7 +17,7 @@ fastglm_bootstrap(
   control = list()
 )
 
-\method{print}{fastglm_bootstrap}(x, ...)
+\method{print}{fastglm_bootstrap}(x, digits = max(3L, getOption("digits") - 3L), ...)
 }
 \arguments{
 \item{object}{a converged fastglm model with its design and response retained,
@@ -49,6 +49,8 @@ from the calling session's global environment.}
 such as `tol`, `maxit`, or `outer.maxit`.}
 
 \item{x}{a `fastglm_bootstrap` result.}
+
+\item{digits}{number of significant digits used for printing.}
 
 \item{...}{further arguments passed to `print()`.}
 }

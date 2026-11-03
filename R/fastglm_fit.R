@@ -164,3 +164,6 @@ vcov.fastglmFit <- function(object, ...) vcov.fastglm(object, ...)
 summary.fastglmFit <- function(object, ...) {
     summary.fastglm(object, ...)
 }
+
+#' @exportS3Method print fastglmFit
+print.fastglmFit <- function(x,...) print.fastglm(x,...)

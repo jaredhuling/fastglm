@@ -34,6 +34,10 @@ For computations that already provide a design matrix, `fastglm(X, y, family)` a
 
 The optional `broom::tidy()` and `broom::glance()` methods provide coefficient and model summaries for matrix and formula fits. Standard `update()` calls can revise a formula specification.
 
+Fitted models and their summaries use a common display: a model heading, labeled coefficient tables, and fitting status. The same conventions apply to count, ordinal, streaming, and bootstrap results. `print(summary(fit),digits=3)` controls displayed precision while retaining the original numerical values. Predictions requested with `se.fit=TRUE` place estimates beside their standard errors. Their `as.data.frame()` method provides a numeric table for reporting; the original vectors or matrices remain accessible as `$fit` and `$se.fit`. For matrix predictions, the table identifies both the observation row and the component, such as an outcome category. The display shows at most 20 rows by default, with `max.rows=Inf` displaying the full table.
+
+Hypothesis-test results from `fastglm_profile_test()` and `fastglm_po_test()` use a compact statistic, degrees-of-freedom, and p-value table. Their `as.data.frame()` and optional `broom::tidy()` methods provide full-precision numeric results for reports, with `details=TRUE` adding method descriptions and explanations for unavailable tests.
+
 For grouped binomial observations, the response can be a two-column matrix containing successes and failures. Trial totals enter the initialized prior weights and are retained for likelihood calculations. Observations with zero prior weight do not contribute to the residual degrees of freedom.
 
 # Choosing a decomposition
@@ -54,10 +58,12 @@ For ordinary matrices, `method="auto"` first rescales predictor columns to reduc
 A coefficient is aliased when its effect cannot be distinguished from a combination of other predictor effects. Pivoted QR reports such coefficients as `NA`; fitted means use the remaining coefficients. Predictions for new rows require the same dependence between predictors as in the fitted design. Sparse matrices and matrices accessed through `bigmemory` support the Cholesky methods and require that all coefficient effects can be distinguished.
 
 ```{r}
-fastglm_diagnostics(fit)[c("converged","solver","rank","standardized.score")]
+fastglm_diagnostics(fit)
 ```
 
 A convergence flag means that the algorithm met its stopping rule. It does not establish that every coefficient is well estimated. `fastglm_diagnostics()` reports the score, which measures how much the fitting objective would change with a small coefficient change, and a standardized version that accounts for predictor scale. A large standardized score can indicate incomplete numerical convergence. Fitted probabilities near zero or one and nearly redundant predictors also warrant examination. In logistic regression, predictors that perfectly separate successes from failures can prevent finite maximum likelihood estimates; the bias-reduction vignette describes an alternative for that setting.
+
+The rank is the number of coefficient effects that can be estimated separately. A large covariance condition number indicates that some combinations of coefficient estimates are much less precisely determined than others; it depends on the predictor units as well as their dependence. The boundary flag records whether the fit encountered a parameter boundary. An unavailable check is labeled explicitly. `as.data.frame(fastglm_diagnostics(fit))` retains numeric and logical fields for further analysis, with vector-valued details, such as the individual coefficient scores, stored in list columns.
 
 # Inference and population averages
 

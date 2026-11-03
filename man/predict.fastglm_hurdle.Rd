@@ -46,7 +46,8 @@ summarized without retaining predictions for all observations in memory.}
 \item{...}{additional arguments.}
 }
 \value{
-Predicted values, or a list with `fit` and `se.fit`.
+Predicted values, or a `fastglm_prediction` list with `fit` and
+  `se.fit`; see \link{fastglm-prediction-methods} for printing and table extraction.
 }
 \description{
 The response prediction averages over both components. For hurdle models,

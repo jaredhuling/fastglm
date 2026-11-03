@@ -133,8 +133,7 @@ A bootstrap provides another way to assess uncertainty by repeatedly resampling 
 ```{r}
 boot <- fastglm_bootstrap(hurdle,R=49,seed=547,type="cluster",cluster=cluster,
     statistic=function(model) mean(predict(model,newdata=d,type="response")))
-boot$conf.int
-table(boot$diagnostics$converged)
+boot
 ```
 
 The small number of repetitions keeps this example short; a substantive analysis needs enough repetitions to estimate the interval endpoints adequately. The reported percentile interval uses quantiles of the refitted statistics. Failed or nonconverged refits are recorded in `diagnostics`, and uncertainty summaries are withheld if any refit fails. The procedure keeps the original predictor coding and transformations fixed, so it does not repeat model selection or data-dependent preprocessing.

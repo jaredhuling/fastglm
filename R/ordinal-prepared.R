@@ -29,7 +29,7 @@
 fastglm_ordinal_prepare <- function(x,data=NULL,weights=NULL,offset=NULL,levels=NULL,firth=FALSE) {
     if(!is.logical(firth) || length(firth)!=1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE",call.=FALSE)
-    call <- match.call(); tt <- mf <- NULL; coding <- NULL
+    call <- match.call(); tt <- mf <- NULL; coding <- assignment <- NULL
     if(inherits(x,"formula")) {
         if(length(x)!=2L) stop("ordinal preparation requires a one-sided formula",call.=FALSE)
         frame.call <- call[c(1L,match(c("x","data","weights","offset"),names(call),0L))]
@@ -41,6 +41,7 @@ fastglm_ordinal_prepare <- function(x,data=NULL,weights=NULL,offset=NULL,levels=
         tt <- attr(mf,"terms")
         x <- model.matrix(tt,mf)
         coding <- attr(x,"contrasts")
+        assignment <- attr(x,"assign"); assignment <- assignment[assignment!=0L]
         x <- x[,attr(x,"assign")!=0L,drop=FALSE]
         weights <- model.weights(mf)
         offset <- model.offset(mf)
@@ -66,7 +67,7 @@ fastglm_ordinal_prepare <- function(x,data=NULL,weights=NULL,offset=NULL,levels=
     }
     offset <- as.numeric(offset); weights <- as.numeric(weights)
     structure(list(x=x,weights=weights,offset=offset,levels=levels,firth=firth,
-        terms=tt,xlevels=if(!is.null(tt)) stats::.getXlevels(tt,mf),contrasts=coding,
+        terms=tt,design.assign=assignment,xlevels=if(!is.null(tt)) stats::.getXlevels(tt,mf),contrasts=coding,
         design.columns=colnames(x),offset.expression=if(!is.null(tt)) call$offset,
         offset.reference=offset,cache=new.env(parent=emptyenv()),call=call),
         class="fastglm_ordinal_design")
@@ -90,7 +91,7 @@ fastglm_ordinal.fastglm_ordinal_design <- function(x,y,weights=NULL,offset=NULL,
     if(!is.environment(design$cache)) design$cache <- new.env(parent=emptyenv())
     fit <- .ordinal_fit_matrix(design$x,y,weights,offset,levels,firth,tol,maxit,block.size,
                                control,design$cache)
-    for(key in c("terms","xlevels","contrasts","offset.expression")) fit[[key]] <- design[[key]]
+    for(key in c("terms","design.assign","xlevels","contrasts","offset.expression")) fit[[key]] <- design[[key]]
     fit$prediction.offset.required <- !is.null(design$terms) && !original.offset
     fit$prepared <- TRUE
     fit$call <- match.call(); fit$call[[1L]] <- quote(fastglm::fastglm_ordinal)

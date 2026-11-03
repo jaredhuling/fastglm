@@ -334,18 +334,15 @@ logLik.fastglm_hurdle <- function(object, ...)
 #' @exportS3Method print fastglm_hurdle
 print.fastglm_hurdle <- function(x, digits = max(3, getOption("digits") - 3), ...)
 {
-    cat("\nfastglm_hurdle:  hurdle ", x$dist, " | ", x$zero.dist,
-        " (link = ", x$link, ")\n", sep = "")
-    cat("Call:  "); print(x$call)
-    cat("\nCount model coefficients (zero-truncated", x$dist, "):\n")
-    print(format(x$coefficients$count, digits = digits), quote = FALSE)
-    cat("\nZero-hurdle model coefficients (binomial,", x$link, "):\n")
-    print(format(x$coefficients$zero, digits = digits), quote = FALSE)
-    if (x$dist == "negbin")
-        cat("\nTheta:", format(x$theta, digits = digits),
-            "  SE:", format(x[["SE.theta"]], digits = digits), "\n")
-    cat("Log-likelihood:", format(x$loglik, digits = digits),
-        "on", length(x$coefficients$count) + length(x$coefficients$zero) +
-             (x$dist == "negbin"), "df\n")
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header("Hurdle regression",x$call)
+    .fastglm_print_field("Count distribution",x$dist)
+    .fastglm_print_field("Binary link",x$link)
+    .fastglm_print_coefficients(x$coefficients$count,"Count coefficients",digits,...)
+    .fastglm_print_coefficients(x$coefficients$zero,"Occurrence coefficients",digits,...)
+    cat("\n")
+    if(x$dist=="negbin") .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    .fastglm_print_field("Log-likelihood",format(x$loglik,digits=digits))
+    .fastglm_print_convergence(x$converged,x$em_iter)
     invisible(x)
 }

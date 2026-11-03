@@ -11,7 +11,9 @@
 #' @param sink optional function of `(value, chunk_index)` that processes or
 #'   writes each result block. Its return value is ignored.
 #' @param ... additional prediction arguments.
-#' @returns Predictions, or invisibly the number of chunks delivered to a sink.
+#' @returns Predictions (a `fastglm_prediction` list when `se.fit=TRUE`), or
+#'   invisibly the number of chunks delivered to a sink. Each prediction block
+#'   supplied to a sink uses the same structure. See \link{fastglm-prediction-methods}.
 #' @export
 predict.fastglm_stream <- function(object,newdata=NULL,type=c("link","response"),
                                    se.fit=FALSE,dispersion=NULL,sink=NULL,...) {
@@ -26,13 +28,13 @@ predict.fastglm_stream <- function(object,newdata=NULL,type=c("link","response")
         if(se.fit) {
             se <- sqrt(pmax(0,dispersion*.model_quad_rows(z$X,object)))
             if(type=="response") se <- se*abs(object$family$mu.eta(eta))
-            value <- list(fit=value,se.fit=se,residual.scale=sqrt(dispersion))
+            value <- .fastglm_prediction(list(fit=value,se.fit=se,residual.scale=sqrt(dispersion)),type)
         }
         if(is.null(sink)) out[[k]] <- value else sink(value,k)
     }
     if(!is.null(sink)) return(invisible(n))
-    if(se.fit) list(fit=unlist(lapply(out,`[[`,"fit"),use.names=FALSE),
-                    se.fit=unlist(lapply(out,`[[`,"se.fit"),use.names=FALSE),residual.scale=sqrt(dispersion))
+    if(se.fit) .fastglm_prediction(list(fit=unlist(lapply(out,`[[`,"fit"),use.names=FALSE),
+                    se.fit=unlist(lapply(out,`[[`,"se.fit"),use.names=FALSE),residual.scale=sqrt(dispersion)),type)
     else unlist(out,use.names=FALSE)
 }
 
@@ -299,10 +301,14 @@ summary.fastglm_stream <- function(object,dispersion=NULL,...) {
 }
 
 #' @exportS3Method print summary.fastglm_stream
-print.summary.fastglm_stream <- function(x,...) {
-    print(x$call);cat("\n");printCoefmat(x$coefficients,...)
-    cat("\nDispersion:",x$dispersion,"\nDeviance:",x$deviance,
-        "on",x$df.residual,"residual degrees of freedom\nAIC:",x$aic,
-        "\nObservations:",x$nobs,"\nConverged:",x$converged,"\n")
+print.summary.fastglm_stream <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header("Streaming generalized linear model",x$call)
+    .fastglm_print_coefficients(x$coefficients,digits=digits,...)
+    cat("\n")
+    .fastglm_print_table(data.frame(Dispersion=x$dispersion,Deviance=x$deviance,
+        `Residual df`=x$df.residual,AIC=x$aic,check.names=FALSE),digits)
+    .fastglm_print_field("Observations",x$nobs)
+    .fastglm_print_convergence(x$converged)
     invisible(x)
 }

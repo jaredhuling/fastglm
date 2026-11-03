@@ -32,7 +32,9 @@ unavailable for class predictions or unconverged fits.}
 \item{...}{further arguments; currently unused.}
 }
 \value{
-A vector or matrix, or a list with \code{fit} and \code{se.fit}.
+A vector or matrix, or a \code{fastglm_prediction} list with
+  \code{fit}, \code{se.fit}, and \code{covariance.scope}. See
+  \link{fastglm-prediction-methods} for printing and table extraction.
 }
 \description{
 Predict ordinal probabilities or outcome categories

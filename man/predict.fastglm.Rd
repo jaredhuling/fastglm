@@ -39,6 +39,11 @@ If omitted, that returned by \code{summary} applied to the object is used.}
 
 \item{...}{further arguments passed to or from other methods.}
 }
+\value{
+Predictions on the requested scale. With `se.fit=TRUE`, a
+  `fastglm_prediction` list containing `fit`, `se.fit`, and `residual.scale`;
+  see \link{fastglm-prediction-methods} for printing and table extraction.
+}
 \description{
 Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
 }
