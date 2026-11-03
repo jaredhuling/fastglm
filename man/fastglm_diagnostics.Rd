@@ -7,7 +7,7 @@
 fastglm_diagnostics(object)
 }
 \arguments{
-\item{object}{a fitted fastglm GLM.}
+\item{object}{a fitted fastglm GLM or ordinal model.}
 }
 \value{
 A list of numerical diagnostics. \code{score} omits division by the
@@ -26,6 +26,11 @@ retained only when the existing constant-information calculation supplies
 the required leverages, including prepared Gamma-log fits. Other compact
 fits and older objects without stored adjusted scores report them as
 unavailable rather than computing an additional covariance matrix.
+QR source fits also report their remaining predictor change, joint
+information-scaled score per positive-weight row, and dispersion checks.
+Ordinal diagnostics report scores in the effective category model after
+any empty interior categories have been collapsed; their standardized
+score is calculated in the centered/scaled fitting coordinates.
 }
 \description{
 Reports whether the iteration converged, which coefficients can be estimated

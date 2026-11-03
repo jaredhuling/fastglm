@@ -16,10 +16,11 @@ and `logLik()`.
 
 Beyond standard GLMs, *fastglm* provides negative-binomial regression,
 hurdle and zero-inflated count models, zero-truncated regression,
-two-part models for positive continuous outcomes, and Firth mean bias
-reduction. The same package supports sparse matrices, mapped matrices,
-and data read in blocks, making it useful when either repeated fitting
-or data size becomes a computational constraint.
+two-part models for positive continuous outcomes, proportional-odds
+regression for ordered outcomes, and Firth mean bias reduction. The
+package also supports sparse matrices, mapped matrices, and data read in
+blocks for supported model classes, making it useful when either repeated
+fitting or data size becomes a computational constraint.
 
 See [NEWS](NEWS.md) for the package's version history.
 
@@ -156,13 +157,16 @@ numerically. *fastglm* provides six explicit methods through *RcppEigen*
 | `"svd"` | `5` | Bidiagonal divide-and-conquer singular value decomposition |
 | `"auto"` |  | Scale columns, attempt LLT, and fall back to pivoted QR for a problematic dense system |
 
-Pivoted QR can identify redundant columns, allowing aliased coefficients
+For dense fits, pivoted QR can identify redundant columns, allowing aliased coefficients
 to be reported as `NA`. Cholesky works with the smaller predictor
 crossproduct and can be faster when the design is well conditioned,
 meaning that small numerical errors are not strongly amplified. Explicit
 Cholesky fits require full column rank and report an error when the
-information matrix is singular or ill conditioned. Sparse, mapped, and
-streaming fits currently use Cholesky methods.
+information matrix is singular or ill conditioned. Sparse and mapped fits
+use Cholesky methods. Streaming GLMs also support `method="qr"`, which
+updates a triangular factor across blocks for greater stability with
+nearly redundant predictors. Streaming fits require full column rank
+with either method.
 
 ``` r
 fastglm(X, y, family=binomial(), method="qr")
@@ -490,6 +494,17 @@ conditional mean amount. The [semicontinuous-outcome
 vignette](vignettes/semicontinuous-fastglm.Rmd) explains this
 interpretation and illustrates average contrasts, clustered inference,
 and bootstrap uncertainty.
+
+### Ordered outcomes
+
+`fastglm_ordinal()` fits cumulative-logit proportional-odds models through a
+formula or a dense matrix, with optional mean bias reduction using
+`firth=TRUE`. Predictions describe category probabilities, and
+`fastglm_average()` summarizes their averages and contrasts. Empty interior
+categories are mapped back to the declared scale with coincident thresholds
+and explicit uncertainty limits. The [ordinal-outcome
+vignette](vignettes/ordinal-fastglm.Rmd) explains the coefficient convention,
+frequency weights, category boundaries, and model-based inference.
 
 ### Firth bias-reduced GLMs
 

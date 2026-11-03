@@ -21,10 +21,10 @@ predict.fastglm_stream <- function(object,newdata=NULL,type=c("link","response")
     if(!is.null(sink) && !is.function(sink)) stop("'sink' must be a function",call.=FALSE)
     n <- object$source$n_chunks; out <- if(is.null(sink)) vector("list",n)
     for(k in seq_len(n)) {
-        z <- object$fetch(k); eta <- drop(z$X%*%coef(object))+z$offset
+        z <- object$fetch(k); eta <- .model_eta(z$X,object,z$offset)
         value <- if(type=="response") object$family$linkinv(eta) else eta
         if(se.fit) {
-            se <- sqrt(pmax(0,.quad_rows(z$X,dispersion*object$cov.unscaled)))
+            se <- sqrt(pmax(0,dispersion*.model_quad_rows(z$X,object)))
             if(type=="response") se <- se*abs(object$family$mu.eta(eta))
             value <- list(fit=value,se.fit=se,residual.scale=sqrt(dispersion))
         }
@@ -41,7 +41,7 @@ residuals.fastglm_stream <- function(object,type=c("deviance","pearson","working
     type <- match.arg(type); n <- object$source$n_chunks
     out <- if(is.null(sink)) vector("list",n)
     for(k in seq_len(n)) {
-        z <- object$fetch(k); eta <- drop(z$X%*%coef(object))+z$offset
+        z <- object$fetch(k); eta <- .model_eta(z$X,object,z$offset)
         mu <- object$family$linkinv(eta); r <- z$y-mu
         r <- switch(type,response=r,working=r/object$family$mu.eta(eta),
             pearson=r*sqrt(z$weights/object$family$variance(mu)),
@@ -61,9 +61,9 @@ logLik.fastglm_stream <- function(object,...) {
 hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
     out <- if(is.null(sink)) vector("list",model$source$n_chunks)
     for(k in seq_len(model$source$n_chunks)) {
-        z <- model$fetch(k); eta <- drop(z$X%*%coef(model))+z$offset; mu <- model$family$linkinv(eta)
+        z <- model$fetch(k); eta <- .model_eta(z$X,model,z$offset); mu <- model$family$linkinv(eta)
         w <- z$weights*model$family$mu.eta(eta)^2/model$family$variance(mu)
-        h <- w*.quad_rows(z$X,model$cov.unscaled)
+        h <- w*.model_quad_rows(z$X,model)
         if(is.null(sink)) out[[k]] <- h else sink(h,k)
     }
     if(is.null(sink)) unlist(out,use.names=FALSE) else invisible(model$source$n_chunks)
@@ -97,6 +97,8 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #' @export
 fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
                           cadjust=TRUE,block.size=8192L,full=FALSE) {
+    if(inherits(object,"fastglm_ordinal"))
+        stop("robust covariance is not implemented for ordinal fits; vcov() provides model-based uncertainty",call.=FALSE)
     if(.count_inference_model(object)) {
         if(missing(type)) type <- "HC0"
         type <- match.arg(type,c("HC0","HC1","HC2","HC3"))
@@ -108,18 +110,20 @@ fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
     good <- !is.na(coef(object)); b <- coef(object)[good]
     if(is.null(object$cov.unscaled)) stop("covariance information was not retained",call.=FALSE)
     bread <- object$cov.unscaled[good,good,drop=FALSE]
+    use.qr <- .has_stream_qr(object)
     p <- length(b); meat <- matrix(0,p,p); clusters <- new.env(hash=TRUE,parent=emptyenv())
     n <- 0L
     add <- function(x,y,w,off,groups=NULL) {
         if(!all(good)) x <- x[,good,drop=FALSE]
-        eta <- drop(x%*%b)+off; mu <- object$family$linkinv(eta)
+        eta <- .model_eta(x,object,off); mu <- object$family$linkinv(eta)
         dm <- object$family$mu.eta(eta); vv <- object$family$variance(mu)
         score <- w*dm*(y-mu)/vv; score[w==0] <- 0
         n <<- n+sum(w>0)
+        if(use.qr) x <- .stream_qr_transform(x,object$qr)
         if(is.null(groups)) {
             omega <- score^2
             if(type %in% c("HC2","HC3")) {
-                h <- w*dm^2/vv*.quad_rows(x,bread)
+                h <- w*dm^2/vv*(if(use.qr) rowSums(x^2) else .quad_rows(x,bread))
                 if(any(h>=1 & w>0)) stop("HC2/HC3 undefined for unit leverage",call.=FALSE)
                 omega <- omega/(1-h)^(if(type=="HC2") 1 else 2)
             }
@@ -155,7 +159,11 @@ fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
         if(cadjust) meat <- meat*g/(g-1)
         if(type=="HC1") meat <- meat*(n-1)/(n-p)
     } else if(type=="HC1") meat <- meat*n/(n-p)
-    v <- bread%*%meat%*%bread; dimnames(v) <- list(names(b),names(b))
+    if(use.qr) {
+        transform <- .stream_qr_transform(diag(p),object$qr)
+        v <- transform%*%meat%*%t(transform)
+    } else v <- bread%*%meat%*%bread
+    dimnames(v) <- list(names(b),names(b))
     if(!all(good)) { full <- matrix(NA_real_,length(good),length(good),dimnames=rep(list(names(coef(object))),2L)); full[good,good] <- v; v <- full }
     v
 }
@@ -167,7 +175,10 @@ vcovHC.fastglm_stream <- function(object,type=c("HC3","HC2","HC1","HC0"),...) fa
 #' Computes averages without retaining individual predictions. For a streaming
 #' fit, a contrast function can transform each design chunk before prediction.
 #' Uncertainty conditions on the supplied covariate distribution.
-#' @param object a fitted fastglm GLM, count model, or two-part model.
+#' For ordinal fits, returns an average for each category or cumulative
+#' probability. With collapsed categories, inference refers to the reduced
+#' category model and removed-category standard errors are unavailable.
+#' @param object a fitted fastglm GLM, count, two-part, or ordinal model.
 #' @param newdata optional prediction data.
 #' @param contrast optional function transforming a design matrix. For models
 #'   with two components, the function receives and returns a list with design
@@ -177,10 +188,14 @@ vcovHC.fastglm_stream <- function(object,type=c("HC3","HC2","HC1","HC0"),...) fa
 #'   of chunk index. Defaults to equal weights.
 #' @param vcov. optional covariance matrix. Count models require the full
 #'   joint covariance, including theta when estimated; for robust inference use
-#'   `fastglm_vcov(object, full=TRUE)`.
+#'   `fastglm_vcov(object, full=TRUE)`. Ordinal models require the full
+#'   threshold--location covariance; supplied covariance matrices are supported
+#'   only when no categories were collapsed.
 #' @param level confidence level for a normal interval.
 #' @param type prediction target: `"response"` for the marginal mean;
 #'   `"count"` and `"zero"` are also available for two-component models.
+#'   For ordinal fits, `"response"` or `"probability"` gives category
+#'   probabilities and `"cumulative"` gives cumulative probabilities.
 #' @returns A data frame with estimate, standard error, and confidence limits.
 #' @export
 fastglm_average <- function(object,newdata=NULL,contrast=NULL,weights=NULL,
@@ -188,31 +203,49 @@ fastglm_average <- function(object,newdata=NULL,contrast=NULL,weights=NULL,
     if(anyNA(coef(object))) stop("average prediction inference requires a full-rank fit",call.=FALSE)
     if(length(level)!=1L || !is.finite(level) || level<=0 || level>=1)
         stop("'level' must lie between zero and one",call.=FALSE)
+    if(inherits(object,"fastglm_ordinal"))
+        return(.ordinal_average(object,newdata,contrast,weights,vcov.,level,type))
     if(.count_inference_model(object))
         return(.count_average(object,newdata,contrast,weights,vcov.,level,type))
     if(!identical(type,"response")) stop("GLM averages use type = 'response'",call.=FALSE)
-    if(is.null(vcov.)) vcov. <- vcov(object)
+    use.qr <- is.null(vcov.) && .has_stream_qr(object)
+    if(is.null(vcov.) && !use.qr) vcov. <- vcov(object)
     total <- estimate <- 0; gradient <- numeric(length(coef(object)))
-    add <- function(x,off,w) {
+    add <- function(x,off,w,contrast.x=NULL) {
         if(is.null(w)) w <- rep(1,nrow(x))
         if(length(w)!=nrow(x) || any(!is.finite(w)|w<0)) stop("invalid averaging weights",call.=FALSE)
-        eta <- drop(x%*%coef(object))+off; mu <- object$family$linkinv(eta)
-        g <- x*object$family$mu.eta(eta)
+        eta <- .model_eta(x,object,off); mu <- object$family$linkinv(eta)
+        g <- (if(use.qr) .stream_qr_transform(x,object$qr) else x)*object$family$mu.eta(eta)
         if(!is.null(contrast)) {
-            xx <- contrast(x)
+            xx <- if(is.null(contrast.x)) contrast(x) else contrast.x
             if(!identical(dim(xx),dim(x))) stop("contrast must preserve design dimensions",call.=FALSE)
-            ee <- drop(xx%*%coef(object))+off
+            ee <- .model_eta(xx,object,off)
             mu <- object$family$linkinv(ee)-mu
-            g <- xx*object$family$mu.eta(ee)-g
+            g <- (if(use.qr) .stream_qr_transform(xx,object$qr) else xx)*object$family$mu.eta(ee)-g
         }
         total <<- total+sum(w); estimate <<- estimate+sum(w*mu)
         gradient <<- gradient+colSums(w*g)
     }
     if(inherits(object,"fastglm_stream") && is.null(newdata)) {
         for(k in seq_len(object$source$n_chunks)) { z <- object$fetch(k); add(z$X,z$offset,if(!is.null(weights)) weights(k)) }
-    } else { d <- .prediction_design(object,newdata); add(d$x,d$offset,weights) }
+    } else {
+        d <- .prediction_design(object,newdata)
+        if(use.qr) {
+            if(!is.null(weights) && (length(weights)!=nrow(d$x) || any(!is.finite(weights)|weights<0)))
+                stop("invalid averaging weights",call.=FALSE)
+            # Apply a user transformation once to the supplied design, preserving
+            # transformations that depend on all rows. Densify only each block.
+            xx <- if(!is.null(contrast)) contrast(d$x)
+            if(!is.null(contrast) && !identical(dim(xx),dim(d$x)))
+                stop("contrast must preserve design dimensions",call.=FALSE)
+            .design_blocks(d$x,function(z,i) add(z,d$offset[i],if(!is.null(weights)) weights[i],
+                if(!is.null(contrast)) xx[i,,drop=FALSE]))
+        } else add(d$x,d$offset,weights)
+    }
     if(total<=0) stop("averaging weights must have positive total",call.=FALSE)
-    gradient <- gradient/total; se <- sqrt(drop(crossprod(gradient,vcov.%*%gradient)))
+    gradient <- gradient/total
+    se <- if(use.qr) sqrt(object$dispersion*sum(gradient^2)) else
+        sqrt(drop(crossprod(gradient,vcov.%*%gradient)))
     estimate <- estimate/total; q <- qnorm((1+level)/2)
     data.frame(estimate=estimate,std.error=se,conf.low=estimate-q*se,conf.high=estimate+q*se)
 }

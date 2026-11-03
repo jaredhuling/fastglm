@@ -1,0 +1,128 @@
+---
+title: "Ordered outcomes and proportional odds with fastglm"
+author: "Jared Huling"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Ordered outcomes and proportional odds with fastglm}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE,comment="#>",message=FALSE)
+library(fastglm)
+```
+
+Outcomes such as satisfaction or symptom severity have a natural ordering, but the differences between their categories need not have a numerical interpretation. Treating three severity levels as the numbers one, two, and three imposes equal spacing. An ordinal model instead estimates the probabilities of the ordered categories. We illustrate a proportional-odds model, examine how mean bias reduction changes its estimation, and use category probabilities to summarize associations.
+
+# The cumulative-logit model
+
+For categories numbered from lowest to highest, the model fitted by `fastglm_ordinal()` is
+
+\[
+\operatorname{logit}\{\Pr(Y_i\leq j\mid x_i)\}
+=\alpha_j-x_i^\mathsf{T}\beta-o_i,
+\qquad j=1,\ldots,K-1.
+\]
+
+The thresholds \(\alpha_j\) divide the outcome scale, and \(o_i\) is an optional offset whose coefficient is fixed at one. A common slope vector \(\beta\) applies to all thresholds. Consequently, a one-unit increase in a predictor multiplies the odds of an outcome above any threshold by the same factor, \(\exp(\beta_r)\). This common odds ratio gives the model its name. It does not imply equal changes in category probabilities.
+
+Positive slopes shift probability toward higher categories under this sign convention, which also agrees with [`MASS::polr()`](https://stat.ethz.ch/R-manual/R-devel/library/MASS/html/polr.html). The thresholds already specify the model's location, so a separate location intercept would be redundant. Formula fits remove the ordinary model-matrix intercept. A matrix supplied directly must omit that intercept.
+
+# Housing satisfaction
+
+The [housing data in MASS](https://stat.ethz.ch/R-manual/R-devel/library/MASS/html/housing.html) describe satisfaction, perceived influence over property management, housing type, and contact with other residents. Each row represents a combination of these variables, and `Freq` gives its number of residents.
+
+```{r}
+housing <- MASS::housing
+levels(housing$Sat)
+c(rows=nrow(housing),residents=sum(housing$Freq))
+
+fit_ml <- fastglm_ordinal(Sat~Infl+Type+Cont,data=housing,
+                          weights=Freq,tol=1e-10)
+fit_br <- update(fit_ml,firth=TRUE)
+summary(fit_br)
+```
+
+The response factor supplies the order of the categories. An unordered factor requires an explicit order through `levels`, which avoids interpreting an alphabetical coding as a substantive ordering. The weights here are frequencies: a row with weight ten represents ten observations with the same recorded values. They are retained on that scale rather than rescaled to sum to the number of rows.
+
+Mean bias reduction solves the adjusted score equations developed for cumulative-link models by [Kosmidis (2014)](https://doi.org/10.1111/rssb.12025). These equations target the leading bias of the original thresholds and common slopes. The ordinal adjustment generally does not arise from adding a log-determinant penalty to the likelihood, so the binomial penalized-profile calculations are not applied to this model.
+
+```{r}
+cbind(maximum_likelihood=coef(fit_ml,component="location"),
+      mean_bias_reduction=coef(fit_br,component="location"))
+exp(coef(fit_br,component="location"))
+fastglm_diagnostics(fit_br)[c("converged","remaining.predictor.step",
+                              "standardized.score")]
+```
+
+The exponentiated slopes are common odds ratios. The fitted probabilities below often provide a more direct description of the outcome distribution. The convergence diagnostics report the remaining change proposed by the estimating equations; a returned coefficient vector alone does not establish that those equations were solved.
+
+# Probabilities and average contrasts
+
+```{r}
+profiles <- unique(housing[,c("Infl","Type","Cont")])[1:4,]
+pred <- predict(fit_br,newdata=profiles,se.fit=TRUE)
+pred$fit
+pred$se.fit
+predict(fit_br,newdata=profiles,type="cumulative")
+```
+
+Each row of `pred$fit` contains probabilities that sum to one. Cumulative predictions give the probability through each category except the last, whose cumulative probability is necessarily one. Prediction standard errors combine uncertainty in the thresholds and slopes using expected Fisher information, the model-based measure of information about these parameters. They assume independent categorical observations and a correctly specified proportional-odds model. These first-order approximations can be unreliable in small or extreme samples.
+
+Average probabilities describe a covariate distribution rather than a single profile. Because the housing rows represent different numbers of residents, the following calculation uses the frequencies again as averaging weights. Fitting weights determine the estimated model; averaging weights determine the population of predictor values over which predictions are summarized.
+
+```{r}
+fastglm_average(fit_br,weights=housing$Freq)
+
+low_contact <- housing
+low_contact$Cont <- factor(rep("Low",nrow(housing)),
+                           levels=levels(housing$Cont))
+contact_difference <- fastglm_average(
+    fit_br,newdata=low_contact,weights=housing$Freq,
+    contrast=function(x) {
+        x[,"ContHigh"] <- 1
+        x
+    })
+contact_difference
+```
+
+This contrast compares high with low contact while keeping the observed distribution of influence and housing type fixed. Each estimate is a difference in the probability of the named satisfaction category. The differences sum to zero because both sets of probabilities sum to one. These are model-based descriptive comparisons, with uncertainty conditional on the supplied predictor distribution. The reported intervals use a normal approximation and are not truncated to the range of possible probability differences.
+
+# Empty categories and the declared outcome scale
+
+An outcome category can be absent from a sample even when it belongs to the intended scale. Removing an empty endpoint before bias reduction changes that scale. The following example retains an unobserved low category.
+
+```{r}
+no_predictors <- matrix(numeric(),nrow=1,ncol=0)
+endpoint_counts <- matrix(c(0,8,2),nrow=1,
+                           dimnames=list(NULL,c("low","middle","high")))
+endpoint_fit <- fastglm_ordinal(no_predictors,endpoint_counts,firth=TRUE)
+coef(endpoint_fit,component="threshold")
+predict(endpoint_fit)
+```
+
+Bias reduction retains finite thresholds in this example. Maximum likelihood would require an infinite threshold for the empty endpoint, and the current finite-threshold interface reports that case as unsupported.
+
+An empty interior category has a different consequence. We fit the reduced category model and restore the declared labels with coincident thresholds and zero probability for the removed category. This boundary interpretation follows the empty-category discussion in Kosmidis (2014, Section 8.3).
+
+```{r}
+interior_counts <- matrix(c(4,0,7,3),nrow=1,
+                           dimnames=list(NULL,c("low","mild","moderate","high")))
+interior_fit <- fastglm_ordinal(no_predictors,interior_counts,firth=TRUE)
+coef(interior_fit,component="threshold")
+predict(interior_fit,se.fit=TRUE)
+diag(vcov(interior_fit))
+```
+
+The warning identifies the reduction, and the fitted object records the mapping. The tied thresholds have unavailable Wald standard errors, as does the probability of the removed category. A zero fitted gap does not justify ordinary uncertainty calculations for that gap. Other probability and cumulative-probability standard errors refer to the reduced category model. The convergence checks also use its parameters, because separate score components for the tied thresholds need not vanish at this boundary.
+
+# Computation and scope
+
+The numerical kernel evaluates likelihoods, scores, and information in C++. It processes probability calculations in blocks and avoids constructing a separate regression-design row for each observation and threshold. The dense input design is still retained in memory. Increasing the number of predictors or categories also increases the size of the parameter information matrix.
+
+The current interface supports the cumulative logit link, freely estimated thresholds, common slopes, offsets, and frequency data. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. Sparse and repeatable-source fitting, alternative ordinal links, and nonparallel slopes require additional implementations.
+
+`logLik()` reports the ordinary categorical frequency likelihood at the returned estimate, omitting constants introduced by grouping observations. In contrast, `deviance()` compares the fit with a saturated model for the supplied response rows, so the grouped deviance depends on that grouping. For bias-reduced estimates, the reported likelihood is evaluated at those estimates rather than maximized by them.
+
+Inference currently uses expected Fisher information and normal approximations. Robust covariance, ordinal bootstrap inference, and ordinal profile intervals are not supplied by this interface. Nonconverged fits retain their diagnostics and point predictions, while methods requiring a covariance refuse to report uncertainty. These distinctions are useful when deciding whether a fitted distribution is sufficiently well determined for the intended interpretation.

@@ -8,7 +8,7 @@
 #' effects can amplify numerical error. For bias-reduced fits the ordinary score
 #' need not vanish. The stored adjusted coefficient and dispersion scores instead
 #' assess the equations used to fit the model at the reported estimates.
-#' @param object a fitted fastglm GLM.
+#' @param object a fitted fastglm GLM or ordinal model.
 #' @returns A list of numerical diagnostics. `score` omits division by the
 #'   dispersion, and `standardized.score` uses the correspondingly unscaled
 #'   information diagonal, retaining the ordinary GLM score convention. For a
@@ -25,14 +25,20 @@
 #'   the required leverages, including prepared Gamma-log fits. Other compact
 #'   fits and older objects without stored adjusted scores report them as
 #'   unavailable rather than computing an additional covariance matrix.
+#'   QR source fits also report their remaining predictor change, joint
+#'   information-scaled score per positive-weight row, and dispersion checks.
+#'   Ordinal diagnostics report scores in the effective category model after
+#'   any empty interior categories have been collapsed; their standardized
+#'   score is calculated in the centered/scaled fitting coordinates.
 #' @md
 #' @export
 fastglm_diagnostics <- function(object) {
+    if(inherits(object,"fastglm_ordinal")) return(.ordinal_diagnostics(object))
     b <- coef(object); good <- !is.na(b)
     score <- numeric(sum(good)); info <- numeric(sum(good))
     ordinary.available <- FALSE
     add <- function(x,y,w,off) {
-        x <- x[,good,drop=FALSE]; eta <- drop(x%*%b[good])+off
+        x <- x[,good,drop=FALSE]; eta <- .model_eta(x,object,off)
         mu <- object$family$linkinv(eta); dm <- object$family$mu.eta(eta); v <- object$family$variance(mu)
         s <- w*dm*(y-mu)/v; s[w==0] <- 0
         ww <- w*dm^2/v; ww[w==0] <- 0
@@ -74,6 +80,10 @@ fastglm_diagnostics <- function(object) {
             max_abs(object$standardized.adjusted.score[good]) else NA_real_
         out$adjusted.dispersion.score <- if(available) object$adjusted.dispersion.score else NA_real_
         out$standardized.dispersion.score <- if(available) object$standardized.dispersion.score else NA_real_
+        for(name in c("remaining.predictor.step","adjusted.score.rms",
+                      "remaining.dispersion.step","adjusted.dispersion.score.rms",
+                      "refined.convergence.verification"))
+            if(!is.null(object[[name]])) out[[name]] <- object[[name]]
     }
     out
 }

@@ -50,6 +50,8 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
                               type=c("pairs","cluster","parametric"),
                               cluster=NULL,seed=NULL,workers=1L,level=.95,
                               control=list()) {
+    if(inherits(object,"fastglm_ordinal"))
+        stop("ordinal bootstrap inference is not implemented",call.=FALSE)
     type<-match.arg(type);.check_iterations(1e-8,R);.check_iterations(1e-8,workers)
     if(R<2L) stop("'R' must be at least two",call.=FALSE)
     if(!isTRUE(object$converged)) stop("bootstrap requires a converged original fit",call.=FALSE)

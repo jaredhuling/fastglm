@@ -83,6 +83,40 @@ fastglm.formula <- function(x, data, family = gaussian(), subset, na.action,
     out
 }
 
+.has_stream_qr <- function(object) {
+    inherits(object, "fastglm_stream") && !is.null(object$qr)
+}
+
+.model_eta <- function(x, object, offset) {
+    b <- coef(object)
+    if (!.has_stream_qr(object)) return(drop(x %*% b[!is.na(b)]) + offset)
+    out <- numeric(nrow(x))
+    .design_blocks(x, function(z, i) out[i] <<- streaming_qr_eta(z, b, offset[i]))
+    names(out) <- rownames(x)
+    out
+}
+
+# The retained factor obeys (sqrt(W) * X / scale)[, pivot] = Q R.
+# Transform rows before taking products to avoid cancellation in x V x'.
+.stream_qr_transform <- function(x, qr) {
+    z <- sweep(as.matrix(x)[, qr$pivot, drop = FALSE], 2L,
+               qr$scale[qr$pivot], "/")
+    t(forwardsolve(t(qr$R), t(z)))
+}
+
+.model_quad_rows <- function(x, object) {
+    if (.has_stream_qr(object)) {
+        out <- numeric(nrow(x))
+        .design_blocks(x, function(z, i) {
+            transformed <- .stream_qr_transform(z, object$qr)
+            out[i] <<- rowSums(transformed^2)
+        })
+        return(out)
+    }
+    good <- !is.na(coef(object))
+    .quad_rows(x, object$cov.unscaled[good, good, drop = FALSE])
+}
+
 #' @export
 predict.fastglmFit <- function(object, newdata = NULL,
                                type = c("link", "response", "terms"),

@@ -2,6 +2,21 @@
 
 ## Model interfaces and inference
 
+* Added cumulative-logit proportional-odds models through `fastglm_ordinal()`,
+  with formula and matrix interfaces, maximum likelihood and mean bias
+  reduction, frequency counts, offsets, and native fitting.
+  Empty interior categories retain their labels through an explicit reduced
+  model mapping; tied-threshold Wald uncertainty is unavailable.
+  Category/cumulative predictions, model-based standard errors, and average
+  probability contrasts use the common model interface.
+
+* Added `method = "qr"` to streaming GLMs, including mean bias reduction.
+  Incremental QR avoids weighted crossproducts in initialization and fitting,
+  retaining a triangular factor for covariance, prediction uncertainty,
+  leverage, robust covariance, and average-prediction inference. Rank is
+  assessed across the complete source; globally redundant columns still
+  produce an explicit error. The default Cholesky solver is unchanged.
+
 * Added penalized profile-likelihood intervals through
   `confint(..., method = "profile")` and joint coefficient tests through
   `fastglm_profile_test()` for retained dense binomial-logit Firth fits.
@@ -38,6 +53,12 @@
   robust/cluster covariance, and average predictions and contrasts.
 
 ## Numerical corrections
+
+* Streaming QR Firth convergence now checks the actual remaining changes in
+  fitted linear predictors, joint adjusted scores, and dispersion.
+  The criterion avoids requiring tiny changes to large cancelling coefficients.
+  Additional precision is used to verify highly ill-conditioned designs;
+  fits that fail the verified criteria still report nonconvergence.
 
 * Safeguarded Gamma-log mean bias reduction against initial coefficient steps
   that overshoot the adjusted-score solution. Firth diagnostics now distinguish

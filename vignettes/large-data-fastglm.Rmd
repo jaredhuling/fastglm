@@ -71,6 +71,24 @@ A file or database reader may need to return to its starting position before a n
 
 The algorithm reuses weighted-regression summaries calculated while checking a proposed coefficient update. Additional passes can still be needed to obtain starting values, shorten an unsuccessful step, fit the intercept-only comparison model, or calculate final summaries. The recorded `passes` and `chunk.reads` values help assess this cost when reading the data is slower than the regression calculations.
 
+# A more stable solve for related predictors
+
+Streaming fits use the `"llt"` Cholesky method by default. At each coefficient update, this method combines weighted products of predictor columns into a small matrix. These products are inexpensive to accumulate across blocks, but they can lose precision when predictors are nearly linear combinations of one another. For example, two measurements may differ only slightly while still carrying distinct information. Rescaling their units can help with differences in magnitude, but it cannot remove their near redundancy.
+
+The option `method="qr"` provides an alternative. QR decomposition summarizes the weighted design using orthogonal transformations, which preserve lengths and angles up to numerical rounding. The streaming calculation updates a small triangular matrix as each block arrives. It does not retain the complete design or form the matrix of weighted crossproducts used by the Cholesky methods. This permits more reliable coefficient updates for difficult predictor configurations, at the cost of additional arithmetic within each pass. The blockwise approach follows the bounded-memory GLM calculations described by [Zietkiewicz and Kosmidis (2024)](https://arxiv.org/abs/2307.07342).
+
+```{r}
+qr_stream <- fastglm_streaming(source,family=poisson(),method="qr")
+max(abs(coef(qr_stream)-coef(stream_fit)))
+head(predict(qr_stream,type="response",se.fit=TRUE)$se.fit)
+```
+
+For this well-conditioned example, the two methods give essentially the same answer. The QR option is most useful when a Cholesky fit reports that the weighted design is numerically unreliable. It is available for both ordinary and bias-reduced streaming GLMs. Predictions, leverage values, robust covariance, and default average-prediction standard errors use the retained triangular factor to preserve the benefit of the more stable fit. Supplying a covariance matrix explicitly to `fastglm_average()` instead uses that matrix, as requested.
+
+The complete weighted design must still have full column rank. QR does not make an exactly redundant predictor identifiable, and this streaming implementation reports a rank failure rather than choosing coefficients for redundant columns. A single block may contain too few rows or lack some factor levels: rank is assessed after combining all blocks. Storage consists of the current block, small records of block sizes, and summaries whose size grows with the square of the number of coefficients. Thus, this approach addresses a large number of observations; a very large number of predictors can still require substantial memory. The default solver and the existing `"auto"` choice are unchanged.
+
+Bias-reduced QR fits check the remaining change in the fitted linear predictors together with the joint adjusted score and, when estimated, dispersion. This is useful when nearly redundant predictors have large coefficients that mostly cancel: the size of an individual coefficient update can then give a poor description of the remaining change in the fitted model. The checks use the current working weights and leverage values and require additional source passes. A better-scaled basis is used for verification when the design requires additional numerical precision. Fits that still fail these checks retain their nonconvergence flag. The bias-reduction vignette illustrates the saved diagnostics.
+
 # Bias reduction with repeated block reads
 
 A large dataset can still contain small or imbalanced subgroups for which bias reduction is useful. The same `firth=TRUE` option is available for sparse matrices, mapped matrices, and repeatable sources. The bias-reduction vignette describes the estimating equations and their supported families.
