@@ -1,0 +1,3 @@
+Sum of saved dataset elapsed seconds: 346.058
+This is computational accounting, not an isolated performance benchmark; other development work was allowed.
+Peak memory was not measured; no scaling claim is made from this small panel.

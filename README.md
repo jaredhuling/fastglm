@@ -501,7 +501,7 @@ and bootstrap uncertainty.
 formula or a dense matrix, with optional mean bias reduction using
 `firth=TRUE`. Predictions describe category probabilities, and
 `fastglm_average()` summarizes their averages and contrasts. Prepared ordinal
-designs reuse common predictor setup across lists of responses. Simulation, probability-based residuals,
+designs reuse common predictor setup across lists of responses. `fastglm_ordinal_assess()` provides prediction scores, calibration plots, and graphical checks of common slopes. Simulation, probability-based residuals,
 and optional broom methods support model assessment and reporting. Robust
 covariance and refitting bootstrap uncertainty are available for regular
 fits, with category and convergence diagnostics. Empty interior categories

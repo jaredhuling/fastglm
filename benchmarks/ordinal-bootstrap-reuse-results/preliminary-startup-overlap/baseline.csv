@@ -1,0 +1,5 @@
+"case","n","p","K","firth","refits","median.seconds","min.seconds","max.seconds","R.allocation.bytes","successful","exact.baseline.agreement"
+"20000_3_4_ML",20000,3,4,FALSE,19,0.603,0.595,0.632,829646120,19,NA
+"20000_3_4_BR",20000,3,4,TRUE,19,0.877,0.853,0.904,829643792,19,NA
+"20000_12_8_ML",20000,12,8,FALSE,19,1.42,1.412,1.442,1906017632,19,NA
+"20000_12_8_BR",20000,12,8,TRUE,19,2.164,2.147,2.192,1905996016,19,NA

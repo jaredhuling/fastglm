@@ -14,6 +14,7 @@ inst/doc
 # R CMD check / build artifacts
 *.Rcheck/
 *.tar.gz
+!benchmarks/ordinal-uncertainty-validation/method-source/fastglm_0.1.3.tar.gz
 
 # revdepcheck output (regenerable; not in package build either)
 revdep/

@@ -1,0 +1,31 @@
+{
+  "final_serial_new_tests": {
+    "assertions_passed": 76,
+    "failures": 0,
+    "errors": 0,
+    "warnings": 0,
+    "skips": 1,
+    "source_sha256": "06afa7f1c5b3ea8724632c102206ce54981741c3b3a22942b183b29ef32f0e7e",
+    "log": "validation/tests02.log"
+  },
+  "difference": "After the initial worker run, one assignment preserved the original call field position in formula refit lists; four full-object identity assertions were added. The final worker run includes this correction and all151 assertions passed.",
+  "worker_initial": {
+    "assertions_passed": 147,
+    "failures": 0,
+    "errors": 0,
+    "warnings": 0,
+    "skips": 0,
+    "source_sha256": "101cc89b6d6cd94b2359b76a47c3d39edb8680dc69108fc1bbdfa8ec6bcfa12c",
+    "log": "validation/workers.log"
+  },
+  "worker_final": {
+    "assertions_passed": 151,
+    "failures": 0,
+    "errors": 0,
+    "warnings": 0,
+    "skips": 0,
+    "source_sha256": "06afa7f1c5b3ea8724632c102206ce54981741c3b3a22942b183b29ef32f0e7e",
+    "log": "validation/workers-final.log",
+    "detail_log": "validation/tests-workers.log"
+  }
+}

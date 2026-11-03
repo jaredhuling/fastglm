@@ -5,7 +5,8 @@
          n=nrow(object$x))
 }
 
-.ordinal_bootstrap_refit <- function(object,input,index=NULL,counts=NULL,control=list()) {
+.ordinal_bootstrap_refit <- function(object,input,index=NULL,counts=NULL,control=list(),cache=NULL) {
+    reuse <- !is.null(counts) && is.null(index) && is.environment(cache)
     if(is.null(index)) index <- seq_len(input$n)
     if(is.null(counts)) {
         y <- if(is.matrix(input$y)) input$y[index,,drop=FALSE] else input$y[index]
@@ -16,12 +17,34 @@
         y <- counts
         weights <- rep(1,nrow(counts))
     }
-    args <- list(x=input$x[index,,drop=FALSE],y=y,weights=weights,
-                 offset=input$offset[index],levels=object$levels,firth=object$firth,
+    if(reuse) {
+        key <- list(x=input$x,offset=input$offset)
+        if(!identical(cache$bootstrap.inputs$key,key)) {
+            # Preserve the ordinary subset's matrix/vector attributes, while
+            # allocating those unchanged inputs only once in each process.
+            cache$bootstrap.inputs <- list(key=key,x=input$x[index,,drop=FALSE],
+                                            offset=input$offset[index])
+        }
+    }
+    args <- list(x=if(reuse) cache$bootstrap.inputs$x else input$x[index,,drop=FALSE],y=y,weights=weights,
+                 offset=if(reuse) cache$bootstrap.inputs$offset else input$offset[index],levels=object$levels,firth=object$firth,
                  tol=object$tol,maxit=object$maxit,block.size=object$block.size,
                  control=object$control)
     args <- utils::modifyList(args,control)
-    fit <- do.call(fastglm_ordinal,args)
+    fit <- if(reuse) {
+        # NULL overrides remove arguments in modifyList(). The public fitting
+        # method would then use these defaults, which must remain identical on
+        # the internal prepared path.
+        args <- utils::modifyList(list(tol=1e-8,maxit=200L,block.size=2048L,control=list()),args)
+        args$cache <- cache
+        result <- do.call(.ordinal_fit_matrix,args)
+        # Preparation is an internal bootstrap optimization. Keep the refit's
+        # public metadata identical to an independent matrix fit, including
+        # statistics that inspect the original preparation diagnostic.
+        result$preparation.reused <- FALSE
+        result$call <- object$call
+        result
+    } else do.call(fastglm_ordinal,args)
     for(key in c("terms","xlevels","contrasts","offset.expression","prediction.offset.required"))
         fit[[key]] <- object[[key]]
     # These refits keep the fitted basis, including factor levels and spline
@@ -95,6 +118,10 @@
         groups
     }
     seeds <- sample.int(.Machine$integer.max,as.integer(R),replace=FALSE)
+    # Parametric draws preserve the effective row totals. Build setup lazily
+    # inside the first refit, preserving per-replicate validation/failure
+    # behavior. Serialized worker closures each own their ordinary R cache.
+    cache <- if(type=="parametric") new.env(parent=emptyenv()) else NULL
     one <- function(j) {
         do.call(RNGkind,as.list(rng.kind))
         set.seed(seeds[j]); warnings <- character(); fit <- NULL; pattern <- NULL
@@ -103,7 +130,7 @@
                 if(type=="cluster") unlist(units[sample.int(length(units),length(units),replace=TRUE)],use.names=FALSE) else NULL
             counts <- if(type=="parametric") .ordinal_simulate_counts(object) else NULL
             pattern <- .ordinal_bootstrap_pattern(object,input,index,counts)
-            fit <- .ordinal_bootstrap_refit(object,input,index,counts,control)
+            fit <- .ordinal_bootstrap_refit(object,input,index,counts,control,cache)
             value <- statistic(fit)
             if(!valid.statistic(value) || length(value)!=length(estimate))
                 stop("refit statistic is non-finite or has changed dimension",call.=FALSE)

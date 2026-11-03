@@ -1,0 +1,4 @@
+Complete datasets: 1000
+Original fits: 2000
+Planned bootstrap replicates per fitted original: 199
+Unique keys, manifest signatures, complete method pairing, and unavailable-summary policy passed.

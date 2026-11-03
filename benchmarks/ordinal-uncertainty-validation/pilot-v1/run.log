@@ -1,0 +1,15 @@
+regular replicate 1/3, 0.121 seconds
+regular replicate 2/3, 0.093 seconds
+regular replicate 3/3, 0.090 seconds
+small replicate 1/3, 0.062 seconds
+small replicate 2/3, 0.083 seconds
+small replicate 3/3, 0.067 seconds
+rare_endpoint replicate 1/3, 0.075 seconds
+rare_endpoint replicate 2/3, 0.087 seconds
+rare_endpoint replicate 3/3, 0.073 seconds
+correlated_predictors replicate 1/3, 0.066 seconds
+correlated_predictors replicate 2/3, 0.073 seconds
+correlated_predictors replicate 3/3, 0.071 seconds
+independent_clusters replicate 1/3, 0.065 seconds
+independent_clusters replicate 2/3, 0.064 seconds
+independent_clusters replicate 3/3, 0.075 seconds
