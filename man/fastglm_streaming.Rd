@@ -2,15 +2,15 @@
 % Please edit documentation in R/streaming.R
 \name{fastglm_streaming}
 \alias{fastglm_streaming}
-\title{Fit a GLM by streaming row-blocks of the design matrix}
+\title{Fit a GLM by reading blocks of observations as needed}
 \usage{
 fastglm_streaming(
   chunk_callback,
-  n_chunks,
+  n_chunks = NULL,
   family = gaussian(),
   start = NULL,
   method = 2L,
-  tol = 1e-07,
+  tol = 1e-08,
   maxit = 100L,
   firth = FALSE
 )
@@ -25,8 +25,8 @@ fastglm_streaming(
   \item{`offset`}{optional; numeric vector of length `n_k` of offsets.}
 }
 Every chunk must have the same number of columns, in the same order. The
-closure is called multiple times per IRLS iteration, so it should be
-reasonably cheap (e.g. an Arrow scanner that reads from columnar files).}
+supplied function, called a callback, is called repeatedly during fitting.
+It must return the same rows and values each time a block is requested.}
 
 \item{n_chunks}{integer; the number of chunks to iterate over.}
 
@@ -48,41 +48,36 @@ lagged leverages from the previous IRLS iteration.  At convergence
 the result matches the exact-leverage dense path.}
 }
 \value{
-A list with class `"fastglm"` containing the same elements as
+An object with classes `"fastglm_stream"` and `"fastglm"` containing
+  coefficient estimates and model summaries as in
   [fastglm()], including `coefficients`, `cov.unscaled`, `deviance`,
-  `iter`, `converged`, etc. The design matrix is *not* attached, so
-  `sandwich::vcovHC()` / `sandwich::vcovCL()` will require re-streaming.
+  `iter`, and `converged`. The object retains the function used to read
+  the observations. Prediction and [fastglm_vcov()] call that function
+  again, so the data must remain accessible and unchanged.
 }
 \description{
-`fastglm_streaming()` runs an IRLS GLM fit where the design matrix is
-produced one chunk at a time by a user-supplied closure. It never holds
-more than a single chunk in memory at once, plus a `p x p` accumulator.
-This is the front-end for fitting on data sources too large to load
-completely into RAM (Arrow datasets, Parquet files, DuckDB query results,
-on-disk CSV streams, etc.).
+`fastglm_streaming()` fits a GLM while keeping only a block of design rows
+and coefficient-sized summary matrices in memory. Reading successive
+blocks this way is called streaming. It permits fitting data that cannot
+be loaded into memory together, at the cost of rereading the observations
+as the coefficient estimates are updated.
 }
 \details{
-The IRLS loop and step-halving (Marschner 2011) run entirely in C++; the
-R closure is called only to *deliver* one chunk at a time. For tier-1
-families (gaussian / binomial / poisson / Gamma / inverse.gaussian on
-their common links) the family functions are evaluated inline in C++, so
-the only R round-trip per iteration is the chunk fetch.
+Iteratively reweighted least squares (IRLS) updates the coefficients by
+solving a sequence of weighted regressions. The updates and safeguards
+that shorten unsuccessful steps run in C++. For supported standard
+families, the distribution calculations also run in C++; the R function
+is called to supply each block of observations.
 
 Standard errors and `cov.unscaled` come from the final `(X' W X)`
 Cholesky factor, exactly as in the in-memory path.
 }
-\section{Arrow / Parquet recipe}{
+\section{Files and databases}{
 
-
-Wrap an Arrow scanner in a closure -- pull each `RecordBatch` as a chunk,
-build the model matrix, and return it together with the response:
-`chunks(k)` opens the dataset, scans the `k`-th batch, calls
-`as.data.frame()`, then returns
-`list(X = model.matrix(~ x1 + x2, data = tbl), y = tbl$y)`. Pass that
-closure plus `n_chunks = length(batches)` to `fastglm_streaming()`.
-
-The same recipe works for DuckDB (one `dbReadTable` per chunk), CSV
-streamers, and custom binary formats.
+[fastglm_source_arrow()] reads one Parquet file per block, and
+[fastglm_source_dbi()] reads the rows returned by one database query per
+block. [fastglm_source()] records the factor levels and transformations
+needed to give the design columns the same meaning in each block.
 }
 
 \examples{

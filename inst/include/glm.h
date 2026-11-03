@@ -3,7 +3,9 @@
 
 #include "glm_base.h"
 #include "families.h"
+#include "bias_reduction.h"
 #include "chunk_source.h"
+#include "prepared_glm.h"
 
 using Eigen::ArrayXd;
 using Eigen::FullPivHouseholderQR;
@@ -48,7 +50,7 @@ protected:
     typedef ColPivHouseholderQR<MatrixXd>::PermutationType  Permutation;
     typedef Permutation::IndicesType                        Indices;
     
-    const Map<MatrixXd> X;
+    const Eigen::Ref<const MatrixXd> X;
     const Map<VectorXd> Y;
     const Map<VectorXd> weights;
     const Map<VectorXd> offset;
@@ -71,6 +73,7 @@ protected:
     double log_det_XtWX_;           // log|X'WX| from most recent solve_wls (used by Firth)
     MatrixXd A_prev;                // (X'WX)^{-1} from previous IRLS iteration (lagged leverages)
     bool     A_prev_available;
+    fglm::GammaWeightGroups dispersion_weight_groups;
     
     
     FullPivHouseholderQR<MatrixXd> FPQR;
@@ -97,6 +100,11 @@ protected:
     MatrixXd                     XtWX_buf;
     VectorXd                     Xtwz_buf; // for streaming accumulation
     bool                         use_streaming;
+    bool                         constant_weights;
+    bool                         factor_ready = false;
+    VectorXd                     constant_leverages;
+    VectorXd                     streaming_gamma_adjustment;
+    const PreparedGlmInfo*       prepared_info;
     
     RealScalar threshold() const 
     {
@@ -179,6 +187,18 @@ protected:
     
     virtual void update_w() override
     {
+        // The sqrt-link derivative is floored near zero. In that exceptional
+        // region Poisson working weights cease to be constant.
+        if (fam_code == 9 && constant_weights &&
+            ((weights.array() > 0) &&
+             (eta.array().abs() < std::numeric_limits<double>::epsilon()/2)).any()) {
+            constant_weights = false;
+            factor_ready = false;
+            if (prepared_info) {
+                prepared_info = nullptr;
+                WX.resize(nobs,nvars);
+            }
+        }
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data(), mu_eta.size());
@@ -376,31 +396,28 @@ protected:
     // Estimate the dispersion φ (1 for binomial/Poisson).
     double compute_firth_phi()
     {
-        const double eps = std::numeric_limits<double>::epsilon();
-        bool unit_disp = (fam_code >= fglm::FAM_BINOMIAL_LOGIT &&
-                          fam_code <= fglm::FAM_POISSON_SQRT);
-        if (fam_code == fglm::FAM_UNKNOWN) unit_disp = true;
-        if (unit_disp || nobs <= nvars) return 1.0;
-        Eigen::Map<const Eigen::ArrayXd> y_a(Y.data(), Y.size());
-        Eigen::Map<const Eigen::ArrayXd> m_a(mu.data(), mu.size());
-        Eigen::Map<const Eigen::ArrayXd> w_a(weights.data(), weights.size());
-        double phi = fglm::dev_resids_sum(fam_code, fam_params, y_a, m_a, w_a)
-                     / (nobs - nvars);
-        return (phi < eps) ? 1.0 : phi;
+        Eigen::Map<const Eigen::ArrayXd> yy(Y.data(), Y.size());
+        Eigen::Map<const Eigen::ArrayXd> mm(mu.data(), mu.size());
+        Eigen::Map<const Eigen::ArrayXd> ww(weights.data(), weights.size());
+        double d = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, yy, mm, ww)
+            : Rcpp::sum(Rcpp::as<Rcpp::NumericVector>(dev_resids_fun(Y, mu, weights)));
+        if (fam_code == 10 && prepared_info)
+            return fglm::adjusted_dispersion(fam_code,d,weights,rank,&prepared_info->weight_groups);
+        if (fam_code >= 10 && fam_code <= 12 && dispersion_weight_groups.empty())
+            dispersion_weight_groups = fglm::gamma_weight_groups(weights);
+        return fglm::adjusted_dispersion(fam_code, d, weights, rank,
+                                         &dispersion_weight_groups);
     }
 
     // Compute ξ from h, d2mu, var_mu, mu_eta, weights, phi and form z* = z + ξ.
-    void apply_firth_xi(const VectorXd &h_lev, const Eigen::ArrayXd &d2mu,
+    void apply_firth_xi(const Eigen::Ref<const VectorXd> &h_lev, const Eigen::ArrayXd &d2mu,
                         double phi, VectorXd &zstar)
     {
-        const double eps = std::numeric_limits<double>::epsilon();
-        Eigen::ArrayXd dmu3 = mu_eta.array().cube();
-        for (int i = 0; i < nobs; ++i)
-            if (std::abs(dmu3[i]) < eps) dmu3[i] = (dmu3[i] >= 0) ? eps : -eps;
-
-        Eigen::ArrayXd xi = phi * h_lev.array() * d2mu * var_mu.array()
-                          / (2.0 * weights.array().max(eps) * dmu3);
-        zstar = z + xi.matrix();
+        zstar = z;
+        for (int i = 0; i < nobs; ++i) {
+            if (weights[i] > 0 && w[i] != 0 && mu_eta[i] != 0)
+                zstar[i] += phi * h_lev[i] * (d2mu[i] / mu_eta[i]) / (2 * w[i] * w[i]);
+        }
     }
 
     // Compute leverages from the current decomposition (dense path).
@@ -504,69 +521,113 @@ protected:
     {
         beta_prev = beta;
 
+        double phi = compute_firth_phi();
+
+        if (prepared_info && (fam_code == 0 || fam_code == 10)) {
+            Xtwz_buf.noalias() = X.adjoint() * (w.array().square() * z.array()).matrix();
+            if (fam_code == 10) Xtwz_buf.noalias() += phi * prepared_info->adjustment;
+            beta = prepared_info->solve(Xtwz_buf);
+            log_det_XtWX_ = prepared_info->logdet;
+            return;
+        }
         Eigen::ArrayXd d2mu(nobs);
         compute_d2mu(d2mu);
-        double phi = compute_firth_phi();
+
+        if (prepared_info) {
+            VectorXd zstar;
+            apply_firth_xi(prepared_info->leverage, d2mu, phi, zstar);
+            Xtwz_buf.noalias() = X.adjoint() *
+                (w.array().square() * zstar.array()).matrix();
+            beta = prepared_info->solve(Xtwz_buf);
+            log_det_XtWX_ = prepared_info->logdet;
+            return;
+        }
 
         // --- Streaming path (big.matrix + Cholesky) ---
         if (use_streaming) {
-            if (!A_prev_available) {
-                // First iteration: standard solve, no Firth adjustment
-                fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
+            const bool reuse_factor = constant_weights && factor_ready;
+            if (!A_prev_available || fam_code == fglm::FAM_GAUSSIAN_IDENTITY) {
+                if (!reuse_factor) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
                 fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf);
             } else {
                 fglm::accumulate_firth_streamed(
                     X, w, z, Eigen::Map<const Eigen::VectorXd>(d2mu.data(), nobs),
-                    var_mu, mu_eta, weights, phi, A_prev,
-                    XtWX_buf, Xtwz_buf);
+                    var_mu, mu_eta, weights, phi, A_prev, XtWX_buf, Xtwz_buf,
+                    -1, !reuse_factor,
+                    fam_code == fglm::FAM_GAMMA_LOG ? &streaming_gamma_adjustment : nullptr);
             }
             if (type == 2) {
-                Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                if (!reuse_factor) {
+                    Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                    if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
+                        Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                }
                 beta = Ch.solve(Xtwz_buf);
             } else {
-                ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                Dplus(ChD.vectorD());
+                if (!reuse_factor) {
+                    ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                    if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                        Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                    Dplus(ChD.vectorD());
+                }
                 beta = ChD.solve(Xtwz_buf);
             }
-            compute_log_det_XtWX();
-            update_A_prev();
+            if (!reuse_factor) {
+                compute_log_det_XtWX();
+                update_A_prev();
+            }
+            factor_ready = true;
             rank = nvars;
             return;
         }
 
         // --- Dense path: exact leverages from current decomposition ---
-        WX.noalias() = w.asDiagonal() * X;
-        wz.noalias() = w.cwiseProduct(z);
+        bool reuse_factor = constant_weights && factor_ready;
+        if (!reuse_factor) {
+            WX.noalias() = w.asDiagonal() * X;
 
-        // Decompose
-        if (type == 0) {
-            PQR.compute(WX);
-            Pmat = PQR.colsPermutation();
-            rank = PQR.rank();
-        } else if (type == 1) {
-            QR.compute(WX);
-            rank = nvars;
-        } else if (type == 2) {
-            update_XtWX();
-            Ch.compute(XtWX_buf.selfadjointView<Lower>());
-            rank = nvars;
-        } else if (type == 3) {
-            update_XtWX();
-            ChD.compute(XtWX_buf.selfadjointView<Lower>());
-            Dplus(ChD.vectorD());
-            rank = nvars;
-        } else if (type == 4) {
-            FPQR.compute(WX);
-            Pmat = FPQR.colsPermutation();
-            rank = FPQR.rank();
-        } else if (type == 5) {
-            bSVD.compute(WX, ComputeThinU | ComputeThinV);
-            rank = bSVD.rank();
+            // Decompose
+            if (type == 0) {
+                PQR.compute(WX);
+                Pmat = PQR.colsPermutation();
+                rank = PQR.rank();
+            } else if (type == 1) {
+                QR.compute(WX);
+                if ((QR.matrixQR().topLeftCorner(nvars, nvars).diagonal().array().abs() <=
+                     WX.norm() * threshold()).any())
+                    Rcpp::stop("Unpivoted QR requires full rank; use method = 'qr'.");
+                rank = nvars;
+            } else if (type == 2) {
+                update_XtWX();
+                Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                    if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
+                        Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                rank = nvars;
+            } else if (type == 3) {
+                update_XtWX();
+                ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                    if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                        Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                Dplus(ChD.vectorD());
+                rank = nvars;
+            } else if (type == 4) {
+                FPQR.compute(WX);
+                Pmat = FPQR.colsPermutation();
+                rank = FPQR.rank();
+            } else if (type == 5) {
+                bSVD.compute(WX, ComputeThinU | ComputeThinV);
+                rank = bSVD.rank();
+            }
+            factor_ready = true;
         }
 
         // Compute leverages and Firth adjustment
         VectorXd h_lev;
-        compute_leverages_dense(h_lev);
+        if (reuse_factor) h_lev = constant_leverages;
+        else {
+            compute_leverages_dense(h_lev);
+            if (constant_weights) constant_leverages = h_lev;
+        }
 
         VectorXd zstar;
         apply_firth_xi(h_lev, d2mu, phi, zstar);
@@ -578,6 +639,7 @@ protected:
                 beta = PQR.solve(wz);
             } else {
                 effects = PQR.householderQ().adjoint() * wz;
+                beta.setZero();
                 beta.head(rank) = PQR.matrixQR().topLeftCorner(rank, rank)
                     .triangularView<Upper>().solve(effects.head(rank));
                 beta = Pmat * beta;
@@ -593,6 +655,7 @@ protected:
                 beta = FPQR.solve(wz);
             } else {
                 effects = FPQR.matrixQ().adjoint() * wz;
+                beta.setZero();
                 beta.head(rank) = FPQR.matrixQR().topLeftCorner(rank, rank)
                     .triangularView<Upper>().solve(effects.head(rank));
                 beta = Pmat * beta;
@@ -602,7 +665,6 @@ protected:
         }
 
         compute_log_det_XtWX();
-        update_A_prev();
     }
 
     // much of solve_wls() comes directly
@@ -614,6 +676,14 @@ protected:
 
         beta_prev = beta;
 
+        if (constant_weights && factor_ready && (type == 2 || type == 3)) {
+            VectorXd rhs = X.adjoint() * (w.array().square() * z.array()).matrix();
+            if (type == 2) beta = Ch.solve(rhs);
+            else beta = ChD.solve(rhs);
+            return;
+        }
+        factor_ready = true;
+
         // Streaming path for big.matrix + Cholesky-based methods (2 or 3):
         // never materialize the n*p product W*X.  Instead accumulate
         // X'W^2 X and X'W^2 z directly in row blocks.
@@ -622,9 +692,13 @@ protected:
             fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf);
             if (type == 2) {
                 Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
                 beta = Ch.solve(Xtwz_buf);
             } else if (type == 3) {
                 ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
                 Dplus(ChD.vectorD());  // sets rank
                 beta = ChD.solve(Xtwz_buf);
             }
@@ -651,6 +725,7 @@ protected:
                                                       triangularView<Upper>().
                                                       solve(MatrixXd::Identity(rank, rank)));
                 effects = PQR.householderQ().adjoint() * wz;
+                beta.setZero();
                 beta.head(rank)                 = Rinv * effects.head(rank);
                 beta                            = Pmat * beta;
 
@@ -661,16 +736,23 @@ protected:
         } else if (type == 1)
         {
             QR.compute(WX);
+            if ((QR.matrixQR().topLeftCorner(nvars, nvars).diagonal().array().abs() <=
+                 WX.norm() * threshold()).any())
+                Rcpp::stop("Unpivoted QR requires full rank; use method = 'qr'.");
             beta                     = QR.solve(wz);
         } else if (type == 2)
         {
             update_XtWX();
             Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
             beta            = Ch.solve(WX.adjoint() * wz);
         } else if (type == 3)
         {
             update_XtWX();
             ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
             Dplus(ChD.vectorD());	// to set the rank
             //FIXME: Check on the permutation in the LDLT and incorporate it in
             //the coefficients and the standard error computation.
@@ -689,6 +771,7 @@ protected:
                             triangularView<Upper>().
                             solve(MatrixXd::Identity(rank, rank)));
                 effects = FPQR.matrixQ().adjoint() * wz;
+                beta.setZero();
                 beta.head(rank)                 = Rinv * effects.head(rank);
                 beta                            = Pmat * beta;
 
@@ -722,8 +805,56 @@ protected:
         
     }
     
+    void finalize_inference(int iter) override
+    {
+        if (prepared_info) {
+            update_var_mu(); update_mu_eta(); update_w();
+            if (prepared_info) {
+                save_vcov();
+                return;
+            }
+        }
+        if (type != 2 && type != 3) {
+            GlmBase<Eigen::VectorXd, Eigen::MatrixXd>::finalize_inference(iter);
+            return;
+        }
+
+        // Cholesky requires full rank, so inference needs only the information
+        // at the reported mean. A working response, coefficient solve, and
+        // Firth leverage adjustment would be discarded at this point.
+        update_var_mu();
+        update_mu_eta();
+        update_w();
+        if (!(constant_weights && factor_ready)) {
+            if (use_streaming) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
+            else {
+                WX.noalias() = w.asDiagonal() * X;
+                update_XtWX();
+            }
+            if (type == 2) {
+                Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+            } else {
+                ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+            }
+        }
+        if (firth_) {
+            double previous_log_det = log_det_XtWX_;
+            compute_log_det_XtWX();
+            dev += previous_log_det - log_det_XtWX_;
+        }
+        save_vcov();
+    }
+
     virtual void save_vcov() override
     {
+        if (prepared_info) {
+            vcov = prepared_info->covariance;
+            return;
+        }
         const double NaN = std::numeric_limits<double>::quiet_NaN();
         MatrixXd I_p = MatrixXd::Identity(nvars, nvars);
 
@@ -737,6 +868,7 @@ protected:
                 vcov.noalias() = PRinv * PRinv.transpose();
             } else
             {
+                Rinv = PQR.matrixQR().topLeftCorner(rank, rank).triangularView<Upper>().solve(MatrixXd::Identity(rank, rank));
                 MatrixXd cov_red = Rinv * Rinv.transpose();
                 MatrixXd cov_padded = MatrixXd::Zero(nvars, nvars);
                 cov_padded.topLeftCorner(rank, rank) = cov_red;
@@ -769,6 +901,7 @@ protected:
                 vcov.noalias() = PRinv * PRinv.transpose();
             } else
             {
+                Rinv = FPQR.matrixQR().topLeftCorner(rank, rank).triangularView<Upper>().solve(MatrixXd::Identity(rank, rank));
                 MatrixXd cov_red = Rinv * Rinv.transpose();
                 MatrixXd cov_padded = MatrixXd::Zero(nvars, nvars);
                 cov_padded.topLeftCorner(rank, rank) = cov_red;
@@ -858,7 +991,7 @@ protected:
 
 
 public:
-    glm(const Map<MatrixXd> &X_,
+    glm(const Eigen::Ref<const MatrixXd> &X_,
         const Map<VectorXd> &Y_,
         const Map<VectorXd> &weights_,
         const Map<VectorXd> &offset_,
@@ -874,7 +1007,8 @@ public:
         bool is_big_matrix_ = false,
         int fam_code_ = -1,
         const fglm::FamilyParams &fam_params_ = fglm::FamilyParams(),
-        bool firth_flag = false) :
+        bool firth_flag = false,
+        const PreparedGlmInfo* prepared_ = nullptr) :
     GlmBase<Eigen::VectorXd, Eigen::MatrixXd>(X_.rows(), X_.cols(),
                                                      tol_, maxit_),
                                                      X(X_),
@@ -897,12 +1031,14 @@ public:
                                                      log_det_XtWX_(0.0),
                                                      A_prev(X_.cols(), X_.cols()),
                                                      A_prev_available(false),
-                                                     WX( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows(),
-                                                         (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.cols()),
+                                                     WX( (prepared_ || (is_big_matrix_ && (type_ == 2 || type_ == 3))) ? 0 : X_.rows(),
+                                                         (prepared_ || (is_big_matrix_ && (type_ == 2 || type_ == 3))) ? 0 : X_.cols()),
                                                      wz( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows()),
                                                      XtWX_buf(X_.cols(), X_.cols()),
                                                      Xtwz_buf(X_.cols()),
-                                                     use_streaming(is_big_matrix_ && (type_ == 2 || type_ == 3))
+                                                     use_streaming(is_big_matrix_ && (type_ == 2 || type_ == 3)),
+                                                     constant_weights(fam_code_ == 0 || fam_code_ == 9 || fam_code_ == 10),
+                                                     prepared_info(prepared_)
                                                      {}
     
     
@@ -933,18 +1069,14 @@ public:
     
     virtual VectorXd get_beta() override
     {
-        if (type == 0 || type == 4)
-        {
-            if (rank != nvars)
-            {
-                //beta.head(rank)                 = Rinv * effects.head(rank);
-                //beta = Pmat * beta;
-            }
+        VectorXd out = beta;
+        if (type == 0 || type == 4) {
+            for (int j = rank; j < nvars; ++j)
+                out[Pmat.indices()[j]] = NA_REAL;
         }
-        
-        return beta;
+        return out;
     }
-    
+
     virtual VectorXd get_weights()  override { return weights; }
     virtual int get_rank()          override { return rank; }
 
@@ -956,6 +1088,7 @@ public:
     // Penalized log-likelihood pieces, exposed so the Firth driver can
     // report them back to R.
     double get_log_det_XtWX() const { return log_det_XtWX_; }
+    double get_bias_dispersion() { return compute_firth_phi(); }
     bool   get_firth()        const { return firth_; }
 
 };

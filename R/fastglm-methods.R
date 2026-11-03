@@ -24,6 +24,7 @@
 summary.fastglm <- function(object, dispersion = NULL,
                             correlation = FALSE, symbolic.cor = FALSE, ...)
 {
+    if (identical(object$inference, "none")) stop("summary requires inference; refit with inference = 'full' or 'diagonal'", call. = FALSE)
     p <- object$rank
 
     est.disp <- FALSE
@@ -31,19 +32,15 @@ summary.fastglm <- function(object, dispersion = NULL,
 
     if (is.null(dispersion))
     {
-        if (!(object$family$family %in% c("poisson", "binomial"))) est.disp <- TRUE
+        est.disp <- is.na(.fixed_dispersion(object$family))
         dispersion <- object$dispersion
     }
 
     aliased <- is.na(coef(object))  # used in print method
 
     covmat.unscaled <- object$cov.unscaled
-    if (is.null(covmat.unscaled) && p > 0)
-    {
-        # Fallback for older fitted objects without cov.unscaled
-        covmat.unscaled <- diag(object$se ^ 2 / max(dispersion, .Machine$double.eps),
-                                nrow = length(object$coefficients))
-    }
+    if (is.null(covmat.unscaled) && correlation)
+        stop("correlations require full covariance; refit with inference = 'full'", call. = FALSE)
     if (!is.null(covmat.unscaled) && length(object$coefficients) > 0L)
     {
         nms <- names(object$coefficients)
@@ -56,8 +53,9 @@ summary.fastglm <- function(object, dispersion = NULL,
 
     if (p > 0)
     {
-        coef   <- object$coefficients
-        se     <- if (!is.null(covmat)) sqrt(diag(covmat)) else object$se
+        coef   <- object$coefficients[!aliased]
+        se     <- if (!is.null(covmat)) sqrt(diag(covmat)) else
+            object$se[!aliased] * sqrt(dispersion / object$dispersion)
         tvalue <- coef / se
 
         dn <- c("Estimate", "Std. Error")
@@ -117,7 +115,10 @@ summary.fastglm <- function(object, dispersion = NULL,
 #' `vcov()` method for `fastglm` fitted objects
 #'
 #' @param object a fitted object of class inheriting from `"fastglm"`.
-#' @param ... additional arguments (currently unused).
+#' @param dispersion scale used for model-based covariance.
+#' @param type optional HC correction for robust covariance.
+#' @param cluster optional cluster identifiers for robust covariance.
+#' @param ... arguments to [fastglm_vcov()].
 #'
 #' @returns The estimated variance-covariance matrix of the fitted coefficients.
 #' For rank-deficient fits, rows and columns corresponding to aliased
@@ -125,19 +126,13 @@ summary.fastglm <- function(object, dispersion = NULL,
 #'
 #' @method vcov fastglm
 #' @exportS3Method stats::vcov fastglm
-vcov.fastglm <- function(object, ...)
-{
-    cov.unscaled <- object$cov.unscaled
-    if (is.null(cov.unscaled))
-    {
-        v <- diag(object[["se"]]^2, nrow = length(object$coefficients))
-        rownames(v) <- colnames(v) <- names(coef(object))
-        return(v)
-    }
-    disp <- if (is.null(object$dispersion) || is.nan(object$dispersion)) 1 else object$dispersion
-    v <- disp * cov.unscaled
-    nms <- names(coef(object))
-    rownames(v) <- colnames(v) <- nms
+vcov.fastglm <- function(object, dispersion = object$dispersion, type = NULL,
+                         cluster = NULL, ...) {
+    if (!is.null(type) || !is.null(cluster))
+        return(fastglm_vcov(object, if (is.null(type)) "HC1" else type, cluster, ...))
+    if (is.null(object$cov.unscaled)) stop("full covariance was not retained; refit with inference = 'full'", call. = FALSE)
+    v <- dispersion * object$cov.unscaled
+    dimnames(v) <- rep(list(names(coef(object))), 2L)
     v
 }
 
@@ -190,7 +185,7 @@ NULL
 vcovHC.fastglm <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 {
     type <- match.arg(type)
-    .vcov_hc_fastglm(object, type)
+    fastglm_vcov(object, type)
 }
 
 #' @rdname vcovHC.fastglm
@@ -198,7 +193,7 @@ vcovHC.fastglm <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 vcovHC.fastglmFit <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 {
     type <- match.arg(type)
-    .vcov_hc_fastglm(object, type)
+    fastglm_vcov(object, type)
 }
 
 #' Empirical estimating-function and bread methods for `fastglm` objects
@@ -256,7 +251,7 @@ estfun.fastglmFit <- estfun.fastglm
 #' @exportS3Method sandwich::bread fastglm
 bread.fastglm <- function(x, ...)
 {
-    inp  <- .vcov_hc_meat_inputs(x)
+    inp  <- .vcov_hc_meat_inputs(x, design = FALSE)
     disp <- .sandwich_dispersion(x, inp)
     nms  <- names(x$coefficients)
     out  <- inp$bread * inp$n * disp
@@ -270,15 +265,15 @@ bread.fastglmFit <- bread.fastglm
 
 # Internal: pull (X, working residuals, working weights, bread) off a fitted
 # fastglm/fastglmFit object.  Returns a list with elements x, r, w, bread, p.
-.vcov_hc_meat_inputs <- function(object)
+.vcov_hc_meat_inputs <- function(object, design = TRUE)
 {
     x <- object$x
     if (is.null(x))
         stop("vcovHC/vcovCL require the design matrix to be stored on the fitted object. ",
              "Refit with fastglm/fastglmPure/fastglm_fit (>= 0.0.6).", call. = FALSE)
-    if (inherits(x, "big.matrix"))
+    if (design && inherits(x, "big.matrix"))
         x <- x[]
-    if (inherits(x, "dgCMatrix"))
+    if (design && inherits(x, "dgCMatrix"))
         x <- as.matrix(x)
 
     bread <- object$cov.unscaled
@@ -393,7 +388,9 @@ family.fastglm <- function(object, ...)
 
 #' Obtains predictions and optionally estimates standard errors of those predictions from a fitted generalized linear model object.
 #' @param object a fitted object of class inheriting from `"fastglm"`.
-#' @param newdata a matrix to be used for prediction.
+#' @param newdata a model matrix, or a data frame for a formula fit.
+#' @param offset optional prediction offsets.
+#' @param terms optional subset of model terms for term predictions.
 #' @param type the type of prediction required. The default is on the scale of the linear predictors;
 #' the alternative "\code{response}" is on the scale of the response variable. Thus for a default binomial
 #' model the default predictions are of log-odds (probabilities on logit scale) and \code{type = "response"}
@@ -406,71 +403,57 @@ family.fastglm <- function(object, ...)
 #' If omitted, that returned by \code{summary} applied to the object is used.
 #' @param ... further arguments passed to or from other methods.
 #' @export
-predict.fastglm <- function(object,
-                            newdata = NULL,
-                            type = c("link", "response"),
-                            se.fit = FALSE,
-                            dispersion = NULL, ...)
-{
+predict.fastglm <- function(object, newdata = NULL,
+                            type = c("link", "response", "terms"),
+                            se.fit = FALSE, dispersion = NULL, offset = NULL,
+                            terms = NULL, ...) {
     type <- match.arg(type)
-
-    if (is.null(dispersion))
-        dispersion <- if (is.null(object$dispersion) || is.nan(object$dispersion)) 1 else object$dispersion
-
-    if (is.null(newdata)) {
+    if (se.fit && is.null(object$cov.unscaled)) stop("prediction standard errors require full covariance", call. = FALSE)
+    if (is.null(dispersion)) dispersion <- object$dispersion
+    if (is.null(newdata) && !se.fit && type != "terms" && !is.null(object$linear.predictors)) {
         eta <- object$linear.predictors
-        if (is.null(eta)) eta <- drop(object$x %*% object$coefficients)
-        if (!se.fit) {
-            pred <- eta
-        } else {
-            cov.scaled <- dispersion * object$cov.unscaled
-            se <- sqrt(rowSums((object$x %*% cov.scaled) * object$x))
-            pred <- list(fit = eta, se.fit = se, residual.scale = sqrt(dispersion))
-        }
+        out <- if (type == "response") object$family$linkinv(eta) else eta
     } else {
-        pred <- predict_fastglm_lm(object, newdata, se.fit, dispersion = dispersion, ...)
-    }
-
-    if (type == "response")
-    {
-        fam <- family(object)
-        if (se.fit)
-        {
-            mu_eta <- fam$mu.eta(pred$fit)
-            pred$fit    <- fam$linkinv(pred$fit)
-            pred$se.fit <- pred$se.fit * abs(mu_eta)
-        } else
-        {
-            pred <- fam$linkinv(pred)
+        design <- .prediction_design(object, newdata, offset)
+        x <- design$x; b <- coef(object); good <- !is.na(b)
+        nonestimable <- rep(FALSE, nrow(x))
+        if (!is.null(object$alias.relation) && !all(good)) {
+            implied <- x[, good, drop = FALSE] %*% object$alias.relation
+            observed <- x[, !good, drop = FALSE]
+            nonestimable <- rowSums(abs(observed-implied)) > 1e-7*(1+rowSums(abs(observed)))
+            if (any(nonestimable)) warning("prediction is not estimable for some rows of the rank-deficient design", call. = FALSE)
+        }
+        if (!all(good)) x <- x[, good, drop = FALSE]
+        eta <- drop(x %*% b[good]) + design$offset
+        v <- dispersion * object$cov.unscaled[good, good, drop = FALSE]
+        if (type == "terms") {
+            if (is.null(object$terms)) stop("term prediction requires a formula fit", call. = FALSE)
+            aa <- attr(design$x, "assign")[good]
+            labs <- attr(object$terms, "term.labels")
+            center <- colMeans(as.matrix(model.matrix(object)[, good, drop = FALSE]))
+            xx <- sweep(as.matrix(x), 2L, center)
+            out <- se <- matrix(0, nrow(x), length(labs), dimnames = list(rownames(x), labs))
+            for (j in seq_along(labs)) {
+                ix <- which(aa == j)
+                out[, j] <- drop(xx[, ix, drop = FALSE] %*% b[good][ix])
+                if (se.fit) se[, j] <- sqrt(.quad_rows(xx[, ix, drop = FALSE], v[ix, ix, drop = FALSE]))
+            }
+            attr(out, "constant") <- sum(center * b[good])
+            if (!is.null(terms)) { out <- out[, terms, drop = FALSE]; se <- se[, terms, drop = FALSE] }
+        } else {
+            eta[nonestimable] <- NA_real_
+            out <- eta
+            if (se.fit) se <- sqrt(pmax(0, .quad_rows(x, v)))
+            if (se.fit) se[nonestimable] <- NA_real_
+            if (type == "response") {
+                if (se.fit) se <- se * abs(object$family$mu.eta(eta))
+                out <- object$family$linkinv(eta)
+            }
         }
     }
-    pred
-}
-
-
-predict_fastglm_lm <- function(object, newdata, se.fit = FALSE, dispersion = 1)
-{
-    dims <- dim(newdata)
-    if (is.null(dims))
-    {
-        newdata <- as.matrix(newdata)
-        dims <- dim(newdata)
+    if (is.null(newdata) && !is.null(object$na.action)) {
+        out <- napredict(object$na.action, out)
+        if (se.fit) se <- napredict(object$na.action, se)
     }
-    beta <- object$coefficients
-
-    if (dims[2L] != length(beta))
-    {
-        stop("newdata provided does not match fitted model 'object'")
-    }
-    eta <- drop(newdata %*% beta)
-
-    if (!se.fit) return(eta)
-
-    cov.unscaled <- object$cov.unscaled
-    if (is.null(cov.unscaled))
-        stop("standard errors of predictions require 'cov.unscaled' from a refit; reinstall fastglm and refit")
-
-    cov.scaled <- dispersion * cov.unscaled
-    se <- sqrt(rowSums((newdata %*% cov.scaled) * newdata))
-    list(fit = eta, se.fit = se, residual.scale = sqrt(dispersion))
+    if (se.fit) list(fit = out, se.fit = se, residual.scale = sqrt(dispersion)) else out
 }

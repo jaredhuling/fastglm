@@ -6,7 +6,7 @@
 \usage{
 fastglm_nb(
   x,
-  y,
+  y = NULL,
   weights = NULL,
   offset = NULL,
   start = NULL,
@@ -18,13 +18,15 @@ fastglm_nb(
   outer.maxit = 50L,
   outer.tol = 1e-07,
   theta.tol = 1e-08,
-  theta.maxit = 100L
+  theta.maxit = 100L,
+  block.size = 8192L
 )
 }
 \arguments{
-\item{x}{design matrix (numeric matrix, dgCMatrix not yet supported here).}
+\item{x}{numeric matrix, `dgCMatrix`, or [fastglm_source()] supplying rows
+on demand. A source must supply its own responses, weights, and offsets.}
 
-\item{y}{non-negative integer response vector.}
+\item{y}{non-negative integer response vector; omitted for a data source.}
 
 \item{weights}{optional prior weights vector of length `length(y)`.}
 
@@ -32,8 +34,9 @@ fastglm_nb(
 
 \item{start}{optional starting values for `beta`.}
 
-\item{init.theta}{optional starting value for `theta`. If `NULL`, uses
-the method-of-moments estimator from a Poisson pilot fit.}
+\item{init.theta}{optional starting value for `theta`. If `NULL`, dense
+fits use a moment initializer; sparse and source fits start at one after
+fitting the Poisson mean model.}
 
 \item{link}{character, one of `"log"` (default), `"sqrt"`, `"identity"`.}
 
@@ -48,22 +51,28 @@ the method-of-moments estimator from a Poisson pilot fit.}
 \item{outer.tol}{convergence tolerance for the outer loop on the
 sup-norm of the beta update plus the relative change in `theta`.}
 
-\item{theta.tol}{Brent tolerance for the inner theta MLE.}
+\item{theta.tol}{tolerance for the inner theta update.}
 
 \item{theta.maxit}{max iterations for the inner theta MLE.}
+
+\item{block.size}{maximum rows processed together for sparse-model size
+estimation and joint inference. A source determines its own block sizes.}
 }
 \value{
 A list of class `c("fastglm_nb", "fastglm")` with the usual
   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
   `twologlik` (twice the maximized NB log-likelihood).
+  `SE.theta` uses the joint observed information for coefficients and theta.
+  The default coefficient covariance retains the GLM expected-information
+  convention; `vcov(fit, full=TRUE)` returns the joint observed covariance.
 }
 \description{
 `fastglm_nb()` fits a negative-binomial regression model, jointly
 maximising the likelihood over the regression coefficients `beta` and the
 NB2 dispersion `theta`. It is the fastglm analogue of [MASS::glm.nb()],
-built on top of the native NB family kernel introduced in 0.0.6 so that
-all numerical loops -- IRLS, the inner theta MLE Brent root-find, and
-the outer (beta, theta) alternation -- run entirely in C++.
+Dense fits use native coefficient and size updates. Sparse and streamed
+fits alternate the existing GLM solver with size updates accumulated over
+row blocks, without loading the full design into a dense matrix.
 }
 \examples{
 set.seed(1)

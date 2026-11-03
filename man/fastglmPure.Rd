@@ -16,7 +16,8 @@ fastglmPure(
   method = 0L,
   tol = 1e-07,
   maxit = 100L,
-  firth = FALSE
+  firth = FALSE,
+  inference = c("full", "diagonal", "none")
 )
 }
 \arguments{
@@ -30,7 +31,7 @@ For \code{fastglmPure} this can only be the result of a call to a family functio
 
 \item{weights}{an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.}
 
-\item{offset}{this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
+\item{offset}{this can be used to specify an a priori known component to be included in the linear predictor during fitting.
 This should be a numeric vector of length equal to the number of cases}
 
 \item{start}{starting values for the parameters in the linear predictor.}
@@ -39,8 +40,9 @@ This should be a numeric vector of length equal to the number of cases}
 
 \item{mustart}{values for the vector of means.}
 
-\item{method}{an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
-2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and 
+\item{method}{a decomposition name (`qr`, `qr_unpivoted`, `llt`, `ldlt`,
+  `qr_full`, `svd`, or `auto`) or an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
+2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and
 Conquer SVD}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
@@ -56,12 +58,15 @@ adjustment modifies each working response by
 (1 for binomial/Poisson, estimated iteratively for other families).
 For `binomial(logit)` this reduces to the familiar
 \eqn{h_i (0.5 - \mu_i) / (\mu_i (1 - \mu_i))}.  Supported for all
-standard GLM families on dense, sparse (`dgCMatrix`), and
+supported unmodified likelihood families on dense, sparse (`dgCMatrix`), and
 `big.matrix` designs, and with any decomposition method.
 Sparse and `big.matrix` paths use lagged leverages from the
 previous IRLS iteration; at convergence the result is identical
 to the exact-leverage dense path.  Convergence is checked on the
 sup-norm of the coefficient update.}
+
+\item{inference}{retain full covariance, diagonal standard errors, or no inference.
+The no-inference option skips the final covariance calculation.}
 }
 \value{
 A list with the elements

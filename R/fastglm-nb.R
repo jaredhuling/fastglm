@@ -3,17 +3,19 @@
 #' `fastglm_nb()` fits a negative-binomial regression model, jointly
 #' maximising the likelihood over the regression coefficients `beta` and the
 #' NB2 dispersion `theta`. It is the fastglm analogue of [MASS::glm.nb()],
-#' built on top of the native NB family kernel introduced in 0.0.6 so that
-#' all numerical loops -- IRLS, the inner theta MLE Brent root-find, and
-#' the outer (beta, theta) alternation -- run entirely in C++.
+#' Dense fits use native coefficient and size updates. Sparse and streamed
+#' fits alternate the existing GLM solver with size updates accumulated over
+#' row blocks, without loading the full design into a dense matrix.
 #'
-#' @param x design matrix (numeric matrix, dgCMatrix not yet supported here).
-#' @param y non-negative integer response vector.
+#' @param x numeric matrix, `dgCMatrix`, or [fastglm_source()] supplying rows
+#'   on demand. A source must supply its own responses, weights, and offsets.
+#' @param y non-negative integer response vector; omitted for a data source.
 #' @param weights optional prior weights vector of length `length(y)`.
 #' @param offset optional offset vector of length `length(y)`.
 #' @param start optional starting values for `beta`.
-#' @param init.theta optional starting value for `theta`. If `NULL`, uses
-#'   the method-of-moments estimator from a Poisson pilot fit.
+#' @param init.theta optional starting value for `theta`. If `NULL`, dense
+#'   fits use a moment initializer; sparse and source fits start at one after
+#'   fitting the Poisson mean model.
 #' @param link character, one of `"log"` (default), `"sqrt"`, `"identity"`.
 #' @param method integer; `0..5`, see [fastglm()].
 #' @param tol convergence tolerance for the IRLS inner loop.
@@ -21,12 +23,17 @@
 #' @param outer.maxit maximum number of `(beta, theta)` outer iterations.
 #' @param outer.tol convergence tolerance for the outer loop on the
 #'   sup-norm of the beta update plus the relative change in `theta`.
-#' @param theta.tol Brent tolerance for the inner theta MLE.
+#' @param theta.tol tolerance for the inner theta update.
 #' @param theta.maxit max iterations for the inner theta MLE.
+#' @param block.size maximum rows processed together for sparse-model size
+#'   estimation and joint inference. A source determines its own block sizes.
 #'
 #' @returns A list of class `c("fastglm_nb", "fastglm")` with the usual
 #'   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
 #'   `twologlik` (twice the maximized NB log-likelihood).
+#'   `SE.theta` uses the joint observed information for coefficients and theta.
+#'   The default coefficient covariance retains the GLM expected-information
+#'   convention; `vcov(fit, full=TRUE)` returns the joint observed covariance.
 #'
 #' @examples
 #' set.seed(1)
@@ -41,7 +48,7 @@
 #' }
 #'
 #' @export
-fastglm_nb <- function(x, y,
+fastglm_nb <- function(x, y = NULL,
                        weights     = NULL,
                        offset      = NULL,
                        start       = NULL,
@@ -53,12 +60,20 @@ fastglm_nb <- function(x, y,
                        outer.maxit = 50L,
                        outer.tol   = 1e-7,
                        theta.tol   = 1e-8,
-                       theta.maxit = 100L)
+                       theta.maxit = 100L,
+                       block.size  = 8192L)
 {
     link <- match.arg(link)
+    if(inherits(x,"dgCMatrix") || inherits(x,"fastglm_source")) {
+        out <- .count_backend_nb(x,y,weights,offset,start,init.theta,link,method,tol,maxit,
+                                 outer.maxit,outer.tol,theta.tol,theta.maxit,block.size)
+        out$call <- match.call()
+        return(out)
+    }
     if (!is.matrix(x)) stop("'x' must be a numeric matrix.", call. = FALSE)
-    if (!is.numeric(y) || any(y < 0))
-        stop("'y' must be non-negative.", call. = FALSE)
+    if(is.integer(x)) storage.mode(x)<-"double"
+    if (!is.numeric(y) || !is.null(dim(y)) || any(!is.finite(y) | y < 0 | y != floor(y)))
+        stop("'y' must contain finite nonnegative integers.", call. = FALSE)
     n <- length(y)
     if (nrow(x) != n)
         stop("nrow(x) and length(y) disagree.", call. = FALSE)
@@ -67,6 +82,11 @@ fastglm_nb <- function(x, y,
     if (is.null(offset))  offset  <- rep(0, n)
     weights <- as.numeric(weights); offset <- as.numeric(offset)
 
+    .validate_glm_data(x, y, weights, offset)
+    .check_iterations(tol, maxit); .check_iterations(outer.tol, outer.maxit)
+    .check_iterations(theta.tol, theta.maxit)
+    method <- .solver_method(method)
+    if (!is.null(start) && (length(start) != ncol(x) || any(!is.finite(start)))) stop("invalid starting coefficients", call. = FALSE)
     if (!is.null(start)) {
         beta_init <- as.numeric(start)
         pilot <- fastglmPure(x, y,
@@ -149,22 +169,33 @@ fastglm_nb <- function(x, y,
     } else {
         negbin(theta = res$theta, link = link)
     }
-    res$family        <- final_family
-    res$y             <- as.numeric(y)
-    res$x             <- x
-    res$n             <- n
+    res$family <- final_family
+    res$y <- as.numeric(y); res$x <- x; res$n <- n
     res$prior.weights <- weights
-    res$dispersion    <- 1                       # NB likelihood is fully specified
-    res$intercept     <- any(apply(x, 2, function(col) max(col) == min(col)))
-    res$df.null       <- n - 1L
-    res$null.deviance <- sum(final_family$dev.resids(
-        as.numeric(y),
-        rep(if (sum(weights) > 0) sum(weights * as.numeric(y))/sum(weights) else mean(y), n),
-        weights))
-    aic_fn <- final_family$aic
-    res$aic <- aic_fn(res$y, res$n, res$fitted.values, res$prior.weights,
-                      res$deviance) + 2 * res$rank
+    res$intercept <- any(.intercept_columns(x))
+    res <- .finish_glm(res, offset)
+    keep <- weights>0
+    res$twologlik <- 2*sum(weights[keep]*dnbinom(y[keep],mu=res$fitted.values[keep],size=res$theta,log=TRUE))
+    res$aic <- -res$twologlik+2*(res$rank+1L)
+    # The beta-only covariance retains the usual expected-information GLM
+    # convention. The joint covariance and theta standard error use observed
+    # information, including the beta/theta cross derivatives.
+    res$theta.boundary <- res$theta<=1e-6*(1+theta.tol) || res$theta>=1e8/(1+theta.tol)
+    if(res$theta.boundary) {
+        joint <- matrix(NA_real_,length(res$coefficients)+1L,length(res$coefficients)+1L)
+        joint[seq_along(res$coefficients),seq_along(res$coefficients)] <- res$cov.unscaled
+    } else {
+        reader <- .count_backend_reader(x,y,weights=weights,offset=offset,block.size=block.size)
+        joint <- .count_backend_joint(reader,res$coefficients,res$theta,FALSE,link)
+    }
+    dimnames(joint) <- rep(list(c(names(res$coefficients),"theta")),2L)
+    res$vcov.full <- joint
+    res$SE.theta <- sqrt(joint[length(res$coefficients)+1L,length(res$coefficients)+1L])
+    if (!res$converged) warning("negative-binomial fit did not converge", call. = FALSE)
     res$call <- match.call()
+    res$theta.estimated <- TRUE
+    res$refit.controls <- list(link=link,method=method,tol=tol,maxit=maxit,outer.maxit=outer.maxit,
+        outer.tol=outer.tol,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
     class(res) <- c("fastglm_nb", "fastglm")
     res
 }
@@ -172,7 +203,7 @@ fastglm_nb <- function(x, y,
 #' @export
 logLik.fastglm_nb <- function(object, ...)
 {
-    df <- length(object$coefficients) + 1L          # +1 for theta
+    df <- object$rank + 1L          # +1 for theta
     structure(object$twologlik / 2, df = df,
-              nobs = length(object$y), class = "logLik")
+              nobs = object$nobs, class = "logLik")
 }

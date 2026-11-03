@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-The *fastglm* package is intended to be a **fast** *and* **stable** alternative to the `glm()` and `glm2::glm2()` functions for fitting generalized linear models. *fastglm* is compatible with `R`'s `family` objects (see `?family`). The package can be installed via
+Generalized linear models relate an outcome mean to predictors while allowing response distributions such as binomial or Poisson. The *fastglm* package performs the fitting calculations in C++ and provides several ways to solve the weighted regressions used during fitting. *fastglm* is compatible with `R`'s `family` objects (see `?family`). The package can be installed via
 
 ```{r, eval = FALSE, echo=TRUE}
 pak::pak("fastglm")
@@ -34,7 +34,7 @@ library(fastglm)
 
 ## Example
 
-The main package function is `fastglm()`. Currently, `fastglm()` does not allow for formula-based data input and is restricted to matrices. We use the following example to demonstrate the usage of `fastglm()`:
+The main function, `fastglm()`, accepts either a model formula and data frame or a predictor matrix and response vector. A matrix is convenient when the predictor columns have already been constructed. The following example illustrates that interface:
 
 ```{r, echo = TRUE}
 data(esoph)
@@ -48,7 +48,7 @@ gfit1 <- fastglm(x = x, y = y, family = binomial(link = "cloglog"))
 summary(gfit1)
 ```
 
-Alternatively, to use the built-in function of `glm()` for processing formulas and data frames, we can use `glm()` with `method = fastglm_fit` to call the *fastglm* fitting functionality:
+A formula can be passed directly to `fastglm()`. The fitting routine can also be used inside `glm()` by supplying `method = fastglm_fit`, which is useful when existing analysis code already uses `glm()`:
 
 ```{r}
 gfit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) +
@@ -56,16 +56,16 @@ gfit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) +
              family = binomial(link = "cloglog"),
              method = fastglm_fit)
 
-summary(gfit2, refit = FALSE)
+summary(gfit2)
 ```
 
-Setting `refit = FALSE` in `summary()` uses the standard errors computed by the internal fitting functions of *fastglm*. The default, `refit = TRUE`, re-fits the model using `glm()` with `method = "glm.fit"` and one IRLS iteration with the coefficients computed previously as the starting values.
+The coefficient summary uses the covariance calculated during fitting, evaluated at the reported coefficient estimates. It therefore obtains standard errors without fitting the model again.
 
-## Computational stability 
+## Computational stability
 
-*fastglm* does not compromise computational stability for speed. In fact, for many situations where `glm()` and even `glm2::glm2()` do not converge, `fastglm()` does converge.
+A GLM is usually fitted through a sequence of weighted regression updates, called iteratively reweighted least squares (IRLS). An update can increase the discrepancy between the fitted and observed outcomes or produce means outside the distribution's allowed range. The *fastglm* safeguards shorten such steps until an acceptable update is found. This step-halving procedure can improve convergence, although difficult models can still fail.
 
-As an example, consider the following data scenario, where the response distribution is (mildly) misspecified, but the link function is quite badly misspecified. In such scenarios, the standard IRLS algorithm tends to have convergence issues. The *glm2* package was designed to handle such cases, however, it still can have convergence issues. *fastglm* uses a similar step-halving technique as `glm2::glm2()`, but it starts at better initialized values and thus tends to have better convergence properties in practice. 
+The following example deliberately fits an inappropriate link, the function relating the response mean to the linear predictor. It illustrates numerical difficulties that can arise when proposed means leave the allowed range. Different starting values and step safeguards can lead to different convergence behavior. Numerical convergence alone does not make the chosen response distribution or link scientifically appropriate.
 
 ```{r, fig.show='hold'}
 set.seed(1)

@@ -1,0 +1,99 @@
+#' Numerical diagnostics for a fitted GLM
+#'
+#' Reports whether the iteration converged, which coefficients can be estimated
+#' separately, and whether fitted parameters are close to a boundary. The score
+#' is the derivative of the likelihood with respect to the coefficients; a large
+#' value after accounting for predictor scale can indicate incomplete convergence.
+#' Covariance conditioning describes how strongly nearly redundant coefficient
+#' effects can amplify numerical error. For bias-reduced
+#' fits the ordinary score need not vanish, so it is labeled separately from
+#' the adjusted-score convergence criterion.
+#' @param object a fitted fastglm GLM.
+#' @returns A list of numerical diagnostics.
+#' @export
+fastglm_diagnostics <- function(object) {
+    b <- coef(object); good <- !is.na(b); score <- numeric(sum(good)); info <- numeric(sum(good))
+    add <- function(x,y,w,off) {
+        x <- x[,good,drop=FALSE]; eta <- drop(x%*%b[good])+off
+        mu <- object$family$linkinv(eta); dm <- object$family$mu.eta(eta); v <- object$family$variance(mu)
+        s <- w*dm*(y-mu)/v; s[w==0] <- 0
+        ww <- w*dm^2/v; ww[w==0] <- 0
+        score <<- score+drop(crossprod(x,s)); info <<- info+colSums(x^2*ww)
+    }
+    if(inherits(object,"fastglm_stream")) {
+        for(k in seq_len(object$source$n_chunks)) { z <- object$fetch(k); add(z$X,z$y,z$weights,z$offset) }
+    } else {
+        x <- model.matrix(object); off <- object$offset
+        if(is.null(off)) off <- rep(0,nrow(x))
+        .design_blocks(x,function(z,i) add(z,object$y[i],object$prior.weights[i],off[i]))
+    }
+    names(score) <- names(b)[good]
+    v <- if(!is.null(object$cov.unscaled)) object$cov.unscaled[good,good,drop=FALSE]
+    list(converged=isTRUE(object$converged),iterations=object$iter,solver=object$solver,
+        fallback=object$solver.fallback,rank=object$rank,aliased=names(b)[!good],
+        score=score,score.type=if(isTRUE(object$firth)) "ordinary (before bias adjustment)" else "ordinary",
+        standardized.score=max(abs(score)/sqrt(info)),
+        covariance.condition=if(length(v) && all(is.finite(v))) kappa(v,exact=TRUE) else NA_real_,
+        boundary=isTRUE(object$boundary),theta.boundary=if(!is.null(object$theta)) object$theta<=1e-6 || object$theta>=1e8 else FALSE)
+}
+
+#' Profile-likelihood interval for negative-binomial size
+#'
+#' Refits regression coefficients at fixed theta and inverts the likelihood-ratio
+#' test on the log-theta scale. The interval may have an infinite upper endpoint
+#' when the Poisson boundary cannot be excluded. Bias-reduced fits are excluded
+#' because their estimates do not maximize this likelihood.
+#' @param object a negative-binomial GLM, truncated model, or hurdle model.
+#' @param level confidence level.
+#' @param tol root-finding tolerance on log theta.
+#' @param maxit maximum iterations for conditional regression fits.
+#' @returns A named interval for theta with the evaluated profile attached.
+#' @export
+fastglm_confint_theta <- function(object,level=.95,tol=1e-5,maxit=200L) {
+    if(is.null(object$theta) || !is.finite(object$theta) || object$theta<=0 ||
+       identical(object$theta.estimated,FALSE)) stop("model must estimate theta",call.=FALSE)
+    if(isTRUE(object$firth) || inherits(object,"fastglm_zi")) stop("theta profiles currently support ordinary NB, truncated NB, and hurdle NB fits",call.=FALSE)
+    if(length(level)!=1L || !is.finite(level) || level<=0 || level>=1) stop("'level' must lie between zero and one",call.=FALSE)
+    .check_iterations(tol,maxit)
+    is.hurdle <- inherits(object,"fastglm_hurdle")
+    is.trunc <- inherits(object,"fastglm_truncated") || is.hurdle
+    if(is.hurdle) {
+        d <- .count_design(object); keep <- object$y>0 & object$weights>0
+        x <- d$x$count[keep,,drop=FALSE]; y <- object$y[keep]
+        w <- object$weights[keep]; off <- d$offset$count[keep]
+        beta <- object$coefficients$count; llmax <- object$loglik_count
+    } else {
+        x <- model.matrix(object); y <- object$y; w <- object$prior.weights; off <- object$offset
+        beta <- coef(object); llmax <- as.numeric(logLik(object))
+    }
+    if(is.null(y)) stop("profile likelihood requires a retained response",call.=FALSE)
+    if(is.null(off)) off <- rep(0,length(y))
+    trace <- new.env(parent=emptyenv()); trace$theta <- trace$loglik <- numeric()
+    profile <- function(logtheta) {
+        theta <- exp(logtheta)
+        fit <- if(is.trunc) fastglm_truncated(x,y,dist="negbin",weights=w,offset=off,
+                    theta=theta,start=beta,tol=1e-10,maxit=maxit) else
+                fastglm(x,y,negbin(theta),weights=w,offset=off,start=beta,method="auto",tol=1e-10,maxit=maxit)
+        if(!fit$converged) stop("conditional profile fit did not converge",call.=FALSE)
+        ll <- as.numeric(logLik(fit)); trace$theta <- c(trace$theta,theta); trace$loglik <- c(trace$loglik,ll)
+        2*(llmax-ll)-qchisq(level,1)
+    }
+    center <- log(object$theta)
+    endpoint <- function(direction) {
+        a <- center; fa <- profile(a)
+        if(fa>0) stop("fitted theta is inconsistent with the conditional likelihood",call.=FALSE)
+        for(j in 1:35) {
+            b <- center+direction*j*log(2)
+            if(b < log(1e-10)) return(0)
+            if(b > log(1e9)) return(Inf)
+            fb <- profile(b)
+            if(fb>=0) return(exp(uniroot(profile,sort(c(a,b)),tol=tol)$root))
+            a <- b
+        }
+        if(direction<0) 0 else Inf
+    }
+    out <- c(lower=endpoint(-1),upper=endpoint(1))
+    attr(out,"level") <- level
+    attr(out,"profile") <- data.frame(theta=trace$theta,logLik=trace$loglik)
+    out
+}

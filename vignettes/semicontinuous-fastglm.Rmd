@@ -1,0 +1,98 @@
+---
+title: "Two-part models for nonnegative continuous outcomes"
+author: "Jared Huling"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Two-part models for nonnegative continuous outcomes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE)
+```
+
+Health care expenditures and other nonnegative outcomes often contain a substantial proportion of zeros together with a right-skewed positive distribution. A single Gamma regression excludes the zero observations and therefore addresses only the positive-outcome mean. A two-part model describes both the probability of a positive outcome and its conditional mean, allowing inference about the overall mean.
+
+Let $\pi(z)=\Pr(Y>0\mid z)$ and $m(x)=E(Y\mid Y>0,x)$. We use a binomial regression for $\pi(z)$ and a Gamma regression with a log link for $m(x)$. The resulting marginal mean is
+\[
+E(Y\mid x,z)=\pi(z)m(x).
+\]
+The two regressions describe different quantities: whether an outcome is positive and how large it is when positive. Under the stated likelihood model, their coefficient uncertainty separates into two covariance blocks, with zero covariance between the blocks. Uncertainty in the overall mean still depends on both regressions. The delta method approximates this uncertainty by calculating how small changes in either set of coefficients change the product $\pi(z)m(x)$.
+
+# Fitting and interpreting the components
+
+```{r}
+library(fastglm)
+set.seed(619)
+d <- data.frame(age=rnorm(800,50,10), severity=rnorm(800))
+probability <- plogis(-.4+.02*(d$age-50)+.5*d$severity)
+positive_mean <- exp(5+.015*(d$age-50)+.4*d$severity)
+d$cost <- rbinom(800,1,probability)*rgamma(800,shape=2,scale=positive_mean/2)
+fit <- fastglm_twopart(cost~age+severity|age+severity,data=d)
+summary(fit)
+```
+
+The first right-hand side specifies the positive-outcome regression, and the second specifies the probability of a positive outcome. A formula with a single right-hand side uses the same predictors in both regressions. The two regressions can therefore reflect different mechanisms when scientific knowledge supports that specification.
+
+# Marginal predictions
+
+A coefficient in the positive-outcome regression describes a conditional association among observations with positive outcomes. Its effect on the overall mean also depends on the binary regression. Predictions make this distinction explicit.
+
+```{r}
+new <- data.frame(age=c(40,60),severity=c(0,0))
+cbind(probability_positive=1-predict(fit,new,type="zero"),
+      positive_mean=predict(fit,new,type="count"),
+      marginal_mean=predict(fit,new,type="response"))
+predict(fit,new,type="response",se.fit=TRUE)
+```
+
+The standard errors condition on the supplied covariates and use the model-based covariance of both regressions. They do not account for model selection or misspecification of the positive-outcome distribution. Simulation provides a complementary assessment of the fitted zero frequency and positive tail.
+
+```{r}
+replicates <- simulate(fit,nsim=2,seed=620)
+vapply(replicates,mean,numeric(1))
+mean(d$cost)
+```
+
+The `firth=TRUE` option modifies the estimating equations to reduce the leading small-sample bias in both regressions. For the Gamma regression, it also adjusts the equation used to estimate dispersion, which determines the spread of positive outcomes around their conditional mean. It can be useful when the positive subset is small, although numerical convergence and the adequacy of both mean models still require examination.
+
+# Comparing average outcomes
+
+A change in a predictor can affect both the probability of a positive outcome and its amount. An average prediction contrast combines these changes on the outcome scale. The function supplied through `contrast` below increases severity by one unit in both regression designs and leaves the other predictors unchanged. The reported estimate is the average change in the fitted overall mean.
+
+```{r}
+change_severity <- function(design) {
+    design$count[,"severity"] <- design$count[,"severity"]+1
+    design$zero[,"severity"] <- design$zero[,"severity"]+1
+    design
+}
+fastglm_average(fit,contrast=change_severity)
+```
+
+This comparison conditions on the observed predictor distribution and describes the fitted association. A causal interpretation requires additional assumptions about treatment assignment, confounding, and the meaning of the intervention. If only the positive-outcome process is to be changed, the transformation can instead modify `design$count` alone.
+
+Repeated outcomes within the same patient or site can make the model-based standard errors inappropriate. Cluster-robust covariance sums the estimating contributions from both regressions within each independent group. Their estimation errors may then be related across components even though the likelihood-based covariance has separate blocks.
+
+```{r}
+cluster <- rep(seq_len(160),each=5)
+V <- fastglm_vcov(fit,type="HC1",cluster=cluster,full=TRUE)
+fastglm_average(fit,contrast=change_severity,vcov.=V)
+```
+
+The group identifiers in this example are illustrative. Actual identifiers should follow the sampling structure, and inference requires enough independent groups for the approximation to be useful. A cluster bootstrap through `fastglm_bootstrap()` provides a refitting-based alternative under the same independence assumption; the count-model vignette gives a worked example.
+
+# Reading large outcome datasets in blocks
+
+The same two-part model can be fitted when the complete predictor matrix cannot be kept in memory. A reader supplies blocks of rows, and `fastglm_source()` records the common factor coding and transformations. Both component regressions then revisit the same data as their coefficients are updated.
+
+```{r}
+read_cost <- function(k) d[((k-1)*200+1):(k*200),]
+cost_source <- fastglm_source(read_cost,4,
+    formula=cost~age+severity|age+severity,prototype=d)
+stream_fit <- fastglm_twopart(cost_source)
+max(abs(unname(coef(stream_fit))-unname(coef(fit))))
+fastglm_average(stream_fit)
+```
+
+The fit retains the reader and coefficient summaries, allowing predictions and average outcomes to be calculated by another pass through the blocks. This reduces design memory while requiring the observations to remain accessible and unchanged. Sparse predictor matrices are also supported through `fastglm_twopart(X, response=y, z=Z)`, where `X` specifies the positive-outcome regression and `Z` the probability of a positive outcome.

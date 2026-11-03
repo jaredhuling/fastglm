@@ -3,6 +3,7 @@ skip_if_not_installed("MASS")
 # Match MASS::glm.nb(y ~ x[,-1]) on simulated NB data.
 
 test_that("fastglm_nb matches MASS::glm.nb across realistic theta", {
+    skip_if_not_installed("numDeriv")
     for (th_true in c(0.5, 2.0)) {
         set.seed(2024 + th_true * 10)
         n  <- 500
@@ -17,7 +18,13 @@ test_that("fastglm_nb matches MASS::glm.nb across realistic theta", {
                      tolerance = 1e-7,
                      info = paste0("theta_true = ", th_true))
         expect_equal(f$theta, m$theta, tolerance = 1e-6)
-        expect_equal(f$SE.theta, m$SE.theta, tolerance = 1e-4)
+        objective <- function(par) -sum(dnbinom(y,
+            mu=exp(drop(X%*%par[seq_len(ncol(X))])),size=exp(par[ncol(X)+1L]),log=TRUE))
+        information <- numDeriv::hessian(objective,c(coef(f),log(f$theta)))
+        j <- ncol(X)+1L
+        # MASS holds beta fixed for its theta SE; fastglm reports the joint SE.
+        expect_equal(f$theta/sqrt(information[j,j]),m$SE.theta,tolerance=1e-4)
+        expect_equal(f$SE.theta,f$theta*sqrt(solve(information)[j,j]),tolerance=1e-5)
         expect_equal(f$twologlik, m$twologlik, tolerance = 1e-6)
         # Coefficient SE should match too.
         expect_equal(unname(f$se), unname(sqrt(diag(vcov(m)))),

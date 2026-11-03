@@ -22,7 +22,7 @@ fastglm_fit(
   firth = FALSE
 )
 
-fastglm_control(fastmethod = 0L, tol = 1e-07, maxit = 100L, ...)
+fastglm_control(fastmethod = 0L, tol = 1e-07, maxit = 100L, firth = FALSE, ...)
 
 \method{vcov}{fastglmFit}(object, ...)
 

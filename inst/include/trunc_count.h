@@ -69,20 +69,23 @@ struct TruncFitResult {
 inline void eval_pois(double lambda,
                       double& muT, double& dmuT_deta, double& log_q)
 {
-    if (!std::isfinite(lambda) || lambda < 0.0) lambda = 0.0;
-    if (lambda < 1e-12) {
+    if (!std::isfinite(lambda) || lambda < 0.0) {
+        muT = dmuT_deta = log_q = std::numeric_limits<double>::quiet_NaN();
+        return;
+    }
+    if (lambda < 1e-5) {
         // Taylor: q ~ lambda(1 - lambda/2 + ...), mu_T -> 1, V_T -> 1/2
         muT       = 1.0 + 0.5 * lambda + lambda * lambda / 12.0;
-        dmuT_deta = 0.5 + lambda / 6.0;     // (V_T at lambda=0 = 1/2)
-        log_q     = std::log(lambda) - 0.5 * lambda;  // log(lambda - lambda^2/2 + ...) ~ log(lambda) - lambda/2
-        if (lambda == 0.0) { muT = 1.0; dmuT_deta = 0.5; log_q = -std::numeric_limits<double>::infinity(); }
+        dmuT_deta = 0.5 * lambda + lambda * lambda / 6.0;     // (V_T at lambda=0 = 1/2)
+        log_q     = std::log(-std::expm1(-lambda));  // log(lambda - lambda^2/2 + ...) ~ log(lambda) - lambda/2
+        if (lambda == 0.0) { muT = 1.0; dmuT_deta = 0.0; log_q = -std::numeric_limits<double>::infinity(); }
         return;
     }
     const double q = -std::expm1(-lambda);   // 1 - exp(-lambda), stable
     muT       = lambda / q;
     dmuT_deta = muT * (1.0 + lambda - muT);  // Var(Y|Y>0) for Poisson
     if (dmuT_deta < 1e-300) dmuT_deta = 1e-300;
-    log_q     = std::log1p(-std::exp(-lambda));
+    log_q     = std::log(q);
 }
 
 // Truncated NB2 at (lambda, theta).  Sets mu_T, dmu_T/deta, log_q, log_p0,
@@ -95,7 +98,10 @@ inline void eval_nb(double lambda, double theta,
                     double& muT, double& dmuT_deta,
                     double& c, double& log_q, double& log_p0)
 {
-    if (!std::isfinite(lambda) || lambda < 0.0) lambda = 0.0;
+    if (!std::isfinite(lambda) || lambda < 0.0) {
+        muT = dmuT_deta = log_q = std::numeric_limits<double>::quiet_NaN();
+        return;
+    }
     if (theta <= 0.0) theta = 1e-12;
 
     const double tlam = theta + lambda;
@@ -118,11 +124,13 @@ inline void eval_nb(double lambda, double theta,
         log_q = std::log(q);
     }
 
-    if (q < 1e-300 || lambda < 1e-15) {
+    if (lambda < 1e-5 * std::min(theta, 1.0)) {
         // lambda -> 0 limit:  mu_T -> 1, c -> 1, dmu_T/deta -> small but positive.
         // Fall back to Poisson-like values in that corner; the log-lik handles itself.
-        muT       = 1.0;
-        dmuT_deta = 1e-12;
+        double a = (1.0 + 1.0 / theta) / 2.0;
+        double b = (1.0 - 1.0 / (theta * theta)) / 12.0;
+        muT = 1.0 + a * lambda + b * lambda * lambda;
+        dmuT_deta = a * lambda + 2.0 * b * lambda * lambda;
         return;
     }
 
@@ -170,11 +178,14 @@ inline double trunc_nb_score_theta(double theta,
                               : std::log(theta / tlam);
         const double log_p0 = theta * log_c;
         // Standard NB2 score row: digamma(y+t) - digamma(t) + log_c + (lam - y)/tlam
-        const double base = digamma(yi + theta) - dig_th + log_c + (lam - yi) / tlam;
+        const double base = fglm::nb::score_theta_row(theta, yi, lam, dig_th);
 
         // Truncation correction: + p_0/(1 - p_0) * [log_c + lam/tlam]
         // Compute p_0/(1 - p_0) = exp(log_p0) / (-expm1(log_p0)) for stability.
-        const double inner = log_c + lam_over_tlam;
+        const double r = lam / theta;
+        const double inner = r < 1e-4
+            ? r * r * (-0.5 + r * (2.0/3.0 + r * (-3.0/4.0 + r * 4.0/5.0)))
+            : log_c + lam_over_tlam;
         double ratio;
         if (log_p0 < -50.0) {
             ratio = std::exp(log_p0);  // negligible truncation
@@ -383,13 +394,13 @@ protected:
     virtual void update_dev_resids() override
     {
         devold = dev;
-        dev = mu.allFinite() && lambda_.allFinite() ? 0.0
+        dev = mu.allFinite() && lambda_.allFinite() ? -2.0 * compute_loglik()
                                                     : std::numeric_limits<double>::infinity();
     }
 
     virtual void update_dev_resids_dont_update_old() override
     {
-        dev = mu.allFinite() && lambda_.allFinite() ? 0.0
+        dev = mu.allFinite() && lambda_.allFinite() ? -2.0 * compute_loglik()
                                                     : std::numeric_limits<double>::infinity();
     }
 
@@ -402,18 +413,14 @@ protected:
 
     virtual void run_step_halving(int &iterr) override
     {
-        // Only recover from non-finite eta -> non-finite mu / lambda.  No
-        // monotonicity halving (Fisher scoring is monotone here, and the
-        // true deviance is expensive to compute).
         (void) iterr;
-        if (!std::isfinite(dev)) {
-            int itrr = 0;
-            while (!std::isfinite(dev) && itrr < maxit) {
-                ++itrr;
-                step_halve();
-                update_dev_resids_dont_update_old();
-            }
+        int halves = 0;
+        while ((!std::isfinite(dev) || dev > devold + tol * (0.1 + std::abs(devold))) && halves < maxit) {
+            step_halve();
+            update_dev_resids_dont_update_old();
+            ++halves;
         }
+        if (!std::isfinite(dev)) Rcpp::stop("truncated-count iteration could not find a finite likelihood");
     }
 
     // ||Δβ||_∞ < tol -- matches the prior trunc IRLS criterion.
@@ -433,12 +440,8 @@ protected:
         XtWX_buf_.template selfadjointView<Lower>().rankUpdate(WX_.adjoint());
         Ch_.compute(XtWX_buf_.template selfadjointView<Lower>());
         ch_ok_ = (Ch_.info() == Eigen::Success);
-        if (!ch_ok_) {
-            // Mark the iterate as infeasible so step-halving / outer caller
-            // can react.  Leaves beta unchanged.
-            dev = std::numeric_limits<double>::infinity();
-            return;
-        }
+        if (!ch_ok_ || Ch_.rcond() < 1e-12)
+            Rcpp::stop("truncated-count information is singular or ill-conditioned");
 
         wz_.noalias() = w.cwiseProduct(z);
         beta = Ch_.solve(WX_.adjoint() * wz_);
@@ -487,8 +490,8 @@ public:
         beta_prev = start;          // first converged() check shouldn't fire
         update_eta();
         refresh_kernels();          // populates mu, mu_eta, lambda_, c_vec_, log_q_
-        dev = 0.0;
-        devold = std::numeric_limits<double>::infinity();
+        dev = -2.0 * compute_loglik();
+        devold = dev;
     }
 
     // Allow the joint (beta, theta) outer loop to re-fit at a new theta
@@ -606,7 +609,44 @@ struct TruncNbJointResult {
     int            outer_iter;
     int            theta_iter;
     bool           outer_converged;
+    MatrixXd joint_vcov;
 };
+
+inline MatrixXd joint_nb_covariance(
+    const Eigen::Ref<const MatrixXd>& X, const VectorXd& beta,
+    const Eigen::Ref<const VectorXd>& y, const Eigen::Ref<const VectorXd>& wt,
+    const Eigen::Ref<const VectorXd>& offset, double theta)
+{
+    const int p = beta.size();
+    VectorXd par(p + 1); par.head(p) = beta; par[p] = std::log(theta);
+    auto score = [&](const VectorXd& z) {
+        double th = std::exp(z[p]);
+        ArrayXd lam = (X * z.head(p) + offset).array().exp();
+        VectorXd row(y.size());
+        for (int i = 0; i < y.size(); ++i) {
+            double mu, dmu, c, lq, lp;
+            eval_nb(lam[i], th, mu, dmu, c, lq, lp);
+            row[i] = wt[i] * c * (y[i] - mu);
+        }
+        VectorXd out(p + 1);
+        out.head(p) = X.transpose() * row;
+        out[p] = th * trunc_nb_score_theta(th, ArrayXd(y), lam, ArrayXd(wt));
+        return out;
+    };
+    MatrixXd info(p + 1, p + 1);
+    for (int j = 0; j <= p; ++j) {
+        double h = std::cbrt(std::numeric_limits<double>::epsilon()) * (1 + std::abs(par[j]));
+        VectorXd plus = par, minus = par; plus[j] += h; minus[j] -= h;
+        info.col(j) = -(score(plus) - score(minus)) / (2 * h);
+    }
+    info = ((info + info.transpose()) * 0.5).eval();
+    Eigen::LLT<MatrixXd> chol(info);
+    if (chol.info() != Eigen::Success || chol.rcond() < 1e-12)
+        return MatrixXd::Constant(p + 1, p + 1, NA_REAL);
+    MatrixXd cov = chol.solve(MatrixXd::Identity(p + 1, p + 1));
+    cov.row(p) *= theta; cov.col(p) *= theta;
+    return cov;
+}
 
 inline TruncNbJointResult fit_trunc_nb_joint(
     const Eigen::Ref<const MatrixXd>& X,
@@ -682,27 +722,28 @@ inline TruncNbJointResult fit_trunc_nb_joint(
         beta_prev = beta_curr;
     }
 
-    // SE.theta from numerical info at the joint MLE.
-    ArrayXd y_arr   = y.array();
-    ArrayXd lam_arr = lam_curr.array().max(1e-12);
-    ArrayXd wt_arr  = wt.array();
-    const double info_th = info_trunc_theta(theta, y_arr, lam_arr, wt_arr);
-    const double se_th   = (info_th > 0.0)
-                             ? std::sqrt(1.0 / info_th)
-                             : std::numeric_limits<double>::quiet_NaN();
+    // The last theta update may exhaust the outer loop before another beta
+    // step. Refresh the cached means and likelihood at the returned theta
+    // without changing the coefficient iterate or convergence status.
+    nb_solver.set_theta(theta);
+    nb_solver.init_from_beta(beta_curr);
+
+    MatrixXd joint_cov = joint_nb_covariance(X, beta_curr, y, wt, offset, theta);
+    const double se_th = std::sqrt(joint_cov(X.cols(), X.cols()));
 
     TruncFitResult inner;
     inner.beta      = beta_curr;
     inner.eta       = nb_solver.get_eta();
     inner.mu_T      = nb_solver.get_mu_T();
     inner.lambda    = lam_curr;
-    inner.se        = nb_solver.get_se();
-    inner.vcov      = nb_solver.get_vcov();
+    inner.vcov = joint_cov.topLeftCorner(X.cols(), X.cols());
+    inner.se = inner.vcov.diagonal().array().sqrt();
     inner.loglik    = nb_solver.compute_loglik();
     inner.iter      = iters;
     inner.converged = inner_conv;
 
     TruncNbJointResult res;
+    res.joint_vcov = joint_cov;
     res.inner            = inner;
     res.theta            = theta;
     res.se_theta         = se_th;

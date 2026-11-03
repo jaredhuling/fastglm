@@ -11,17 +11,12 @@ namespace fglm {
 // Choose ~16k so a chunk * p * 8 bytes fits comfortably in L2/L3 for typical p.
 inline int default_chunk_rows()
 {
-    static int cached = -1;
-    if (cached < 0) {
-        const char* env = std::getenv("FASTGLM_CHUNK_ROWS");
-        int v = 16384;
-        if (env != nullptr) {
-            int parsed = std::atoi(env);
-            if (parsed > 0) v = parsed;
-        }
-        cached = v;
+    const char* env = std::getenv("FASTGLM_CHUNK_ROWS");
+    if (env != nullptr) {
+        int parsed = std::atoi(env);
+        if (parsed > 0) return parsed;
     }
-    return cached;
+    return 16384;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +99,9 @@ inline void apply_X_streamed(
 // adjustment computed with lagged leverages from A_prev = (X'WX)^{-1} of the
 // previous IRLS iteration.
 //
-// Both XtWX_out and Xtwzstar_out are zeroed internally.
+// Xtwzstar_out is zeroed internally; XtWX_out is retained when its weights
+// are constant. For Gamma's log link, constant_adjustment can retain X'h/2
+// in p entries, avoiding an observation-sized leverage cache.
 inline void accumulate_firth_streamed(
     const Eigen::Ref<const Eigen::MatrixXd>& X,
     const Eigen::Ref<const Eigen::VectorXd>& w,           // sqrt working weights
@@ -117,53 +114,58 @@ inline void accumulate_firth_streamed(
     const Eigen::MatrixXd& A_prev,                        // p×p (X'WX)^{-1} from prev iter
     Eigen::MatrixXd& XtWX_out,
     Eigen::VectorXd& Xtwzstar_out,
-    int chunk_rows = -1)
+    int chunk_rows = -1,
+    bool accumulate_information = true,
+    Eigen::VectorXd* constant_adjustment = nullptr)
 {
     if (chunk_rows <= 0) chunk_rows = default_chunk_rows();
     const Eigen::Index n = X.rows();
     const Eigen::Index p = X.cols();
-    const double eps = std::numeric_limits<double>::epsilon();
 
-    XtWX_out.setZero();
+    if (accumulate_information) XtWX_out.setZero();
     Xtwzstar_out.setZero();
+    const bool build_adjustment = constant_adjustment != nullptr &&
+        constant_adjustment->size() == 0;
+    if (build_adjustment) constant_adjustment->setZero(p);
+    const bool need_leverages = constant_adjustment == nullptr || build_adjustment;
 
-    Eigen::MatrixXd WB(chunk_rows, p);
-    Eigen::MatrixXd XA(chunk_rows, p);
+    Eigen::MatrixXd WB(accumulate_information ? chunk_rows : 0, p);
+    Eigen::MatrixXd XA(need_leverages ? chunk_rows : 0, p);
     Eigen::VectorXd wzs_block(chunk_rows);
 
     for (Eigen::Index r = 0; r < n; r += chunk_rows) {
         Eigen::Index k = std::min<Eigen::Index>(chunk_rows, n - r);
         auto X_k = X.middleRows(r, k);
+        if (accumulate_information) {
+            WB.topRows(k).noalias() = w.segment(r, k).asDiagonal() * X_k;
+            XtWX_out.selfadjointView<Eigen::Lower>().rankUpdate(WB.topRows(k).adjoint());
+        }
 
-        // WB_k = diag(w_k) * X_k
-        WB.topRows(k).noalias() = w.segment(r, k).asDiagonal() * X_k;
-
-        // X'WX accumulation
-        XtWX_out.selfadjointView<Eigen::Lower>().rankUpdate(WB.topRows(k).adjoint());
-
-        // Lagged leverages: h_i = w_i^2 * x_i' A_prev x_i
-        //   = rowSums((X_k * A_prev) .* X_k) .* w_k^2
-        XA.topRows(k).noalias() = X_k * A_prev;
-        Eigen::ArrayXd h_k =
-            (XA.topRows(k).array() * X_k.array()).rowwise().sum()
-            * w.segment(r, k).array().square();
-
-        // ξ_i = φ * h_i * d2mu_i * V_i / (2 * pw_i * dmu_i^3)
-        Eigen::ArrayXd dmu3 = mu_eta_vec.segment(r, k).array().cube();
-        for (Eigen::Index i = 0; i < k; ++i)
-            if (std::abs(dmu3[i]) < eps) dmu3[i] = (dmu3[i] >= 0) ? eps : -eps;
-
-        Eigen::ArrayXd xi_k = phi * h_k * d2mu.segment(r, k).array()
-                               * var_mu_vec.segment(r, k).array()
-                               / (2.0 * pw.segment(r, k).array().max(eps) * dmu3);
-
-        // z*_i = z_i + ξ_i
-        // w^2 * z* for X'Wz* accumulation
         wzs_block.head(k).array() =
-            w.segment(r, k).array().square()
-            * (z.segment(r, k).array() + xi_k);
+            w.segment(r, k).array().square() * z.segment(r, k).array();
+        if (need_leverages) {
+            XA.topRows(k).noalias() = X_k * A_prev;
+            Eigen::ArrayXd h_k =
+                (XA.topRows(k).array() * X_k.array()).rowwise().sum()
+                * w.segment(r, k).array().square();
+            if (build_adjustment) {
+                (*constant_adjustment).noalias() += X_k.adjoint() * (0.5*h_k).matrix();
+            } else {
+                Eigen::ArrayXd xi_k = Eigen::ArrayXd::Zero(k);
+                for (Eigen::Index i = 0; i < k; ++i) {
+                    Eigen::Index j = r + i;
+                    if (pw[j] > 0 && w[j] != 0 && mu_eta_vec[j] != 0)
+                        xi_k[i] = phi * h_k[i] * (d2mu[j] / mu_eta_vec[j]) / (2*w[j]*w[j]);
+                }
+                wzs_block.head(k).array() = w.segment(r, k).array().square()
+                    * (z.segment(r, k).array() + xi_k);
+            }
+        }
         Xtwzstar_out.noalias() += X_k.adjoint() * wzs_block.head(k);
     }
+    if (constant_adjustment != nullptr)
+        Xtwzstar_out.noalias() += phi * (*constant_adjustment);
+
 }
 
 }  // namespace fglm

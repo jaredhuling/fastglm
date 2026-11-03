@@ -42,7 +42,7 @@ List fastglm(Rcpp::NumericMatrix Xs,
              double tol,
              int maxit,
              int fam_code,
-             const fglm::FamilyParams& fam_params)
+             const fglm::FamilyParams& fam_params, bool inference)
 {
     const Map<MatrixXd>  X(as<Map<MatrixXd> >(Xs));
     const Map<VectorXd>  y(as<Map<VectorXd> >(ys));
@@ -67,14 +67,13 @@ List fastglm(Rcpp::NumericMatrix Xs,
 
 
     // maximize likelihood
-    int iters = glm_solver->solve(maxit);
+    int iters = glm_solver->solve(maxit, inference);
     
     VectorXd beta      = glm_solver->get_beta();
     VectorXd se        = glm_solver->get_se();
-    VectorXd mu        = glm_solver->get_mu();
-    VectorXd eta       = glm_solver->get_eta();
+    const VectorXd &mu = glm_solver->get_mu_ref();
+    const VectorXd &eta = glm_solver->get_eta_ref();
     VectorXd wts       = glm_solver->get_w();
-    VectorXd pweights  = glm_solver->get_weights();
     MatrixXd vcov      = glm_solver->get_vcov();
 
     double dev         = glm_solver->get_dev();
@@ -89,7 +88,7 @@ List fastglm(Rcpp::NumericMatrix Xs,
                         _["linear.predictors"] = eta,
                         _["deviance"]          = dev,
                         _["weights"]           = wts,
-                        _["prior.weights"]     = pweights,
+                        _["prior.weights"]     = weightss,
                         _["rank"]              = rank,
                         _["df.residual"]       = df,
                         _["iter"]              = iters,
@@ -116,10 +115,10 @@ List fit_glm(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector w
              Function var, Function mu_eta, Function linkinv, Function dev_resids,
              Function valideta, Function validmu,
              int type, double tol, int maxit, int fam_code = -1,
-             Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue)
+             Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue, bool inference = true)
 {
     fglm::FamilyParams fp = parse_fam_params(fam_params);
-    return fastglm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp);
+    return fastglm(x, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp, inference);
 }
 
 
@@ -144,7 +143,7 @@ List bigfastglm(XPtr<BigMatrix> Xs,
                 int maxit,
                 int fam_code,
                 const fglm::FamilyParams& fam_params,
-                bool firth = false)
+                bool firth = false, bool inference = true)
 {
     //const Map<MatrixXd>  X(as<Map<MatrixXd> >(Xs));
     //XPtr<BigMatrix> bMPtr(Xs);
@@ -155,7 +154,11 @@ List bigfastglm(XPtr<BigMatrix> Xs,
     {
         throw Rcpp::exception("type for provided big.matrix not available");
     }
-    const Map<MatrixXd>  X = Map<MatrixXd>((double *)Xs->matrix(), Xs->nrow(), Xs->ncol()  );
+    if (Xs->separated_columns())
+        Rcpp::stop("Separated big.matrix storage requires fastglm_streaming() with row chunks.");
+    double* first = (double*)Xs->matrix() + Xs->col_offset() * Xs->total_rows() + Xs->row_offset();
+    const Eigen::Map<MatrixXd, 0, Eigen::OuterStride<> > X(
+        first, Xs->nrow(), Xs->ncol(), Eigen::OuterStride<>(Xs->total_rows()));
     const Map<VectorXd>  y(as<Map<VectorXd> >(ys));
     
     
@@ -186,14 +189,13 @@ List bigfastglm(XPtr<BigMatrix> Xs,
 
 
     // maximize likelihood
-    int iters = solver->solve(maxit);
+    int iters = solver->solve(maxit, inference);
 
     VectorXd beta      = solver->get_beta();
     VectorXd se        = solver->get_se();
-    VectorXd mu        = solver->get_mu();
-    VectorXd eta       = solver->get_eta();
+    const VectorXd &mu = solver->get_mu_ref();
+    const VectorXd &eta = solver->get_eta_ref();
     VectorXd wts       = solver->get_w();
-    VectorXd pweights  = solver->get_weights();
     MatrixXd vcov      = solver->get_vcov();
 
     double dev         = solver->get_dev();
@@ -208,7 +210,7 @@ List bigfastglm(XPtr<BigMatrix> Xs,
                             _["linear.predictors"] = eta,
                             _["deviance"]          = dev,
                             _["weights"]           = wts,
-                            _["prior.weights"]     = pweights,
+                            _["prior.weights"]     = weightss,
                             _["rank"]              = rank,
                             _["df.residual"]       = df,
                             _["iter"]              = iters,
@@ -220,10 +222,12 @@ List bigfastglm(XPtr<BigMatrix> Xs,
         Eigen::Map<const Eigen::ArrayXd> y_arr(y.data(), y.size());
         Eigen::Map<const Eigen::ArrayXd> mu_arr(mu_final.data(), mu_final.size());
         Eigen::Map<const Eigen::ArrayXd> w_arr(weights.data(), weights.size());
-        double std_dev = fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr);
+        double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr)
+            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
         out["deviance"]           = std_dev;
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;
+        out["bias.dispersion"] = solver->get_bias_dispersion();
         out["firth"]              = true;
     }
 
@@ -238,11 +242,11 @@ List fit_big_glm(SEXP x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcp
                  Function valideta, Function validmu,
                  int type, double tol, int maxit, int fam_code = -1,
                  Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue,
-                 bool firth = false)
+                 bool firth = false, bool inference = true)
 {
     XPtr<BigMatrix> xpMat(x);
     fglm::FamilyParams fp = parse_fam_params(fam_params);
-    return bigfastglm(xpMat, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp, firth);
+    return bigfastglm(xpMat, y, weights, offset, start, mu, eta, var, mu_eta, linkinv, dev_resids, valideta, validmu, type, tol, maxit, fam_code, fp, firth, inference);
 }
 
 
@@ -257,7 +261,7 @@ List fit_sparse_glm(SEXP x_sparse,
                     Function valideta, Function validmu,
                     int type, double tol, int maxit, int fam_code = -1,
                     Rcpp::Nullable<Rcpp::NumericVector> fam_params = R_NilValue,
-                    bool firth = false)
+                    bool firth = false, bool inference = true)
 {
     if (type != 2 && type != 3) {
         throw std::invalid_argument("for dgCMatrix objects, 'method' must be 2 (LLT) or 3 (LDLT).");
@@ -285,7 +289,7 @@ List fit_sparse_glm(SEXP x_sparse,
                       valideta, validmu,
                       tol, maxit, type, fam_code, fp, firth);
     solver.init_parms(beta_init, mu_init, eta_init);
-    int iters = solver.solve(maxit);
+    int iters = solver.solve(maxit, inference);
 
     VectorXd b   = solver.get_beta();
     VectorXd se  = solver.get_se();
@@ -317,10 +321,12 @@ List fit_sparse_glm(SEXP x_sparse,
         Eigen::Map<const Eigen::ArrayXd> y_arr(Y.data(), Y.size());
         Eigen::Map<const Eigen::ArrayXd> mu_arr(m.data(), m.size());
         Eigen::Map<const Eigen::ArrayXd> w_arr(wts.data(), wts.size());
-        double std_dev = fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr);
+        double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
+            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
         out["deviance"]           = std_dev;
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;
+        out["bias.dispersion"] = solver.get_bias_dispersion();
         out["firth"]              = true;
     }
     return out;

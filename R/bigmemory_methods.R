@@ -60,7 +60,7 @@ setMethod("%*%",signature(x="big.matrix", y="vector"),
 setMethod("%*%",signature(x="vector", y="big.matrix"),
           function(x, y)
           {
-              if(dim(y)[2] != length(x)) stop("non-conformant matrices")
+              if(dim(y)[1] != length(x)) stop("non-conformant matrices")
               return( .Call("prod_vec_big_right", x, y@address) )
           },
           valueClass="vector"

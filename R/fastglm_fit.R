@@ -124,238 +124,22 @@ fastglm_fit <- function(x, y,
                         singular.ok = TRUE,
                         firth = FALSE)
 {
-    control <- do.call("fastglm_control", control)
-    if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
-        stop("'firth' must be TRUE or FALSE.", call. = FALSE)
-    
-    is_sparse_matrix <- inherits(x, "dgCMatrix")
-    if (is_sparse_matrix)
-    {
-        is_big_matrix <- FALSE
-        if (!(control$method %in% c(2, 3)))
-        {
-            stop("for sparse (dgCMatrix) objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
-                 "QR / SVD on sparse matrices is not supported by this package.")
-        }
-    } else if (bigmemory::is.big.matrix(x))
-    {
-        is_big_matrix <- TRUE
-        if (!(control$method %in% c(2, 3)))
-        {
-            stop("for big.matrix objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
-                 "QR / SVD methods would force the matrix to be fully read into RAM, ",
-                 "defeating the purpose of bigmemory.")
-        }
-    } else if (is.matrix(x))
-    {
-        is_big_matrix <- FALSE
-    } else
-    {
-        stop("x must be a matrix, a big.matrix object, or a Matrix::dgCMatrix")
-    }
-    
-    xnames <- colnames(x)
-    ynames <- if (is.matrix(y)) rownames(y) else names(y)
-    
-    nobs <- NROW(y)
-    nvars <- ncol(x)
-    
-    if (is.null(weights)) 
-        weights <- rep.int(1, nobs)
-    else
-        weights <- as.vector(weights)
-    
-    if (any(weights < 0))
-        stop("negative weights not allowed")
-    
-    if (is.null(offset)) 
-        offset <- rep.int(0, nobs)
-    else
-        offset  <- as.vector(offset)
-    
-    stopifnot(is.numeric(y), 
-              is.numeric(weights),
-              is.numeric(offset),
-              NROW(y) == nrow(x),
-              NROW(y) == NROW(weights),
-              NROW(y) == NROW(offset)             
-    )
-    
-    variance <- family$variance
-    linkinv <- family$linkinv
-    
-    if (!is.function(variance) || !is.function(linkinv)) 
-        stop("'family' argument seems not to be a valid family object", 
-             call. = FALSE)
-    
-    if (is.null(family$family)) 
-    {
-        print(family)
-        stop("'family' not recognized")
-    }
-    
-    # from glm
-    dev.resids  <- family$dev.resids
-    aic         <- family$aic
-    mu.eta      <- family$mu.eta 
-    
-    unless.null <- function(x, if.null) if (is.null(x)) if.null else x
-    valideta    <- unless.null(family$valideta, function(eta) TRUE)
-    validmu     <- unless.null(family$validmu,  function(mu)  TRUE)
-    
-    if (is.null(mustart)) 
-    {
-        ## calculates mustart and may change y and weights and set n (!)
-        eval(family$initialize)
-    } else 
-    {
-        mukeep <- mustart
-        eval(family$initialize)
-        mustart <- mukeep
-    }
-    
-    y <- as.numeric(y)
-    
-    coefold <- NULL
-    eta <-
-        if (!is.null(etastart)) {
-            etastart
-        } else if (!is.null(start))
-        {    
-            if (length(start) != nvars)
-            {
-                stop(gettextf("length of 'start' should equal %d and correspond to initial coefs for %s", 
-                              nvars, toString(xnames)), 
-                     domain = NA)
-            }
-            
-            coefold <- start
-            offset + as.vector(x %*% start)
-            
-        } else family$linkfun(mustart)
-    
-    mu <- linkinv(eta)
-    
-    if (!(validmu(mu) && valideta(eta)))
-        stop("cannot find valid starting values: please specify some", call. = FALSE)
-    
-    if (is.null(start)) start <- rep(0, nvars)
-    
-    fc <- family_code(family)
-    fp <- family_params(family)
-
-    if (is_sparse_matrix)
-    {
-        res <- fit_sparse_glm(x, drop(y), drop(weights), drop(offset),
-                              drop(start), drop(mu), drop(eta),
-                              variance, mu.eta, linkinv, dev.resids,
-                              valideta, validmu,
-                              as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                              as.integer(fc), fp, firth = firth)
-        col_max <- apply(x, 2, max)
-        col_min <- apply(x, 2, min)
-        res$intercept <- any(is.int <- (col_max == col_min))
-    } else if (!is_big_matrix && firth)
-    {
-        res <- fit_glm_firth(x, drop(y), drop(weights), drop(offset),
-                             drop(start), drop(mu), drop(eta),
-                             variance, mu.eta, linkinv, dev.resids,
-                             valideta, validmu,
-                             as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                             as.integer(fc), fp)
-        res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
-    } else if (!is_big_matrix)
-    {
-        res <- fit_glm(x, drop(y), drop(weights), drop(offset),
-                       drop(start), drop(mu), drop(eta),
-                       variance, mu.eta, linkinv, dev.resids,
-                       valideta, validmu,
-                       as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                       as.integer(fc), fp)
-
-        res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
-    } else
-    {
-        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset),
-                           drop(start), drop(mu), drop(eta),
-                           variance, mu.eta, linkinv, dev.resids,
-                           valideta, validmu,
-                           as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                           as.integer(fc), fp, firth = firth)
-
-        res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
-    }
-    
-    if (!res$converged)
-    {
-        warning("fastglm_fit: algorithm did not converge", call. = FALSE)
-    }
-    
-    eps <- 10 * .Machine$double.eps
-    if (family$family == "binomial") 
-    {
-        if (any(res$fitted.values > 1 - eps) || any(res$fitted.values < eps))
-            warning("fastglm_fit: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
-    }
-    if (family$family == "poisson") 
-    {
-        if (any(res$fitted.values < eps))
-            warning("fastglm_fit: fitted rates numerically 0 occurred", call. = FALSE)
-    }
-    
-    if (is.null(xnames))
-    {
-        ncx <- ncol(x)
-        if (res$intercept)
-        {
-            which.int <- which(is.int)
-            xnames    <- paste0("X", seq_len(ncx - 1L))
-            names(res$coefficients) <- seq_len(ncx)
-            names(res$coefficients)[-which.int] <- xnames
-            names(res$coefficients)[which.int]  <- "(Intercept)"
-        } else
-        {
-            names(res$coefficients) <- paste0("X", seq_len(ncx))
-        }
-    } else
-    {
-        names(res$coefficients) <- xnames
-    }
-    
-    wtdmu         <- if (res$intercept) sum(weights * y) / sum(weights) else family$linkinv(offset)
-
-    n.ok          <- nobs - sum(weights == 0)
-    
-    res$df.null   <- n.ok - as.integer(res$intercept)
-    res$null.deviance <- sum(family$dev.resids(y, wtdmu, weights))
-    res$family <- family
-    res$prior.weights <- weights
-
-    res$aic <- aic(y, nobs, res$fitted.values, res$prior.weights, res$deviance) + 2 * res$rank
-
-    res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
-    res$dispersion <-
-        if (family$family %in% c("poisson", "binomial")) 1
-        else if (res$df.residual > 0)
-            sum((res$weights * res$residuals ^ 2)[weights > 0]) / res$df.residual
-        else NaN
-
-    res$y <- y
-    res$n <- nobs
-    res$x <- x        # reference to the model matrix; used by vcovHC / vcovCL
+    control <- do.call(fastglm_control, control)
+    firth <- firth || isTRUE(control$firth)
+    res <- fastglmPure(x, y, .resolve_family(family),
+                      if (is.null(weights)) rep(1, NROW(y)) else weights,
+                      if (is.null(offset)) rep(0, NROW(y)) else offset,
+                      start, etastart, mustart, control$method, control$tol,
+                      control$maxit, firth = firth)
+    if (!singular.ok && res$rank < ncol(x)) stop("singular fit encountered", call. = FALSE)
+    res <- .finish_glm(res, if (is.null(offset)) rep(0, NROW(y)) else offset, intercept)
     res$class <- "fastglmFit"
-
-    if (!is.null(res$cov.unscaled) && length(res$coefficients) > 0L) {
-        nms <- names(res$coefficients)
-        rownames(res$cov.unscaled) <- colnames(res$cov.unscaled) <- nms
-    }
-
     res
 }
 
 #' @export
 #' @rdname fastglm_fit
-fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, ...) {
+fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = FALSE, ...) {
     if (...length() > 0L && "method" %in% ...names() && identical(fastmethod, 0L)) {
         fastmethod <- ...elt(which(...names() == "method")[1L])
         fastmethod_name <- "method"
@@ -364,33 +148,17 @@ fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, ...) {
         fastmethod_name <- "fastmethod"
     }
     
-    if (!is.numeric(fastmethod) || length(fastmethod) != 1L || !(fastmethod %in% 0:5)) 
-        stop(sprintf("'%s' must be an interger between 0 and 5", fastmethod_name))
-    
-    if (!is.numeric(tol) || length(tol) != 1L || tol <= 0) 
-        stop("value of 'tol' must be > 0")
-    
-    if (!is.numeric(maxit) || length(maxit) != 1L || maxit <= 0) 
-        stop("maximum number of iterations must be > 0")
-    
-    list(method = fastmethod, tol = tol, maxit = maxit)
+    if (!identical(fastmethod, "auto")) fastmethod <- .solver_method(fastmethod)
+    .check_iterations(tol, maxit)
+
+    list(method = fastmethod, tol = tol, maxit = maxit, firth = firth)
 }
 
 #' @exportS3Method stats::vcov fastglmFit
 #' @rdname fastglm_fit
-vcov.fastglmFit <- function(object, ...) {
-    cov.unscaled <- object$cov.unscaled
-    if (is.null(cov.unscaled)) {
-        v <- diag(object[["se"]]^2, nrow = length(object$coefficients))
-        rownames(v) <- colnames(v) <- names(coef(object))
-        return(v)
-    }
-    disp <- if (is.null(object$dispersion) || is.nan(object$dispersion)) 1 else object$dispersion
-    v <- disp * cov.unscaled
-    rownames(v) <- colnames(v) <- names(coef(object))
-    v
-}
+vcov.fastglmFit <- function(object, ...) vcov.fastglm(object, ...)
 
+#' @method summary fastglmFit
 #' @exportS3Method summary fastglmFit
 #' @rdname fastglm_fit
 summary.fastglmFit <- function(object, ...) {

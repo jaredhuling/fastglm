@@ -23,11 +23,16 @@ fastglm_hurdle(
   theta.maxit = 100L,
   model = TRUE,
   y = TRUE,
-  x = FALSE
+  x = FALSE,
+  response = NULL,
+  z = NULL,
+  method = 2L,
+  block.size = 8192L
 )
 }
 \arguments{
-\item{formula}{a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
+\item{formula}{a numeric matrix, `dgCMatrix`, [fastglm_source()], or a
+[Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 where the right-hand side after `|` specifies the zero-model design.
 If `|` is absent, the same RHS is used for both parts.}
 
@@ -50,19 +55,34 @@ currently supported.}
 `"logit"` (default), `"probit"`, `"cloglog"`, `"log"`.}
 
 \item{init.theta}{optional positive scalar starting value for the NB
-dispersion.  If `NULL`, a method-of-moments initializer is used.}
+dispersion. Formula fits use a moment initializer by default; matrix
+and source fits start at one after fitting a truncated Poisson model.}
 
 \item{tol, maxit}{IRLS-loop convergence tolerance and iteration cap.}
 
 \item{outer.tol, outer.maxit}{`(beta, theta)` outer-loop convergence
 tolerance and iteration cap (only used when `dist = "negbin"`).}
 
-\item{theta.tol, theta.maxit}{Brent-loop tolerance / iteration cap for
-the inner theta MLE (only used when `dist = "negbin"`).}
+\item{theta.tol, theta.maxit}{tolerance and iteration cap for the inner
+theta update (only used when `dist = "negbin"`).}
 
 \item{model}{logical; keep the model frame on the result.}
 
-\item{y, x}{logical; keep the response / design matrices on the result.}
+\item{y, x}{logical; retain the response and, for formula fits, design
+matrices. Matrix fits retain their supplied designs for prediction;
+source fits retain the reader instead of observation-level data.}
+
+\item{response}{nonnegative integer response for a matrix design. A source
+supplies its response in each block; the existing `y` argument controls
+whether a fitted model retains its response.}
+
+\item{z}{optional binary-component matrix for matrix inputs; defaults to
+the count design. Source blocks can supply `Z` separately from `X`.}
+
+\item{method}{decomposition for matrix/source component GLMs, as in [fastglm()].}
+
+\item{block.size}{maximum number of matrix rows processed together for the
+truncated count component. A source determines its own block sizes.}
 }
 \value{
 A list of class `c("fastglm_hurdle", "fastglm")` with elements
@@ -80,8 +100,9 @@ Brent-1D MLE inside the C++ driver, alternating with the count-side
 IRLS.
 }
 \details{
-This is the fastglm analogue of [pscl::hurdle()] -- coefficients agree
-to 1e-6 on standard datasets, with all numerical loops in C++.
+Formula fits use the native count-model driver. Sparse designs and data
+supplied in blocks use the same likelihood with blockwise score updates.
+The latter permits repeated passes over data that need not fit in memory.
 }
 \examples{
 set.seed(1)
