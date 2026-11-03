@@ -1,0 +1,5 @@
+"case","n","p","K","firth","mode","operation","responses","median.seconds","min.seconds","max.seconds","R.allocation.bytes","max.error"
+"20000_3_4_ML",20000,3,4,FALSE,"baseline","direct",2,0.041,0.041,0.041,23593800,0
+"20000_3_4_BR",20000,3,4,TRUE,"baseline","direct",2,0.0740000000000001,0.073,0.0760000000000001,23593800,0
+"20000_12_8_ML",20000,12,8,FALSE,"baseline","direct",2,0.102,0.102,0.105,61755368,0
+"20000_12_8_BR",20000,12,8,TRUE,"baseline","direct",2,0.184,0.184,0.187,61755368,0

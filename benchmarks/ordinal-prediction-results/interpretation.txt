@@ -1,0 +1,10 @@
+Ordinal prediction: before/after allocation benchmark
+All 20 matched cases are retained; 20 pairs passed numerical checks and completed timing.
+Fitted parameters, centered computation, offsets, category mapping, and inference targets are held fixed. Only the prediction implementation differs.
+Cumulative R-managed allocation bytes, allocation count, and largest single R allocation; not process RSS or native peak memory.
+Timings are a bounded comparison on one machine; allocation totals are the direct implementation evidence.
+class: elapsed ratios 0.443-0.497; R allocation reductions 51.8-54.9%.
+cumulative: elapsed ratios 0.336-0.381; R allocation reductions 58.4-62.0%.
+cumulative_se: elapsed ratios 0.571-0.788; R allocation reductions 27.4-32.7%.
+probability: elapsed ratios 0.491-0.532; R allocation reductions 47.5-50.2%.
+probability_se: elapsed ratios 0.635-0.781; R allocation reductions 24.8-27.3%.

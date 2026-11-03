@@ -2,6 +2,24 @@
 
 ## Model interfaces and inference
 
+* Added `fastglm_ordinal_prepare()` and `fastglm_ordinal_batch()` for repeated
+  ordinal responses on a common predictor design. Saved centering, scaling,
+  and rank checks are reused when predictors and effective row frequencies
+  agree; changed inputs rebuild the preparation. Formula metadata and ordinary
+  R serialization are retained, with separate category mappings and convergence
+  diagnostics for each fit.
+* Added ordinal simulation, probability-scale and cumulative residuals, and
+  optional broom tidy, glance, and augment methods. Simulation preserves
+  effective category frequencies without expanding grouped observations.
+* Added HC0/HC1 and cluster covariance for ordinal fits, using the observed
+  ordinary-score Jacobian and explicit frequency semantics. For mean bias
+  reduction this is a first-order sandwich convention, with regularity and
+  positive-category requirements. Supplied covariance matrices can be used
+  in summaries, tidy output, and average probability contrasts.
+* Added ordinal pairs, cluster, and parametric refitting bootstraps. Replicate
+  diagnostics retain failures and category changes; regular uncertainty
+  summaries are unavailable when refits fail or categories are empty.
+
 * Added cumulative-logit proportional-odds models through `fastglm_ordinal()`,
   with formula and matrix interfaces, maximum likelihood and mean bias
   reduction, frequency counts, offsets, and native fitting.
@@ -103,6 +121,12 @@
   propagates source errors. Grouped-binomial likelihoods retain trial totals.
 
 ## Performance and verification
+
+* Added a reproducible ordinal development study spanning small samples,
+  rare categories, separation, correlated predictors, grouped frequencies,
+  and larger predictor/category dimensions. It distinguishes convergence,
+  reduced-category fits, and regular interval coverage, with simulation error
+  reported separately from computational performance.
 
 * Replaced numerical differentiation in joint count-model information with
   analytic derivatives, retaining coefficient--theta dependence, mixture

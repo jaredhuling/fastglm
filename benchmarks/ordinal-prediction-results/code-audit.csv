@@ -1,0 +1,6 @@
+"function_name","installed_md5","repository_md5","matches"
+".ordinal_prediction_design","b7cd657f9f29f6aedc2364ec32e9726e","b7cd657f9f29f6aedc2364ec32e9726e",TRUE
+".ordinal_prediction_scale","62501da21997e3e3b3b79ade512a53f0","62501da21997e3e3b3b79ade512a53f0",TRUE
+".ordinal_probability_block","162ad7a04493653d3d3fc50c05c84d21","162ad7a04493653d3d3fc50c05c84d21",TRUE
+".ordinal_gradient","ed084ba199ee33c94a4ef86a724517dd","ed084ba199ee33c94a4ef86a724517dd",TRUE
+"predict.fastglm_ordinal","171bd2e0f3a732566c94d5a197d85f62","171bd2e0f3a732566c94d5a197d85f62",TRUE

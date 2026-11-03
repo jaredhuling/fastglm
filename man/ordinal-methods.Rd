@@ -4,6 +4,7 @@
 \alias{update.fastglm_ordinal}
 \alias{coef.fastglm_ordinal}
 \alias{vcov.fastglm_ordinal}
+\alias{summary.fastglm_ordinal}
 \alias{confint.fastglm_ordinal}
 \title{Methods for proportional-odds fits}
 \usage{
@@ -11,7 +12,17 @@ update.fastglm_ordinal(object, formula., ..., evaluate = TRUE)
 
 \method{coef}{fastglm_ordinal}(object, component = c("all", "location", "threshold"), ...)
 
-\method{vcov}{fastglm_ordinal}(object, component = c("all", "location", "threshold"), ...)
+\method{vcov}{fastglm_ordinal}(
+  object,
+  component = c("all", "location", "threshold"),
+  type = c("model", "HC0", "HC1"),
+  cluster = NULL,
+  cadjust = TRUE,
+  block.size = 8192L,
+  ...
+)
+
+\method{summary}{fastglm_ordinal}(object, vcov. = NULL, ...)
 
 \method{confint}{fastglm_ordinal}(object, parm, level = 0.95, ...)
 }
@@ -25,6 +36,19 @@ update.fastglm_ordinal(object, formula., ..., evaluate = TRUE)
 \item{evaluate}{evaluate the updated call or return it for inspection.}
 
 \item{component}{return all parameters, location slopes, or thresholds.}
+
+\item{type}{covariance convention: \code{"model"} uses expected Fisher
+information; \code{"HC0"} and \code{"HC1"} use the ordinary-score sandwich
+described in \code{fastglm_vcov()}.}
+
+\item{cluster}{optional cluster identifiers for robust covariance.}
+
+\item{cadjust}{apply the cluster-count correction for robust covariance.}
+
+\item{block.size}{number of rows processed together for robust covariance.}
+
+\item{vcov.}{optional full coefficient covariance for the summary. Defaults
+to model-based expected Fisher information.}
 
 \item{parm}{parameters by name or position; defaults to all parameters.}
 
