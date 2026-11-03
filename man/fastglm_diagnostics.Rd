@@ -10,7 +10,10 @@ fastglm_diagnostics(object)
 \item{object}{a fitted fastglm GLM or ordinal model.}
 }
 \value{
-A list of numerical diagnostics. \code{score} omits division by the
+A \code{fastglm_diagnostics} list with a compact printed summary.
+Existing components remain accessible with \code{$} or \code{[[} at full precision.
+\code{as.data.frame()} returns one row, with list columns for coefficient scores,
+category labels, and other nonscalar details. \code{score} omits division by the
 dispersion, and \code{standardized.score} uses the correspondingly unscaled
 information diagonal, retaining the ordinary GLM score convention. For a
 bias-reduced fit, \code{adjusted.score} contains the adjusted likelihood scores,

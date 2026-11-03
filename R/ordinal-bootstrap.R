@@ -45,7 +45,7 @@
         result$call <- object$call
         result
     } else do.call(fastglm_ordinal,args)
-    for(key in c("terms","xlevels","contrasts","offset.expression","prediction.offset.required"))
+    for(key in c("terms","design.assign","xlevels","contrasts","offset.expression","prediction.offset.required"))
         fit[[key]] <- object[[key]]
     # These refits keep the fitted basis, including factor levels and spline
     # transformations. Remove the original missing-row restoration: the refit

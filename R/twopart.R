@@ -73,6 +73,5 @@ logLik.fastglm_twopart <- function(object, ...) {
 }
 #' @exportS3Method print fastglm_twopart
 print.fastglm_twopart <- function(x, ...) {
-    cat("\nTwo-part binomial / Gamma regression\n")
     print(summary(x), ...); invisible(x)
 }

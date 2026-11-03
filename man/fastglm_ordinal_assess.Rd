@@ -14,10 +14,14 @@ fastglm_ordinal_assess(
   offset = NULL,
   bins = 10L,
   proportional.odds = FALSE,
-  po.control = list()
+  po.control = list(),
+  po.test = c("none", "score"),
+  po.terms = NULL,
+  po.test.control = list(),
+  po.estimation = c("ML", "meanBR")
 )
 
-\method{print}{fastglm_ordinal_assessment}(x, ...)
+\method{print}{fastglm_ordinal_assessment}(x, digits = max(3L, getOption("digits") - 3L), ...)
 
 \method{plot}{fastglm_ordinal_assessment}(x, type = c("calibration", "proportional.odds"), level = 0.95, ...)
 }
@@ -46,7 +50,23 @@ models for the events \eqn{Y>j}, using the assessment rows and offsets.}
 \item{po.control}{named list containing \code{tol} and/or \code{maxit} for
 these auxiliary binary fits; defaults are \code{1e-8} and \code{200}.}
 
+\item{po.test}{\code{"none"} (default) or \code{"score"} for an analytic
+expected-information score test of the common-slope restriction.}
+
+\item{po.terms}{optional formula term names, or predictor column names for
+a matrix fit, to test jointly. The default tests all location predictors.
+All columns belonging to a selected formula term are included.}
+
+\item{po.test.control}{named list containing \code{tol} and/or \code{maxit}
+for the requested null refit; defaults are \code{1e-10} and \code{500}.}
+
+\item{po.estimation}{\code{"ML"} (default) or \code{"meanBR"} for the
+score-test null fit. See \code{\link{fastglm_po_test}} for the interpretation
+and limitations of the mean-bias-reduced alternative.}
+
 \item{x}{an ordinal assessment object.}
+
+\item{digits}{number of significant digits used for printing.}
 
 \item{...}{additional arguments passed to the plotting function; unused by
 the print method.}
@@ -62,13 +82,18 @@ An object of class \code{fastglm_ordinal_assessment}, containing
   \code{scores}, the overall frequency-weighted losses; \code{rows}, individual
   row averages and exclusions; \code{calibration}, predicted and observed
   cumulative probabilities by threshold and bin; and \code{proportional.odds},
-  the optional slope comparison table. It also records the evaluation source,
+  the optional slope comparison table. \code{proportional.odds.test} is
+  \code{NULL} unless requested; otherwise it records \code{statistic},
+  \code{df}, \code{p.value}, \code{available}, tested terms and columns,
+  null convergence, frequency, warnings, and an unavailability reason
+  and explanation. It also records the evaluation source,
   category order, and exclusion counts. Plot methods use these saved tables.
 }
 \description{
 Compares predicted cumulative probabilities with observed frequencies,
 scores the full ordered prediction distribution, and optionally compares
-predictor slopes across binary divisions of the outcome scale.
+predictor slopes across binary divisions of the outcome scale or tests
+proportional odds using an analytic score statistic.
 }
 \details{
 The ranked probability score (\code{rps}) is
@@ -108,9 +133,45 @@ The ranked probability score (\code{rps}) is
   frequency away (\code{unrepresentable_binary_counts}). Calibration alone
   is also not a test of proportional odds.
 
+  With \code{po.test="score"}, a proportional-odds null is refitted to
+  the included assessment outcomes, predictors, frequencies, and offsets.
+  Maximum likelihood is the default, including when \code{object} used
+  mean bias reduction. Set \code{po.estimation="meanBR"} to request a
+  mean-bias-reduced null explicitly. The resulting ordinary efficient score
+  retains its nuisance projection and has only first-order justification;
+  it can be conservative in small samples. The null refit
+  affects neither the original model nor the prediction scores. With
+  supplied outcomes, the test concerns the common-slope restriction in those
+  outcomes, rather than calibration of the original model's coefficients.
+  The score uses expected Fisher information, averaged analytically over
+  possible outcomes under this null, and projects out the threshold and
+  common-slope nuisance scores. No resampling is used for its p-value.
+
+  If \code{s} design columns are tested across \code{K} categories, the
+  asymptotic chi-square reference has \code{s*(K-2)} degrees of freedom.
+  Other predictors retain common slopes in both the null and the local
+  alternative; a selected-term test does not allow other terms to have
+  arbitrary threshold-specific slopes. Independent observations and a
+  correctly specified, identifiable interior null are required. The
+  approximation can be inaccurate in small or sparse samples; a large
+  p-value does not establish proportional odds. The test is not a robust,
+  cluster-adjusted, or higher-order bias-corrected test.
+
+  The score test currently requires a dense design, at least three declared
+  categories, at least one tested predictor, and positive frequency in every
+  category. Empty categories, deficient rank, failed null fits, and
+  unavailable information produce missing statistics and p-values with an
+  explicit reason. Categories and degrees of freedom are not silently
+  reduced, and the calculation does not switch to a mean bias-reduced fit.
+  The descriptive slope comparison and formal test can be requested
+  independently. Formula term selection requires retained design assignments
+  from a current ordinal fit, including when \code{model=FALSE}.
+
   Scoring and calibration use blocks of rows and require work proportional to
   the number of rows times the number of categories. The optional binary
   comparison fits one model per threshold without expanding frequency rows.
+  The score test also processes frequencies without expanding observations;
+  its information matrix grows with the predictor and category dimensions.
 }
 \references{
 Epstein, E. S. (1969). A scoring system for probability forecasts
@@ -123,4 +184,9 @@ Epstein, E. S. (1969). A scoring system for probability forecasts
   Brant, R. (1990). Assessing proportionality in the proportional odds model
   for ordinal logistic regression. Biometrics, 46, 1171--1178.
   \doi{10.2307/2532457}.
+
+  SAS Institute Inc. (2013). SAS/STAT 12.3 User's Guide. The LOGISTIC
+  Procedure, Score Statistics and Tests, pp. 4246--4248. Expected and
+  observed information define distinct finite-sample score calculations;
+  this implementation uses expected information.
 }

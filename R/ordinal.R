@@ -129,11 +129,13 @@ fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
     terms <- attr(mf,"terms")
     design <- model.matrix(terms,mf,contrasts.arg=contrasts)
     coding <- attr(design,"contrasts")
+    assignment <- attr(design,"assign")
     design <- design[,attr(design,"assign")!=0L,drop=FALSE]
     fit <- fastglm_ordinal.default(design,model.response(mf),
         weights=model.weights(mf),offset=model.offset(mf),levels=levels,
         firth=firth,tol=tol,maxit=maxit,block.size=block.size,control=control)
     fit$terms <- terms
+    fit$design.assign <- assignment[assignment!=0L]
     fit$xlevels <- stats::.getXlevels(terms,mf)
     fit$contrasts <- coding
     fit$na.action <- attr(mf,"na.action")
@@ -262,26 +264,31 @@ summary.fastglm_ordinal <- function(object,vcov.=NULL,...) {
 }
 
 #' @exportS3Method print summary.fastglm_ordinal
-print.summary.fastglm_ordinal <- function(x,...) {
-    print(x$call)
-    cat("\nCumulative logit with common slopes; ",
-        if(x$firth) "mean bias reduction" else "maximum likelihood","\n",sep="")
-    if(nrow(x$location)) { cat("\nLocation coefficients (positive means higher outcomes):\n"); printCoefmat(x$location,...) }
-    cat("\nThresholds:\n"); printCoefmat(x$thresholds,P.values=FALSE,has.Pvalue=FALSE,...)
-    if(isTRUE(x$converged)) cat("\nUncertainty:",x$covariance.type,"\n")
-    cat("\nFrequency total:",x$frequency,"  Positive-frequency rows:",x$nobs.rows,
-        "\nConverged:",x$converged," (",x$convergence.reason,"); iterations:",x$iterations,"\n")
-    if(x$boundary) cat("Empty interior categories:",paste(x$collapsed.categories,collapse=", "),
-                       "\nTied-threshold standard errors are unavailable; inference uses the reduced category model.\n")
+print.summary.fastglm_ordinal <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header("Proportional-odds regression",x$call)
+    .fastglm_print_field("Estimation",if(x$firth) "mean bias reduction" else "maximum likelihood")
+    .fastglm_print_coefficients(x$location,"Location coefficients (positive means higher outcomes)",digits,...)
+    .fastglm_print_coefficients(x$thresholds,"Thresholds",digits,P.values=FALSE,has.Pvalue=FALSE,...)
+    cat("\n")
+    if(isTRUE(x$converged)) .fastglm_print_field("Uncertainty",x$covariance.type)
+    .fastglm_print_field("Sample",paste0(x$frequency," observations represented by ",x$nobs.rows," positive-frequency rows"))
+    .fastglm_print_convergence(x$converged,x$iterations,x$convergence.reason)
+    if(x$boundary) {
+        .fastglm_print_field("Empty interior categories",x$collapsed.categories)
+        cat("Tied-threshold standard errors are unavailable; inference uses the reduced category model.\n")
+    }
     invisible(x)
 }
 
 #' @exportS3Method print fastglm_ordinal
-print.fastglm_ordinal <- function(x,...) {
-    print(x$call)
-    cat("\nLocation coefficients:\n"); print(x$beta,...)
-    cat("\nThresholds:\n"); print(x$alpha,...)
-    cat("\nConverged:",x$converged," (",x$convergence.reason,")\n")
+print.fastglm_ordinal <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header("Proportional-odds regression",x$call)
+    .fastglm_print_field("Estimation",if(x$firth) "mean bias reduction" else "maximum likelihood")
+    .fastglm_print_coefficients(x$beta,"Location coefficients",digits,...)
+    .fastglm_print_coefficients(x$alpha,"Thresholds",digits,...)
+    cat("\n"); .fastglm_print_convergence(x$converged,x$iterations,x$convergence.reason)
     invisible(x)
 }
 
@@ -454,7 +461,9 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,...) {
 #' @details With collapsed empty interior categories, probability and cumulative
 #'   uncertainty refer to the reduced category model. The removed category has
 #'   fitted probability zero and unavailable probability standard error.
-#' @returns A vector or matrix, or a list with \code{fit} and \code{se.fit}.
+#' @returns A vector or matrix, or a \code{fastglm_prediction} list with
+#'   \code{fit}, \code{se.fit}, and \code{covariance.scope}. See
+#'   \link{fastglm-prediction-methods} for printing and table extraction.
 #' @export
 predict.fastglm_ordinal <- function(object,newdata=NULL,
         type=c("probability","cumulative","class","link","response"),
@@ -523,8 +532,8 @@ predict.fastglm_ordinal <- function(object,newdata=NULL,
         fit <- napredict(object$na.action,fit)
         if(se.fit) se <- napredict(object$na.action,se)
     }
-    if(se.fit) list(fit=fit,se.fit=se,
-        covariance.scope=if(object$boundary) "reduced category model" else "expected Fisher information") else fit
+    if(se.fit) .fastglm_prediction(list(fit=fit,se.fit=se,
+        covariance.scope=if(object$boundary) "reduced category model" else "expected Fisher information"),type) else fit
 }
 
 #' @export

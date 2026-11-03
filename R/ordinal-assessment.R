@@ -135,7 +135,8 @@
 #'
 #' Compares predicted cumulative probabilities with observed frequencies,
 #' scores the full ordered prediction distribution, and optionally compares
-#' predictor slopes across binary divisions of the outcome scale.
+#' predictor slopes across binary divisions of the outcome scale or tests
+#' proportional odds using an analytic score statistic.
 #' @param object a converged \code{fastglm_ordinal} model.
 #' @param newdata prediction data frame or matrix, as in \code{predict}.
 #' @param y ordered outcomes, category labels, numeric codes in the fitted
@@ -152,6 +153,16 @@
 #'   models for the events \eqn{Y>j}, using the assessment rows and offsets.
 #' @param po.control named list containing \code{tol} and/or \code{maxit} for
 #'   these auxiliary binary fits; defaults are \code{1e-8} and \code{200}.
+#' @param po.test \code{"none"} (default) or \code{"score"} for an analytic
+#'   expected-information score test of the common-slope restriction.
+#' @param po.terms optional formula term names, or predictor column names for
+#'   a matrix fit, to test jointly. The default tests all location predictors.
+#'   All columns belonging to a selected formula term are included.
+#' @param po.test.control named list containing \code{tol} and/or \code{maxit}
+#'   for the requested null refit; defaults are \code{1e-10} and \code{500}.
+#' @param po.estimation \code{"ML"} (default) or \code{"meanBR"} for the
+#'   score-test null fit. See \code{\link{fastglm_po_test}} for the interpretation
+#'   and limitations of the mean-bias-reduced alternative.
 #' @details The ranked probability score (\code{rps}) is
 #'   \eqn{\sum_{j=1}^{K-1}\{F_j-I(Y\leq j)\}^2};
 #'   \code{rps_normalized} divides by \eqn{K-1}, and lies between zero and one.
@@ -189,14 +200,54 @@
 #'   frequency away (\code{unrepresentable_binary_counts}). Calibration alone
 #'   is also not a test of proportional odds.
 #'
+#'   With \code{po.test="score"}, a proportional-odds null is refitted to
+#'   the included assessment outcomes, predictors, frequencies, and offsets.
+#'   Maximum likelihood is the default, including when \code{object} used
+#'   mean bias reduction. Set \code{po.estimation="meanBR"} to request a
+#'   mean-bias-reduced null explicitly. The resulting ordinary efficient score
+#'   retains its nuisance projection and has only first-order justification;
+#'   it can be conservative in small samples. The null refit
+#'   affects neither the original model nor the prediction scores. With
+#'   supplied outcomes, the test concerns the common-slope restriction in those
+#'   outcomes, rather than calibration of the original model's coefficients.
+#'   The score uses expected Fisher information, averaged analytically over
+#'   possible outcomes under this null, and projects out the threshold and
+#'   common-slope nuisance scores. No resampling is used for its p-value.
+#'
+#'   If \code{s} design columns are tested across \code{K} categories, the
+#'   asymptotic chi-square reference has \code{s*(K-2)} degrees of freedom.
+#'   Other predictors retain common slopes in both the null and the local
+#'   alternative; a selected-term test does not allow other terms to have
+#'   arbitrary threshold-specific slopes. Independent observations and a
+#'   correctly specified, identifiable interior null are required. The
+#'   approximation can be inaccurate in small or sparse samples; a large
+#'   p-value does not establish proportional odds. The test is not a robust,
+#'   cluster-adjusted, or higher-order bias-corrected test.
+#'
+#'   The score test currently requires a dense design, at least three declared
+#'   categories, at least one tested predictor, and positive frequency in every
+#'   category. Empty categories, deficient rank, failed null fits, and
+#'   unavailable information produce missing statistics and p-values with an
+#'   explicit reason. Categories and degrees of freedom are not silently
+#'   reduced, and the calculation does not switch to a mean bias-reduced fit.
+#'   The descriptive slope comparison and formal test can be requested
+#'   independently. Formula term selection requires retained design assignments
+#'   from a current ordinal fit, including when \code{model=FALSE}.
+#'
 #'   Scoring and calibration use blocks of rows and require work proportional to
 #'   the number of rows times the number of categories. The optional binary
 #'   comparison fits one model per threshold without expanding frequency rows.
+#'   The score test also processes frequencies without expanding observations;
+#'   its information matrix grows with the predictor and category dimensions.
 #' @returns An object of class \code{fastglm_ordinal_assessment}, containing
 #'   \code{scores}, the overall frequency-weighted losses; \code{rows}, individual
 #'   row averages and exclusions; \code{calibration}, predicted and observed
 #'   cumulative probabilities by threshold and bin; and \code{proportional.odds},
-#'   the optional slope comparison table. It also records the evaluation source,
+#'   the optional slope comparison table. \code{proportional.odds.test} is
+#'   \code{NULL} unless requested; otherwise it records \code{statistic},
+#'   \code{df}, \code{p.value}, \code{available}, tested terms and columns,
+#'   null convergence, frequency, warnings, and an unavailability reason
+#'   and explanation. It also records the evaluation source,
 #'   category order, and exclusion counts. Plot methods use these saved tables.
 #' @references Epstein, E. S. (1969). A scoring system for probability forecasts
 #'   of ranked categories. Journal of Applied Meteorology, 8, 985--987.
@@ -208,9 +259,16 @@
 #'   Brant, R. (1990). Assessing proportionality in the proportional odds model
 #'   for ordinal logistic regression. Biometrics, 46, 1171--1178.
 #'   \doi{10.2307/2532457}.
+#'
+#'   SAS Institute Inc. (2013). SAS/STAT 12.3 User's Guide. The LOGISTIC
+#'   Procedure, Score Statistics and Tests, pp. 4246--4248. Expected and
+#'   observed information define distinct finite-sample score calculations;
+#'   this implementation uses expected information.
 #' @export
 fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
-        offset=NULL,bins=10L,proportional.odds=FALSE,po.control=list()) {
+        offset=NULL,bins=10L,proportional.odds=FALSE,po.control=list(),
+        po.test=c("none","score"),po.terms=NULL,po.test.control=list(),
+        po.estimation=c("ML","meanBR")) {
     if(!inherits(object,"fastglm_ordinal") || !isTRUE(object$converged))
         stop("ordinal assessment requires a converged fastglm_ordinal fit",call.=FALSE)
     if(!is.numeric(bins) || is.complex(bins) || length(bins)!=1L || !is.finite(bins) ||
@@ -218,6 +276,10 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
         stop("'bins' must be a positive integer",call.=FALSE)
     if(!is.logical(proportional.odds) || length(proportional.odds)!=1L || is.na(proportional.odds))
         stop("'proportional.odds' must be TRUE or FALSE",call.=FALSE)
+    po.test <- match.arg(po.test)
+    po.estimation <- match.arg(po.estimation)
+    if(po.test=="none" && (!is.null(po.terms) || length(po.test.control) || po.estimation!="ML"))
+        stop("'po.terms', 'po.test.control', and 'po.estimation' require po.test = 'score'",call.=FALSE)
     training <- is.null(newdata) && is.null(y)
     if(!is.null(newdata) && is.null(y))
         stop("supply assessment outcomes 'y' with 'newdata'",call.=FALSE)
@@ -296,6 +358,7 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
     scores <- data.frame(frequency=frequency,log_loss=score(rows$log_loss),
                          rps=score(rows$rps),rps_normalized=score(rows$rps_normalized))
     po <- if(proportional.odds) .ordinal_assessment_po(object,design,response,take,po.control) else NULL
+    po.test.result <- if(po.test=="score") .ordinal_assessment_po_test(object,design,response,take,po.terms,po.test.control,po.estimation) else NULL
     if(training && !is.null(object$na.action)) {
         index <- napredict(object$na.action,seq_len(n))
         rows <- rows[index,,drop=FALSE]
@@ -306,24 +369,35 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
     excluded <- table(rows$exclusion[!rows$included])
     exclusions <- data.frame(reason=as.character(names(excluded)),rows=as.integer(excluded),stringsAsFactors=FALSE)
     structure(list(scores=scores,rows=rows,calibration=calibration,proportional.odds=po,
+        proportional.odds.test=po.test.result,
         evaluation=if(training) "training" else "supplied outcomes",levels=object$levels,
         exclusions=exclusions,bins=bins,call=match.call()),class="fastglm_ordinal_assessment")
 }
 
 #' @rdname fastglm_ordinal_assess
 #' @param x an ordinal assessment object.
+#' @param digits number of significant digits used for printing.
 #' @param ... additional arguments passed to the plotting function; unused by
 #'   the print method.
 #' @method print fastglm_ordinal_assessment
 #' @export
-print.fastglm_ordinal_assessment <- function(x,...) {
-    cat("Ordinal assessment (",x$evaluation,")\n",sep="")
-    print(x$scores,row.names=FALSE)
-    if(nrow(x$exclusions)) { cat("Excluded rows:\n"); print(x$exclusions,row.names=FALSE) }
+print.fastglm_ordinal_assessment <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header(paste0("Ordinal assessment (",x$evaluation,")"))
+    tab <- x$scores
+    names(tab) <- c("Frequency","Log loss","Ranked probability score","Normalized RPS")
+    cat("\nPrediction scores:\n"); .fastglm_print_table(tab,digits)
+    if(nrow(x$exclusions)) {
+        cat("\nExcluded rows:\n"); tab <- x$exclusions; tab$reason <- gsub("_"," ",tab$reason,fixed=TRUE)
+        names(tab) <- c("Reason","Rows"); .fastglm_print_table(tab,digits)
+    }
     if(!is.null(x$proportional.odds)) {
         failed <- unique(x$proportional.odds$threshold[!x$proportional.odds$converged])
-        cat("Descriptive proportional-odds comparison; ",length(failed),
+        cat("\nDescriptive proportional-odds comparison; ",length(failed),
             " unavailable threshold fit(s).\n",sep="")
+    }
+    if(!is.null(x$proportional.odds.test)) {
+        cat("\n"); print(x$proportional.odds.test,digits=digits,...)
     }
     invisible(x)
 }

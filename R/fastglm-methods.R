@@ -108,7 +108,13 @@ summary.fastglm <- function(object, dispersion = NULL,
         ans$correlation <- covmat.unscaled / outer(dd, dd)
         ans$symbolic.cor <- symbolic.cor
     }
-    class(ans) <- "summary.glm"
+    ans$converged <- object$converged
+    ans$convergence.reason <- object$convergence.reason
+    ans$firth <- object$firth
+    ans$theta <- object$theta
+    ans$SE.theta <- object$SE.theta
+    ans$title <- if(inherits(object,"fastglm_nb")) "Negative-binomial regression" else "Generalized linear model"
+    class(ans) <- c("summary.fastglm","summary.glm")
     return(ans)
 }
 
@@ -333,22 +339,18 @@ bread.fastglmFit <- bread.fastglm
 #' @exportS3Method print fastglm
 print.fastglm <- function(x, digits = max(3L, getOption("digits") - 3L), ...)
 {
-    cat("\nCall:  ", paste(deparse(x$call), sep = "\n", collapse = "\n"), 
-        "\n\n", sep = "")
-    
-    if (length(coef(x)) > 0L) {
-        cat("Coefficients")
-        if (is.character(co <- x$contrasts)) {
-            cat("  [contrasts: ", apply(cbind(names(co), co), 1L, paste, collapse = "="), "]")
-        }
-        
-        cat(":\n")
-        print.default(format(x$coefficients, digits = digits), 
-                      print.gap = 2, quote = FALSE)
-    }
-    else {
-        cat("No coefficients\n\n")
-    }
+    digits <- .fastglm_print_digits(digits)
+    title <- if(inherits(x,"fastglm_truncated")) "Zero-truncated regression" else
+        if(inherits(x,"fastglm_nb")) "Negative-binomial regression" else
+        if(inherits(x,"fastglm_stream")) "Streaming generalized linear model" else "Generalized linear model"
+    .fastglm_print_header(title,x$call)
+    if(!is.null(x$family)) .fastglm_print_field("Family",paste0(x$family$family," (",x$family$link," link)"))
+    if(isTRUE(x$firth)) .fastglm_print_field("Estimation","mean bias reduction")
+    .fastglm_print_coefficients(coef(x),digits=digits,...)
+    cat("\n")
+    if(!is.null(x$theta)) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    .fastglm_print_convergence(x$converged,x$iter,x$convergence.reason)
+    invisible(x)
 }
 
 #' @exportS3Method residuals fastglm
@@ -402,6 +404,9 @@ family.fastglm <- function(object, ...)
 #' @param dispersion the dispersion of the GLM fit to be assumed in computing the standard errors.
 #' If omitted, that returned by \code{summary} applied to the object is used.
 #' @param ... further arguments passed to or from other methods.
+#' @returns Predictions on the requested scale. With `se.fit=TRUE`, a
+#'   `fastglm_prediction` list containing `fit`, `se.fit`, and `residual.scale`;
+#'   see \link{fastglm-prediction-methods} for printing and table extraction.
 #' @export
 predict.fastglm <- function(object, newdata = NULL,
                             type = c("link", "response", "terms"),
@@ -455,5 +460,5 @@ predict.fastglm <- function(object, newdata = NULL,
         out <- napredict(object$na.action, out)
         if (se.fit) se <- napredict(object$na.action, se)
     }
-    if (se.fit) list(fit = out, se.fit = se, residual.scale = sqrt(dispersion)) else out
+    if (se.fit) .fastglm_prediction(list(fit = out, se.fit = se, residual.scale = sqrt(dispersion)),type) else out
 }

@@ -127,7 +127,8 @@
 #'   It receives each block of predictions so that results can be written or
 #'   summarized without retaining predictions for all observations in memory.
 #' @param ... additional arguments.
-#' @returns Predicted values, or a list with `fit` and `se.fit`.
+#' @returns Predicted values, or a `fastglm_prediction` list with `fit` and
+#'   `se.fit`; see \link{fastglm-prediction-methods} for printing and table extraction.
 #' @export
 predict.fastglm_hurdle <- function(object, newdata = NULL,
                                    type = c("response", "count", "zero", "prob", "link"),
@@ -145,7 +146,8 @@ predict.fastglm_hurdle <- function(object, newdata = NULL,
         }
         if(!is.null(sink)) return(invisible(object$source$n_chunks))
         bind <- function(x) if(is.null(dim(x[[1L]]))) unlist(x,use.names=FALSE) else do.call(rbind,x)
-        if(se.fit) return(list(fit=bind(lapply(out,`[[`,"fit")),se.fit=bind(lapply(out,`[[`,"se.fit"))))
+        if(se.fit) return(.fastglm_prediction(list(fit=bind(lapply(out,`[[`,"fit")),
+            se.fit=bind(lapply(out,`[[`,"se.fit"))),type))
         return(bind(out))
     }
     if(!is.null(sink)) stop("a prediction sink requires a streaming fit and no newdata",call.=FALSE)
@@ -177,7 +179,7 @@ predict.fastglm_hurdle <- function(object, newdata = NULL,
             v[active,active,drop=FALSE])*grad[,active,drop=FALSE]))) else rep(0,nrow(grad))
         if (!is.null(dim(val))) dim(se) <- dim(val)
     }
-    if (se.fit) list(fit = val, se.fit = se) else val
+    if (se.fit) .fastglm_prediction(list(fit = val, se.fit = se),type) else val
 }
 
 #' @rdname predict.fastglm_hurdle
@@ -202,7 +204,8 @@ model.matrix.fastglm_zi <- model.matrix.fastglm_hurdle
 #' @exportS3Method summary fastglm_hurdle
 summary.fastglm_hurdle <- function(object, ...) {
     b <- coef(object); se <- sqrt(diag(vcov(object))); z <- b / se
-    structure(list(call = object$call,
+    structure(list(call = object$call, title=if(inherits(object,"fastglm_twopart")) "Two-part binomial / Gamma regression" else
+        if(inherits(object,"fastglm_zi")) "Zero-inflated regression" else "Hurdle regression",
         coefficients = cbind(Estimate = b, `Std. Error` = se, `z value` = z, `Pr(>|z|)` = 2 * pnorm(-abs(z))),
         loglik = as.numeric(logLik(object)), nobs = nobs(object), theta = object$theta,
         SE.theta = object$SE.theta, converged = object$converged), class = "summary.fastglm_count")
@@ -210,10 +213,16 @@ summary.fastglm_hurdle <- function(object, ...) {
 #' @exportS3Method summary fastglm_zi
 summary.fastglm_zi <- summary.fastglm_hurdle
 #' @exportS3Method print summary.fastglm_count
-print.summary.fastglm_count <- function(x, ...) {
-    print(x$call); cat("\n"); printCoefmat(x$coefficients, ...)
-    if (!is.null(x$theta) && is.finite(x$theta)) cat("\nTheta:", x$theta, "(SE", x$SE.theta, ")\n")
-    cat("\nLog-likelihood:", x$loglik, "on", x$nobs, "observations\nConverged:", x$converged, "\n")
+print.summary.fastglm_count <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header(if(is.null(x$title)) "Count regression" else x$title,x$call)
+    .fastglm_print_coefficients(x$coefficients,digits=digits,...)
+    cat("\n")
+    if(!is.null(x$theta) && is.finite(x$theta))
+        .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    .fastglm_print_field("Log-likelihood",format(x$loglik,digits=digits))
+    .fastglm_print_field("Observations",x$nobs)
+    .fastglm_print_convergence(x$converged)
     invisible(x)
 }
 

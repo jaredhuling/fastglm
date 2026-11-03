@@ -1,0 +1,9 @@
+PASS: 30 cells, 30000 datasets, 90000 method records
+PASS: unique complete method/replication grid, seed mapping, and availability fields
+PASS: frozen source and environment identity checked by dispatcher
+PASS: regenerated tables, report, and provenance match in a separate directory
+summary.csv: 96fb5dbb4773bea61d438e3a2f6b9b56331ac813bef0d7c1476f1e6d09a1b535
+paired.csv: 1d97161680f45116fc67746def3ff61b4de13d90ec6392d7fce1f68999e37106
+failure-counts.csv: 0885dff57cef58f6d400e80ad08c80f940b7aedd07df314589819259fe04385b
+RESULTS.md: f29088faebfc942445a35759f3215eeab2866fde1b3ba67b943cc4c7d0c502ea
+results-manifest.txt: 4067444fcdd902bb745a0f41a692b7221be01dc1f5c186d0a9ee8dfe1761ac4a

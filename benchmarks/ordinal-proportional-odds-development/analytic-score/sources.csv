@@ -1,0 +1,4 @@
+source,url,retrieved,version,sha256,reading
+"Liu, He, Tu, Tang (2023)",https://pmc.ncbi.nlm.nih.gov/articles/PMC10410795/,2026-11-03,Published General Psychiatry 36(3):e101048 HTML,ae42d57f5a74bc6c59d6521362a7bed538241baf7f3ef2723bead75b07074c9e,Model definitions; Score test; Simulation studies; Discussion
+SAS Institute (2013),https://support.sas.com/documentation/onlinedoc/stat/123/logistic.pdf,2026-11-03,SAS/STAT 12.3 LOGISTIC manual,c40b11852945f7e7d4ce490f817759fedf3dd69c93751a06262a777d9a9ecd06,Score Statistics and Tests; Testing the Parallel Lines Assumption; pp.4246-4248
+SAS Institute,https://support.sas.com/documentation/cdl/en/statug/65328/HTML/default/statug_logistic_examples03.htm,2026-11-03,SAS/STAT 12.1 Example 54.3 HTML,ae64d5bc7996c2cdbb45b5349754a85edf57c00bd6d07e1031363fd7ce894b1f,Full data table; model specification; Output 54.3.1

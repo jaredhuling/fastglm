@@ -108,3 +108,48 @@ Compare a conventional Brant implementation in regular cases and consider
 parametric null calibration as a separate candidate. The next decision is
 whether the first-order comparison is reliable enough to expose, or whether
 joint slope differences should remain descriptive until calibration improves.
+
+## Completed development study
+
+The frozen study in `study/` has now been completed and audited. Its
+[assessment](study/ASSESSMENT.md) recommends retaining the descriptive public
+diagnostic: the candidate chi-square test has substantial false-positive
+inflation in sparse endpoint settings and some small multipredictor samples.
+Independent score and numerical-Jacobian checks reproduced the covariance in
+selected cases. The next investigation is a well-defined discrepancy and
+parametric calibration under a fitted proportional-odds null, with explicit
+handling of simulated empty categories. No public hypothesis test was added.
+
+## Completed mechanism investigation
+
+The subsequent fixed-design investigation in `mechanisms/` separates covariance
+scale, adjusted-score sensitivity, covariance variability, chi-square shape and
+category selection. Its [assessment](mechanisms/ASSESSMENT.md) reports 36,000
+main-study datasets and a further 40,000 reference-precision datasets. Exact
+adjusted-score derivatives improve the sparse-endpoint result but leave major
+inflation; independent sampling-covariance calculations still expose incorrect
+chi-square tails. Mean shifts explain little in the investigated cells.
+
+Oracle simulation calibration supports further work but does not validate a
+fitted-null bootstrap. The [next-method specification](mechanisms/NEXT-METHOD.md)
+holds a null-based covariance metric fixed across response simulations, avoiding
+per-resample covariance inversion. Sparse nuisance uncertainty, original empty
+interior categories and conditional reporting remain explicit obligations before
+a public test or a frozen calibration study. Production behavior is unchanged.
+
+## Active analytic direction
+
+The user's preference is now to prioritize analytic inference, using simulation
+for evaluation rather than analysis-time calibration. The completed
+[analytic-score development comparison](analytic-score/ASSESSMENT.md) evaluates
+an expected-information score test at ML and meanBR null fits, with 30,000 main
+and 8,000 stress datasets. The expected-information score at ML is the primary
+candidate for further confirmation; meanBR-root scoring is not uniformly better.
+
+A separate [information audit](analytic-score/INFORMATION-AUDIT.md) distinguishes
+expected from observed likelihood information and explains substantial finite-
+sample differences in paired replays. This is an established statistical
+construction with promising implementation evidence, not a new higher-order
+correction. The earlier simulation proposal remains historical. Public testing
+still awaits independent confirmation, interface/eligibility specification,
+and validation of grouped frequencies and offsets.

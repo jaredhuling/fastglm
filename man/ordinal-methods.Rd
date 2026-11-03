@@ -8,7 +8,7 @@
 \alias{confint.fastglm_ordinal}
 \title{Methods for proportional-odds fits}
 \usage{
-update.fastglm_ordinal(object, formula., ..., evaluate = TRUE)
+\method{update}{fastglm_ordinal}(object, formula., ..., evaluate = TRUE)
 
 \method{coef}{fastglm_ordinal}(object, component = c("all", "location", "threshold"), ...)
 

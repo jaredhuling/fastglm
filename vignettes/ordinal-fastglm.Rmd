@@ -52,23 +52,21 @@ Mean bias reduction solves the adjusted score equations developed for cumulative
 cbind(maximum_likelihood=coef(fit_ml,component="location"),
       mean_bias_reduction=coef(fit_br,component="location"))
 exp(coef(fit_br,component="location"))
-fastglm_diagnostics(fit_br)[c("converged","remaining.predictor.step",
-                              "standardized.score")]
+fastglm_diagnostics(fit_br)
 ```
 
-The exponentiated slopes are common odds ratios. The fitted probabilities below often provide a more direct description of the outcome distribution. The convergence diagnostics report the remaining change proposed by the estimating equations; a returned coefficient vector alone does not establish that those equations were solved.
+The exponentiated slopes are common odds ratios. The fitted probabilities below often provide a more direct description of the outcome distribution. The convergence diagnostics report the remaining change proposed by the estimating equations; a returned coefficient vector alone does not establish that those equations were solved. The reciprocal information condition number describes numerical conditioning in the fitting coordinates: values near zero indicate that the information matrix is close to singular. This check concerns the stability of the coefficient calculations, whereas the scores and remaining changes assess whether the fitting equations have been solved.
 
 # Probabilities and average contrasts
 
 ```{r}
 profiles <- unique(housing[,c("Infl","Type","Cont")])[1:4,]
 pred <- predict(fit_br,newdata=profiles,se.fit=TRUE)
-pred$fit
-pred$se.fit
+pred
 predict(fit_br,newdata=profiles,type="cumulative")
 ```
 
-Each row of `pred$fit` contains probabilities that sum to one. Cumulative predictions give the probability through each category except the last, whose cumulative probability is necessarily one. Prediction standard errors combine uncertainty in the thresholds and slopes using expected Fisher information, the model-based measure of information about these parameters. They assume independent categorical observations and a correctly specified proportional-odds model. These first-order approximations can be unreliable in small or extreme samples.
+The display pairs each profile and outcome category with its estimated probability and standard error. `as.data.frame(pred)` extracts this table, and `pred$fit` retains the original probability matrix, whose rows sum to one. Cumulative predictions give the probability through each category except the last, whose cumulative probability is necessarily one. Prediction standard errors combine uncertainty in the thresholds and slopes using expected Fisher information, the model-based measure of information about these parameters. They assume independent categorical observations and a correctly specified proportional-odds model. These first-order approximations can be unreliable in small or extreme samples.
 
 Average probabilities describe a covariate distribution rather than a single profile. Because the housing rows represent different numbers of residents, the following calculation uses the frequencies again as averaging weights. Fitting weights determine the estimated model; averaging weights determine the population of predictor values over which predictions are summarized.
 
@@ -138,10 +136,7 @@ A refitting bootstrap describes variation by constructing new response datasets 
 boot_location <- fastglm_bootstrap(
     fit_br,R=199,type="parametric",seed=61103,
     statistic=function(fit) coef(fit,component="location"))
-cbind(estimate=boot_location$estimate,
-      std.error=boot_location$std.error,
-      boot_location$conf.int)
-table(boot_location$diagnostics$converged)
+boot_location
 ```
 
 This calculation assumes the fitted response model. The alternatives `type="pairs"` and `type="cluster"` resample stored rows or whole independent clusters, respectively. Row resampling preserves the counts and weights attached to each sampled row; it therefore describes a different sampling scheme from resampling individual residents represented by frequencies. The analyst must choose the scheme that corresponds to the study design. Formula transformations and factor coding are held fixed during refitting. Because parametric draws also preserve predictor rows and total row frequencies, their refits reuse design preparation within each worker process. Each replicate still has its own starting thresholds, optimization, and convergence assessment.
@@ -257,6 +252,59 @@ plot(assumption_check,type="proportional.odds")
 
 Positive auxiliary slopes describe shifts toward higher outcomes, matching the ordinal model's sign convention. Dashed horizontal lines mark the common slopes from the ordinal fit, and the vertical intervals are separate 95% normal intervals for the auxiliary slopes. Variation across thresholds can suggest that the common-slope restriction deserves further investigation. The estimates use overlapping observations and are correlated, so their displayed uncertainty cannot be interpreted as independent tests of equal slopes. The comparison is a graphical diagnostic, with failed threshold fits retained in the returned table; it does not provide a formal proportional-odds test.
 
+## An analytic test of proportional odds
+
+We can assess the common-slope restriction with `fastglm_po_test()`. The score measures how the log likelihood would initially change if the slopes were allowed to differ across thresholds. Its expected variation is calculated from the category probabilities under the fitted proportional-odds model, with adjustment for the estimated thresholds and common slopes. This calculation uses expected Fisher information, obtained by averaging over possible outcomes analytically. It requires neither simulated outcomes nor resampling to compute a p-value.
+
+```{r}
+po_test <- fastglm_po_test(fit_br)
+po_test
+```
+
+By default, the test refits the proportional-odds null by maximum likelihood, including when the original model used mean bias reduction. The original fitted model and its predictions remain unchanged. The printed table identifies the null estimation method and uses a first-order chi-square approximation. Expected and observed information can give different score statistics in finite samples. The [SAS/STAT description of the proportional-odds score test](https://support.sas.com/documentation/onlinedoc/stat/123/logistic.pdf), on pages 4246 to 4248, allows either form; the implementation here uses expected information throughout.
+
+The same test can be included with prediction scores by calling `fastglm_ordinal_assess(fit_br,po.test="score")`. Printing that assessment displays its scores and test in separate tables. Printing its `proportional.odds.test` component displays the test alone. For a report or subsequent calculation, `as.data.frame(po_test)` and `broom::tidy(po_test)` provide numeric columns with the full computed precision; display rounding does not change those values.
+
+For \(s\) predictor columns and \(K\) categories, the joint test has \(s(K-2)\) degrees of freedom. A small p-value gives evidence against the common-slope model in the specified direction of departure. A large p-value does not establish proportional odds, particularly when the sample contains little information about a category or predictor. The graphical comparison remains useful for understanding which threshold-specific associations differ and whether those differences are substantively important.
+
+We can also select formula terms. The following test allows the slopes associated with housing type to differ across thresholds while retaining common slopes for perceived influence and contact. Selecting a factor includes all of its model-matrix columns.
+
+```{r}
+type_test <- fastglm_po_test(fit_br,terms="Type")
+type_test
+as.data.frame(type_test)
+```
+
+The joint p-value is `r signif(po_test$p.value,3)`, and the housing-type p-value is `r signif(type_test$p.value,3)`. Neither comparison gives strong evidence against its specified common-slope restriction in these data. This finding should be considered alongside the plotted associations and the prediction assessment, since limited power can also produce a large p-value.
+
+This selected-term test still assumes that the other terms satisfy proportional odds. It does not fit a model with unrestricted threshold-specific effects for those terms. For a matrix fit, `terms` selects named predictor columns. Within `fastglm_ordinal_assess()`, the corresponding argument is `po.terms`. Frequency weights, grouped category counts, and location offsets follow the same conventions as fitting, without expanding grouped observations.
+
+The chi-square approximation requires independent observations and a correctly specified, identifiable null model with positive category probabilities. It can be inaccurate in small or sparse samples. If a declared category is empty, the design is deficient, the ML null does not converge, or the expected information cannot be used reliably, `available` is false and the statistic and p-value are missing; `reason` and `detail` explain the failure. A finite bias-reduced fit therefore does not guarantee that this ML-based test is available. The function does not silently remove categories or switch tests.
+
+When assessment outcomes are supplied through `newdata` and `y`, the test refits its null to those outcomes using the complete rows with positive frequency. It then assesses proportional odds in that evaluation population. This differs from the prediction scores above, which assess predictions from the original fitted coefficients. Neither calculation establishes independence or correct specification of omitted predictors.
+
+## Separation and a bias-reduced null
+
+When a predictor group contains only the highest outcome, increasing its slope can keep improving the likelihood without reaching a finite maximum. This is a form of separation. Additional iterations cannot produce a finite ML estimate in such a sample. The test checks for this configuration in predictors with two observed values and reports it directly.
+
+```{r}
+exposure <- matrix(c(0,1),ncol=1,dimnames=list(NULL,"exposed"))
+sparse_counts <- rbind(c(12,18,20),c(0,0,4))
+colnames(sparse_counts) <- c("low","middle","high")
+sparse_fit <- fastglm_ordinal(exposure,sparse_counts,firth=TRUE)
+fastglm_po_test(sparse_fit)
+```
+
+An explicitly requested mean-bias-reduced null can provide finite estimates under separation. The test then evaluates the ordinary score at that null and removes the contribution associated with estimating its thresholds and common slopes. This removal is essential because the ordinary nuisance score is nonzero at a bias-reduced estimate.
+
+```{r}
+fastglm_po_test(sparse_fit,null.estimation="meanBR")
+```
+
+This option has the same first-order chi-square limit under a regular interior null, but it can be conservative in small samples. It is an ordinary efficient-score calculation at a bias-reduced null, rather than the larger-model adjusted-score statistic discussed by [Kosmidis (2014, Section 12)](https://doi.org/10.1111/rssb.12025). A higher-order accuracy claim would require a separate justification. The choice of null estimator should be specified as part of the analysis; the function never switches estimators automatically. Within `fastglm_ordinal_assess()`, use `po.estimation="meanBR"` together with `po.test="score"`.
+
+Bias reduction does not supply information about a predictor level that is entirely absent. Empty declared outcome categories and deficient designs therefore remain explicit unsupported cases for these tests. Failed null fits retain their convergence details. The printed explanation can be exported with `as.data.frame(result,details=TRUE)`.
+
 # Empty categories and the declared outcome scale
 
 An outcome category can be absent from a sample even when it belongs to the intended scale. Removing an empty endpoint before bias reduction changes that scale. The following example retains an unobserved low category.
@@ -277,11 +325,12 @@ The same endpoint can be empty in a parametric bootstrap refit. This does not re
 ```{r}
 endpoint_boot <- fastglm_bootstrap(
     endpoint_fit,R=199,type="parametric",seed=61105)
-endpoint_boot$inference.available
-c(endpoint_empty_refits=mean(lengths(
+endpoint_boot
+data.frame(
+  `Category pattern`=c("Empty endpoint","Empty interior category"),
+  `Proportion of refits`=c(mean(lengths(
     endpoint_boot$diagnostics$empty.end.categories)>0),
-  interior_empty_refits=mean(endpoint_boot$diagnostics$boundary))
-endpoint_boot$conf.int
+    mean(endpoint_boot$diagnostics$boundary)),check.names=FALSE)
 ```
 
 For this seed, the low category is empty in some refits, but the middle category is present in every refit. The threshold parameters keep the same meaning throughout this bootstrap. If the middle category were absent, its two neighboring thresholds would coincide and the package would withhold the full-model intervals.

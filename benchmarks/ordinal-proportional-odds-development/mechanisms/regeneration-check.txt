@@ -1,0 +1,10 @@
+PASS: 41 raw/design/provenance file hashes verified.
+PASS: relocated regeneration matches all summary tables, reference checks, assessment and report provenance.
+summary.csv: 3298a2791af56169e1acf167ff75974f9f8d761c6ab9cd7a3e8c18755b5e5d58
+paired.csv: 253464f6a59a66a3f5304c1d789d913db3ccf8801336f6104e33e0bb8fc4f727
+moments.csv: 71205d8be2f30e17649edd46d90e0f2ef74c894ac72cb9baf9f46732e2cfe99a
+failure-counts.csv: bd131bf20447b7c8533ff2c777bd2e160f0c07f75b331955a84cff95b7ca014a
+fit-diagnostics.csv: b833d1f232546823451018cf7271087d96b6290ab1f2fe5f208c2ff21cd14740
+reference-check.csv: f536246dd71114d64abf0d7a92f7bf3f7e81a12057ecff165f369ff91a946e70
+ASSESSMENT.md: fcfbdd264ccd113f2f4eb6ceb862d4ddcf806c91e2a010557c782042aa69fe35
+report-input-hashes.csv: 88397969009e222890f6661c3b497350c026b91e131c2e82ed9f770895041e38

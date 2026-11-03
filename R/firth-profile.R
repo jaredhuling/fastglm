@@ -185,7 +185,9 @@
 #'   No Wald replacement is made.
 #'   Optimization starts from the fitted solution; convergence diagnostics do
 #'   not establish that a global maximum has been found in a multimodal problem.
-#' @returns `fastglm_profile_test()` returns an `htest` object with the statistic,
+#' @returns `fastglm_profile_test()` returns a `fastglm_test` object inheriting
+#'   from `htest`, with a compact printed table and `as.data.frame()` and
+#'   optional `broom::tidy()` extraction. It retains the statistic,
 #'   degrees of freedom, p-value, coefficient estimates, hypothesized values,
 #'   the full and constrained penalized log likelihoods (excluding constants
 #'   independent of coefficients), and `diagnostics` containing convergence,
@@ -224,5 +226,7 @@ fastglm_profile_test <- function(object,parm,null=0,control=list()) {
         estimate=full$coefficients[parm],null.value=null,alternative="two.sided",
         method="Firth penalized likelihood ratio test (asymptotic chi-square reference)",data.name=data.name,
         loglik=c(full=full$value,restricted=if(is.null(restricted)) NA_real_ else restricted$value),
-        diagnostics=list(converged=!nzchar(message),message=message,full=full,restricted=restricted)),class="htest")
+        null.estimation="Firth penalized likelihood",
+        diagnostics=list(converged=!nzchar(message),message=message,full=full,restricted=restricted)),
+        class=c("fastglm_test","htest"))
 }

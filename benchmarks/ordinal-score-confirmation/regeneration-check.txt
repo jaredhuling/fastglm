@@ -1,0 +1,10 @@
+PASS: 69 source/evidence hashes verified.
+PASS: frozen identities and all 74000 main/precision records audited.
+PASS: relocated summaries and assessment reproduce byte for byte.
+rates.csv: 12d1d3d2fc9359d92400cb311cd0467429ea6d44d00cb2b6c55989cd88d3d99d
+statistics.csv: 3eaee963be5fa6de2a0f430b287c0a9405504641f577ad83991869fb5c79b8c2
+failures.csv: 4fca49ccde3a89d8d8d625ddfc58ab7926b5f81fc10a1df504918cc902b59944
+warnings.csv: bd78b4c63aedb6297ecc68c14f4438ce9994af7c3bb8c9f7169db2e285d2d57e
+precision/rates.csv: a60a43329bc873ecf91bbdb2e20019532043e5be56788c44d1570b7646e49327
+precision/failures.csv: 221490c9592fdb47ad0c07977f01fb99909b1dfb870aeaaacba229e4e7f71472
+ASSESSMENT.md: 333d5fb95258b1d1106c45c7995ac8bb9a8f9b6d5709a484b552a7442598201a

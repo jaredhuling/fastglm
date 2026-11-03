@@ -1,0 +1,7 @@
+PASS: 56 source/evidence hashes verified.
+PASS: frozen identities and all 54000 confirmation records audited.
+PASS: relocated tables and assessment reproduce byte for byte.
+rates.csv: 7c6d8396f1dc312492942d48e19dce97e2004fec18bdf2659c7af8ecf2b1c60f
+failures.csv: f9ee29220bed218bfbc15697a63f1c95408f05326904b92c2e11b437a3e6c40c
+paired.csv: 859cc101c829ed415c1364c59c327fcdf24f1025f0a52223baf69b4900669f6c
+ASSESSMENT.md: 73ce81ca7f45eec9007aef0b247025daaebc89c1daba743a79cfe14a53593069

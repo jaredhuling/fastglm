@@ -193,8 +193,7 @@ A convergence flag records whether the numerical stopping rule was satisfied. Fo
 ```{r}
 fit_gamma <- fastglm(X, y_gam, family=Gamma("log"), firth=TRUE,
                     tol=1e-10)
-fastglm_diagnostics(fit_gamma)[c("converged", "convergence.reason",
-    "standardized.adjusted.score", "standardized.dispersion.score")]
+fastglm_diagnostics(fit_gamma)
 ```
 
 The standardized coefficient diagnostic divides each adjusted score by the square root of its expected information and reports the largest absolute value. This accounts for the units of the predictors when assessing how far the equations remain from zero. The dispersion diagnostic applies the same scaling to the dispersion equation. Both quantities should be close to zero at a numerical solution; they are numerical diagnostics rather than hypothesis-test statistics. Families with fixed dispersion, including binomial and Poisson models, have no dispersion equation to check.
@@ -218,9 +217,7 @@ gamma_reader <- local({
 })
 qr_gamma <- fastglm_streaming(gamma_reader,length(gamma_blocks),Gamma("log"),
                               method="qr",firth=TRUE,tol=1e-8)
-fastglm_diagnostics(qr_gamma)[c("converged","remaining.predictor.step",
-    "adjusted.score.rms","remaining.dispersion.step",
-    "adjusted.dispersion.score.rms")]
+fastglm_diagnostics(qr_gamma)
 ```
 
 `remaining.predictor.step` is the largest proposed change in a fitted linear predictor among observations with positive weight. The joint score is scaled by expected information and the number of positive-weight rows; the dispersion diagnostics measure the remaining relative dispersion update and its scaled score. All checks use the reported coefficients and current information. Verification requires additional block reads, and difficult designs can require a further factorization to assess the equations accurately. These costs can matter when reading the source is slow. A failed step search or insufficient numerical precision still produces an unsuccessful fit.

@@ -351,10 +351,14 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
 #' @rdname fastglm_bootstrap
 #' @method print fastglm_bootstrap
 #' @param x a `fastglm_bootstrap` result.
+#' @param digits number of significant digits used for printing.
 #' @param ... further arguments passed to `print()`.
 #' @export
-print.fastglm_bootstrap <- function(x,...) {
-    cat("Refit bootstrap (",x$type,"): ",x$successful," of ",x$R," successful refits\n",sep="")
-    print(cbind(Estimate=x$estimate,`Std. Error`=x$std.error,x$conf.int),...)
+print.fastglm_bootstrap <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    .fastglm_print_header(paste0("Refit bootstrap (",x$type,")"))
+    .fastglm_print_field("Refits",paste(x$successful,"of",x$R,"successful"))
+    .fastglm_print_coefficients(cbind(Estimate=x$estimate,`Std. Error`=x$std.error,x$conf.int),
+        "Estimates and confidence intervals",digits,P.values=FALSE,has.Pvalue=FALSE,...)
+    if(!isTRUE(x$inference.available)) .fastglm_print_field("Inference","Unavailable; inspect the refit diagnostics")
     invisible(x)
 }

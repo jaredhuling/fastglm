@@ -9,7 +9,10 @@
 #' need not vanish. The stored adjusted coefficient and dispersion scores instead
 #' assess the equations used to fit the model at the reported estimates.
 #' @param object a fitted fastglm GLM or ordinal model.
-#' @returns A list of numerical diagnostics. `score` omits division by the
+#' @returns A `fastglm_diagnostics` list with a compact printed summary.
+#'   Existing components remain accessible with `$` or `[[` at full precision.
+#'   `as.data.frame()` returns one row, with list columns for coefficient scores,
+#'   category labels, and other nonscalar details. `score` omits division by the
 #'   dispersion, and `standardized.score` uses the correspondingly unscaled
 #'   information diagonal, retaining the ordinary GLM score convention. For a
 #'   bias-reduced fit, `adjusted.score` contains the adjusted likelihood scores,
@@ -33,7 +36,8 @@
 #' @md
 #' @export
 fastglm_diagnostics <- function(object) {
-    if(inherits(object,"fastglm_ordinal")) return(.ordinal_diagnostics(object))
+    if(inherits(object,"fastglm_ordinal"))
+        return(structure(.ordinal_diagnostics(object),class="fastglm_diagnostics"))
     b <- coef(object); good <- !is.na(b)
     score <- numeric(sum(good)); info <- numeric(sum(good))
     ordinary.available <- FALSE
@@ -85,7 +89,7 @@ fastglm_diagnostics <- function(object) {
                       "refined.convergence.verification"))
             if(!is.null(object[[name]])) out[[name]] <- object[[name]]
     }
-    out
+    structure(out,class="fastglm_diagnostics")
 }
 
 #' Profile-likelihood interval for negative-binomial size

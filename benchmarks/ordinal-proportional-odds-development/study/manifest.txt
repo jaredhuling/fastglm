@@ -1,0 +1,7 @@
+list(files = c(PROTOCOL.md = "81aba4dc2c27cf9b9113ba2dd9de03bf", 
+config.R = "c802681810a7d5d05723602996a2e84e", methods.R = "26f07f61ce2ee0d6eacc18d16a3a15fc", 
+run.R = "cc095912ce78189618b4c7d2f7a71b96", summarize.R = "dff5ec405eb3d2ad5c6a2f1a31249b8e", 
+prototype.R = "b7b9fa4fa6d7d90b0ec5c0dd24858d4f"), packages = c(fastglm = "0.1.3", 
+MASS = "7.3.65", car = "3.1.3"), candidate.revision = "b5e08af", 
+    R = "R version 4.5.1 (2025-06-13)", RNG = c("Mersenne-Twister", 
+    "Inversion", "Rejection"))

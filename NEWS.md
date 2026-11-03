@@ -2,6 +2,29 @@
 
 ## Model interfaces and inference
 
+* Unified printed model, summary, diagnostics, prediction, bootstrap, and hypothesis-test output with
+  common headings, aligned tables, display precision, and fitting status.
+  Test results retain numeric fields and provide `as.data.frame()` and optional
+  `broom::tidy()` extraction, including failure explanations.
+  Diagnostics use readable solver names and labeled numerical checks.
+  Predictions with standard errors print aligned tables and support
+  `as.data.frame()`, while retaining the original `fit` and `se.fit` components.
+  Vignettes use these displays directly.
+* Added `fastglm_po_test()` for direct proportional-odds testing and an explicit
+  `null.estimation = "meanBR"` option (`po.estimation` within assessment).
+  This evaluates the ordinary nuisance-projected score at a bias-reduced null;
+  its chi-square reference has first-order justification. A sufficient
+  separation check identifies two-valued predictor groups observed only in an
+  endpoint category. ML separation is reported before optimization; empty
+  categories and deficient rank remain unsupported.
+
+* Added an optional analytic proportional-odds score test to
+  `fastglm_ordinal_assess()`, using an ML null refit and expected Fisher
+  information. Joint and selected-term tests support frequency counts and
+  offsets. Empty categories, deficient designs, failed null fits, and unusable
+  information return explicit diagnostics and unavailable p-values. The test
+  uses a first-order chi-square reference without resampling.
+
 * Added `fastglm_marginal_effects()` for average derivatives of ordinal category
   and cumulative probabilities with respect to a continuous predictor. Formula
   interactions and smooth transformations are differentiated together, with

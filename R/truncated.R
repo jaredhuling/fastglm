@@ -116,13 +116,13 @@ predict.fastglm_truncated <- function(object, newdata = NULL,
         dt <- (calc(eta,object$theta+ht)-calc(eta,object$theta-ht))/(2*ht)
         grad <- cbind(grad, dt)
     }
-    list(fit = fit, se.fit = sqrt(pmax(0, .quad_rows(grad, object$vcov.full))))
+    .fastglm_prediction(list(fit = fit, se.fit = sqrt(pmax(0, .quad_rows(grad, object$vcov.full)))),type)
 }
 
 #' @exportS3Method summary fastglm_truncated
 summary.fastglm_truncated <- function(object,...) {
     b <- coef(object); se <- sqrt(diag(vcov(object))); z <- b/se
-    structure(list(call=object$call, coefficients=cbind(Estimate=b,`Std. Error`=se,
+    structure(list(call=object$call, title="Zero-truncated regression", coefficients=cbind(Estimate=b,`Std. Error`=se,
         `z value`=z,`Pr(>|z|)`=2*pnorm(-abs(z))),loglik=object$loglik,
         nobs=object$nobs,theta=object$theta,SE.theta=object$SE.theta,
         converged=object$converged),class="summary.fastglm_count")

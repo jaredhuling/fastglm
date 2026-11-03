@@ -1,0 +1,5 @@
+"cell","scenario","test","reason","records"
+22,"correlated6","joint","available",5000
+21,"narrow_middle4","joint","available",5000
+22,"correlated6","x1","available",5000
+21,"narrow_middle4","x1","available",5000

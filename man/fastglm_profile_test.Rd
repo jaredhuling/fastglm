@@ -24,7 +24,9 @@ standardized units; `max.expand = 25` limits bracket expansions; and
 `max.root = 100` limits root iterations.}
 }
 \value{
-`fastglm_profile_test()` returns an `htest` object with the statistic,
+`fastglm_profile_test()` returns a `fastglm_test` object inheriting
+  from `htest`, with a compact printed table and `as.data.frame()` and
+  optional `broom::tidy()` extraction. It retains the statistic,
   degrees of freedom, p-value, coefficient estimates, hypothesized values,
   the full and constrained penalized log likelihoods (excluding constants
   independent of coefficients), and `diagnostics` containing convergence,

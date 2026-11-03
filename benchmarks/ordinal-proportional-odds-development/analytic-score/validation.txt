@@ -1,0 +1,3 @@
+PASS: numerical likelihood score and expected Hessian; exact enumerated score moments;
+      block accumulation; production null-score/information identities; nuisance projection;
+      outcome reversal and affine predictor invariance at ML and meanBR null fits.

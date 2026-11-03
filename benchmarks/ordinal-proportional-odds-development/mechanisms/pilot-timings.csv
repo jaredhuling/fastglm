@@ -1,0 +1,10 @@
+"scenario","n","cell","seconds.per.dataset","binary.failed"
+"regular3",80,1,0.185,0
+"regular3",1000,2,0.0045,0
+"rare_lower3",80,3,0.002,0
+"rare_lower3",250,4,0.002,0
+"rare_lower3",1000,5,0.0035,0
+"rare_interior3",80,6,0.0025,0
+"rare_interior3",1000,7,0.0045,0
+"regular5",80,8,0.004,0
+"regular5",1000,9,0.00949999999999995,0

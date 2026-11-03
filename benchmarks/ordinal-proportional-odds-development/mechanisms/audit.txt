@@ -1,0 +1,5 @@
+PASS: dimensions, cells, bank identities, seeds, category counts, missingness and covariance counts.
+Total response datasets: 36000 
+Binary fit failures: 0 
+Maximum adjusted-score residual: 1.125511e-10 
+Source/dependency identity is checked by run.R before this audit.
