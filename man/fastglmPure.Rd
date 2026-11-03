@@ -63,7 +63,9 @@ supported unmodified likelihood families on dense, sparse (`dgCMatrix`), and
 Sparse and `big.matrix` paths use lagged leverages from the
 previous IRLS iteration; at convergence the result is identical
 to the exact-leverage dense path.  Convergence is checked on the
-sup-norm of the coefficient update.}
+sup-norm of the coefficient update. Gamma-log fits also check the remaining
+adjusted-score update, so a small step caused by step halving does not
+suffice for convergence.}
 
 \item{inference}{retain full covariance, diagonal standard errors, or no inference.
 The no-inference option skips the final covariance calculation.}

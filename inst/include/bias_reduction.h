@@ -41,6 +41,59 @@ inline GammaWeightGroups gamma_weight_groups(
     return groups;
 }
 
+// Terms in the Gamma dispersion score. Grouped prior weights preserve the
+// exact weighted equation while avoiding repeated special-function calls.
+struct GammaDispersionTerms {
+    double expected = 0, d2 = 0, d3 = 0;
+    void add(const GammaWeightGroups& groups, double phi) {
+        for (const auto& group : groups) {
+            const double w = group.first, count = group.second, a = w / phi;
+            if (a > 1e5) {
+                const double t = 1 / a;
+                expected += count*w*(t + t*t/6 - std::pow(t,4)/60);
+                d2 += count*w*w*(t*t + t*t*t/3 - std::pow(t,5)/15);
+                d3 += count*w*w*w*(2*t*t*t + std::pow(t,4) - std::pow(t,6)/3);
+            } else {
+                expected += count*2*w*(std::log(a)-R::digamma(a));
+                d2 += count*w*w*(2*R::trigamma(a)-2/a);
+                d3 += count*w*w*w*(-2*R::psigamma(a,2)-2/(a*a));
+            }
+        }
+    }
+    double numerator(double dev, int rank, double phi) const {
+        return dev - expected + (rank-2)*phi + d3/d2;
+    }
+};
+
+inline void append_adjusted_diagnostics(Rcpp::List& out,
+    const Eigen::VectorXd& score, const Eigen::VectorXd& information,
+    double dispersion_score, double standardized_dispersion,
+    const std::string& reason)
+{
+    Eigen::VectorXd standardized = score.array() / information.array().sqrt();
+    out["adjusted.score"] = score;
+    out["adjusted.information.diagonal"] = information;
+    out["standardized.adjusted.score"] = standardized;
+    out["adjusted.dispersion.score"] = dispersion_score;
+    out["standardized.dispersion.score"] = standardized_dispersion;
+    out["convergence.reason"] = reason;
+}
+
+inline void dispersion_diagnostics(int code, double dev, int n, int rank,
+    double phi, const GammaDispersionTerms& gamma, double& score, double& standardized)
+{
+    score = standardized = NA_REAL;
+    if ((code >= 3 && code <= 9) || (code >= 17 && code <= 19) || !(phi > 0)) return;
+    double numerator = dev - (n-rank)*phi;
+    double d2 = n*phi*phi;
+    if (code >= 10 && code <= 12) {
+        numerator = gamma.numerator(dev, rank, phi);
+        d2 = gamma.d2;
+    }
+    score = numerator / (2*phi*phi);
+    standardized = numerator / std::sqrt(2*d2);
+}
+
 // Mean bias-reducing dispersion score, multiplied by 2 phi^2.
 // For Gaussian and inverse Gaussian this reduces to D - (n-p) phi.
 // Gamma requires the derivatives of its dispersion normalizer.
@@ -59,23 +112,10 @@ inline double adjusted_dispersion(int code, double dev,
         cached_groups = &local_groups;
     }
     auto score = [&](double logphi) {
-        double phi = std::exp(logphi), expected = 0, d2 = 0, d3 = 0;
-        for (const auto& group : *cached_groups) {
-            double w = group.first;
-            double count = group.second;
-            double a = w / phi;
-            if (a > 1e5) {
-                double t = 1 / a;
-                expected += count * w * (t + t*t/6 - std::pow(t,4)/60);
-                d2 += count * w*w * (t*t + t*t*t/3 - std::pow(t,5)/15);
-                d3 += count * w*w*w * (2*t*t*t + std::pow(t,4) - std::pow(t,6)/3);
-            } else {
-                expected += count * 2*w * (std::log(a) - R::digamma(a));
-                d2 += count * w*w * (2*R::trigamma(a) - 2/a);
-                d3 += count * w*w*w * (-2*R::psigamma(a, 2) - 2/(a*a));
-            }
-        }
-        return dev - expected + (rank - 2)*phi + d3/d2;
+        const double phi = std::exp(logphi);
+        GammaDispersionTerms terms;
+        terms.add(*cached_groups, phi);
+        return terms.numerator(dev, rank, phi);
     };
     double center = std::max(-30.0, std::min(30.0, std::log(dev / (n - rank))));
     double lo = std::max(-30.0, center - std::log(2.0));

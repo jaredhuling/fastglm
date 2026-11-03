@@ -45,6 +45,10 @@ protected:
     bool constant_weights;
     bool factor_ready;
     Eigen::VectorXd constant_leverages;
+    Eigen::VectorXd gamma_adjustment;
+    double gamma_step_phi = 1;
+    bool gamma_step_failed = false;
+    bool gamma_initial_consistent = false;
 
     // Sparse decompositions (analyzePattern done once, factorize per iter)
     SpLLT  Ch;
@@ -181,15 +185,49 @@ protected:
         return Rcpp::as<bool>(validmu(mu));
     }
 
+    bool failed() const override { return gamma_step_failed; }
+
     bool converged() override
     {
-        if (firth_)
-            return (beta - beta_prev).cwiseAbs().maxCoeff() < tol;
+        if (firth_) {
+            if (gamma_step_failed || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
+            if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
+                double phi = compute_firth_phi_sparse();
+                Eigen::VectorXd score = X.adjoint()*
+                    (weights.array()*(Y.array()/mu.array()-1)).matrix() + phi*gamma_adjustment;
+                return solve_factored(score).cwiseAbs().maxCoeff() < tol;
+            }
+            return true;
+        }
         return std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol;
     }
 
     void run_step_halving(int &iterr) override
     {
+        if (firth_ && fam_code == fglm::FAM_GAMMA_LOG && (iterr > 0 || gamma_initial_consistent) &&
+            gamma_adjustment.size() == nvars) {
+            const Eigen::VectorXd delta = beta-beta_prev;
+            const double quadratic = delta.dot(XtWX*delta);
+            double fraction = 1;
+            int halves = 0;
+            while (true) {
+                const double change = dev-devold -
+                    2*gamma_step_phi*gamma_adjustment.dot(beta-beta_prev);
+                const double rounding = 64*std::numeric_limits<double>::epsilon()*
+                    (1+std::abs(dev)+std::abs(devold));
+                if (std::isfinite(dev) && valideta_check() && validmu_check() &&
+                    change <= -0.2*fraction*quadratic + rounding) break;
+                if (++halves > 50) {
+                    gamma_step_failed = true;
+                    beta = beta_prev; update_eta(); update_mu();
+                    update_dev_resids_dont_update_old();
+                    break;
+                }
+                step_halve(); fraction *= 0.5;
+                update_dev_resids_dont_update_old();
+            }
+            return;
+        }
         const bool firth_skip = firth_;
         if (!std::isfinite(dev)) {
             int itrr = 0;
@@ -343,18 +381,24 @@ protected:
     void solve_wls_firth()
     {
         beta_prev = beta;
-        const bool reuse_factor = constant_weights && factor_ready;
-        const bool needs_adjustment = A_prev_available &&
-            fam_code != fglm::FAM_GAUSSIAN_IDENTITY;
+        bool reuse_factor = constant_weights && factor_ready;
         Eigen::VectorXd w2 = w.array().square();
         if (!reuse_factor)
             XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
 
+        if (fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) {
+            factorize_information(XtWX);
+            factor_ready = true; reuse_factor = true;
+            compute_log_det_XtWX_sparse(); update_A_prev_sparse();
+        }
+        const bool needs_adjustment = A_prev_available &&
+            fam_code != fglm::FAM_GAUSSIAN_IDENTITY;
         Eigen::VectorXd zstar = z;
         if (needs_adjustment) {
             Eigen::ArrayXd d2mu(nobs);
             compute_d2mu_sparse(d2mu);
             double phi = compute_firth_phi_sparse();
+            gamma_step_phi = phi;
             Eigen::VectorXd h_lev;
             if (constant_weights && constant_leverages.size() == nobs)
                 h_lev = constant_leverages;
@@ -362,6 +406,8 @@ protected:
                 compute_leverages_lagged(h_lev);
                 if (constant_weights) constant_leverages = h_lev;
             }
+            if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == 0)
+                gamma_adjustment.noalias() = 0.5 * X.adjoint() * h_lev;
             for (int i = 0; i < nobs; ++i)
                 if (weights[i] > 0 && w2[i] != 0 && mu_eta[i] != 0)
                     zstar[i] += phi * h_lev[i] * (d2mu[i] / mu_eta[i]) / (2 * w2[i]);
@@ -461,6 +507,11 @@ public:
         beta = start_;
         eta  = eta_;
         mu   = mu_;
+        if (firth_ && fam_code == fglm::FAM_GAMMA_LOG) {
+            const Eigen::VectorXd mapped = X*beta + offset;
+            gamma_initial_consistent = (mapped-eta).cwiseAbs().maxCoeff() <=
+                16*std::numeric_limits<double>::epsilon()*(1+eta.cwiseAbs().maxCoeff());
+        }
         update_dev_resids();
         rank = nvars;
     }
@@ -469,6 +520,40 @@ public:
     Eigen::VectorXd get_weights() override { return weights; }
     double get_log_det_XtWX() const { return log_det_XtWX_; }
     double get_bias_dispersion() { return compute_firth_phi_sparse(); }
+    void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
+    {
+        const std::string reason = gamma_step_failed ? "step_halving_failed" :
+            (conv ? "converged" : "iteration_limit");
+        out["convergence.reason"] = reason;
+        if (!inference && !constant_weights) return;
+        Eigen::VectorXd score;
+        if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
+            score = X.adjoint()*(weights.array()*(Y.array()/mu.array()-1)/phi).matrix() + gamma_adjustment;
+        } else if (fam_code == fglm::FAM_GAUSSIAN_IDENTITY) {
+            score = X.adjoint()*(weights.array()*(Y.array()-mu.array())/phi).matrix();
+        } else {
+            if (!inference) { update_var_mu(); update_mu_eta(); update_w(); }
+            Eigen::VectorXd h;
+            if (constant_leverages.size() == nobs) h = constant_leverages;
+            else { update_A_prev_sparse(); compute_leverages_lagged(h); }
+            Eigen::ArrayXd d2mu(nobs); compute_d2mu_sparse(d2mu);
+            Eigen::VectorXd contribution = Eigen::VectorXd::Zero(nobs);
+            for (int i=0;i<nobs;++i) if (weights[i] > 0 && mu_eta[i] != 0)
+                contribution[i] = weights[i]*mu_eta[i]*(Y[i]-mu[i])/(phi*var_mu[i]) +
+                    h[i]*d2mu[i]/(2*mu_eta[i]);
+            score = X.adjoint()*contribution;
+        }
+        Eigen::VectorXd information = XtWX.diagonal()/phi;
+        const double dev = Rcpp::as<double>(out["deviance"]);
+        fglm::GammaDispersionTerms terms;
+        if (fam_code >= 10 && fam_code <= 12) {
+            if (dispersion_weight_groups.empty()) dispersion_weight_groups = fglm::gamma_weight_groups(weights);
+            terms.add(dispersion_weight_groups,phi);
+        }
+        double ds, ds_scaled;
+        fglm::dispersion_diagnostics(fam_code,dev,(weights.array()>0).count(),rank,phi,terms,ds,ds_scaled);
+        fglm::append_adjusted_diagnostics(out,score,information,ds,ds_scaled,reason);
+    }
     bool   get_firth()        const { return firth_; }
 };
 

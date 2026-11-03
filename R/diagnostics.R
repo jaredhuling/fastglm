@@ -2,17 +2,35 @@
 #'
 #' Reports whether the iteration converged, which coefficients can be estimated
 #' separately, and whether fitted parameters are close to a boundary. The score
-#' is the derivative of the likelihood with respect to the coefficients; a large
+#' is the derivative of the log likelihood with respect to the coefficients; a large
 #' value after accounting for predictor scale can indicate incomplete convergence.
 #' Covariance conditioning describes how strongly nearly redundant coefficient
-#' effects can amplify numerical error. For bias-reduced
-#' fits the ordinary score need not vanish, so it is labeled separately from
-#' the adjusted-score convergence criterion.
+#' effects can amplify numerical error. For bias-reduced fits the ordinary score
+#' need not vanish. The stored adjusted coefficient and dispersion scores instead
+#' assess the equations used to fit the model at the reported estimates.
 #' @param object a fitted fastglm GLM.
-#' @returns A list of numerical diagnostics.
+#' @returns A list of numerical diagnostics. `score` omits division by the
+#'   dispersion, and `standardized.score` uses the correspondingly unscaled
+#'   information diagonal, retaining the ordinary GLM score convention. For a
+#'   bias-reduced fit, `adjusted.score` contains the adjusted likelihood scores,
+#'   including dispersion scaling, and `standardized.adjusted.score` is the
+#'   largest absolute adjusted score divided by the square root of its expected
+#'   information diagonal. `adjusted.dispersion.score` and
+#'   `standardized.dispersion.score` describe the dispersion equation; they are
+#'   missing for families whose dispersion is fixed. `convergence.reason`
+#'   records the solver's stopping reason when available. Ordinary scores require
+#'   retained data or a readable source. Stored adjusted scores remain available
+#'   after data are omitted. With `inference = "none"`, adjusted scores are
+#'   retained only when the existing constant-information calculation supplies
+#'   the required leverages, including prepared Gamma-log fits. Other compact
+#'   fits and older objects without stored adjusted scores report them as
+#'   unavailable rather than computing an additional covariance matrix.
+#' @md
 #' @export
 fastglm_diagnostics <- function(object) {
-    b <- coef(object); good <- !is.na(b); score <- numeric(sum(good)); info <- numeric(sum(good))
+    b <- coef(object); good <- !is.na(b)
+    score <- numeric(sum(good)); info <- numeric(sum(good))
+    ordinary.available <- FALSE
     add <- function(x,y,w,off) {
         x <- x[,good,drop=FALSE]; eta <- drop(x%*%b[good])+off
         mu <- object$family$linkinv(eta); dm <- object$family$mu.eta(eta); v <- object$family$variance(mu)
@@ -22,19 +40,42 @@ fastglm_diagnostics <- function(object) {
     }
     if(inherits(object,"fastglm_stream")) {
         for(k in seq_len(object$source$n_chunks)) { z <- object$fetch(k); add(z$X,z$y,z$weights,z$offset) }
-    } else {
-        x <- model.matrix(object); off <- object$offset
-        if(is.null(off)) off <- rep(0,nrow(x))
-        .design_blocks(x,function(z,i) add(z,object$y[i],object$prior.weights[i],off[i]))
+        ordinary.available <- TRUE
+    } else if(!is.null(object$y)) {
+        x <- tryCatch(model.matrix(object), error=function(e) NULL)
+        off <- object$offset
+        if(!is.null(x)) {
+            if(is.null(off)) off <- rep(0,nrow(x))
+            .design_blocks(x,function(z,i) add(z,object$y[i],object$prior.weights[i],off[i]))
+            ordinary.available <- TRUE
+        }
     }
+    if(!ordinary.available) score[] <- info[] <- NA_real_
     names(score) <- names(b)[good]
+    max_abs <- function(z) if(length(z)) max(abs(z)) else 0
     v <- if(!is.null(object$cov.unscaled)) object$cov.unscaled[good,good,drop=FALSE]
-    list(converged=isTRUE(object$converged),iterations=object$iter,solver=object$solver,
+    out <- list(converged=isTRUE(object$converged),iterations=object$iter,solver=object$solver,
         fallback=object$solver.fallback,rank=object$rank,aliased=names(b)[!good],
         score=score,score.type=if(isTRUE(object$firth)) "ordinary (before bias adjustment)" else "ordinary",
-        standardized.score=max(abs(score)/sqrt(info)),
+        ordinary.score.available=ordinary.available,
+        standardized.score=if(ordinary.available) max_abs(score/sqrt(info)) else NA_real_,
         covariance.condition=if(length(v) && all(is.finite(v))) kappa(v,exact=TRUE) else NA_real_,
         boundary=isTRUE(object$boundary),theta.boundary=if(!is.null(object$theta)) object$theta<=1e-6 || object$theta>=1e8 else FALSE)
+    out$convergence.reason <- if(!is.null(object$convergence.reason)) object$convergence.reason else
+        if(isTRUE(object$converged)) "converged" else "not_converged"
+    if(isTRUE(object$firth)) {
+        available <- length(object$adjusted.score)==length(b) &&
+            length(object$standardized.adjusted.score)==length(b) &&
+            !is.null(object$adjusted.score)
+        out$adjusted.score.available <- available
+        out$adjusted.score <- setNames(if(available) object$adjusted.score[good] else
+            rep(NA_real_,sum(good)),names(b)[good])
+        out$standardized.adjusted.score <- if(available)
+            max_abs(object$standardized.adjusted.score[good]) else NA_real_
+        out$adjusted.dispersion.score <- if(available) object$adjusted.dispersion.score else NA_real_
+        out$standardized.dispersion.score <- if(available) object$standardized.dispersion.score else NA_real_
+    }
+    out
 }
 
 #' Profile-likelihood interval for negative-binomial size

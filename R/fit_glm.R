@@ -161,7 +161,9 @@ tweedie_link_power <- function(family) {
 #'   Sparse and `big.matrix` paths use lagged leverages from the
 #'   previous IRLS iteration; at convergence the result is identical
 #'   to the exact-leverage dense path.  Convergence is checked on the
-#'   sup-norm of the coefficient update.
+#'   sup-norm of the coefficient update. Gamma-log fits also check the remaining
+#'   adjusted-score update, so a small step caused by step halving does not
+#'   suffice for convergence.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -471,6 +473,9 @@ fastglmPure <- function(x, y,
     res$n <- n
     if (!is.null(scaling)) {
         res$coefficients <- res$coefficients / scaling
+        if (!is.null(res$adjusted.score)) res$adjusted.score <- res$adjusted.score * scaling
+        if (!is.null(res$adjusted.information.diagonal))
+            res$adjusted.information.diagonal <- res$adjusted.information.diagonal * scaling^2
         if (length(res$cov.unscaled)) res$cov.unscaled <- res$cov.unscaled / outer(scaling, scaling)
         res$se <- res$se / scaling
         if (!is.null(res$log.det.XtWX)) res$log.det.XtWX <- res$log.det.XtWX + 2 * sum(log(scaling))

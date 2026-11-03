@@ -10,15 +10,30 @@ fastglm_diagnostics(object)
 \item{object}{a fitted fastglm GLM.}
 }
 \value{
-A list of numerical diagnostics.
+A list of numerical diagnostics. \code{score} omits division by the
+dispersion, and \code{standardized.score} uses the correspondingly unscaled
+information diagonal, retaining the ordinary GLM score convention. For a
+bias-reduced fit, \code{adjusted.score} contains the adjusted likelihood scores,
+including dispersion scaling, and \code{standardized.adjusted.score} is the
+largest absolute adjusted score divided by the square root of its expected
+information diagonal. \code{adjusted.dispersion.score} and
+\code{standardized.dispersion.score} describe the dispersion equation; they are
+missing for families whose dispersion is fixed. \code{convergence.reason}
+records the solver's stopping reason when available. Ordinary scores require
+retained data or a readable source. Stored adjusted scores remain available
+after data are omitted. With \code{inference = "none"}, adjusted scores are
+retained only when the existing constant-information calculation supplies
+the required leverages, including prepared Gamma-log fits. Other compact
+fits and older objects without stored adjusted scores report them as
+unavailable rather than computing an additional covariance matrix.
 }
 \description{
 Reports whether the iteration converged, which coefficients can be estimated
 separately, and whether fitted parameters are close to a boundary. The score
-is the derivative of the likelihood with respect to the coefficients; a large
+is the derivative of the log likelihood with respect to the coefficients; a large
 value after accounting for predictor scale can indicate incomplete convergence.
 Covariance conditioning describes how strongly nearly redundant coefficient
-effects can amplify numerical error. For bias-reduced
-fits the ordinary score need not vanish, so it is labeled separately from
-the adjusted-score convergence criterion.
+effects can amplify numerical error. For bias-reduced fits the ordinary score
+need not vanish. The stored adjusted coefficient and dispersion scores instead
+assess the equations used to fit the model at the reported estimates.
 }

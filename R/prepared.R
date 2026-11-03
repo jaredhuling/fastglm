@@ -90,6 +90,9 @@ fastglm_prepare <- function(x, data = NULL, weights = NULL, offset = NULL, firth
         cn[is.int]<-if(sum(is.int)==1L) "(Intercept)" else paste0("(Intercept)",seq_len(sum(is.int)))
     }
     fit$coefficients<-setNames(fit$coefficients/factor$scale,cn)
+    if(!is.null(fit$adjusted.score)) fit$adjusted.score<-fit$adjusted.score*factor$scale
+    if(!is.null(fit$adjusted.information.diagonal))
+        fit$adjusted.information.diagonal<-fit$adjusted.information.diagonal*factor$scale^2
     if(length(fit$cov.unscaled)) fit$cov.unscaled<-fit$cov.unscaled/outer(factor$scale,factor$scale)
     fit$log.det.XtWX<-fit$log.det.XtWX+2*sum(log(factor$scale))
     fit$penalized.deviance<-fit$penalized.deviance-2*sum(log(factor$scale))

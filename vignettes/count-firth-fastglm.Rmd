@@ -63,6 +63,8 @@ The first right-hand side specifies the count model, and the second specifies th
 
 `vcov(fit)` has one row per regression coefficient. `vcov(fit, full=TRUE)` also includes theta when it is estimated. Prediction standard errors use this full covariance to account for how a small change in each fitted parameter changes the prediction. This local approximation is called the delta method; it includes dependence between the regression coefficients and theta.
 
+For these count models, the joint information is computed from analytic likelihood derivatives and accumulated over blocks of observations. This avoids repeatedly perturbing each parameter and recalculating all score contributions to approximate the curvature. The calculation is useful when many coefficients are fitted or observations are read in blocks, while retaining the same joint uncertainty target. Numerical derivatives remain useful as an independent check of the implementation.
+
 # Zero-inflated counts
 
 A zero-inflated model assigns probability $\pi$ to a structural zero and probability $1-\pi$ to an ordinary count distribution. Its marginal zero probability is $\pi+(1-\pi)p_0$, and its marginal mean is $(1-\pi)\mu$. For an observed zero, the data do not reveal which process generated it. Estimation therefore involves uncertainty about both components, and their coefficient errors can be related. The covariance calculation includes this dependence when reporting uncertainty in the overall mean or zero probability.

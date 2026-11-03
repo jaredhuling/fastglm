@@ -285,7 +285,7 @@ static double stream_pass_firth(Function& callback,
 {
     double dev_sum = 0.0;
     int n_total = 0, n_positive = 0;
-    double expected = 0, d2total = 0, d3total = 0;
+    fglm::GammaDispersionTerms dispersion_terms;
     const bool reuse_information = *constant_information && A_prev != nullptr;
     const bool gamma_log = fam.code == fglm::FAM_GAMMA_LOG;
     const bool build_gamma_adjustment = gamma_log && A_prev != nullptr &&
@@ -315,21 +315,8 @@ static double stream_pass_firth(Function& callback,
             // The groups live only for this chunk. Repeated prior weights
             // need one normalizer evaluation, independent of its row count.
             const auto groups = fglm::gamma_weight_groups(c.w);
-            for (const auto& group : groups) {
-                const double w = group.first, count = group.second;
-                n_positive += group.second;
-                const double a = w / phi_prev;
-                if (a > 1e5) {
-                    const double t = 1/a;
-                    expected += count*w*(t + t*t/6 - std::pow(t,4)/60);
-                    d2total += count*w*w*(t*t + t*t*t/3 - std::pow(t,5)/15);
-                    d3total += count*w*w*w*(2*t*t*t + std::pow(t,4) - std::pow(t,6)/3);
-                } else {
-                    expected += count*2*w*(std::log(a)-R::digamma(a));
-                    d2total += count*w*w*(2*R::trigamma(a)-2/a);
-                    d3total += count*w*w*w*(-2*R::psigamma(a,2)-2/(a*a));
-                }
-            }
+            for (const auto& group : groups) n_positive += group.second;
+            dispersion_terms.add(groups, phi_prev);
         } else n_positive += (wa > 0).count();
         dev_sum += fam.dev_resids_sum(ya, mu_arr, wa);
 
@@ -393,8 +380,8 @@ static double stream_pass_firth(Function& callback,
     if (!fam.is_unit_dispersion()) {
         if (n_positive <= p) Rcpp::stop("bias reduction requires positive residual degrees of freedom");
         if (fam.code >= 10 && fam.code <= 12) {
-            double adjusted = dev_sum - expected + (p-2)*phi_prev + d3total/d2total;
-            double step = adjusted * phi_prev / d2total;
+            double adjusted = dispersion_terms.numerator(dev_sum,p,phi_prev);
+            double step = adjusted * phi_prev / dispersion_terms.d2;
             *phi_out = phi_prev * std::exp(std::max(-0.69314718056, std::min(0.69314718056, step)));
         } else *phi_out = dev_sum / (n_positive-p);
     }
@@ -514,7 +501,68 @@ List fit_streaming_glm(Function chunk_callback,
         fam.code == fglm::FAM_POISSON_SQRT || fam.code == fglm::FAM_GAMMA_LOG;
     VectorXd gamma_adjustment;
 
-    for (iter = 1; iter <= maxit; ++iter) {
+    bool gamma_step_failed = false;
+    const bool safeguarded_gamma = firth && fam.code == fglm::FAM_GAMMA_LOG;
+    if (safeguarded_gamma) {
+        double phi_next = phi_prev;
+        dev_curr = stream_pass_firth(chunk_callback,n_chunks,p,beta,fam,nullptr,
+            phi_prev,&XtWX,&Xtwz,nullptr,&phi_next,&constant_information,&gamma_adjustment);
+        spd_factorize_and_solve(type,XtWX,Xtwz,llt,ldlt);
+        MatrixXd identity = MatrixXd::Identity(p,p);
+        if (type == 2) {
+            A_prev = llt.solve(identity);
+            log_det_XtWX = 2*llt.matrixLLT().diagonal().array().log().sum();
+        } else {
+            A_prev = ldlt.solve(identity);
+            log_det_XtWX = ldlt.vectorD().array().log().sum();
+        }
+        A_prev_available = true;
+        // Build the constant leverage adjustment once. Each accepted trial
+        // also supplies the next iteration's score, so line search adds a
+        // source pass only when a proposed step is rejected.
+        dev_curr = stream_pass_firth(chunk_callback,n_chunks,p,beta,fam,&A_prev,
+            phi_prev,&XtWX,&Xtwz,nullptr,&phi_next,&constant_information,&gamma_adjustment);
+        for (iter=1;iter<=maxit;++iter) {
+            VectorXd proposed;
+            if (type == 2) proposed = llt.solve(Xtwz);
+            else proposed = ldlt.solve(Xtwz);
+            const VectorXd delta = proposed-beta;
+            const double quadratic = delta.dot(XtWX*delta);
+            const double phi_proposed = phi_next;
+            double fraction = 1, dev_new = 0, phi_after = phi_proposed;
+            int halves = 0;
+            while (true) {
+                bool valid = true;
+                try {
+                    dev_new = stream_pass_firth(chunk_callback,n_chunks,p,proposed,fam,&A_prev,
+                        phi_proposed,&XtWX,&Xtwz,nullptr,&phi_after,&constant_information,&gamma_adjustment);
+                } catch (const std::domain_error&) {
+                    valid = false; dev_new = std::numeric_limits<double>::infinity();
+                }
+                const double change = dev_new-dev_curr -
+                    2*phi_prev*gamma_adjustment.dot(proposed-beta);
+                const double rounding = 64*std::numeric_limits<double>::epsilon()*
+                    (1+std::abs(dev_new)+std::abs(dev_curr));
+                if (valid && std::isfinite(dev_new) &&
+                    change <= -0.2*fraction*quadratic + rounding) break;
+                if (++halves > 50) { gamma_step_failed = true; break; }
+                fraction *= 0.5;
+                proposed = beta + fraction*delta;
+            }
+            if (gamma_step_failed) break;
+            beta = proposed; phi_prev = phi_proposed; dev_curr = dev_new; phi_next = phi_after;
+            VectorXd score_step;
+            if (type == 2) score_step = llt.solve(Xtwz)-beta;
+            else score_step = ldlt.solve(Xtwz)-beta;
+            if (score_step.cwiseAbs().maxCoeff() < tol &&
+                std::abs(phi_next-phi_prev)/phi_prev < tol) {
+                converged = true; break;
+            }
+            Rcpp::checkUserInterrupt();
+        }
+    }
+
+    if (!safeguarded_gamma)     for (iter = 1; iter <= maxit; ++iter) {
         double std_dev, phi_new = phi_prev;
         if (firth) {
             std_dev = stream_pass_firth(chunk_callback, n_chunks, p, beta, fam,
@@ -600,8 +648,9 @@ List fit_streaming_glm(Function chunk_callback,
     }
     if (iter > maxit) iter = maxit;
 
-    // Final XtWX/Xtwz at the converged beta to get cov.unscaled.
-    if (firth) stream_pass(chunk_callback, n_chunks, p, beta, fam,
+    // Changing working weights require information at the reported beta.
+    // Constant information is already exact there; reuse it without a pass.
+    if (firth && !constant_information) stream_pass(chunk_callback, n_chunks, p, beta, fam,
                 /*accumulate=*/true, &XtWX, &Xtwz, nullptr, nullptr);
 
     // cov.unscaled = (X'WX)^{-1}.
@@ -628,6 +677,8 @@ List fit_streaming_glm(Function chunk_callback,
     double dev_final  = 0.0;
     double null_dev   = 0.0;
     double pearson    = 0.0;
+    VectorXd adjusted_score = VectorXd::Zero(p);
+    fglm::GammaDispersionTerms final_dispersion_terms;
     {
         for (int k = 1; k <= n_chunks; ++k) {
             Chunk c = pull_chunk(chunk_callback, k, p);
@@ -643,6 +694,22 @@ List fit_streaming_glm(Function chunk_callback,
             ArrayXd va;
             fam.variance(mu, va);
             pearson += (wa * (ya - mu).square() / va).sum();
+            if (firth) {
+                ArrayXd dmu; fam.mu_eta(eta,dmu);
+                ArrayXd contribution = wa*dmu*(ya-mu)/(phi_prev*va);
+                for (int i=0;i<n_k;++i) if (wa[i] == 0) contribution[i] = 0;
+                if (fam.code != fglm::FAM_GAUSSIAN_IDENTITY &&
+                    fam.code != fglm::FAM_GAMMA_LOG) {
+                    ArrayXd d2mu; fam.d2mu_deta2(eta,mu,dmu,d2mu);
+                    MatrixXd xa = c.X*cov_unscaled;
+                    ArrayXd h = (xa.array()*c.X.array()).rowwise().sum()*wa*dmu.square()/va;
+                    for (int i=0;i<n_k;++i) if (wa[i]>0 && dmu[i]!=0)
+                        contribution[i] += h[i]*d2mu[i]/(2*dmu[i]);
+                }
+                adjusted_score.noalias() += c.X.adjoint()*contribution.matrix();
+                if (fam.code >= 10 && fam.code <= 12)
+                    final_dispersion_terms.add(fglm::gamma_weight_groups(c.w),phi_prev);
+            }
 
             ArrayXd mu0(n_k);
             if (has_intercept) {
@@ -698,6 +765,13 @@ List fit_streaming_glm(Function chunk_callback,
         out["log.det.XtWX"]       = log_det_XtWX;
         out["bias.dispersion"]    = phi_prev;
         out["firth"]              = true;
+        if (fam.code == fglm::FAM_GAMMA_LOG) adjusted_score += gamma_adjustment;
+        VectorXd information = XtWX.diagonal()/phi_prev;
+        double ds, ds_scaled;
+        fglm::dispersion_diagnostics(fam.code,dev_final,n_ok,p,phi_prev,final_dispersion_terms,ds,ds_scaled);
+        std::string reason = gamma_step_failed ? "step_halving_failed" :
+            (converged ? "converged" : "iteration_limit");
+        fglm::append_adjusted_diagnostics(out,adjusted_score,information,ds,ds_scaled,reason);
     }
 
     return out;

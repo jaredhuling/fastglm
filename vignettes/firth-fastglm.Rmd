@@ -186,6 +186,23 @@ cbind(fastglm_SE = f$se, brglm2_SE = summary(b)$coefficients[, "Std. Error"])
 max(abs(f$se - summary(b)$coefficients[, "Std. Error"]))
 ```
 
+# Assessing convergence
+
+A convergence flag records whether the numerical stopping rule was satisfied. For a bias-reduced fit, the adjusted scores provide a more direct assessment of the equations being solved. An ordinary likelihood score can remain appreciably different from zero at a correctly computed bias-reduced estimate, because the adjustment changes the estimating equation. `fastglm_diagnostics()` therefore reports the ordinary and adjusted scores separately.
+
+```{r}
+fit_gamma <- fastglm(X, y_gam, family=Gamma("log"), firth=TRUE,
+                    tol=1e-10)
+fastglm_diagnostics(fit_gamma)[c("converged", "convergence.reason",
+    "standardized.adjusted.score", "standardized.dispersion.score")]
+```
+
+The standardized coefficient diagnostic divides each adjusted score by the square root of its expected information and reports the largest absolute value. This accounts for the units of the predictors when assessing how far the equations remain from zero. The dispersion diagnostic applies the same scaling to the dispersion equation. Both quantities should be close to zero at a numerical solution; they are numerical diagnostics rather than hypothesis-test statistics. Families with fixed dispersion, including binomial and Poisson models, have no dispersion equation to check.
+
+Highly skewed Gamma responses can produce an initial coefficient step that overshoots the solution. For the Gamma log link, the fitting procedure holds the current dispersion fixed and reduces such a step until the coefficient objective decreases sufficiently. The final adjusted scores are then checked, so a small step caused by repeated halving does not by itself establish convergence. `convergence.reason` distinguishes a successful fit from an exhausted iteration limit or an unsuccessful step search. An unsuccessful fit requires examination before its coefficients or uncertainty summaries are used.
+
+The adjusted diagnostics are retained with supported fits, including prepared Gamma-log fits that omit their data or covariance. Ordinary scores require the original observations and predictors, and older fitted objects may not contain the stored adjusted diagnostics. An unavailable diagnostic is reported as missing rather than as a zero score.
+
 # Adjusted scores and penalized likelihood
 
 Mean bias reduction modifies the score equations. For logistic regression, this corresponds to adding half the log determinant of the expected information to the log likelihood. This equivalence does not extend to every family and link. `penalized.deviance` is therefore reported only for the supported canonical cases; ordinary deviance remains available for all supported families.
