@@ -29,7 +29,7 @@
     args <- list(x=if(reuse) cache$bootstrap.inputs$x else input$x[index,,drop=FALSE],y=y,weights=weights,
                  offset=if(reuse) cache$bootstrap.inputs$offset else input$offset[index],levels=object$levels,firth=object$firth,
                  tol=object$tol,maxit=object$maxit,block.size=object$block.size,
-                 control=object$control)
+                 control=object$control,link=.ordinal_link(object))
     args <- utils::modifyList(args,control)
     fit <- if(reuse) {
         # NULL overrides remove arguments in modifyList(). The public fitting

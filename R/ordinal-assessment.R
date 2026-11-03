@@ -103,9 +103,11 @@
         lost.tail <- any(high>0 & low>0 & (fraction==0 | fraction==1))
         if(lost.tail) reason <- "unrepresentable_binary_counts"
         if(sum(high)>0 && sum(low)>0 && !lost.tail) {
-            fit <- tryCatch(withCallingHandlers(fastglm(xx,cbind(high,low),
-                family=binomial(),offset=off,firth=TRUE,method="auto",
-                tol=ctl$tol,maxit=ctl$maxit,retain.data=FALSE),warning=function(w) {
+            fit <- tryCatch(withCallingHandlers(if(.ordinal_link(object)=="cloglog")
+                .ordinal_fit_core(xx[,-1L,drop=FALSE],cbind(low,high),offset=off,
+                    firth=TRUE,tol=ctl$tol,maxit=ctl$maxit,link="cloglog") else
+                fastglm(xx,cbind(high,low),family=binomial(.ordinal_link(object)),offset=off,
+                    firth=TRUE,method="auto",tol=ctl$tol,maxit=ctl$maxit,retain.data=FALSE),warning=function(w) {
                     warning <<- c(warning,conditionMessage(w)); invokeRestart("muffleWarning")
                 }),error=function(e) { reason <<- conditionMessage(e); NULL })
         }
@@ -136,7 +138,7 @@
 #' Compares predicted cumulative probabilities with observed frequencies,
 #' scores the full ordered prediction distribution, and optionally compares
 #' predictor slopes across binary divisions of the outcome scale or tests
-#' proportional odds using an analytic score statistic.
+#' the common-slope restriction using an analytic score statistic.
 #' @param object a converged \code{fastglm_ordinal} model.
 #' @param newdata prediction data frame or matrix, as in \code{predict}.
 #' @param y ordered outcomes, category labels, numeric codes in the fitted
@@ -149,8 +151,11 @@
 #' @param offset optional replacement prediction offset.
 #' @param bins positive integer number of equal-width calibration bins on
 #'   \eqn{[0,1]}. Bin boundaries do not depend on observed outcomes.
-#' @param proportional.odds also fit separate mean bias-reduced binary logistic
-#'   models for the events \eqn{Y>j}, using the assessment rows and offsets.
+#' @param proportional.odds also fit separate mean bias-reduced binary
+#'   models at each threshold, using the fitted cumulative link and the
+#'   assessment rows and offsets. Reported slopes use the ordinal sign convention.
+#'   Complementary-log-log fits model \eqn{Y\leq j} directly; logit and probit
+#'   fits use their equivalent reversed-tail representation for \eqn{Y>j}.
 #' @param po.control named list containing \code{tol} and/or \code{maxit} for
 #'   these auxiliary binary fits; defaults are \code{1e-8} and \code{200}.
 #' @param po.test \code{"none"} (default) or \code{"score"} for an analytic
@@ -200,7 +205,7 @@
 #'   frequency away (\code{unrepresentable_binary_counts}). Calibration alone
 #'   is also not a test of proportional odds.
 #'
-#'   With \code{po.test="score"}, a proportional-odds null is refitted to
+#'   With \code{po.test="score"}, a common-slope null on the fitted link is refitted to
 #'   the included assessment outcomes, predictors, frequencies, and offsets.
 #'   Maximum likelihood is the default, including when \code{object} used
 #'   mean bias reduction. Set \code{po.estimation="meanBR"} to request a
@@ -318,10 +323,14 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
         for(j in seq.int(K-1L,1L)) suffix[,j] <- suffix[,j]+suffix[,j+1L]
         low <- rps <- logloss <- numeric(length(ii))
         alpha <- object$working$alpha
+        kernel <- if(.ordinal_link(object)!="logit") .ordinal_link_kernel(alpha,location,.ordinal_link(object))
         for(j in seq_len(q)) {
             low <- low+counts[,j]
             eta <- alpha[object$threshold.map[j]]-location
-            F <- plogis(eta); S <- plogis(-eta)
+            if(is.null(kernel)) {F <- plogis(eta); S <- plogis(-eta)} else {
+                F <- kernel$cumulative[,object$threshold.map[j]]
+                S <- kernel$survival[,object$threshold.map[j]]
+            }
             rps <- rps+(low/frequency)*S^2+(suffix[,j+1L]/frequency)*F^2
             bin <- pmin(bins,floor(F*bins)+1L)
             sums <- rowsum(cbind(frequency,frequency*F,low),bin,reorder=FALSE)
@@ -337,7 +346,7 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
             active <- counts[,k]>0
             if(!any(active)) next
             r <- match(k,retained)
-            lp <- if(is.na(r)) rep(-Inf,sum(active)) else if(r==1L)
+            lp <- if(is.na(r)) rep(-Inf,sum(active)) else if(!is.null(kernel)) kernel$log.probability[active,r] else if(r==1L)
                 plogis(alpha[1L]-location[active],log.p=TRUE) else if(r==length(retained))
                 plogis(location[active]-alpha[length(alpha)],log.p=TRUE) else
                 plogis(alpha[r]-location[active],log.p=TRUE)+
@@ -370,7 +379,7 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
     exclusions <- data.frame(reason=as.character(names(excluded)),rows=as.integer(excluded),stringsAsFactors=FALSE)
     structure(list(scores=scores,rows=rows,calibration=calibration,proportional.odds=po,
         proportional.odds.test=po.test.result,
-        evaluation=if(training) "training" else "supplied outcomes",levels=object$levels,
+        evaluation=if(training) "training" else "supplied outcomes",levels=object$levels,link=.ordinal_link(object),
         exclusions=exclusions,bins=bins,call=match.call()),class="fastglm_ordinal_assessment")
 }
 
@@ -393,7 +402,8 @@ print.fastglm_ordinal_assessment <- function(x,digits=max(3L,getOption("digits")
     }
     if(!is.null(x$proportional.odds)) {
         failed <- unique(x$proportional.odds$threshold[!x$proportional.odds$converged])
-        cat("\nDescriptive proportional-odds comparison; ",length(failed),
+        cat(if(.ordinal_link(x)=="logit") "\nDescriptive proportional-odds comparison; " else
+            paste0("\nDescriptive common-slope comparison (",.ordinal_link(x),"); "),length(failed),
             " unavailable threshold fit(s).\n",sep="")
     }
     if(!is.null(x$proportional.odds.test)) {
@@ -438,7 +448,7 @@ plot.fastglm_ordinal_assessment <- function(x,type=c("calibration","proportional
             delta <- qnorm((1+level)/2)*z$std.error
             limits <- range(c(z$common.estimate,z$estimate-delta,z$estimate+delta),finite=TRUE)
             draw(list(x=z$threshold,y=z$estimate,xlim=c(.5,length(x$levels)-.5),ylim=limits,
-                xaxt="n",xlab="Event: outcome above category",ylab="Slope (positive = higher outcomes)",
+                xaxt="n",xlab="Outcome threshold",ylab="Slope (positive = higher outcomes)",
                 main=group,pch=19))
             graphics::axis(1,at=z$threshold,labels=z$category)
             graphics::arrows(z$threshold,z$estimate-delta,z$threshold,z$estimate+delta,

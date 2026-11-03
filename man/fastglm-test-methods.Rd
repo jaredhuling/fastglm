@@ -5,6 +5,9 @@
 \alias{as.data.frame.fastglm_test}
 \alias{print.fastglm_test}
 \alias{tidy.fastglm_test}
+\alias{as.data.frame.fastglm_test_list}
+\alias{print.fastglm_test_list}
+\alias{tidy.fastglm_test_list}
 \title{Display and extract hypothesis tests}
 \usage{
 \method{as.data.frame}{fastglm_test}(x, row.names = NULL, optional = FALSE, details = FALSE, ...)
@@ -12,10 +15,18 @@
 \method{print}{fastglm_test}(x, digits = max(3L, getOption("digits") - 3L), ...)
 
 tidy.fastglm_test(x, ...)
+
+\method{as.data.frame}{fastglm_test_list}(x, row.names = NULL, optional = FALSE, details = FALSE, ...)
+
+\method{print}{fastglm_test_list}(x, digits = max(3L, getOption("digits") - 3L), ...)
+
+tidy.fastglm_test_list(x, ...)
 }
 \arguments{
 \item{x}{a test returned by \code{\link[=fastglm_po_test]{fastglm_po_test()}}, the proportional-odds test
-component of \code{\link[=fastglm_ordinal_assess]{fastglm_ordinal_assess()}}, or \code{\link[=fastglm_profile_test]{fastglm_profile_test()}}.}
+component of \code{\link[=fastglm_ordinal_assess]{fastglm_ordinal_assess()}}, \code{\link[=fastglm_wald_test]{fastglm_wald_test()}}, or
+\code{\link[=fastglm_profile_test]{fastglm_profile_test()}}. Collections from \code{fastglm_po_test(by.term=TRUE)}
+print a table and extract one row per hypothesis.}
 
 \item{row.names}{optional row names for the extracted data frame.}
 

@@ -205,6 +205,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     res$source <- source; res$fetch <- fetch; res$state <- state
     res$terms <- source$schema$terms; res$xlevels <- source$schema$xlevels
     res$contrasts <- source$schema$contrasts
+    res$assign <- source$schema$assign
     res$call <- match.call(); res$firth <- firth; res$solver <- if(method==0L) "qr" else c("llt","ldlt")[method-1L]
     # Evaluate the likelihood using original binomial trial totals. Gaussian
     # and Gamma likelihood normalizers depend on global dispersion, so they

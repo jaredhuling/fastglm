@@ -16,7 +16,7 @@ and `logLik()`.
 
 Beyond standard GLMs, *fastglm* provides negative-binomial regression,
 hurdle and zero-inflated count models, zero-truncated regression,
-two-part models for positive continuous outcomes, proportional-odds
+two-part models for positive continuous outcomes, cumulative-link
 regression for ordered outcomes, and Firth mean bias reduction. The
 package also supports sparse matrices, mapped matrices, and data read in
 blocks for supported model classes, making it useful when either repeated
@@ -497,11 +497,12 @@ and bootstrap uncertainty.
 
 ### Ordered outcomes
 
-`fastglm_ordinal()` fits cumulative-logit proportional-odds models through a
-formula or a dense matrix, with optional mean bias reduction using
-`firth=TRUE`. Predictions describe category probabilities, and
+`fastglm_ordinal()` fits cumulative-link models through a formula or a dense
+matrix, with logit, probit, or complementary log-log links and optional mean
+bias reduction using `firth=TRUE`. The default logit link gives a
+proportional-odds model. Predictions describe category probabilities, and
 `fastglm_average()` summarizes their averages and contrasts. Prepared ordinal
-designs reuse common predictor setup across lists of responses. `fastglm_ordinal_assess()` provides prediction scores, calibration plots, and graphical checks of common slopes. Simulation, probability-based residuals,
+designs reuse common predictor setup across lists of responses. `fastglm_ordinal_assess()` provides prediction scores, calibration plots, and graphical checks of common slopes. `fastglm_po_test()` tests the common-slope restriction jointly or by term, while `fastglm_wald_test()` tests model terms and coefficient contrasts. Simulation, probability-based residuals,
 and optional broom methods support model assessment and reporting. Robust
 covariance and refitting bootstrap uncertainty are available for regular
 fits, with category and convergence diagnostics. Empty interior categories

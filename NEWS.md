@@ -2,6 +2,22 @@
 
 ## Model interfaces and inference
 
+* Ordinal models now support probit and complementary log-log links with
+  maximum likelihood and mean bias reduction. Predictions, marginal effects,
+  expected and robust covariance, assessment, common-slope score tests, prepared
+  designs, and bootstrap refits retain the selected link.
+* Dense Firth GLMs with a numerically zero-rank working design no longer report
+  successful convergence from a zero coefficient update.
+
+* Added `fastglm_wald_test()` for joint formula-term tests and named linear
+  coefficient contrasts in GLMs and ordinal models, with model-based or supplied
+  covariance and the shared test display. Nonestimability and unavailable
+  covariance remain explicit; the chi-square reference is a first-order approximation.
+* Proportional-odds score tests now use the tridiagonal threshold information
+  directly, reducing intermediate allocations. `fastglm_po_test(by.term=TRUE)`
+  shares one null fit and one information calculation across joint and term-specific
+  tests, with readable tables and numeric extraction.
+
 * Unified printed model, summary, diagnostics, prediction, bootstrap, and hypothesis-test output with
   common headings, aligned tables, display precision, and fitting status.
   Test results retain numeric fields and provide `as.data.frame()` and optional

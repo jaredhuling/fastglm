@@ -44,8 +44,11 @@ Counts times weights, or individual weights, must be integer frequencies.}
 \item{bins}{positive integer number of equal-width calibration bins on
 \eqn{[0,1]}. Bin boundaries do not depend on observed outcomes.}
 
-\item{proportional.odds}{also fit separate mean bias-reduced binary logistic
-models for the events \eqn{Y>j}, using the assessment rows and offsets.}
+\item{proportional.odds}{also fit separate mean bias-reduced binary
+models at each threshold, using the fitted cumulative link and the
+assessment rows and offsets. Reported slopes use the ordinal sign convention.
+Complementary-log-log fits model \eqn{Y\leq j} directly; logit and probit
+fits use their equivalent reversed-tail representation for \eqn{Y>j}.}
 
 \item{po.control}{named list containing \code{tol} and/or \code{maxit} for
 these auxiliary binary fits; defaults are \code{1e-8} and \code{200}.}
@@ -93,7 +96,7 @@ An object of class \code{fastglm_ordinal_assessment}, containing
 Compares predicted cumulative probabilities with observed frequencies,
 scores the full ordered prediction distribution, and optionally compares
 predictor slopes across binary divisions of the outcome scale or tests
-proportional odds using an analytic score statistic.
+the common-slope restriction using an analytic score statistic.
 }
 \details{
 The ranked probability score (\code{rps}) is
@@ -133,7 +136,7 @@ The ranked probability score (\code{rps}) is
   frequency away (\code{unrepresentable_binary_counts}). Calibration alone
   is also not a test of proportional odds.
 
-  With \code{po.test="score"}, a proportional-odds null is refitted to
+  With \code{po.test="score"}, a common-slope null on the fitted link is refitted to
   the included assessment outcomes, predictors, frequencies, and offsets.
   Maximum likelihood is the default, including when \code{object} used
   mean bias reduction. Set \code{po.estimation="meanBR"} to request a

@@ -15,7 +15,7 @@ Authors@R: c(
 Description: Fits generalized linear models efficiently using 'RcppEigen'. The iteratively reweighted least squares 
     implementation utilizes the step-halving approach of Marschner (2011) <doi:10.32614/RJ-2011-012> to help safeguard
     against convergence issues. Provides formula and matrix interfaces for count and
-    proportional-odds models, mean bias reduction, and blockwise fitting for supported
+    cumulative-link ordinal models, mean bias reduction, and blockwise fitting for supported
     model classes.
 BugReports: https://github.com/jaredhuling/fastglm/issues
 URL: https://github.com/jaredhuling/fastglm, https://jaredhuling.org/fastglm/

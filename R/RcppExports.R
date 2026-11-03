@@ -53,12 +53,12 @@ fit_glm_zi <- function(x_count, z_zero, y, weights, offset_count, offset_zero, d
     .Call(`_fastglm_fit_glm_zi`, x_count, z_zero, y, weights, offset_count, offset_zero, dist_code, zero_fam_code, init_theta, tol, maxit, em_tol, em_maxit, theta_tol, theta_maxit, var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero, dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero, var_fun_count, mu_eta_fun_count, linkinv_fun_count, dev_resids_fun_count, valideta_fun_count, validmu_fun_count)
 }
 
-ordinal_native_evaluate <- function(x, y, counts, weights, offset, categories, coefficients, firth = FALSE, block_size = 2048L, condition_tol = 1e-14) {
-    .Call(`_fastglm_ordinal_native_evaluate`, x, y, counts, weights, offset, categories, coefficients, firth, block_size, condition_tol)
+ordinal_native_evaluate <- function(x, y, counts, weights, offset, categories, coefficients, firth = FALSE, block_size = 2048L, condition_tol = 1e-14, link = 0L) {
+    .Call(`_fastglm_ordinal_native_evaluate`, x, y, counts, weights, offset, categories, coefficients, firth, block_size, condition_tol, link)
 }
 
-ordinal_native_fit <- function(x, y, counts, weights, offset, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE) {
-    .Call(`_fastglm_ordinal_native_fit`, x, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace)
+ordinal_native_fit <- function(x, y, counts, weights, offset, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L) {
+    .Call(`_fastglm_ordinal_native_fit`, x, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
 }
 
 streaming_qr_eta <- function(x, beta, offset) {

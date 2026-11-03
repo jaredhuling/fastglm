@@ -1,0 +1,305 @@
+"file","test","nb","failed","skipped","error","warning","passed","real"
+"test-adjusted-diagnostics.R","Firth diagnostics report the adjusted equations at the returned estimate",32,0,FALSE,FALSE,0,32,0.196
+"test-adjusted-diagnostics.R","adjusted diagnostics retain coefficient units through automatic scaling",7,0,FALSE,FALSE,0,7,0.018
+"test-adjusted-diagnostics.R","compact prepared fits retain adjusted diagnostics and older fits remain readable",12,0,FALSE,FALSE,0,12,0.024
+"test-bigmatrix-streaming.R","big.matrix path matches dense path",2,0,FALSE,FALSE,0,2,0.0710000000000002
+"test-bigmatrix-streaming.R","big.matrix rejects QR / SVD methods (would defeat streaming)",4,0,FALSE,FALSE,0,4,0.0679999999999998
+"test-bigmatrix-streaming.R","FASTGLM_CHUNK_ROWS environment variable does not change results",1,0,FALSE,FALSE,0,1,0.0589999999999999
+"test-count-backends.R","estimated-size NB agrees across dense, sparse, and streamed designs",37,0,FALSE,FALSE,0,37,0.428
+"test-count-backends.R","sparse estimated-size NB preserves non-log link likelihoods",8,0,FALSE,FALSE,0,8,0.024
+"test-count-backends.R","hurdle likelihood and joint covariance agree across representations",22,0,FALSE,FALSE,0,22,0.372
+"test-count-backends.R","source hurdle fits preserve separate offsets and zero-only blocks",3,0,FALSE,FALSE,0,3,0.032
+"test-count-backends.R","two-part fits agree when positive rows are supplied in blocks",20,0,FALSE,FALSE,0,20,0.122
+"test-count-backends.R","count block readers reject changed columns and invalid responses",6,0,FALSE,FALSE,0,6,0.0110000000000001
+"test-count-backends.R","positive-component passes reset sequential readers and visit skipped blocks",3,0,FALSE,FALSE,0,3,0.016
+"test-count-backends.R","single-formula source offsets retain component meanings",2,0,FALSE,FALSE,0,2,0.0670000000000002
+"test-count-backends.R","large-theta score retains its analytic Poisson-limit expansion",1,0,FALSE,FALSE,0,1,0.00200000000000022
+"test-count-backends.R","analytic NB information matches an independent likelihood Hessian",3,0,FALSE,FALSE,0,3,0.00999999999999979
+"test-count-backends.R","NB Poisson-boundary fits keep coefficients without a regular theta SE",10,0,FALSE,FALSE,0,10,0.0190000000000001
+"test-count-backends.R","rare-event Poisson limits are not mistaken for an interior theta root",12,0,FALSE,FALSE,0,12,0.052
+"test-count-backends.R","unfinished truncated NB fits report their returned parameter values",4,0,FALSE,FALSE,0,4,0.0229999999999997
+"test-count-inference.R","joint count scores differentiate the observation likelihood",12,0,FALSE,FALSE,0,12,0.133
+"test-count-inference.R","two-part cluster covariance includes cross-component scores",3,0,FALSE,FALSE,0,3,0.0089999999999999
+"test-count-inference.R","count averages use joint uncertainty and component contrasts",9,0,FALSE,FALSE,0,9,0.0860000000000003
+"test-count-inference.R","bootstrap refits reproduce explicit row and cluster samples",8,0,FALSE,FALSE,0,8,0.0949999999999998
+"test-count-inference.R","bootstrap supports count models and repeatable streaming sources",8,0,FALSE,FALSE,0,8,0.242
+"test-count-inference.R","cluster bootstrap scans skipped blocks in sequential sources",4,0,FALSE,FALSE,0,4,0.0110000000000001
+"test-count-inference.R","information failures retain the source reader error",2,0,FALSE,FALSE,0,2,0.004
+"test-count-inference.R","parametric binomial bootstrap retains proportion trial counts",5,0,FALSE,FALSE,0,5,0.0129999999999999
+"test-count-inference.R","two-component bootstrap preserves sparse designs",4,0,FALSE,FALSE,0,4,0.0279999999999996
+"test-count-inference.R","streaming component predictions retain external source offsets",2,0,FALSE,FALSE,0,2,0.044
+"test-count-inference.R","two-part marginal cluster uncertainty agrees with cluster sample means",2,0,FALSE,FALSE,0,2,0.00499999999999989
+"test-count-inference.R","joint count inference respects numerical theta boundaries",3,0,FALSE,FALSE,0,3,0.00599999999999978
+"test-count-inference.R","count scores preserve small-rate and Poisson-boundary limits",5,0,FALSE,FALSE,0,5,0.00700000000000012
+"test-count-information.R","analytic count information differentiates the weighted likelihood",84,0,FALSE,FALSE,0,84,0.219
+"test-count-information.R","information is additive over blocks and linear in prior weights",5,0,FALSE,FALSE,0,5,0.0089999999999999
+"test-count-information.R","analytic curvature remains accurate for rare positive counts",9,0,FALSE,FALSE,0,9,0.0110000000000001
+"test-count-information.R","information respects the numerical limits of R links",29,0,FALSE,FALSE,0,29,0.12
+"test-count-information.R","two-part Cauchy links retain sandwich inference",3,0,FALSE,FALSE,0,3,0.00600000000000023
+"test-count-information.R","joint information and robust covariance agree across count backends",18,0,FALSE,FALSE,0,18,0.211
+"test-diagnostic-prediction-display.R","diagnostics display readable checks and retain exact numerical fields",34,0,FALSE,FALSE,0,34,0.0590000000000002
+"test-diagnostic-prediction-display.R","prediction tables preserve row identities and matrix components",31,0,FALSE,FALSE,0,31,0.236
+"test-diagnostic-prediction-display.R","all prediction interfaces share the display including streaming blocks",27,0,FALSE,FALSE,0,27,0.0860000000000003
+"test-diagnostic-prediction-display.R","unavailable category uncertainty remains explicit in prediction output",5,0,FALSE,FALSE,0,5,0.0230000000000006
+"test-extensions.R","count offsets apply only to their component and NB uncertainty is joint",8,0,FALSE,FALSE,0,8,0.0390000000000006
+"test-extensions.R","truncated and two-part models predict the modeled conditional means",8,0,FALSE,FALSE,0,8,0.0209999999999999
+"test-extensions.R","prepared Gaussian batches reuse the factor and match individual fits",7,0,FALSE,FALSE,0,7,0.0540000000000003
+"test-extensions.R","streaming initialization, inference, and chunk partitions are consistent",9,0,FALSE,FALSE,0,9,0.016
+"test-extensions.R","formula sources retain factors and reject changed chunk schemas",2,0,FALSE,FALSE,0,2,0.00999999999999979
+"test-extensions.R","compact fits skip covariance and diagnostics recover small scores",6,0,FALSE,FALSE,0,6,0.00800000000000001
+"test-extensions.R","streaming grouped-binomial trial totals and Gamma adjustment agree",4,0,FALSE,FALSE,0,4,0.00999999999999979
+"test-extensions.R","theta profile endpoints satisfy the likelihood-ratio equation",4,0,FALSE,FALSE,0,4,0.0260000000000007
+"test-extensions.R","two-part marginal uncertainty agrees with its analytic gradient",3,0,FALSE,FALSE,0,3,0.00899999999999945
+"test-extensions.R","database sources preserve a common factor schema",1,0,FALSE,FALSE,0,1,0.124
+"test-extensions.R","rank-deficient predictions identify nonestimable rows",4,0,FALSE,FALSE,0,4,0.00600000000000023
+"test-extensions.R","streaming weighted continuous-family likelihoods use global dispersion",6,0,FALSE,FALSE,0,6,0.0150000000000006
+"test-extensions.R","streaming summaries use stored sufficient summaries without rereading",3,0,FALSE,FALSE,0,3,0.00499999999999989
+"test-extensions.R","compact inference preserves standard errors without inventing correlations",6,0,FALSE,FALSE,0,6,0.0249999999999995
+"test-extensions.R","truncated starting coefficients are checked before native fitting",3,0,FALSE,FALSE,0,3,0.0229999999999997
+"test-extensions.R","zero-weight clusters do not enter the cluster-count correction",1,0,FALSE,FALSE,0,1,0.00400000000000045
+"test-families-native.R","native and R-callback paths agree on tier-1 families",14,0,FALSE,FALSE,0,14,0.0209999999999999
+"test-families-nb.R","native NB log link agrees with glm() on MASS::negative.binomial",9,0,FALSE,FALSE,0,9,0.0199999999999996
+"test-families-nb.R","native NB sqrt link agrees with glm()",2,0,FALSE,FALSE,0,2,0.00600000000000023
+"test-families-nb.R","built-in negbin() matches MASS::negative.binomial()",2,0,FALSE,FALSE,0,2,0.00399999999999956
+"test-families-nb.R","NB native path matches R-callback fallback",2,0,FALSE,FALSE,0,2,0.00400000000000045
+"test-families-nb.R","NB SE / vcov are unaffected by Pearson-disp override (disp = 1)",1,0,FALSE,FALSE,0,1,0.00400000000000045
+"test-families-numerical.R","Gamma log link converges with large coefficients (extreme mu)",4,0,FALSE,FALSE,0,4,0.00600000000000023
+"test-families-numerical.R","Gamma log link: native vs R-callback agree under extreme mu",4,0,FALSE,FALSE,0,4,0.00499999999999989
+"test-families-numerical.R","Gamma inverse link converges and matches glm()",3,0,FALSE,FALSE,0,3,0.00499999999999989
+"test-families-numerical.R","Gamma identity link converges and matches glm()",3,0,FALSE,FALSE,0,3,0.00499999999999989
+"test-families-numerical.R","Gamma dev_resids matches R for log link",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-families-numerical.R","InvGauss log link converges and matches glm()",3,0,FALSE,FALSE,0,3,0.00499999999999989
+"test-families-numerical.R","InvGauss 1/mu^2 link converges and matches glm()",3,0,FALSE,FALSE,0,3,0.00900000000000034
+"test-families-numerical.R","InvGauss dev_resids is stable for large mu (no NaN)",5,0,FALSE,FALSE,0,5,0.00599999999999934
+"test-families-numerical.R","InvGauss native vs R-callback agree",4,0,FALSE,FALSE,0,4,0.00499999999999989
+"test-families-numerical.R","InvGauss inverse link converges and matches glm()",3,0,FALSE,FALSE,0,3,0.00499999999999989
+"test-families-numerical.R","Tweedie log link converges with large coefficients",4,0,FALSE,FALSE,0,4,0.0150000000000006
+"test-families-numerical.R","Tweedie native vs R-callback agree under stress",4,0,FALSE,FALSE,0,4,0.00699999999999967
+"test-families-numerical.R","Tweedie p near 1 (Poisson limit) matches Poisson",2,0,FALSE,FALSE,0,2,0.00399999999999956
+"test-families-numerical.R","Gamma log link gives consistent results across all methods",10,0,FALSE,FALSE,0,10,0.0170000000000003
+"test-families-numerical.R","InvGauss log link gives consistent results across methods 0-5",5,0,FALSE,FALSE,0,5,0.00800000000000001
+"test-families-numerical.R","Gamma log link handles very large fitted values without NaN",3,0,FALSE,FALSE,0,3,0.00400000000000045
+"test-families-numerical.R","Poisson handles large fitted values without overflow",2,0,FALSE,FALSE,0,2,0.00400000000000045
+"test-families-numerical.R","InvGauss log link with large coefficients stays finite",4,0,FALSE,FALSE,0,4,0.00599999999999934
+"test-families-quasi.R","native quasi-poisson matches glm(family = quasipoisson())",4,0,FALSE,FALSE,0,4,0.00700000000000056
+"test-families-quasi.R","native quasi-binomial matches glm(family = quasibinomial())",4,0,FALSE,FALSE,0,4,0.00800000000000001
+"test-families-quasi.R","over-dispersed quasi-poisson recovers >1 dispersion",2,0,FALSE,FALSE,0,2,0.00300000000000011
+"test-families-tweedie.R","native Tweedie log-link matches glm() across var.power values",12,0,FALSE,FALSE,0,12,0.0280000000000005
+"test-families-tweedie.R","native Tweedie sqrt link matches glm()",2,0,FALSE,FALSE,0,2,0.00599999999999934
+"test-families-tweedie.R","native Tweedie p=2 (Gamma limit) matches Gamma-log",1,0,FALSE,FALSE,0,1,0.00199999999999978
+"test-families-tweedie.R","Tweedie native path matches R-callback fallback",2,0,FALSE,FALSE,0,2,0.00300000000000011
+"test-firth-backend-cache.R","constant-information Firth fits agree across weighted backends",360,0,FALSE,FALSE,0,360,0.665
+"test-firth-backend-cache.R","cached Firth information retains rank and convergence safeguards",5,0,FALSE,FALSE,0,5,0.0109999999999992
+"test-firth-backend-cache.R","Gamma chunk grouping preserves skewed and small dispersion fits",6,0,FALSE,FALSE,0,6,0.0129999999999999
+"test-firth-backend-cache.R","Poisson sqrt information respects the derivative floor",3,0,FALSE,FALSE,0,3,0.00600000000000023
+"test-firth-backend-cache.R","big.matrix Firth information caches retain weighted results",24,0,FALSE,FALSE,0,24,0.11
+"test-firth-profile.R","Firth native objective and adjusted score match independent calculations",4,0,FALSE,FALSE,0,4,0.00499999999999989
+"test-firth-profile.R","profile intervals and joint tests agree with logistf",7,0,FALSE,FALSE,0,7,0.343999999999999
+"test-firth-profile.R","profile inference remains finite under complete separation",11,0,FALSE,FALSE,0,11,0.048
+"test-firth-profile.R","the published sex2 example agrees with logistf profile inference",4,0,FALSE,FALSE,0,4,0.0279999999999996
+"test-firth-profile.R","grouped responses retain frequency weights and offsets",3,0,FALSE,FALSE,0,3,0.0180000000000007
+"test-firth-profile.R","profile constraints retain the full Jeffreys penalty",4,0,FALSE,FALSE,0,4,0.0140000000000002
+"test-firth-profile.R","unsupported fits and failed profile computations are explicit",11,0,FALSE,FALSE,0,11,0.0220000000000002
+"test-firth-stopping.R","QR Firth stopping checks the remaining score in predictor coordinates",96,0,FALSE,FALSE,0,96,0.238
+"test-firth-stopping.R","QR Firth saved stopping quantities use current information and dispersion",9,0,FALSE,FALSE,0,9,0.0149999999999997
+"test-firth-stopping.R","QR Firth stopping handles separation and frequency weights honestly",10,0,FALSE,FALSE,0,10,0.0190000000000001
+"test-firth-stopping.R","small marginal scores do not hide a remaining weak-direction step",5,0,FALSE,FALSE,0,5,0.00599999999999934
+"test-firth-stopping.R","ill-conditioned stopping verification preserves the actual design",4,0,FALSE,FALSE,0,4,0.0170000000000003
+"test-firth-stopping.R","the final allowed iterate is certified only with stationary dispersion",9,0,FALSE,FALSE,0,9,0.00999999999999979
+"test-firth.R","Firth coefs match logistf on simulated logistic data",4,0,FALSE,FALSE,0,4,0.00999999999999979
+"test-firth.R","Firth converges under perfect separation (where unpenalized glm diverges)",4,0,FALSE,FALSE,0,4,0.00599999999999934
+"test-firth.R","Firth matches logistf on a typical small-sample bias case",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-firth.R","firth = TRUE works for all standard families",8,0,FALSE,FALSE,0,8,0.0110000000000001
+"test-firth.R","firth result reports unpenalized deviance and penalized.deviance",5,0,FALSE,FALSE,0,5,0.00600000000000023
+"test-firth.R","fastglm_fit accepts firth = TRUE",2,0,FALSE,FALSE,0,2,0.00300000000000011
+"test-firth.R","Firth binomial gives identical results across all 6 methods",10,0,FALSE,FALSE,0,10,0.0149999999999997
+"test-firth.R","Firth Poisson gives identical results across all 6 methods",5,0,FALSE,FALSE,0,5,0.0119999999999996
+"test-firth.R","Firth sparse matches dense",3,0,FALSE,FALSE,0,3,0.00899999999999945
+"test-firth.R","Firth sparse LDLT matches dense",1,0,FALSE,FALSE,0,1,0.00399999999999956
+"test-firth.R","Firth streaming matches dense",5,0,FALSE,FALSE,0,5,0.0140000000000002
+"test-firth.R","Firth streaming LDLT matches dense",1,0,FALSE,FALSE,0,1,0.00399999999999956
+"test-firth.R","Firth streaming reports penalized deviance",3,0,FALSE,FALSE,0,3,0.00499999999999989
+"test-firth.R","Firth uses user's chosen method, not forced to 2",3,0,FALSE,FALSE,0,3,0.00400000000000045
+"test-gamma-firth-convergence.R","skewed weighted Gamma fits reach the finite adjusted-score root",139,0,FALSE,FALSE,0,139,0.296
+"test-gamma-firth-convergence.R","unfinished Gamma iterations report their remaining score",5,0,FALSE,FALSE,0,5,0.00600000000000023
+"test-gamma-initialization.R","tiny Gamma responses do not distort source initialization or null models",10,0,FALSE,FALSE,0,10,0.0179999999999998
+"test-gamma-initialization.R","Gamma null calculation is invariant to offset shifts and block boundaries",4,0,FALSE,FALSE,0,4,0.00499999999999989
+"test-glmnb.R","fastglm_nb matches MASS::glm.nb across realistic theta",12,0,FALSE,FALSE,0,12,0.0389999999999997
+"test-glmnb.R","fastglm_nb matches MASS::glm.nb on the quine dataset",3,0,FALSE,FALSE,0,3,0.00999999999999979
+"test-glmnb.R","init.theta is honored",2,0,FALSE,FALSE,0,2,0.00700000000000056
+"test-glmnb.R","fastglm_nb converges on overdispersed data where MASS::glm.nb fails",6,0,FALSE,FALSE,0,6,0.00999999999999979
+"test-glmnb.R","fastglm_nb returns a fastglm-classed object with the expected slots",7,0,FALSE,FALSE,0,7,0.00599999999999934
+"test-hurdle.R","Poisson hurdle: coefs match pscl::hurdle on simulated data",4,0,FALSE,FALSE,0,4,0.00900000000000034
+"test-hurdle.R","Poisson hurdle: SEs agree with pscl::hurdle",2,0,FALSE,FALSE,0,2,0.00800000000000001
+"test-hurdle.R","Hurdle handles two-RHS formula y ~ x | z (different zero design)",4,0,FALSE,FALSE,0,4,0.00800000000000001
+"test-hurdle.R","NB hurdle: coefs and theta match pscl::hurdle",4,0,FALSE,FALSE,0,4,0.0170000000000003
+"test-hurdle.R","Hurdle Poisson: log-link returns valid block-diagonal vcov",2,0,FALSE,FALSE,0,2,0.00299999999999923
+"test-hurdle.R","pscl::hurdle on bioChemists matches fastglm_hurdle",3,0,FALSE,FALSE,0,3,0.0170000000000003
+"test-hurdle.R","Hurdle with zero.dist != binomial errors clearly",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-integer-designs.R","integer dense designs match double designs in ordinary and Firth GLMs",39,0,FALSE,FALSE,0,39,0.0540000000000003
+"test-integer-designs.R","integer designs work in negative-binomial and two-component paths",14,0,FALSE,FALSE,0,14,0.069
+"test-integer-designs.R","integer source blocks normalize locally without changing the source",4,0,FALSE,FALSE,0,4,0.0140000000000002
+"test-joint-tests.R","term-specific proportional-odds tests share a null fit and match separate tests",44,0,FALSE,FALSE,0,44,0.204
+"test-joint-tests.R","joint Wald tests agree with Gaussian F tests and GLM coefficient tests",10,0,FALSE,FALSE,0,10,0.069
+"test-joint-tests.R","Wald contrasts align covariance and retain nonzero nulls and precision",9,0,FALSE,FALSE,0,9,0.0779999999999994
+"test-joint-tests.R","Wald tests report nonestimability and covariance failure explicitly",11,0,FALSE,FALSE,0,11,0.0150000000000006
+"test-model-contracts.R","pivoted QR gives stable fitted values with aliases",42,0,FALSE,FALSE,0,42,0.223999999999999
+"test-model-contracts.R","zero weights and binomial trials have consistent model accounting",5,0,FALSE,FALSE,0,5,0.00800000000000001
+"test-model-contracts.R","sparse Cholesky rejects nearly singular information",2,0,FALSE,FALSE,0,2,0.00699999999999967
+"test-model-contracts.R","formula predictions preserve offsets, factors, terms, and NA actions",10,0,FALSE,FALSE,0,10,0.0170000000000003
+"test-model-contracts.R","custom family kernels and exact NB theta retain their semantics",4,0,FALSE,FALSE,0,4,0.00600000000000023
+"test-model-contracts.R","big.matrix views respect row and column offsets",3,0,FALSE,FALSE,0,3,0.0870000000000006
+"test-model-contracts.R","mean bias reduction includes the adjusted Gamma dispersion score",3,0,FALSE,FALSE,0,3,0.00999999999999979
+"test-model-contracts.R","formula models can be updated and have tidy coefficient summaries",3,0,FALSE,FALSE,0,3,0.00600000000000023
+"test-model-contracts.R","binomial simulation preserves numeric response trial denominators",3,0,FALSE,FALSE,0,3,0.0129999999999999
+"test-ordinal-api.R","ordinal formula and matrix fits have consistent model methods",24,0,FALSE,FALSE,0,24,0.0459999999999994
+"test-ordinal-api.R","ordinal prediction preserves offsets, missing rows, and declared order",15,0,FALSE,FALSE,0,15,0.0269999999999992
+"test-ordinal-api.R","ordinal probability uncertainty and averages agree with numerical derivatives",10,0,FALSE,FALSE,0,10,0.0459999999999994
+"test-ordinal-api.R","ordinal grouped deviance and nonconvergence are explicit",9,0,FALSE,FALSE,0,9,0.0169999999999995
+"test-ordinal-assessment.R","ordinal assessment scores individual outcomes within frequency rows",13,0,FALSE,FALSE,0,13,0.103000000000002
+"test-ordinal-assessment.R","assessment outcomes cannot leak into prediction or calibration bins",10,0,FALSE,FALSE,0,10,0.0190000000000001
+"test-ordinal-assessment.R","ordinal assessment retains excluded and missing rows",16,0,FALSE,FALSE,0,16,0.0220000000000002
+"test-ordinal-assessment.R","structural zeros and tiny ordinal tails have honest log scores",10,0,FALSE,FALSE,0,10,0.016
+"test-ordinal-assessment.R","proportional-odds comparisons use supplied data and retain failures",27,0,FALSE,FALSE,0,27,0.081999999999999
+"test-ordinal-assessment.R","blocked and sparse assessment preserve category order and probabilities",6,0,FALSE,FALSE,0,6,0.0240000000000009
+"test-ordinal-bootstrap-prepared.R","prepared parametric refits retain independent-fit results and metadata",36,0,FALSE,FALSE,0,36,0.0679999999999996
+"test-ordinal-bootstrap-prepared.R","parametric preparation checks totals and keeps failures local to refits",12,0,FALSE,FALSE,0,12,0.0730000000000004
+"test-ordinal-bootstrap-prepared.R","parametric reuse preserves draws and formula statistic metadata",19,0,FALSE,FALSE,0,19,0.0340000000000007
+"test-ordinal-bootstrap-prepared.R","parametric boundary diagnostics are preserved during setup reuse",9,0,FALSE,FALSE,0,9,0.0150000000000006
+"test-ordinal-bootstrap-prepared.R","parametric bootstrap workers retain their own setup across assigned refits",1,0,TRUE,FALSE,0,0,0.000999999999999446
+"test-ordinal-bootstrap.R","ordinal pair and cluster bootstraps preserve row frequency semantics",11,0,FALSE,FALSE,0,11,0.0220000000000002
+"test-ordinal-bootstrap.R","ordinal grouped pair resampling copies counts and weights together",3,0,FALSE,FALSE,0,3,0.00600000000000023
+"test-ordinal-bootstrap.R","ordinal parametric refits use effective count totals with unit weights",10,0,FALSE,FALSE,0,10,0.0220000000000002
+"test-ordinal-bootstrap.R","ordinal bootstrap preserves formula prediction metadata and offsets",2,0,FALSE,FALSE,0,2,0.011000000000001
+"test-ordinal-bootstrap.R","ordinal bootstrap retains boundary point replicates without regular intervals",19,0,FALSE,FALSE,0,19,0.032
+"test-ordinal-bootstrap.R","only meanBR parametric bootstrap allows empty endpoints",10,0,FALSE,FALSE,0,10,0.0380000000000003
+"test-ordinal-bootstrap.R","ordinal ML endpoint failures and nonconvergence remain visible",15,0,FALSE,FALSE,0,15,0.0250000000000004
+"test-ordinal-bootstrap.R","ordinal bootstrap seeds are reproducible across worker scheduling",1,0,TRUE,FALSE,0,0,0.00100000000000122
+"test-ordinal-bootstrap.R","ordinal bootstrap aligns omitted rows and preserves exact cluster labels",5,0,FALSE,FALSE,0,5,0.0179999999999989
+"test-ordinal-categories.R","ordinal category mapping preserves declared endpoints and unused interior levels",11,0,FALSE,FALSE,0,11,0.0120000000000005
+"test-ordinal-categories.R","consecutive empty categories keep only the original outer endpoints for bias reduction",10,0,FALSE,FALSE,0,10,0.0109999999999992
+"test-ordinal-categories.R","frequency mapping is identical for grouped counts and repeated observations",7,0,FALSE,FALSE,0,7,0.00799999999999912
+"test-ordinal-categories.R","declared scale is distinct from the observed category count",9,0,FALSE,FALSE,0,9,0.0129999999999999
+"test-ordinal-categories.R","expanded boundary covariance records the reduced rank",6,0,FALSE,FALSE,0,6,0.00600000000000023
+"test-ordinal-categories.R","public boundary fits preserve the declared scale and qualify uncertainty",19,0,FALSE,FALSE,0,19,0.0259999999999998
+"test-ordinal-core.R","ordinal native scores and information agree with probability derivatives",6,0,FALSE,FALSE,0,6,0.0210000000000008
+"test-ordinal-core.R","binary ordinal mean bias reduction equals logistic Firth fitting",6,0,FALSE,FALSE,0,6,0.00699999999999967
+"test-ordinal-core.R","ordinal grouped counts and frequency expansion fit the same model",14,0,FALSE,FALSE,0,14,0.0179999999999989
+"test-ordinal-core.R","intercept-only ordinal fits have exact adjusted-count solutions",18,0,FALSE,FALSE,0,18,0.0239999999999991
+"test-ordinal-core.R","ordinal convergence detects separation and respects linear coordinates",9,0,FALSE,FALSE,0,9,0.0120000000000005
+"test-ordinal-core.R","ordinal core rejects unsupported and unidentified inputs explicitly",10,0,FALSE,FALSE,0,10,0.0170000000000012
+"test-ordinal-core.R","zero-frequency extremes do not affect ordinal fitting or scaling",15,0,FALSE,FALSE,0,15,0.016
+"test-ordinal-core.R","ordinal grouped totals are accumulated after applying frequency weights",16,0,FALSE,FALSE,0,16,0.0170000000000012
+"test-ordinal-inference.R","ordinal observed information and frequency meat agree with likelihood derivatives",8,0,FALSE,FALSE,0,8,0.0289999999999999
+"test-ordinal-inference.R","ordinal sandwiches preserve frequency expansion and cluster sums",31,0,FALSE,FALSE,0,31,0.0449999999999999
+"test-ordinal-inference.R","binary ordinal sandwiches reduce to ordinary logistic sandwiches",6,0,FALSE,FALSE,0,6,0.0129999999999999
+"test-ordinal-inference.R","ordinal ML covariance agrees with the polr ordinary-score reference",1,0,FALSE,FALSE,0,1,0.00600000000000023
+"test-ordinal-inference.R","ordinal covariance respects affine coordinates and replication scaling",6,0,FALSE,FALSE,0,6,0.0419999999999998
+"test-ordinal-inference.R","ordinal cluster IDs align with formula omissions and ignore zero-frequency rows",7,0,FALSE,FALSE,0,7,0.0129999999999999
+"test-ordinal-inference.R","ordinal robust inference rejects unsupported boundaries and corrections",11,0,FALSE,FALSE,0,11,0.0199999999999996
+"test-ordinal-inference.R","ordinal covariance conveniences preserve parameter order and supplied uncertainty",9,0,FALSE,FALSE,0,9,0.0120000000000005
+"test-ordinal-links.R","cumulative-link maximum likelihood matches MASS and retains the link",31,0,FALSE,FALSE,0,31,0.0920000000000005
+"test-ordinal-links.R","binary cumulative-link bias reduction agrees with binary GLMs",20,0,FALSE,FALSE,0,20,0.0310000000000006
+"test-ordinal-links.R","link-specific scores, information, and bias adjustments match derivatives",10,0,FALSE,FALSE,0,10,0.132
+"test-ordinal-links.R","alternative links preserve grouping, prediction derivatives, and refit settings",26,0,FALSE,FALSE,0,26,0.105
+"test-ordinal-links.R","alternative-link tails retain probabilities and finite log losses",12,0,FALSE,FALSE,0,12,0.0120000000000005
+"test-ordinal-links.R","alternative-link common-slope tests match an unrestricted numerical score",8,0,FALSE,FALSE,0,8,0.0330000000000013
+"test-ordinal-links.R","alternative-link marginal standard errors match numerical delta derivatives",4,0,FALSE,FALSE,0,4,0.00999999999999979
+"test-ordinal-links.R","a zero-rank working design cannot masquerade as Firth convergence",3,0,FALSE,FALSE,0,3,0.00699999999999967
+"test-ordinal-links.R","complementary-log-log tail scores avoid subtraction of large log probabilities",7,0,FALSE,FALSE,0,7,0.0129999999999999
+"test-ordinal-marginal-effects.R","marginal effects and their uncertainty agree with independent derivatives",7,0,FALSE,FALSE,0,7,0.0180000000000007
+"test-ordinal-marginal-effects.R","formula effects retain prediction bases, offsets, and block invariance",11,0,FALSE,FALSE,0,11,0.0340000000000007
+"test-ordinal-marginal-effects.R","matrix marginal effects preserve frequencies and reduced categories",13,0,FALSE,FALSE,0,13,0.0210000000000008
+"test-ordinal-methods.R","ordinal simulation preserves categorical frequencies and RNG state",20,0,FALSE,FALSE,0,20,0.0360000000000014
+"test-ordinal-methods.R","ordinal multinomial draws have the specified totals and moments",5,0,FALSE,FALSE,0,5,0.00600000000000023
+"test-ordinal-methods.R","probability-scale residuals agree with independent categorical formulas",8,0,FALSE,FALSE,0,8,0.0280000000000005
+"test-ordinal-methods.R","ordinal workflow methods restore excluded formula rows",15,0,FALSE,FALSE,0,15,0.0289999999999999
+"test-ordinal-methods.R","ordinal tidy output distinguishes odds ratios and thresholds",19,0,FALSE,FALSE,0,19,0.032
+"test-ordinal-po-test.R","ordinal score inference agrees with numerical likelihood derivatives",5,0,FALSE,FALSE,0,5,0.0219999999999985
+"test-ordinal-po-test.R","ordinal score tests preserve frequency grouping, offsets and outcome reversal",7,0,FALSE,FALSE,0,7,0.0329999999999995
+"test-ordinal-po-test.R","formula terms select all their design columns for score tests",10,0,FALSE,FALSE,0,10,0.0380000000000003
+"test-ordinal-po-test.R","score tests report unsupported samples without changing predictions or exclusions",18,0,FALSE,FALSE,0,18,0.0440000000000005
+"test-ordinal-prediction-performance.R","ordinal prediction retains subnormal interior probabilities",6,0,FALSE,FALSE,0,6,0.0149999999999988
+"test-ordinal-prediction-performance.R","selective ordinal prediction preserves full helper and uncertainty results",9,0,FALSE,FALSE,0,9,0.011000000000001
+"test-ordinal-prediction-performance.R","binary and reduced-category ordinal classes agree across blocks",13,0,FALSE,FALSE,0,13,0.0239999999999991
+"test-ordinal-prepared.R","prepared ordinal fits reuse setup and agree with direct fits",32,0,FALSE,FALSE,0,32,0.0370000000000008
+"test-ordinal-prepared.R","ordinal setup keys use effective totals and not response allocations",9,0,FALSE,FALSE,0,9,0.0109999999999992
+"test-ordinal-prepared.R","ordinal caches invalidate safely after mutable inputs and failed setup",20,0,FALSE,FALSE,0,20,0.0389999999999997
+"test-ordinal-prepared.R","prepared formulas retain prediction coding and explicit offset semantics",12,0,FALSE,FALSE,0,12,0.0250000000000004
+"test-ordinal-prepared.R","ordinal prepared caches serialize and handle zero rows and integer matrices",11,0,FALSE,FALSE,0,11,0.0149999999999988
+"test-ordinal-prepared.R","ordinal batches support response-specific fitting vectors and category orders",10,0,FALSE,FALSE,0,10,0.016
+"test-performance-contracts.R","final Cholesky covariance uses the reported mean without another coefficient update",24,0,FALSE,FALSE,0,24,0.0440000000000005
+"test-performance-contracts.R","constant-column detection retains intercept and null-model accounting",3,0,FALSE,FALSE,0,3,0.00399999999999956
+"test-performance-contracts.R","Gamma dispersion grouping preserves the adjusted score for unequal prior weights",54,0,FALSE,FALSE,0,54,0.147
+"test-performance-contracts.R","constant-weight Firth decompositions agree across solvers",72,0,FALSE,FALSE,0,72,0.113000000000001
+"test-prepared-firth.R","prepared bias-reduced fits share setup and match independent fits",114,0,FALSE,FALSE,0,114,0.142999999999999
+"test-prepared-firth.R","prepared factors invalidate after changing predictors or weights",6,0,FALSE,FALSE,0,6,0.0129999999999999
+"test-prepared-firth.R","integer predictors are converted once in the shared setup",5,0,FALSE,FALSE,0,5,0.00500000000000078
+"test-prepared-firth.R","prepared fits respect response-specific weights and offsets",7,0,FALSE,FALSE,0,7,0.0239999999999991
+"test-prepared-firth.R","batch warm starts reset when new offsets leave the link domain",4,0,FALSE,FALSE,0,4,0.00900000000000034
+"test-prepared-firth.R","prepared inference levels and serialized caches retain their meaning",8,0,FALSE,FALSE,0,8,0.0139999999999993
+"test-prepared-firth.R","batch Firth settings and ordinary solver fallbacks remain explicit",7,0,FALSE,FALSE,0,7,0.0139999999999993
+"test-prepared-firth.R","prepared Gamma fits agree across sequential and independent processes",1,0,TRUE,FALSE,0,0,0.000999999999999446
+"test-result-display.R","hypothesis tests have compact printing and numeric table extraction",17,0,FALSE,FALSE,0,17,0.020999999999999
+"test-result-display.R","separation has a certificate and explicit bias-reduced inference",16,0,FALSE,FALSE,0,16,0.0250000000000004
+"test-result-display.R","the bias-reduced root retains the ordinary nuisance-score projection",4,0,FALSE,FALSE,0,4,0.00799999999999912
+"test-result-display.R","model and bootstrap displays share tables without changing results",23,0,FALSE,FALSE,0,23,0.0419999999999998
+"test-review-fixes.R","summary.fastglm computes correct SEs from cov.scaled (C3)",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","summary.fastglm SEs correct for Gamma family (C3)",1,0,FALSE,FALSE,0,1,0.00400000000000134
+"test-review-fixes.R","fastglm_zi class does not inherit broken fastglm methods (C5)",7,0,FALSE,FALSE,0,7,0.0139999999999993
+"test-review-fixes.R","fastglm_hurdle class does not inherit broken fastglm methods (C5)",6,0,FALSE,FALSE,0,6,0.00799999999999912
+"test-review-fixes.R","predict.fastglm returns fitted values when newdata is NULL (I6)",6,0,FALSE,FALSE,0,6,0.00999999999999979
+"test-review-fixes.R","fastglm_nb handles offset correctly (C4)",3,0,FALSE,FALSE,0,3,0.0080000000000009
+"test-review-fixes.R","fastglm_nb has intercept, aic, and n fields (I17)",4,0,FALSE,FALSE,0,4,0.00500000000000078
+"test-review-fixes.R","rank-deficient X handled correctly by pivoted QR methods",6,0,FALSE,FALSE,0,6,0.0479999999999983
+"test-review-fixes.R","rank-deficient X: SVD also detects rank",2,0,FALSE,FALSE,0,2,0.00199999999999889
+"test-review-fixes.R","gaussian:log link works natively",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","poisson:sqrt link works natively",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","Gamma:identity link works natively",1,0,FALSE,FALSE,0,1,0.00200000000000067
+"test-review-fixes.R","inverse.gaussian:identity link works natively",1,0,FALSE,FALSE,0,1,0.00199999999999889
+"test-review-fixes.R","fastglm_fit works as glm() method for multiple families",3,0,FALSE,FALSE,0,3,0.00699999999999967
+"test-review-fixes.R","offsets work in fastglm and fastglmPure",2,0,FALSE,FALSE,0,2,0.00400000000000134
+"test-review-fixes.R","zero prior weights are handled correctly",2,0,FALSE,FALSE,0,2,0.00300000000000011
+"test-review-fixes.R","custom start values work",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","etastart and mustart work",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","residuals.fastglm returns correct deviance residuals",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","residuals.fastglm returns correct pearson residuals",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","intercept-only model works",2,0,FALSE,FALSE,0,2,0.00399999999999956
+"test-review-fixes.R","single predictor (no intercept) works",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-review-fixes.R","Firth works with big.matrix",1,0,FALSE,FALSE,0,1,0.0920000000000005
+"test-review-fixes.R","predict type=response with se.fit works",3,0,FALSE,FALSE,0,3,0.00300000000000011
+"test-review-fixes.R","predict with newdata still works",2,0,FALSE,FALSE,0,2,0.00300000000000011
+"test-robust-se.R","vcovHC matches sandwich::vcovHC for binomial logit",4,0,FALSE,FALSE,0,4,0.011000000000001
+"test-robust-se.R","vcovHC matches sandwich for gaussian and poisson",6,0,FALSE,FALSE,0,6,0.016
+"test-robust-se.R","vcovCL matches sandwich::vcovCL",1,0,FALSE,FALSE,0,1,0.00699999999999967
+"test-robust-se.R","vcovHC works on sparse and big.matrix fits",2,0,FALSE,FALSE,0,2,0.0910000000000011
+"test-sources.R","formula sources preserve both component designs and transformations",5,0,FALSE,FALSE,0,5,0.00799999999999912
+"test-sources.R","Parquet sources preserve factor levels, offsets, and fitted models",1,0,TRUE,FALSE,0,0,0.000999999999999446
+"test-sources.R","repeated reads do not duplicate family initialization warnings",2,0,FALSE,FALSE,0,2,0.004999999999999
+"test-sources.R","new-data prediction retains source offset columns",3,0,FALSE,FALSE,0,3,0.0100000000000016
+"test-sources.R","fixed-theta likelihoods remain stable near the Poisson limit",5,0,FALSE,FALSE,0,5,0.00900000000000034
+"test-sparse.R","sparse dgCMatrix path matches dense path on a binomial logit fit",2,0,FALSE,FALSE,0,2,0.004999999999999
+"test-sparse.R","sparse rejects unsupported decomposition methods",4,0,FALSE,FALSE,0,4,0.0080000000000009
+"test-sparse.R","one-hot encoded categorical recovery: sparse matches dense",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-streaming-callback.R","fastglm_streaming with K chunks matches single-shot fastglm",2,0,FALSE,FALSE,0,2,0.00399999999999956
+"test-streaming-callback.R","streaming honors offset and prior weights",1,0,FALSE,FALSE,0,1,0.00500000000000078
+"test-streaming-callback.R","streaming gaussian recovers exact OLS",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-streaming-callback.R","streaming rejects bad chunk shapes",1,0,FALSE,FALSE,0,1,0.00300000000000011
+"test-streaming-qr-inference.R","streaming QR retains stable uncertainty for nearly redundant predictors",16,0,FALSE,FALSE,0,16,0.0410000000000004
+"test-streaming-qr-inference.R","streaming QR prediction handles scale, permutation, and explicit covariance",5,0,FALSE,FALSE,0,5,0.0129999999999999
+"test-streaming-qr-inference.R","QR averages block sparse newdata and preserve whole-design contrasts",5,0,FALSE,FALSE,0,5,0.0540000000000003
+"test-streaming-qr.R","streaming QR agrees with dense QR across native families",300,0,FALSE,FALSE,0,300,0.417
+"test-streaming-qr.R","streaming QR resolves near collinearity without normal equations",17,0,FALSE,FALSE,0,17,0.132000000000001
+"test-streaming-qr.R","streaming QR reports rank and convergence failures explicitly",7,0,FALSE,FALSE,0,7,0.0139999999999993
+"test-streaming-qr.R","streaming QR preserves safeguarded weighted Gamma fitting",10,0,FALSE,FALSE,0,10,0.0140000000000011
+"test-streaming-qr.R","streaming QR leaves automatic defaults and custom callbacks intact",5,0,FALSE,FALSE,0,5,0.00900000000000034
+"test-vcov.R","vcov(fastglm) matches vcov(glm) across all decomposition methods",12,0,FALSE,FALSE,0,12,0.0250000000000004
+"test-vcov.R","vcov(fastglm) for gaussian, poisson, gamma agrees with glm",6,0,FALSE,FALSE,0,6,0.0120000000000005
+"test-vcov.R","predict(se.fit = TRUE) matches predict.glm",2,0,FALSE,FALSE,0,2,0.00399999999999956
+"test-vcov.R","vcov.fastglmFit no longer requires a refit",2,0,FALSE,FALSE,0,2,0.00300000000000011
+"test-zi.R","Poisson ZI: coefs match pscl::zeroinfl on simulated data",4,0,FALSE,FALSE,0,4,0.0170000000000012
+"test-zi.R","Poisson ZI: SEs agree with pscl::zeroinfl",2,0,FALSE,FALSE,0,2,0.0109999999999992
+"test-zi.R","ZI handles two-RHS formula y ~ x | z (different zero design)",4,0,FALSE,FALSE,0,4,0.00999999999999979
+"test-zi.R","NB ZI: coefs and theta match pscl::zeroinfl",4,0,FALSE,FALSE,0,4,0.0350000000000001
+"test-zi.R","ZI Poisson: probit zero link works",3,0,FALSE,FALSE,0,3,0.0129999999999999
+"test-zi.R","pscl::zeroinfl on bioChemists matches fastglm_zi",3,0,FALSE,FALSE,0,3,0.027000000000001

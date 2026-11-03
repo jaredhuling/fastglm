@@ -6,7 +6,7 @@
 \alias{vcov.fastglm_ordinal}
 \alias{summary.fastglm_ordinal}
 \alias{confint.fastglm_ordinal}
-\title{Methods for proportional-odds fits}
+\title{Methods for cumulative-link ordinal fits}
 \usage{
 \method{update}{fastglm_ordinal}(object, formula., ..., evaluate = TRUE)
 
@@ -58,5 +58,5 @@ to model-based expected Fisher information.}
 Coefficients, covariance, or model summaries, as appropriate.
 }
 \description{
-Methods for proportional-odds fits
+Methods for cumulative-link ordinal fits
 }

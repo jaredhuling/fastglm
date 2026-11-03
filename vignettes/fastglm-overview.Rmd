@@ -89,6 +89,27 @@ fastglm_average(fit, vcov.=robust)
 
 `fastglm_average()` estimates an average response over a supplied covariate distribution. Its standard error accounts for coefficient uncertainty while conditioning on those covariates. A `contrast` function can alter the design matrix, yielding the average difference between transformed and original predictions. Such a contrast describes the fitted mean model; a causal interpretation requires additional identification assumptions.
 
+## Joint coefficient tests
+
+A categorical predictor generally contributes several coefficients. Testing those coefficients together addresses whether that predictor contributes to the specified mean model, conditional on the remaining terms. `fastglm_wald_test()` selects all columns associated with a formula term and combines their estimates and covariance in a joint Wald statistic.
+
+```{r}
+fastglm_wald_test(fit,terms="group")
+fastglm_wald_test(fit,terms="group",vcov.=robust)
+```
+
+The second test uses the cluster covariance calculated above. Both tests use a first-order chi-square reference; the covariance must correspond to the sampling structure. Small samples or few independent clusters can make this approximation inaccurate. A test of a main-effect term in a model containing interactions depends on the predictor coding and reference values. It does not test every effect involving that variable.
+
+A named contrast specifies a linear combination of coefficients. For example, the difference between the coefficients for groups c and b describes their log mean ratio at equal values of the other predictors in this model.
+
+```{r}
+group_comparison <- fastglm_wald_test(fit,contrast=c(groupc=1,groupb=-1))
+group_comparison
+as.data.frame(group_comparison)
+```
+
+Matrix contrasts permit several comparisons in a joint test, and `null` supplies their hypothesized values. Omitted named coefficients receive weight zero. The returned result retains the contrast estimates and standard errors at full precision. Nonestimable comparisons, unsuccessful fits, and unusable covariance matrices produce an unavailable test with an explanation.
+
 # Repeated outcomes on a shared design
 
 Repeated outcome analyses often use the same predictors and weights. `fastglm_prepare()` saves this common design and the information needed to construct predictors consistently. For Gaussian regression with an identity link, the expensive matrix decomposition depends only on the predictors and weights, so it can be reused across outcomes. Certain bias-reduced models also permit this reuse, as illustrated below. For models whose fitting weights change with the response and fitted mean, the preceding fit can still provide useful starting coefficients. Reusing those starting coefficients is called a warm start.

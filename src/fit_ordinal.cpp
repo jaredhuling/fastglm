@@ -29,15 +29,15 @@ struct OrdinalData {
     Rcpp::NumericMatrix counts;
     Rcpp::NumericVector weights, offset;
     VectorXd totals;
-    int n,p,K,q,d,block;
+    int n,p,K,q,d,block,link;
     bool grouped;
 
     OrdinalData(Rcpp::NumericMatrix X,Rcpp::IntegerVector y,Rcpp::NumericMatrix Y,
-        Rcpp::NumericVector w,Rcpp::NumericVector off,int categories,int block_size) :
+        Rcpp::NumericVector w,Rcpp::NumericVector off,int categories,int block_size,int link_code=0) :
         x(X.begin(),X.nrow(),X.ncol()),codes(y),counts(Y),weights(w),offset(off),
-        n(X.nrow()),p(X.ncol()),K(categories),q(categories-1),d(p+q),block(block_size),
+        n(X.nrow()),p(X.ncol()),K(categories),q(categories-1),d(p+q),block(block_size),link(link_code),
         grouped(Y.nrow()!=0 || Y.ncol()!=0) {
-        if(n<1 || K<2 || block<1 || w.size()!=n || off.size()!=n ||
+        if(n<1 || K<2 || block<1 || link<0 || link>2 || w.size()!=n || off.size()!=n ||
            (grouped && (Y.nrow()!=n || Y.ncol()!=K)) || (!grouped && y.size()!=n))
             Rcpp::stop("incompatible ordinal data dimensions");
         if(!x.allFinite()) Rcpp::stop("ordinal design must be finite");
@@ -92,11 +92,63 @@ struct OrdinalData {
 };
 
 struct OrdinalRow {
-    VectorXd eta,g,cdf,survival,logp,left,right,neighbor;
+    VectorXd eta,g,cdf,survival,logp,left,right,neighbor,gprime,logg,logcdf,logsurvival,location,logden;
+    int link=0;
     explicit OrdinalRow(int q) : eta(q),g(q),cdf(q),survival(q),logp(q+1),
-        left(q),right(q),neighbor(q) {}
-    void evaluate(const VectorXd& alpha,double linear) {
+        left(q),right(q),neighbor(q),gprime(q),logg(q),logcdf(q),logsurvival(q),location(q+1),logden(q) {}
+    void evaluate(const VectorXd& alpha,double linear,int link_code=0) {
+        link=link_code;
         const int q=alpha.size();
+        if(link!=0) {
+            for(int s=0;s<q;++s) {
+                eta[s]=alpha[s]-linear;
+                if(link==1) {
+                    logcdf[s]=R::pnorm(eta[s],0,1,true,true);
+                    logsurvival[s]=R::pnorm(eta[s],0,1,false,true);
+                    logg[s]=R::dnorm(eta[s],0,1,true);
+                    g[s]=std::exp(logg[s]);gprime[s]=-eta[s]*g[s];
+                } else {
+                    const double e=std::exp(eta[s]);
+                    logcdf[s]=eta[s]<-36 ? eta[s] : std::log(-std::expm1(-e));
+                    logsurvival[s]=-e;logg[s]=eta[s]-e;
+                    g[s]=std::exp(logg[s]);gprime[s]=std::isfinite(e) ? g[s]*(1-e) : 0;
+                }
+                cdf[s]=std::exp(logcdf[s]);survival[s]=std::exp(logsurvival[s]);
+            }
+            logp[0]=logcdf[0];logp[q]=logsurvival[q-1];
+            for(int s=1;s<q;++s) {
+                if(link==2) {
+                    const double ld=eta[s]+std::log(-std::expm1(alpha[s-1]-alpha[s]));
+                    logden[s]=ld < -36 ? ld : std::log(-std::expm1(-std::exp(ld)));
+                }
+                logp[s]=eta[s]<=0 ? logcdf[s]+ordinal_log1mexp(logcdf[s-1]-logcdf[s]) :
+                    logsurvival[s-1]+(link==2 ? logden[s] : ordinal_log1mexp(logsurvival[s]-logsurvival[s-1]));
+            }
+            for(int s=0;s<q;++s) {
+                left[s]=std::exp(logg[s]-logp[s]);right[s]=std::exp(logg[s]-logp[s+1]);
+            }
+            if(link==2) {
+                right[q-1]=std::exp(eta[q-1]);
+                for(int s=1;s<q;++s) {
+                    const double difference=std::exp(eta[s])*(-std::expm1(alpha[s-1]-alpha[s]));
+                    left[s]=std::exp(eta[s]-difference-logden[s]);
+                    right[s-1]=std::exp(eta[s-1]-logden[s]);
+                }
+            }
+            location[0]=left[0];location[q]=-right[q-1];
+            for(int s=1;s<q;++s) {
+                const double gap=alpha[s]-alpha[s-1];
+                const double delta=link==1 ? -.5*gap*(eta[s]+eta[s-1]) :
+                    gap-std::exp(eta[s])*(-std::expm1(-gap));
+                location[s]=delta>=0 ? left[s]*(-std::expm1(-delta)) :
+                    -right[s-1]*(-std::expm1(delta));
+            }
+            for(int s=0;s<q;++s) neighbor[s]=location[s]-location[s+1];
+            if(!logp.allFinite() || !left.allFinite() || !right.allFinite() ||
+               !location.allFinite() || !gprime.allFinite())
+                throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
+            return;
+        }
         for(int s=0;s<q;++s) {
             eta[s]=alpha[s]-linear;
             const double e=std::exp(-std::abs(eta[s])),den=1+e;
@@ -118,6 +170,7 @@ struct OrdinalRow {
             throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
     }
     double location_score(int category) const {
+        if(link!=0) return location[category];
         return (category<eta.size() ? survival[category] : 0)-
             (category>0 ? cdf[category-1] : 0);
     }
@@ -150,7 +203,7 @@ OrdinalState ordinal_evaluate(const OrdinalData& data,const VectorXd& parameters
         for(int r=0;r<length;++r) {
             const int i=first+r;const double m=data.totals[i];
             if(m==0) continue;
-            row.evaluate(alpha,data.linear(i,beta)+data.offset[i]);
+            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link);
             result.min_logp=std::min(result.min_logp,row.logp.minCoeff());
             if(data.grouped) {
                 for(int k=0;k<data.K;++k) {
@@ -211,11 +264,11 @@ OrdinalState ordinal_evaluate(const OrdinalData& data,const VectorXd& parameters
         for(int r=0;r<length;++r) {
             const int i=first+r;const double m=data.totals[i];
             if(m==0) continue;
-            row.evaluate(alpha,data.linear(i,beta)+data.offset[i]);
+            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link);
             const double quadratic=p ? xb.row(r).dot(xx.row(r)) : 0;
             for(int s=0;s<q;++s) {
                 const double v=result.inverse(s,s)+quadratic-(p ? 2*xa(r,s) : 0);
-                c[s]=.5*m*row.g[s]*(1-2*row.cdf[s])*v;
+                c[s]=data.link==0 ? .5*m*row.g[s]*(1-2*row.cdf[s])*v : .5*m*row.gprime[s]*v;
                 slope[r]-=c[s]*row.neighbor[s];
             }
             for(int s=0;s<q;++s)
@@ -251,8 +304,8 @@ Rcpp::List ordinal_state_list(const OrdinalState& state) {
 Rcpp::List ordinal_native_evaluate(Rcpp::NumericMatrix x,Rcpp::IntegerVector y,
     Rcpp::NumericMatrix counts,Rcpp::NumericVector weights,Rcpp::NumericVector offset,
     int categories,Rcpp::NumericVector coefficients,bool firth=false,
-    int block_size=2048,double condition_tol=1e-14) {
-    OrdinalData data(x,y,counts,weights,offset,categories,block_size);
+    int block_size=2048,double condition_tol=1e-14,int link=0) {
+    OrdinalData data(x,y,counts,weights,offset,categories,block_size,link);
     VectorXd beta=Rcpp::as<VectorXd>(coefficients);
     return ordinal_state_list(ordinal_evaluate(data,beta,firth,condition_tol));
 }
@@ -262,11 +315,11 @@ Rcpp::List ordinal_native_fit(Rcpp::NumericMatrix x,Rcpp::IntegerVector y,
     Rcpp::NumericMatrix counts,Rcpp::NumericVector weights,Rcpp::NumericVector offset,
     int categories,Rcpp::NumericVector start,bool firth=false,double score_tol=1e-8,
     double step_tol=1e-8,int maxit=200,int block_size=2048,double max_step=4,
-    int max_halves=35,double condition_tol=1e-14,bool trace=false) {
+    int max_halves=35,double condition_tol=1e-14,bool trace=false,int link=0) {
     if(!(score_tol>0) || !(step_tol>0) || maxit<1 || !(max_step>0) || max_halves<1 ||
        !(condition_tol>0) || !std::isfinite(score_tol+step_tol+max_step+condition_tol))
         Rcpp::stop("invalid ordinal optimizer controls");
-    OrdinalData data(x,y,counts,weights,offset,categories,block_size);
+    OrdinalData data(x,y,counts,weights,offset,categories,block_size,link);
     VectorXd parameters=Rcpp::as<VectorXd>(start);
     int evaluations=0,fallbacks=0,iterations=0;
     auto evaluate=[&](const VectorXd& b) { ++evaluations;return ordinal_evaluate(data,b,firth,condition_tol); };

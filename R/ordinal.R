@@ -1,6 +1,6 @@
-#' Fit a proportional-odds model for ordered outcomes
+#' Fit a cumulative-link model for ordered outcomes
 #'
-#' Fits a cumulative-logit model with common slopes and freely estimated
+#' Fits a cumulative-link model with common slopes and freely estimated
 #' thresholds, by maximum likelihood or mean bias reduction. Positive slopes
 #' shift probability toward higher outcome categories.
 #' @param x a formula, an object from [fastglm_ordinal_prepare()], or a finite
@@ -15,11 +15,14 @@
 #'   responses. For count matrices, counts times weights must be integers.
 #'   Frequencies are used without normalization.
 #' @param offset a location offset: the model is
-#'   `logit Pr(Y <= j) = alpha[j] - x beta - offset`.
+#'   `link{Pr(Y <= j)} = alpha[j] - x beta - offset`.
 #' @param levels category labels in increasing order. Numeric responses are
 #'   interpreted as codes from one to the number of labels.
 #' @param firth use mean bias reduction through adjusted score equations.
 #'   `NULL` in a prepared-design fit uses that design's default.
+#' @param link cumulative link: `"logit"` (proportional odds), `"probit"`,
+#'   or `"cloglog"` (complementary log-log). Prepared fits use their saved
+#'   link when `NULL` is supplied.
 #' @param tol tolerance for the remaining change in cumulative linear
 #'   predictors and the standardized adjusted score.
 #' @param maxit maximum fitting iterations.
@@ -30,8 +33,8 @@
 #' @param model retain the formula model frame.
 #' @param ... additional arguments to the default or formula method.
 #' @details Thresholds are estimated in increasing order. The same location
-#'   slopes apply to all cumulative probabilities. Only the logit link and
-#'   full-rank location designs are currently supported. Sparse matrices and
+#'   slopes apply to all cumulative probabilities. Full-rank location designs
+#'   are required. Sparse matrices and
 #'   repeatable sources are not accepted by this interface.
 #'
 #'   An empty interior category is removed from the numerical fit and then
@@ -80,16 +83,16 @@ fastglm_ordinal <- function(x, ...) UseMethod("fastglm_ordinal")
 #' @export
 fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
                                     firth=FALSE,tol=1e-8,maxit=200L,
-                                    block.size=2048L,control=list(),...) {
+                                    block.size=2048L,control=list(),link="logit",...) {
     if(length(list(...))) stop("unused ordinal fitting arguments",call.=FALSE)
     if(missing(y)) stop("an ordinal response is required",call.=FALSE)
-    fit <- .ordinal_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,block.size,control)
+    fit <- .ordinal_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,link=link)
     fit$call <- match.call()
     fit$call[[1L]] <- quote(fastglm::fastglm_ordinal)
     fit
 }
 
-.ordinal_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache=NULL) {
+.ordinal_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache=NULL,link="logit") {
     if(!is.matrix(x) || !is.numeric(x))
         stop("ordinal fitting currently requires a dense numeric matrix or formula",call.=FALSE)
     if(is.factor(y) && !is.ordered(y) && is.null(levels))
@@ -97,7 +100,7 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
     if(ncol(x)>0L && is.null(colnames(x))) colnames(x) <- paste0("x",seq_len(ncol(x)))
     if(anyNA(colnames(x)) || any(!nzchar(colnames(x))) || anyDuplicated(colnames(x)))
         stop("ordinal predictor column names must be distinct and nonmissing",call.=FALSE)
-    fit <- .ordinal_fit_core(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache)
+    fit <- .ordinal_fit_core(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache,link)
     q <- length(fit$alpha)
     names(fit$coefficients) <- c(paste0("threshold:",names(fit$alpha)),names(fit$beta))
     dimnames(fit$mapped.covariance) <- rep(list(names(fit$coefficients)),2L)
@@ -116,7 +119,7 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
 fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
                                     contrasts=NULL,levels=NULL,firth=FALSE,
                                     tol=1e-8,maxit=200L,block.size=2048L,
-                                    control=list(),model=TRUE,...) {
+                                    control=list(),model=TRUE,link="logit",...) {
     if(length(list(...))) stop("unused ordinal fitting arguments",call.=FALSE)
     if(!is.logical(model) || length(model)!=1L || is.na(model))
         stop("'model' must be TRUE or FALSE",call.=FALSE)
@@ -133,7 +136,7 @@ fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
     design <- design[,attr(design,"assign")!=0L,drop=FALSE]
     fit <- fastglm_ordinal.default(design,model.response(mf),
         weights=model.weights(mf),offset=model.offset(mf),levels=levels,
-        firth=firth,tol=tol,maxit=maxit,block.size=block.size,control=control)
+        firth=firth,tol=tol,maxit=maxit,block.size=block.size,control=control,link=link)
     fit$terms <- terms
     fit$design.assign <- assignment[assignment!=0L]
     fit$xlevels <- stats::.getXlevels(terms,mf)
@@ -174,7 +177,7 @@ update.fastglm_ordinal <- function(object,formula.,...,evaluate=TRUE) {
     switch(component,all=seq_len(q+p),location=q+seq_len(p),threshold=seq_len(q))
 }
 
-#' Methods for proportional-odds fits
+#' Methods for cumulative-link ordinal fits
 #' @param object a fitted \code{fastglm_ordinal} model.
 #' @param component return all parameters, location slopes, or thresholds.
 #' @param ... further method arguments.
@@ -255,7 +258,7 @@ summary.fastglm_ordinal <- function(object,vcov.=NULL,...) {
     structure(list(call=object$call,location=tab[q+seq_along(object$beta),,drop=FALSE],
         thresholds=tab[seq_len(q),1:2,drop=FALSE],converged=object$converged,
         convergence.reason=object$convergence.reason,iterations=object$iterations,
-        firth=object$firth,frequency=object$frequency,nobs.rows=object$nobs.rows,
+        firth=object$firth,link=.ordinal_link(object),frequency=object$frequency,nobs.rows=object$nobs.rows,
         loglik=object$loglik,boundary=object$boundary,
         covariance.type=if(is.null(vcov.)) "expected Fisher information" else "supplied covariance",
         collapsed.categories=object$levels[object$collapsed.categories],
@@ -266,7 +269,8 @@ summary.fastglm_ordinal <- function(object,vcov.=NULL,...) {
 #' @exportS3Method print summary.fastglm_ordinal
 print.summary.fastglm_ordinal <- function(x,digits=max(3L,getOption("digits")-3L),...) {
     digits <- .fastglm_print_digits(digits)
-    .fastglm_print_header("Proportional-odds regression",x$call)
+    .fastglm_print_header(if(.ordinal_link(x)=="logit") "Proportional-odds regression" else
+        paste0("Cumulative-link regression (",.ordinal_link(x),")"),x$call)
     .fastglm_print_field("Estimation",if(x$firth) "mean bias reduction" else "maximum likelihood")
     .fastglm_print_coefficients(x$location,"Location coefficients (positive means higher outcomes)",digits,...)
     .fastglm_print_coefficients(x$thresholds,"Thresholds",digits,P.values=FALSE,has.Pvalue=FALSE,...)
@@ -284,7 +288,8 @@ print.summary.fastglm_ordinal <- function(x,digits=max(3L,getOption("digits")-3L
 #' @exportS3Method print fastglm_ordinal
 print.fastglm_ordinal <- function(x,digits=max(3L,getOption("digits")-3L),...) {
     digits <- .fastglm_print_digits(digits)
-    .fastglm_print_header("Proportional-odds regression",x$call)
+    .fastglm_print_header(if(.ordinal_link(x)=="logit") "Proportional-odds regression" else
+        paste0("Cumulative-link regression (",.ordinal_link(x),")"),x$call)
     .fastglm_print_field("Estimation",if(x$firth) "mean bias reduction" else "maximum likelihood")
     .fastglm_print_coefficients(x$beta,"Location coefficients",digits,...)
     .fastglm_print_coefficients(x$alpha,"Thresholds",digits,...)
@@ -394,6 +399,11 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,...) {
     p <- length(object$beta); a <- object$working$alpha; q <- length(a)
     xx <- .ordinal_prediction_scale(x,object$working$center,object$working$scale)
     location <- streaming_qr_eta(xx,object$working$beta,offset)
+    if(.ordinal_link(object)!="logit") {
+        out <- .ordinal_link_kernel(a,location,.ordinal_link(object))
+        out$x <- xx
+        return(out)
+    }
     n <- nrow(x); full <- what=="all"
     want.probability <- full || what=="probability"
     threshold.names <- if(!is.null(names(a))) list(NULL,names(a)) else NULL

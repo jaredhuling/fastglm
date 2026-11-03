@@ -118,5 +118,13 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         _["bias.dispersion"]   = solver.get_bias_dispersion(),
         _["firth"]             = true);
     solver.append_bias_diagnostics(out, Rcpp::as<double>(out["bias.dispersion"]), inference);
+    // A saturated working mean can erase every weighted predictor direction.
+    // A zero update in that state does not solve the intended model equations.
+    if (X.cols()>0 && rk==0) {
+        out["converged"]=false;
+        out["convergence.reason"]="singular_working_information";
+        out["adjusted.score"]=Rcpp::NumericVector(X.cols(),NA_REAL);
+        out["standardized.adjusted.score"]=Rcpp::NumericVector(X.cols(),NA_REAL);
+    }
     return out;
 }

@@ -139,7 +139,7 @@ fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
         slope <- drop(dx%*%object$working$beta)
         for(j in seq_len(q)) {
             density <- parts$derivative[,j]
-            curvature <- density*(parts$survival[,j]-parts$cumulative[,j])
+            curvature <- if(is.null(parts$curvature)) density*(parts$survival[,j]-parts$cumulative[,j]) else parts$curvature[,j]
             value <- -density*slope
             g <- matrix(0,length(i),q+p)
             g[,j] <- -curvature*slope

@@ -1,0 +1,3 @@
+"case","estimation","implementation.baseline","allocated.bytes.baseline","largest.bytes.baseline","implementation.candidate","allocated.bytes.candidate","largest.bytes.candidate"
+3,"meanBR","baseline",472753568,1490992,"candidate",152120368,240048
+3,"ML","baseline",472753568,1490992,"candidate",152120368,240048

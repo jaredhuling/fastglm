@@ -14,7 +14,8 @@ fastglm_ordinal_batch(
   tol = 1e-08,
   maxit = 200L,
   block.size = 2048L,
-  control = list()
+  control = list(),
+  link = NULL
 )
 }
 \arguments{
@@ -36,6 +37,8 @@ response. `NULL` uses the prepared default or each response's own labels.}
 \item{firth}{default to the prepared design's setting, or `FALSE` for a matrix.}
 
 \item{tol, maxit, block.size, control}{ordinal fitting controls; see [fastglm_ordinal()].}
+
+\item{link}{default to the prepared link, or `"logit"` for a matrix.}
 }
 \value{
 A list of `fastglm_ordinal` fits, with the response list's names.
