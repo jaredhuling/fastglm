@@ -215,6 +215,25 @@ fastglm_diagnostics(fit_housing)
 
 The display reports how many scoring steps were reduced and the adjusted score at the returned estimates. Sparse, memory-mapped, and streamed fits use the current information matrix for the bias adjustment with these links; using information from an earlier iteration can cause oscillation in difficult cases. Streamed fits consequently require additional reads of the source. These numerical safeguards improve stability but do not guarantee convergence for every dataset or starting value.
 
+Accurate probability calculations are also necessary when outcomes are almost determined by the predictors. A probability can be so close to one that ordinary floating-point subtraction loses the complementary probability, even though that small quantity still affects the bias adjustment. Replacing small probabilities and derivatives separately by numerical lower bounds can therefore change the equations being solved. Probit and complementary log-log bias reduction evaluates these quantities using logarithms of probabilities and stable tail formulas. The likelihood, residuals, covariance, and score diagnostics follow the same calculations. Displayed probabilities can still round to zero or one.
+
+The following example separates the binary outcomes at zero exposure. The nuisance predictor, frequency weights, and offsets remain part of the model. The adjusted-score diagnostic assesses the numerical solution directly; agreement between two coefficient vectors would not establish accuracy if both calculations used the same probability approximation.
+
+```{r}
+set.seed(112101)
+separation_design <- cbind("(Intercept)"=1,
+    exposure=seq(-2,2,length.out=240),nuisance=rnorm(240,sd=.25))
+separated_fit <- fastglm(separation_design,
+    as.numeric(separation_design[,"exposure"]>0),
+    family=binomial("cloglog"),firth=TRUE,
+    weights=rep(c(0,1,2,1),60),offset=cos(seq_len(240))/8,
+    tol=1e-10,maxit=500)
+summary(separated_fit)
+fastglm_diagnostics(separated_fit)
+```
+
+Solving the adjusted equations is a numerical requirement. It does not make Wald intervals or hypothesis tests exact in small samples, and this example does not assess their coverage or rejection rates.
+
 The adjusted diagnostics are retained with supported fits, including prepared Gamma-log fits that omit their data or covariance. Ordinary scores require the original observations and predictors, and older fitted objects may not contain the stored adjusted diagnostics. An unavailable diagnostic is reported as missing rather than as a zero score.
 
 For streaming fits using `method="qr"`, convergence also depends on the change in fitted linear predictors implied by the remaining adjusted equations. This check is useful when nearly redundant predictors have large, opposite coefficients: their individual updates may remain appreciable while their combined effect changes very little. A joint score diagnostic accounts for combinations of coefficients that separate marginal score checks can miss. The following reader supplies the same Gamma observations in blocks.

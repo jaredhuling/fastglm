@@ -1,0 +1,44 @@
+
+ reference 
+$coefficients
+(Intercept)           x           z 
+ -0.6380102  14.2126086   1.4891041 
+
+$converged
+[1] TRUE
+
+$exact_score
+(Intercept)           x           z 
+ 0.06778462  0.13239540  0.01110269 
+
+$standardized_score
+[1] 0.5730143
+
+$remaining_predictor_change
+[1] 5.465435
+
+
+ fit 
+$coefficients
+(Intercept)           x           z 
+ -0.9058519  30.4232769   4.7416810 
+
+$converged
+[1] TRUE
+
+$exact_score
+  (Intercept)             x             z 
+-2.260753e-11 -3.241705e-12  1.401708e-11 
+
+$standardized_score
+[1] 3.4776e-11
+
+$remaining_predictor_change
+[1] 1.188042e-10
+
+$binary_ordinal_converged
+[1] TRUE
+
+$coefficient_difference
+[1] 7.516476e-11
+

@@ -1,0 +1,80 @@
+True-score root search using row quadratic forms
+$slow
+[1] 1
+
+$b
+(Intercept)           x           z 
+ -0.9058519  30.4232769   4.7416810 
+
+$iterations
+[1] 138
+
+$score
+  (Intercept)             x             z 
+-1.771533e-09 -2.540172e-10  1.098348e-09 
+
+$remaining
+[1] 9.309774e-09
+
+$slow
+[1] 0.2
+
+$b
+(Intercept)           x           z 
+ -0.9058519  30.4232769   4.7416810 
+
+$iterations
+[1] 191
+
+$score
+  (Intercept)             x             z 
+-3.952063e-10  1.228332e-11  1.708230e-13 
+
+$remaining
+[1] 9.469175e-09
+
+$start
+[1] -0.7 14.0  1.5
+
+$b
+[1] -0.779500 18.719159  1.821653
+
+$objective
+[1] 0.0306744
+
+$remaining
+[1] 2.617356
+
+$convergence
+[1] 0
+
+$start
+[1] -1 25  2
+
+$b
+[1] -0.850846 19.412242  1.806431
+
+$objective
+[1] 0.09993545
+
+$remaining
+[1] 1.275622
+
+$convergence
+[1] 1
+
+$start
+[1] -1 40  3
+
+$b
+[1] -1.030673 39.127432  2.718810
+
+$objective
+[1] 0.06333416
+
+$remaining
+[1] 8.848342
+
+$convergence
+[1] 1
+

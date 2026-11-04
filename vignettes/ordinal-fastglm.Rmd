@@ -89,6 +89,8 @@ The fits are compared through their category probabilities because their coeffic
 
 Mean bias reduction uses the first and second derivatives of the selected cumulative distribution in the adjusted equations of Kosmidis (2014). It targets bias in that link's threshold and slope parameters. The same link is retained by prepared fits, refitting bootstrap calculations, predictions, marginal effects, and model assessment. `fastglm_po_test()` tests the common-slope restriction on the fitted link scale; for probit and complementary log-log models its printed heading identifies that interpretation. These score and Wald tests retain their first-order inferential scope.
 
+With two categories, the cumulative-link model is a binary regression for membership in the lower category. Under the convention above, its binary linear predictor is the threshold minus the location predictor and offset. The corresponding binomial GLM and ordinal model therefore solve the same mean bias-reduction equations after accounting for these signs. For binary probit and complementary log-log fits, bounded Fisher-scoring updates permit temporary increases in the score norm; requiring that norm to decrease at every step can prevent progress toward a solution. Convergence still requires a small adjusted score and a small remaining predictor change.
+
 # Probabilities and average contrasts
 
 ```{r}
@@ -393,6 +395,8 @@ The warning identifies the reduction, and the fitted object records the mapping.
 # Computation and scope
 
 The numerical kernel evaluates likelihoods, scores, and information in C++. It processes probability calculations in blocks and avoids constructing a separate regression-design row for each observation and threshold. The dense input design is still retained in memory. Increasing the number of predictors or categories also increases the size of the parameter information matrix.
+
+For logistic ordinal models, each fitting evaluation reuses calculations involving the differences between adjacent thresholds. Algebraic identities also reduce repeated exponential and logarithm calculations for category probabilities and their derivatives. These changes preserve the likelihood and bias-adjustment equations. The additional storage depends on the number of categories; it does not add an array of probabilities for every observation. The benefit depends on the predictor dimension, number of categories, and number of fitting evaluations.
 
 The current interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, common slopes, offsets, and frequency data. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. Sparse and repeatable-source fitting and nonparallel slopes require additional implementations.
 

@@ -1,0 +1,60 @@
+Logistic ordinal probability and derivative calculations
+=======================================================
+
+Baseline: e94b066737740d548791c391493277fad925e59c (fastglm 0.1.3).
+The source patch and added source files are recorded in the adjacent
+binomial-tail-accuracy study. Installed native-library hashes and session
+information identify the binaries actually measured here. The later binomial
+state-cache/direct-product changes do not change the ordinal evaluator or its
+logistic R interface. The subsequent R-side cloglog tail correction concerns
+a different link.
+
+Motivation and derivation
+------------------------
+The previous ordinal-fit-profile study found the native evaluator dominated
+large-data fitting. For cumulative logistic probabilities F_j and density g_j,
+write P_j = F_j-F_(j-1), d_j = alpha_j-alpha_(j-1), and S_j=1-F_j.
+For an interior category,
+  log(P_j) = log(F_j) + log(S_(j-1)) + log(1-exp(-d_j)),
+  g_j/P_j = S_j + 1/expm1(d_j),
+  g_j/P_(j+1) = F_j + 1/expm1(d_(j+1)).
+The adjacent-category probability sum is
+  P_j+P_(j+1) = F_(j+1)*S_(j-1)*(1-exp(-(d_j+d_(j+1)))).
+Endpoints use the corresponding cumulative probability or survival function.
+These are algebraic rearrangements of the same likelihood, information, and
+mean-bias adjustment. Threshold-only quantities are calculated once per
+evaluation. The three extra vectors have length K-1, independent of n.
+No observation-level probability array is retained.
+
+Validation and timing
+---------------------
+Existing numerical derivative tests check likelihood scores, expected
+information, and bias adjustments. test-ordinal-logistic-kernel.R additionally
+checks direct exponential formulas, narrow category gaps, extreme thresholds,
+zero frequencies, and different row blocks. This is implementation validation,
+not a new estimator or a study of inferential calibration.
+
+run.R uses a separate seed (112301) and three designs: (n,p,K)=(10000,3,8),
+(100000,6,5), and (1000000,3,4). Both ML and mean bias reduction are evaluated,
+with ordinary and prepared interfaces. One warm-up precedes three elapsed-time
+measurements per case. Baseline and candidate run in separate R processes,
+without competing fitting or compilation jobs. Baseline runs first, so thermal
+or time-order effects are not eliminated. Median times have millisecond
+resolution; the smallest cases should not be read as precise universal ratios.
+
+Across the 12 comparisons, median speedups were 1.73 to 2.73. At one million
+observations, ordinary ML fitting fell from 1.019 to 0.512 seconds; ordinary
+mean bias reduction fell from 1.916 to 0.954 seconds. All iteration counts
+were identical. Maximum coefficient and predicted-probability differences
+were 2.23e-16 and 1.67e-16; maximum covariance difference was 1.31e-18.
+The maximum absolute log-likelihood difference was 2.33e-10 at n=1,000,000.
+Individual results and numerical comparisons accompany the scripts.
+
+These gains apply to the logistic ordinal evaluator. They do not establish
+similar gains for other cumulative links, predictor dimensions, category
+patterns, or external packages. No cross-package timing claim is made.
+
+Reproduction: install the baseline commit and candidate into separate libraries,
+then run run.R LIBRARY LABEL (baseline or candidate) from the repository root.
+Use a new results directory or preserve existing results before a new run;
+run.R refuses to replace recorded raw results. Run summarize.R for summaries.

@@ -1,0 +1,81 @@
+clipped root
+(Intercept)           x           z 
+ -0.6380102  14.2126086   1.4891041 
+$clipped
+[1] TRUE
+
+$score
+ (Intercept)            x            z 
+2.650784e-11 5.360157e-13 3.373140e-12 
+
+$remaining
+[1] 1.398553e-11
+
+$scoring_eigen
+[1] -5.4294092  0.2035552 -0.1466439
+
+$clipped
+[1] FALSE
+
+$score
+(Intercept)           x           z 
+ 0.06778462  0.13239540  0.01110269 
+
+$remaining
+[1] 5.465435
+
+$scoring_eigen
+[1]  0.4145241 -0.1468770  0.1455923
+
+no descent at 40 
+$clipped
+[1] FALSE
+
+$b
+(Intercept)           x           z 
+ -0.7450667  18.8102232   1.9804192 
+
+$iterations
+[1] 40
+
+$remaining
+[1] 3.576897
+
+[1]  1.2881879 -0.4161117  0.1067305
+$clipped
+[1] TRUE
+
+$b
+(Intercept)           x           z 
+ -0.6380102  14.2126086   1.4891041 
+
+$iterations
+[1] 104
+
+$remaining
+[1] 8.938446e-10
+
+[1] -5.4294092  0.2035552 -0.1466439
+Newton steps for true equations
+failed 77 
+$b
+[1] -0.7397014 18.2455964  1.8674728
+
+$iterations
+[1] 77
+
+$score
+(Intercept)           x           z 
+ 0.17652168  0.04033651  0.04520665 
+
+$remaining
+[1] 3.496639
+
+                     R    ordinal
+(Intercept) 0.06778482 0.06778482
+x           0.13239540 0.13239540
+z           0.01110270 0.01110270
+                     R    ordinal
+(Intercept) 0.17652168 0.17652168
+x           0.04033651 0.04033651
+z           0.04520665 0.04520665

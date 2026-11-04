@@ -1,0 +1,155 @@
+Accurate noncanonical binomial adjusted scores
+=============================================
+
+Baseline: e94b066737740d548791c391493277fad925e59c (fastglm 0.1.3).
+The source patch records tracked changes; source-additions contains added
+implementation files. Session records and native-library hashes identify the
+installed builds. The manifest records the completed artifacts. Earlier
+firth-noncanonical results are preserved without alteration.
+
+Scope and equations
+-------------------
+This work corrects numerical evaluation of established mean bias-reduction
+equations for binomial probit and complementary log-log models. It is not a
+new estimator or an inferential calibration method. No coverage or rejection
+rate study was used to choose the calculation or convergence criteria.
+The relevant score, expected-information, and AS_mean adjustment equations were
+read in the brglm2 iteration vignette, sections "Generalized linear models",
+"Bias-reducing adjusted score functions", and "Iteration":
+https://ikosmidis.r-universe.dev/brglm2/doc/iteration.html
+No universal finiteness or global-convergence result is claimed here.
+
+For response proportion y, effective trials m, design row x, linear predictor
+eta, mean p, derivative d, and second derivative d2, the row quantities are
+  ordinary score = m*d*(y-p)/(p*(1-p)),
+  working information weight = m*d^2/(p*(1-p)),
+  adjustment = h*d2/(2*d), where h=w*x'*(X'WX)^(-1)*x.
+For cloglog, t=exp(eta), log(1-p)=-t, and
+  w=m*exp(2*eta-t-log(p)),
+  score=m*(y*exp(eta-t-log(p))-(1-y)*t), d2/d=1-t.
+For probit, logarithms of both normal tails and the normal density give the
+same quantities without subtracting a rounded mean from one; d2/d=-eta.
+Zero counts and zero weights are handled before potentially infinite products.
+In ranges where direct products are safe, the implementation reuses the
+probabilities and derivative directly; these are the same algebraic formulas.
+Dense, mapped, and sparse fits cache the current state's score, information,
+and deviance quantities. A predictor change invalidates this cache.
+
+Findings from development
+-------------------------
+The earlier safeguard study left one separated cloglog example unresolved.
+Strong damping let brglm2 report convergence near (-0.6380,14.2126,1.4891).
+However, probability and derivative floors change the adjusted equations in
+that example. Independent tail calculations give adjusted score approximately
+(0.06778,0.13240,0.01110) there, with a remaining predictor change about 5.47.
+Thus the earlier interpretation of that reference fit as the desired finite
+solution was incomplete. diagnose.R reproduces this comparison.
+
+Accurate tail calculations instead give a root near
+(-0.90585,30.42328,4.74168). The native GLM and independently implemented binary
+ordinal evaluator agree after accounting for the sign convention. The
+ordinal binary solver permits nonmonotone adjusted-score norms: the Fisher
+scoring direction is not a gradient direction for that norm, and a monotone
+norm search can stall at a positive-score point. It retains finite-domain
+checks, bounded predictor changes, and final score/predictor convergence checks.
+
+An early R prototype formed leverages from squared rows of Q. Absolute
+roundoff in a nearly zero row of Q can produce a spurious adjustment when
+combined with enormous cloglog curvature or divided by a tiny working weight.
+The corrected independent calculation uses w*x'*(X'WX)^(-1)*x. Development
+logs retain the earlier misleading calculations and the subsequent correction;
+they are not all accepted validation evidence. A separate probit example
+(seed 112101, also tested at 112102) exposed the same issue in dense native QR.
+The corrected QR and SVD implementations form row quadratic quantities before
+applying small weights. This avoids amplifying Q/U roundoff.
+
+The returned fitted probabilities retain the ordinary family convention and
+can round to zero or one. Likelihood, weights, adjusted and ordinary scores,
+covariance, residuals, and probability derivative calculations use eta directly
+for fits carrying the new internal marker. Older saved fits are not relabeled
+as having solved the new numerical equations. Extremely bad starting values
+can still underflow working information or fail; such cases are not evidence
+of a solved system.
+
+Numerical confirmation
+----------------------
+run.R preserves the RNG sequence of the previous 111901 panel for the two
+noncanonical binomial links. It adds a separate 112201 panel at n=120 and 300,
+with separated, grouped, all-zero, and all-one outcomes; frequency weights,
+zero weights, offsets, and nuisance predictors are included. Six computation
+paths are tested for each stress case: dense QR/LLT, sparse LLT, mapped LLT,
+streamed QR/LLT. These 146 fits use tol=1e-9 and maxit=500. This panel was not
+used to tune inferential rejection rates. Development examples and intermediate
+candidate results are retained separately from the final implementation.
+
+The baseline reported convergence for 134 of 146 fits. Six of those converged
+fits did not solve the accurately evaluated equations (standardized adjusted
+score about 0.0483). The remaining 12 failures were separated cloglog cases.
+The final numerical results and performance tradeoffs are recorded below and
+in results/accuracy-summary.csv and results/timing-comparison.csv.
+
+Tests also compare independent scores and information, binary ordinal models,
+all dense decomposition methods, row partitions, grouping/expansion, predictor
+recoding, zero weights, offsets, residual identities, likelihood conventions,
+prediction derivatives, and missing-row handling. Existing moderate-data
+brglm2 comparisons are retained; agreement with a clipped extreme-data root
+is deliberately not used as the accuracy criterion.
+
+Performance and limits
+----------------------
+The ordinary timing protocol is the existing firth-noncanonical/time-ordinary.R
+script: n=12000, five predictors plus intercept, six families, 41 timed fits
+per family. Baseline runs first; elapsed differences are descriptive and may
+include machine/time-order effects. Initial candidate and state-cache-only
+timings are retained to show the cost and effect of the subsequent exact
+algebraic optimization. Final timings use label "products".
+
+These changes resolve the tested failures and improve equation accuracy.
+They do not guarantee convergence for every design or starting value, improve
+small-sample Wald calibration, or remove the cost of exact tail calculations.
+No bootstrap calibration, mixed-effects extension, or external Windows check
+is part of this work.
+
+Reproduction from repository root
+---------------------------------
+Install baseline and final sources into separate libraries. Run:
+  Rscript benchmarks/binomial-tail-accuracy/run.R LIBRARY LABEL
+  Rscript benchmarks/firth-noncanonical/time-ordinary.R LIBRARY LABEL benchmarks/binomial-tail-accuracy/results
+  Rscript benchmarks/binomial-tail-accuracy/diagnose.R LIBRARY
+  Rscript benchmarks/binomial-tail-accuracy/summarize.R LABEL
+Use label baseline for the baseline and products for the final candidate.
+Raw result files are not overwritten; preserve them and use a fresh destination
+before rerunning. The final scripts and source snapshot are hashed in the
+manifest; these hashes record the completed state, not a preregistration.
+
+Build sequence
+--------------
+The candidate and final labels precede the state-cache optimization; final
+also includes the aligned streamed Pearson summary and removal of an unused
+ordinal helper. The cached timing label records reuse of each binomial state.
+The products label is the completed implementation, including exact direct
+products in safe ranges and stable R-side ordinal tail logs. No raw result
+from an earlier candidate was replaced.
+
+Completed results
+-----------------
+All 146 final fits converged; the maximum independent standardized adjusted
+score was 8.02e-9. Maximum relative covariance discrepancy was 1.88e-14, and
+maximum discrepancy between reported and independently evaluated adjusted
+scores was 2.35e-13. In the original difficult cloglog example, the native GLM
+and binary ordinal coefficients differed by 7.52e-11 at tol=1e-10.
+
+For ordinary n=12000 data, final median probit time was 11.25 ms versus 7.35 ms
+for the baseline (1.53 times as long); cloglog was 12.51 versus 8.71 ms
+(1.44 times as long). The initial exact-tail implementation took 13.55 and
+15.41 ms respectively. Caching and exact direct products reduced that cost,
+but did not eliminate the overhead relative to the floored calculation.
+Other families' measured ratios were 1.00 to 1.09; their fitting equations
+and core iteration were not changed by this optimization. These comparisons
+do not establish speed equivalence under every workload.
+
+The complete testthat suite passed. The three process-worker tests also passed
+when local sockets were available. Arrow-specific tests were skipped because
+Arrow is not installed. Both revised vignettes rendered successfully to HTML
+in the vignettes directory. Local build/check details are recorded separately
+in results/local-check.txt.

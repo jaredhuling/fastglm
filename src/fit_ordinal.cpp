@@ -14,9 +14,6 @@ struct OrdinalEvaluationError : std::runtime_error {
     explicit OrdinalEvaluationError(const std::string& message) : std::runtime_error(message) {}
 };
 
-inline double ordinal_softplus(double x) {
-    return std::max(x,0.0)+std::log1p(std::exp(-std::abs(x)));
-}
 inline double ordinal_log1mexp(double x) {
     return x < -std::log(2.0) ? std::log1p(-std::exp(x)) : std::log(-std::expm1(x));
 }
@@ -93,9 +90,19 @@ struct OrdinalData {
 
 struct OrdinalRow {
     VectorXd eta,g,cdf,survival,logp,left,right,neighbor,gprime,logg,logcdf,logsurvival,location,logden;
+    VectorXd loggap,inverse_gap,neighbor_gap;
     int link=0;
-    explicit OrdinalRow(int q) : eta(q),g(q),cdf(q),survival(q),logp(q+1),
-        left(q),right(q),neighbor(q),gprime(q),logg(q),logcdf(q),logsurvival(q),location(q+1),logden(q) {}
+    explicit OrdinalRow(const VectorXd& alpha) : eta(alpha.size()),g(alpha.size()),cdf(alpha.size()),
+        survival(alpha.size()),logp(alpha.size()+1),left(alpha.size()),right(alpha.size()),neighbor(alpha.size()),
+        gprime(alpha.size()),logg(alpha.size()),logcdf(alpha.size()),logsurvival(alpha.size()),
+        location(alpha.size()+1),logden(alpha.size()),loggap(alpha.size()),inverse_gap(alpha.size()),neighbor_gap(alpha.size()) {
+        for(int s=1;s<alpha.size();++s) {
+            const double gap=alpha[s]-alpha[s-1];
+            loggap[s]=ordinal_log1mexp(-gap);inverse_gap[s]=1/std::expm1(gap);
+        }
+        for(int s=1;s+1<alpha.size();++s)
+            neighbor_gap[s]=-std::expm1(alpha[s-1]-alpha[s+1]);
+    }
     void evaluate(const VectorXd& alpha,double linear,int link_code=0) {
         link=link_code;
         const int q=alpha.size();
@@ -109,7 +116,7 @@ struct OrdinalRow {
                     g[s]=std::exp(logg[s]);gprime[s]=-eta[s]*g[s];
                 } else {
                     const double e=std::exp(eta[s]);
-                    logcdf[s]=eta[s]<-36 ? eta[s] : std::log(-std::expm1(-e));
+                    logcdf[s]=eta[s]<-36 ? eta[s] : ordinal_log1mexp(-e);
                     logsurvival[s]=-e;logg[s]=eta[s]-e;
                     g[s]=std::exp(logg[s]);gprime[s]=std::isfinite(e) ? g[s]*(1-e) : 0;
                 }
@@ -155,16 +162,20 @@ struct OrdinalRow {
             cdf[s]=eta[s]>=0 ? 1/den : e/den;
             survival[s]=eta[s]>=0 ? e/den : 1/den;
             g[s]=e/(den*den);
+            const double logden=std::log1p(e);
+            logcdf[s]=eta[s]>=0 ? -logden : eta[s]-logden;
+            logsurvival[s]=eta[s]>=0 ? -eta[s]-logden : -logden;
         }
-        logp[0]=-ordinal_softplus(-eta[0]);
-        logp[q]=-ordinal_softplus(eta[q-1]);
+        logp[0]=logcdf[0];logp[q]=logsurvival[q-1];
         for(int s=1;s<q;++s)
-            logp[s]=-ordinal_softplus(-eta[s])+ordinal_log1mexp(alpha[s-1]-alpha[s])-
-                ordinal_softplus(eta[s-1]);
+            logp[s]=logcdf[s]+logsurvival[s-1]+loggap[s];
         for(int s=0;s<q;++s) {
-            const double logg=-std::abs(eta[s])-2*std::log1p(std::exp(-std::abs(eta[s])));
-            left[s]=std::exp(logg-logp[s]);right[s]=std::exp(logg-logp[s+1]);
-            neighbor[s]=std::exp(logp[s])+std::exp(logp[s+1]);
+            // g_s / P_s and g_s / P_{s+1} simplify exactly for the logit link.
+            // Threshold gaps are common to every row and computed only once.
+            left[s]=survival[s]+(s ? inverse_gap[s] : 0);
+            right[s]=cdf[s]+(s+1<q ? inverse_gap[s+1] : 0);
+            neighbor[s]=q==1 ? 1 : (s==0 ? cdf[1] : (s==q-1 ? survival[q-2] :
+                cdf[s+1]*survival[s-1]*neighbor_gap[s]));
         }
         if(!logp.allFinite() || !left.allFinite() || !right.allFinite())
             throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
@@ -194,7 +205,7 @@ OrdinalState ordinal_evaluate(const OrdinalData& data,const VectorXd& parameters
     const VectorXd alpha=parameters.head(q),beta=parameters.tail(p);
     for(int s=1;s<q;++s) if(!(alpha[s]>alpha[s-1]))
         throw OrdinalEvaluationError("ordinal thresholds are not strictly ordered");
-    OrdinalState result(d);OrdinalRow row(q);
+    OrdinalState result(d);OrdinalRow row(alpha);
     for(int first=0;first<data.n;first+=data.block) {
         Rcpp::checkUserInterrupt();
         const int length=std::min(data.block,data.n-first);
@@ -325,6 +336,10 @@ Rcpp::List ordinal_native_fit(Rcpp::NumericMatrix x,Rcpp::IntegerVector y,
     auto evaluate=[&](const VectorXd& b) { ++evaluations;return ordinal_evaluate(data,b,firth,condition_tol); };
     OrdinalState current=evaluate(parameters);
     bool converged=false;std::string reason="iteration_limit",last_rejection;
+    // A two-category cumulative-link model is a binomial GLM. Use its bounded
+    // adjusted scoring iteration: a likelihood-score norm need not decrease
+    // along this non-gradient direction, even on a path to a regular root.
+    const bool binary_scoring=firth && data.q==1 && data.link!=0;
     MatrixXd history(maxit,4);
     for(int iter=1;iter<=maxit;++iter) {
         Rcpp::checkUserInterrupt();iterations=iter;
@@ -342,7 +357,8 @@ Rcpp::List ordinal_native_fit(Rcpp::NumericMatrix x,Rcpp::IntegerVector y,
         VectorXd accepted_parameters;OrdinalState accepted_state(data.d);
         auto search=[&](VectorXd direction) {
             if(!direction.allFinite()) return false;
-            direction/=std::max(1.0,data.predictor_step(direction)/max_step);
+            const double bound=binary_scoring ? std::min(1.0,max_step) : max_step;
+            direction/=std::max(1.0,data.predictor_step(direction)/bound);
             double fraction=1;
             for(int s=1;s<data.q;++s) {
                 const double change=direction[s]-direction[s-1];
@@ -353,7 +369,7 @@ Rcpp::List ordinal_native_fit(Rcpp::NumericMatrix x,Rcpp::IntegerVector y,
                 try {
                     OrdinalState trial=evaluate(candidate);
                     const double merit=.5*trial.score.dot(metric*trial.score);
-                    if(std::isfinite(merit) && merit<=(1-1e-4*fraction)*merit0) {
+                    if(std::isfinite(merit) && (binary_scoring || merit<=(1-1e-4*fraction)*merit0)) {
                         accepted_parameters=candidate;accepted_state=std::move(trial);return true;
                     }
                 } catch(const OrdinalEvaluationError& error) { last_rejection=error.what(); }

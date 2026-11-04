@@ -11,6 +11,104 @@ inline bool bounded_firth_predictors(int code) {
     return code==FAM_BINOMIAL_PROBIT || code==FAM_BINOMIAL_CLOGLOG;
 }
 
+// Binomial adjusted scores must use the actual tail probabilities. Combining
+// separately floored means and derivatives changes both information and roots.
+struct BinomialFirthTerms {
+    double weight=0,score=0,ratio=0,logp=0,logq=0,derivative=0;
+};
+
+inline BinomialFirthTerms binomial_firth_terms(int code,double eta,double y,double prior) {
+    BinomialFirthTerms out;
+    double success_rate,failure_rate,log_weight;
+    if(code==FAM_BINOMIAL_CLOGLOG) {
+        const double t=std::exp(eta);
+        if(eta>=-36 && t<32) {
+            // Here direct products cannot underflow. Reuse the two tails
+            // instead of exponentiating three separate log ratios.
+            const double q=std::exp(-t),p=-std::expm1(-t);
+            out.logp=t>0.6931471805599453 ? std::log1p(-q) : std::log(p);
+            out.logq=-t;out.derivative=t*q;
+            if(prior==0) return out;
+            const double rate=out.derivative/p;
+            out.weight=prior*(t*rate);
+            out.score=prior*(y*rate-(1-y)*t);out.ratio=1-t;
+            return out;
+        }
+        out.logp=eta < -36 ? eta : (t>0.6931471805599453 ? std::log1p(-std::exp(-t)) : std::log(-std::expm1(-t)));
+        out.logq=-t;
+        out.derivative=std::exp(eta-t);
+        log_weight=2*eta-t-out.logp;
+        success_rate=std::exp(eta-t-out.logp);failure_rate=t;
+        out.ratio=1-t;
+    } else {
+        const double logd=-0.5*eta*eta-0.91893853320467274178;
+        out.derivative=std::exp(logd);
+        if(std::abs(eta)<8) {
+            const double tail=R::pnorm(-std::abs(eta),0,1,true,false);
+            out.logp=eta<=0 ? std::log(tail) : std::log1p(-tail);
+            out.logq=eta<=0 ? std::log1p(-tail) : std::log(tail);
+            if(prior==0) return out;
+            const double p=eta<=0 ? tail : 1-tail,q=eta<=0 ? 1-tail : tail;
+            out.weight=prior*(out.derivative*out.derivative/(p*q));
+            out.score=prior*out.derivative*(y/p-(1-y)/q);out.ratio=-eta;
+            return out;
+        } else {
+            out.logp=R::pnorm(eta,0,1,true,true);
+            out.logq=R::pnorm(eta,0,1,false,true);
+        }
+        log_weight=2*logd-out.logp-out.logq;
+        success_rate=std::exp(logd-out.logp);failure_rate=std::exp(logd-out.logq);
+        out.ratio=-eta;
+    }
+    if(prior==0) {out.ratio=0;return out;}
+    out.weight=std::exp(std::log(prior)+log_weight);
+    // Zero counts must not multiply an infinite tail score.
+    out.score=(y>0 ? prior*y*success_rate : 0)-(y<1 ? prior*(1-y)*failure_rate : 0);
+    if(out.weight==0) out.ratio=0;
+    return out;
+}
+
+struct BinomialFirthWorking {
+    Eigen::VectorXd weight,score,ratio;
+    double deviance=0;
+    void update(int code,const Eigen::Ref<const Eigen::VectorXd>& eta,
+        const Eigen::Ref<const Eigen::VectorXd>& y,const Eigen::Ref<const Eigen::VectorXd>& prior,
+        bool include_deviance=false,bool check=true) {
+        weight.resize(eta.size());score.resize(eta.size());ratio.resize(eta.size());
+        deviance=0;
+        for(int i=0;i<eta.size();++i) {
+            const auto row=binomial_firth_terms(code,eta[i],y[i],prior[i]);
+            weight[i]=row.weight;score[i]=row.score;ratio[i]=row.ratio;
+            if(include_deviance && prior[i]>0) {
+                if(y[i]>0) deviance+=2*prior[i]*y[i]*(std::log(y[i])-row.logp);
+                if(y[i]<1) deviance+=2*prior[i]*(1-y[i])*(std::log1p(-y[i])-row.logq);
+            }
+        }
+        if(check) validate();
+    }
+    void validate() const {
+        if(!weight.allFinite() || !score.allFinite() || !ratio.allFinite())
+            Rcpp::stop("non-finite binomial adjusted-score quantities; use less extreme starting coefficients");
+    }
+};
+
+inline double binomial_firth_deviance(int code,const Eigen::Ref<const Eigen::VectorXd>& eta,
+    const Eigen::Ref<const Eigen::VectorXd>& y,const Eigen::Ref<const Eigen::VectorXd>& prior) {
+    double answer=0;
+    for(int i=0;i<eta.size();++i) if(prior[i]>0) {
+        double logp,logq;
+        if(code==FAM_BINOMIAL_CLOGLOG) {
+            const double t=std::exp(eta[i]);logq=-t;
+            logp=eta[i]<-36 ? eta[i] : (t>0.6931471805599453 ? std::log1p(-std::exp(-t)) : std::log(-std::expm1(-t)));
+        } else {
+            logp=R::pnorm(eta[i],0,1,true,true);logq=R::pnorm(eta[i],0,1,false,true);
+        }
+        if(y[i]>0) answer+=2*prior[i]*y[i]*(std::log(y[i])-logp);
+        if(y[i]<1) answer+=2*prior[i]*(1-y[i])*(std::log1p(-y[i])-logq);
+    }
+    return answer;
+}
+
 // Limit a scoring update to one link-scale unit over positive-frequency rows.
 // This changes the path, not the adjusted-score root, and is invariant to
 // invertible recoding of the predictor columns. Small updates are unchanged.

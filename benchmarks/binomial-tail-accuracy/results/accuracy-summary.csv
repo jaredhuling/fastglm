@@ -1,0 +1,3 @@
+"","fits","converged","exact_score_below_1e_6","maximum_exact_score","maximum_covariance_relative_error","maximum_reported_score_error"
+"baseline",146,134,128,0.721722751214748,8.10167242358964e-12,1.13861890722221
+"candidate",146,146,146,8.0155494808086e-09,1.87045493250702e-14,2.34102902362759e-13

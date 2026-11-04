@@ -224,6 +224,8 @@ List bigfastglm(XPtr<BigMatrix> Xs,
         Eigen::Map<const Eigen::ArrayXd> w_arr(weights.data(), weights.size());
         double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr)
             : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
+        if(fglm::bounded_firth_predictors(fam_code))
+            std_dev=fglm::binomial_firth_deviance(fam_code,solver->get_eta_ref(),y_arr.matrix(),w_arr.matrix());
         out["deviance"]           = std_dev;
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;
@@ -324,6 +326,8 @@ List fit_sparse_glm(SEXP x_sparse,
         Eigen::Map<const Eigen::ArrayXd> w_arr(wts.data(), wts.size());
         double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
             : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
+        if(fglm::bounded_firth_predictors(fam_code))
+            std_dev=fglm::binomial_firth_deviance(fam_code,e,Y,w_arr.matrix());
         out["deviance"]           = std_dev;
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;

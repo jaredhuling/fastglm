@@ -34,6 +34,9 @@
 #'   `step.reductions` counts scoring updates reduced to limit their largest
 #'   fitted linear-predictor change to one. A reduced step alone cannot establish
 #'   convergence. These safeguards do not guarantee convergence for every design.
+#'   For these bias-reduced binomial fits, scores and information use stable
+#'   probability-tail calculations; rounded fitted probabilities are not used
+#'   to reconstruct the estimating equations.
 #'   Ordinal diagnostics report scores in the effective category model after
 #'   any empty interior categories have been collapsed; their standardized
 #'   score is calculated in the centered/scaled fitting coordinates.
@@ -50,6 +53,11 @@ fastglm_diagnostics <- function(object) {
         mu <- object$family$linkinv(eta); dm <- object$family$mu.eta(eta); v <- object$family$variance(mu)
         s <- w*dm*(y-mu)/v; s[w==0] <- 0
         ww <- w*dm^2/v; ww[w==0] <- 0
+        code <- .stable_binomial_code(object)
+        if(code>=0L) {
+            moments <- binomial_firth_moments(as.numeric(eta),as.numeric(y),w,code)
+            s <- moments$score;ww <- moments$working
+        }
         score <<- score+drop(crossprod(x,s)); info <<- info+colSums(x^2*ww)
     }
     if(inherits(object,"fastglm_stream")) {

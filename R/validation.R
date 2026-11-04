@@ -101,6 +101,15 @@
     if (identical(res$inference, "none"))
         res$weights <- w * derivative^2 / fam$variance(res$fitted.values)
     res$weights[!positive] <- 0
+    binomial.code <- .stable_binomial_code(res)
+    if(binomial.code>=0L) {
+        moments <- binomial_firth_moments(res$linear.predictors,as.numeric(y),w,binomial.code)
+        res$weights <- moments$working
+        res$residuals <- .binomial_working_residual(moments,y,res$linear.predictors,binomial.code)
+        names(res$residuals) <- names(y)
+        res$residuals[!positive] <- 0
+        res$deviance <- sum(moments$deviance)
+    }
     disp <- .fixed_dispersion(fam)
     res$estimated.dispersion <- is.na(disp)
     if (is.na(disp)) disp <- if (res$df.residual > 0) sum(w * (y - res$fitted.values)^2 / fam$variance(res$fitted.values)) / res$df.residual else NaN
@@ -127,7 +136,9 @@
             res$null.deviance <- sum(fam$dev.resids(y, mu0, w))
         }
     }
-    if (all(positive)) {
+    if(binomial.code>=0L) {
+        res$aic <- .binomial_tail_aic(moments,y,res$n,w)+2*res$rank
+    } else if (all(positive)) {
         res$aic <- .family_aic(fam,y, res$n, res$fitted.values, w, res$deviance) + 2 * res$rank
     } else {
         trials <- if (length(res$n) == length(y)) res$n[positive] else res$n
