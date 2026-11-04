@@ -1,0 +1,16 @@
+{
+  "recorded_after_execution": true,
+  "python_version": "3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 17.0.0 (clang-1700.6.3.2)]",
+  "arithmetic": "decimal, 80 decimal digits; exact decoding of binary64 inputs",
+  "editorial_changes": "Missing spaces in protocol and methods prose were corrected after execution; numerical specifications and result files were not changed. Protocol-at-execution snapshots match the originally recorded digests.",
+  "sha256": {
+    "benchmarks/ordinal-partial-boundary/high-precision.py": "35399f338a084a7b40c55917e83f7257c8aa286cfc37a77b8444230f29559df8",
+    "benchmarks/ordinal-partial-boundary/independent-roots.R": "b5b99c0ce82e8c56ca1305e5e08eb40b482d872bade7ac1080c82834a34d2943",
+    "benchmarks/ordinal-partial-boundary/decision-log.txt": "1186a0463f8c2eb53b685f3a13bedf066710dc239de891d3128706049569bf80",
+    "benchmarks/ordinal-partial-boundary/saturated-logit-certificate.txt": "881d1adcc561fa8a606f70e66da8c3ae1af1fa005fffb6d2fb28217f490da559",
+    "benchmarks/ordinal-partial-boundary/development-protocol.txt": "98cf93fdfc57e5789527128d85cd5638d78a70252061ab598eff61c90c9d3d4b",
+    "benchmarks/ordinal-partial-boundary-confirmation/protocol.txt": "1d7845964c6897b09ce5192f4d713abca10d747629fa051c5630a9881f542d8c",
+    "benchmarks/ordinal-partial-boundary/summarize-geometry.py": "02dbc85ef1bd51077bd052b3a002c33f5e3602a211a0084893218e1edf6c3d96"
+  },
+  "geometry_summary": "Derived after the initial runs from their stored high-precision score vectors and inputs; no new fitted roots or altered numerical criteria."
+}

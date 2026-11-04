@@ -58,7 +58,10 @@ expected-information score test of the common-slope restriction.}
 
 \item{po.terms}{optional formula term names, or predictor column names for
 a matrix fit, to test jointly. The default tests all location predictors.
-All columns belonging to a selected formula term are included.}
+All columns belonging to a selected formula term are included.
+For a partial model, the default selects its varying terms and tests their
+equal-slope restrictions while leaving other varying effects unrestricted.
+Already-common terms add no restrictions, rather than zero-effect tests.}
 
 \item{po.test.control}{named list containing \code{tol} and/or \code{maxit}
 for the requested null refit; defaults are \code{1e-10} and \code{500}.}
@@ -147,14 +150,17 @@ The ranked probability score (\code{rps}) is
   supplied outcomes, the test concerns the common-slope restriction in those
   outcomes, rather than calibration of the original model's coefficients.
   The score uses expected Fisher information, averaged analytically over
-  possible outcomes under this null, and projects out the threshold and
-  common-slope nuisance scores. No resampling is used for its p-value.
+  possible outcomes under this null, and projects out the threshold,
+  common-slope, and any untested varying-effect nuisance scores. No
+  resampling is used for its p-value.
 
   If \code{s} design columns are tested across \code{K} categories, the
   asymptotic chi-square reference has \code{s*(K-2)} degrees of freedom.
-  Other predictors retain common slopes in both the null and the local
-  alternative; a selected-term test does not allow other terms to have
-  arbitrary threshold-specific slopes. Independent observations and a
+  For a common-slope fit, other predictors retain common slopes in both the
+  null and the local alternative. For a partial fit, other varying effects
+  remain unrestricted. The latter uses the term-equality construction in
+  \code{\link{fastglm_po_test}}. The descriptive binary-slope comparison is
+  available only for common-slope fits. Independent observations and a
   correctly specified, identifiable interior null are required. The
   approximation can be inaccurate in small or sparse samples; a large
   p-value does not establish proportional odds. The test is not a robust,

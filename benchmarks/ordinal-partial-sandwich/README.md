@@ -98,8 +98,8 @@ conventional finite-sample factors, not corrections chosen from this audit.
 Public calculations reject nonconvergence, empty-category boundaries, singular
 or indefinite observed bread, unsupported HC2/HC3 corrections, fewer than two
 positive-frequency clusters, invalid prediction domains, and nonfinite or
-numerically unresolved curvature. Source fits do not yet provide robust
-covariance. No generalized inverse, ridge, probability clipping, sign repair,
+numerically unresolved curvature. This audit initially covered dense fits; the subsequent source extension is
+documented in `../ordinal-source-covariance/methods.txt`. No generalized inverse, ridge, probability clipping, sign repair,
 or substitution of expected information is applied.
 
 ## Reproducible checks

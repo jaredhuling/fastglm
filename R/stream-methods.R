@@ -91,11 +91,18 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #'   two-part, and ordinal models support HC0 and HC1. The default is HC3 for
 #'   GLMs and HC0 for count, two-part, and ordinal models.
 #' @param cluster optional cluster identifiers; for streaming fits, a function
-#'   of chunk index returning identifiers in the source row order. For ordinal
-#'   fits, supply one identifier per retained row, or per row before missing-value
+#'   of chunk index returning identifiers in the source row order. For dense
+#'   ordinal fits, supply one identifier per retained row, or per row before missing-value
 #'   omission after any formula subset. Each represented individual in a grouped
 #'   frequency row belongs to that row's cluster; split the row if its members
 #'   belong to different clusters.
+#'   For ordinal sources, the callback is called once for each block and must
+#'   return one identifier per original block row. The same identifier in
+#'   different blocks denotes the same cluster. Numeric identifiers retain
+#'   their full precision. Factors use their labels; other identifier types
+#'   must remain consistent across positive-frequency blocks (integers and
+#'   ordinary numeric vectors may be combined). Missing labels are allowed
+#'   only for rows with zero effective frequency.
 #' @param cadjust multiply clustered covariance by `G/(G-1)`.
 #' @param block.size maximum number of design rows processed at once.
 #' @param full include the estimated negative-binomial size parameter when
@@ -110,8 +117,12 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #'   and identifiable interior parameters. For GLM, count, and two-part models,
 #'   sandwich covariance for bias-adjusted scores is not implemented.
 #'
-#'   Ordinal robust covariance requires a retained dense design and supports
-#'   common and threshold-specific slopes jointly.
+#'   Ordinal robust covariance supports dense, prepared, and repeatable source
+#'   fits, with common and threshold-specific slopes jointly. Source fits
+#'   reread the observations once without retaining the full design or response.
+#'   The source determines the size of the loaded block; `block.size` limits
+#'   the temporary calculations within that block. Cluster calculations retain
+#'   one score vector and identifier per positive-frequency cluster.
 #'   For ordinal fits, the covariance uses the inverse observed negative
 #'   Jacobian of the ordinary likelihood score, rather than inverse expected
 #'   Fisher information. Independent-observation meat sums individual score
@@ -134,14 +145,13 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #'   relative to the square root of the sample size. Finite estimates under
 #'   separation do not establish those conditions. This convention does not
 #'   promise finite-sample calibration or bias reduction under misspecification.
-#'   See [fastglm_bootstrap()] for refit-based uncertainty.
+#'   See [fastglm_bootstrap()] for refit-based uncertainty from retained-data
+#'   fits; ordinal source bootstrapping remains unavailable.
 #' @returns A coefficient covariance matrix.
 #' @md
 #' @export
 fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
                           cadjust=TRUE,block.size=8192L,full=FALSE) {
-    if(inherits(object,"fastglm_ordinal_stream"))
-        stop("robust covariance is not yet available for ordinal source fits; vcov() returns model-based covariance",call.=FALSE)
     if(inherits(object,"fastglm_ordinal")) {
         if(missing(type)) type <- "HC0"
         return(.ordinal_robust_vcov(object,type,cluster,cadjust,block.size))

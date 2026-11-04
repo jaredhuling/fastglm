@@ -63,7 +63,9 @@ coef.fastglm_ordinal_partial <- function(object,component=c("all","location","th
 #'   and processing block size, as in [fastglm_vcov()]. Supplying `cluster`
 #'   requires `type="HC0"` or `type="HC1"`. For mean-bias-reduced fits,
 #'   sandwich covariance uses the same first-order ordinary-score convention
-#'   and regularity assumptions described there.
+#'   and regularity assumptions described there. For a source fit, `cluster`
+#'   is a function of block index returning identifiers in original block row
+#'   order. Repeated identifiers may span source blocks.
 #' @export
 vcov.fastglm_ordinal_partial <- function(object,component=c("all","location","threshold","common","nonparallel"),
     type=c("model","HC0","HC1"),cluster=NULL,cadjust=TRUE,block.size=8192L,...) {

@@ -1,0 +1,82 @@
+Ordinal source covariance: validation results
+============================================
+
+Baseline: 17c4a8a. This is an implementation audit of established covariance
+calculations, not a new estimator or a finite-sample coverage claim. The exact
+formulas, assumptions, source contract, storage bounds, and reproduction command
+are in methods.txt.
+
+Implemented behavior
+--------------------
+Common and partial ordinal source fits now support HC0, HC1, and one-way cluster
+covariance through fastglm_vcov() and vcov(). One source reread accumulates the
+ordinary category scores and observed negative Hessians. Full threshold/slope
+cross-covariances and the established meanBR first-order convention are retained.
+
+Cluster callbacks receive the block index and return labels in original block
+row order. Exact matching joins clusters across blocks without collapsing numeric
+labels that print identically. Labels missing only at zero-frequency rows are
+allowed. Only distinct positive-frequency labels and one score vector per such
+cluster are retained; additional cluster storage is O(Gd).
+
+No full design, response, or observation-level score matrix is collected by the
+covariance implementation. The user-supplied source may itself retain data; the
+bounded-memory contract requires an appropriate reader. Numerical source values
+must remain unchanged between reads, as required for the fitted source itself.
+
+Regression evidence
+-------------------
+The focused and existing regression run passed 739 expectations with zero
+failures, errors, skips, or test warnings. Its retained log is
+validation-20261104/tests.log. Files exercised:
+
+  tests/testthat/test-ordinal-inference.R
+  tests/testthat/test-ordinal-partial-robust.R
+  tests/testthat/test-ordinal-source-covariance.R
+  tests/testthat/test-ordinal-streaming.R
+
+The new checks cover common/partial slopes, all three links, ML/meanBR,
+dense/prepared/source representations, grouped/expanded frequencies, HC0/HC1,
+clusters crossing blocks, full-precision labels, all-zero blocks, original-row
+callback alignment, factor labels, formula coding, reread/schema errors,
+supplied-covariance summaries, and extreme raw-count/frequency products.
+
+The older housing-source fixture removes a declared category through its
+weights. Its covariance rejection remains correct and is now tested as an
+empty-category restriction in both dense and source representations, rather
+than as a blanket prohibition on source covariance.
+
+Independent audit
+-----------------
+All 120 checks in validation-20261104/checks.csv passed:
+
+  48 comparisons establish bit-for-bit agreement of the refactored dense
+     aggregation with its saved baseline source, including covariance metadata.
+  48 comparisons establish source/dense agreement for HC0/HC1, with and without
+     clustering, across both slope structures, all links, and both estimators.
+  24 comparisons use independently differentiated category log probabilities
+     and the total ordinary log likelihood to construct individual or cluster
+     meat and observed-information bread.
+
+The largest numerical-reference discrepancy was approximately 1.031e-8 under
+the recorded normalization, below the declared 3e-7 derivative-reference
+tolerance. No production estimator or tolerance was altered in response to
+these checks. The script, saved baseline aggregation source, session information,
+source hashes, and complete per-check results permit reproduction.
+
+Remaining limits
+----------------
+Every declared category must have positive frequency, and ordinary observed
+bread must be numerically invertible. Nonconverged fits, unresolved curvature,
+invalid source labels, unsupported corrections, and fewer than two effective
+clusters fail explicitly. Source profile inference and refit bootstrap methods
+remain unsupported. The ordinary-score sandwich at a meanBR estimate has the
+existing first-order interpretation; it does not differentiate the global
+adjustment or establish finite-sample calibration.
+
+Decision
+--------
+The streamed calculation can use the same public covariance interface and
+interpretation as the retained-data calculation. No separate streamed estimator
+or replacement bread is needed. Subsequent work can focus on source performance
+and broader boundary diagnostics without revising these covariance equations.

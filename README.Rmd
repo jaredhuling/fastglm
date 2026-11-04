@@ -166,11 +166,11 @@ The overall mean combines the probability of a positive outcome with its conditi
 | Specify the model | Dense formula or matrix; individual outcomes, grouped category frequencies, and offsets; selected nonparallel effects require every category to be observed |
 | Interpret predictions | Category and cumulative probabilities, prediction standard errors, average probabilities and contrasts; automatic marginal effects for continuous predictors |
 | Test coefficients | Joint Wald tests and named contrasts; ML profile and ordinary or adjusted-score inference for retained dense models with all categories observed |
-| Assess common slopes | `fastglm_po_test()` tests the restriction jointly or by term from a retained dense common-slope fit |
-| Assess fit and uncertainty | Residuals, prediction scores, and calibration; robust covariance for eligible dense fits; refitting bootstraps for common-slope fits |
+| Assess common slopes | `fastglm_po_test()` tests the restriction jointly or by term in common-slope or partial fits |
+| Assess fit and uncertainty | Residuals, prediction scores, and calibration; robust covariance for eligible dense or streamed fits; refitting bootstraps for retained common-slope fits |
 | Repeat fits or read large datasets | `fastglm_ordinal_prepare()` / `fastglm_ordinal_batch()` reuse dense designs; `fastglm_ordinal_streaming()` fits common-slope or partial models from repeatable blocks, including mean bias reduction |
 
-Dense partial fits support robust covariance, marginal effects, ML profiles, and constrained score tests, including equality of selected slopes across thresholds. Streamed fits retain model-based covariance and Wald inference; their robust covariance and constrained inference require separate implementations. Empty-category behavior also depends on the model and estimation method. The [ordinal vignette](vignettes/ordinal-fastglm.Rmd) begins with the full support guide and develops examples for each workflow.
+Dense partial fits support robust covariance, marginal effects, ML profiles, and constrained score tests, including equality of selected slopes across thresholds. Streamed fits provide model-based or robust covariance and Wald inference. Profile intervals and constrained coefficient-score tests require retained data. Empty-category behavior also depends on the model and estimation method. The [ordinal vignette](vignettes/ordinal-fastglm.Rmd) begins with the full support guide and develops examples for each workflow.
 
 ## Firth bias-reduced GLMs
 

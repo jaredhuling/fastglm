@@ -1,0 +1,23 @@
+2026-11-04, development decisions before independent root attempts
+
+Baseline reproduction separates an insufficient-iteration case from persistent
+failures: probit converges by iteration 56; logit remains at gap 1.22e-9 after
+100/200 iterations; complementary log-log stops near gap 9.30e-14. Dense and source
+paths agree at the converged probit root but their nonconverged boundary paths
+are sensitive to rounding/aggregation order. No root-absence conclusion follows.
+
+Independent 80-decimal evaluation at twelve stored states reproduces the logit
+standardized residual 5.92e-6 despite adjustment error only 1.22e-8 in absolute
+coefficient units. Thus logit's failure is not explained by double-precision
+adjustment cancellation at that state. Complementary log-log has secondary
+arithmetic error at gap 9.30e-14 (adjustment error 1.61e-4), but its 80-decimal
+standardized residual remains 1.04e-5, above the unchanged 1e-8 tolerance.
+
+Next candidate: use nleqslv Newton/double-dogleg for the same original adjusted
+scores with constant scaling from the intercept start. Enforce feasibility by
+parameterizing each threshold increment as the maximum observed slope-difference
+projection plus an exponential margin. This is an algorithmic coordinate map,
+not a new bias reduction in transformed coordinates. Use four declared starts
+per link (intercept-only, early native, cap 30, native cap 200), at most 200 iterations.
+Native convergence criteria remain the acceptance gate. Preserve all attempts,
+including inability to compute a numerical Jacobian at machine-scale margins.

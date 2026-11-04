@@ -1,0 +1,65 @@
+Partial ordinal mean-bias boundary failures: bounded development study
+Baseline 17c4a8a, 2026-11-04
+
+Purpose and decision
+---------------------
+Determine why the retained sparse individual-response fixture approaches an
+ordering boundary without convergence. The package needs reliable diagnosis
+and a useful solver when an interior adjusted-score root exists. This supporting
+investigation may justify a numerical repair or a more specific failure report;
+it does not establish universal root existence, finite estimates or inferential
+calibration. This is development, with any later confirmation kept separate.
+
+Fixed statistical target
+-------------------------
+Keep the original threshold/common/varying coefficient coordinates, cumulative
+multinomial likelihood, global expected information, and mean-bias adjustment.
+Retain the package's score, predictor-step, conditioning and positivity
+tolerances. No clipping, ridge estimator, changed penalty, reduced adjustment,
+constraint relaxation or coverage-based tuning is permitted. Integer frequency
+weights and offsets have their existing meanings. All positive-frequency rows
+must have strictly ordered cumulative predictors.
+
+Competing mechanisms and separating checks
+------------------------------------------
+1. Arithmetic: compare ordinary scores, global information and adjusted scores
+   at the same coefficients using an independent direct formula, including
+   arbitrary-precision arithmetic near the smallest gap. Distinguish probability
+   cancellation from an ill-conditioned information inverse.
+2. Optimizer: inspect the frozen iteration trajectory, feasible step fractions,
+   score components, normal/tangent boundary directions and conditioning. Try
+   independent root algorithms or equation-preserving coordinate preconditioners
+   only as labeled prototypes. Use multiple declared starts and retain failures.
+   An independently verified interior root falsifies root-absence explanations.
+3. Statistical domain: identify which row/category approaches zero probability
+   and whether it is observed. Trace a local boundary path with nuisance/tangent
+   adjustment and examine the limiting normal score. Failure of an optimizer
+   is not evidence proving absence of any interior root. A local obstruction
+   does not establish a global theorem.
+
+Bounded initial experiments
+---------------------------
+Reproduce the coded 96-row, four-category, two-fully-varying-predictor fixture
+from test-ordinal-partial-source.R (seed154005), with its weights and offsets.
+Run all three links at the unchanged default tolerance and iteration caps30
+and200, and compare dense/source behavior on the retained partition. Store
+every fit, warning, iteration path, final coefficients and source/data hashes.
+Then evaluate at most twelve selected states with 70-or-more-decimal arithmetic
+and at most twelve bounded independent root attempts (max200 iterations each).
+No timing claims or simultaneous benchmark jobs are part of this study.
+
+Stop or revise the question after these bounded checks if they cannot separate
+the mechanisms. Log any new candidate or adaptive branch before running it.
+Do not relabel the inspected fixture as fresh confirmation. A proposed repair
+or diagnostic requires a separate frozen confirmation protocol with fresh
+deterministic interior, boundary and coordinate/representation checks. Native
+production edits, builds and installation are coordinated separately.
+
+Evidence handling
+-------------------
+Use new result directories. Preserve failed candidates and their reasons.
+Record which assertions are exact algebra, conditional theory, empirical
+numerical evidence, falsified, or unresolved. Read the primary cumulative-link
+bias-reduction sources before attributing boundary behavior to a theorem.
+Retain access locations and reading scope; do not infer a universal finiteness
+claim from the published finite examples. No inference simulations are run.

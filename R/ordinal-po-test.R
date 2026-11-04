@@ -1,5 +1,5 @@
-# Test selected threshold-specific slope deviations at an ML common-slope null.
-# Expected information and ordinary scores use the same frequency normalization.
+# Ordinary-score common-slope tests. Expected information and ordinary scores
+# use the same frequency normalization.
 .ordinal_po_test_columns <- function(object,terms) {
     columns <- names(object$beta)
     if(is.null(terms)) return(list(index=seq_along(columns),terms=if(is.null(object$terms))
@@ -148,7 +148,9 @@
 }
 
 .ordinal_assessment_po_test <- function(object,design,response,included,terms,control,
-                                       estimation="ML",by.term=FALSE) {
+                                       estimation="ML",by.term=FALSE,method="score") {
+    if(inherits(object,"fastglm_ordinal_partial"))
+        return(.ordinal_partial_po_test(object,design,response,included,terms,control,estimation,by.term,method))
     selected <- .ordinal_po_test_columns(object,terms); ctl <- .ordinal_po_test_control(control)
     K <- length(object$levels); p <- length(object$beta)
     out <- structure(list(method=if(.ordinal_link(object)=="logit") "Expected-information proportional-odds score test" else
@@ -233,27 +235,228 @@
     }))
 }
 
+.ordinal_partial_po_columns <- function(object,terms) {
+    columns <- object$design.columns
+    if(!is.null(object$terms)) {
+        labels <- attr(object$terms,"term.labels");assignment <- object$design.assign
+        if(length(assignment)!=length(columns))
+            stop("common-slope term tests require retained design assignments",call.=FALSE)
+        if(is.null(terms)) terms <- labels[seq_along(labels)%in%assignment[object$nonparallel]]
+        if(!is.character(terms) || !length(terms) || anyNA(terms) || anyDuplicated(terms) || any(!terms%in%labels))
+            stop("unknown or duplicated formula term in 'terms'",call.=FALSE)
+        selected <- which(assignment%in%match(terms,labels))
+        common.terms <- terms[!match(terms,labels)%in%assignment[object$nonparallel]]
+    } else {
+        if(is.null(terms)) terms <- columns[object$nonparallel]
+        if(!is.character(terms) || !length(terms) || anyNA(terms) || anyDuplicated(terms) || any(!terms%in%columns))
+            stop("unknown or duplicated predictor column in 'terms'",call.=FALSE)
+        selected <- which(columns%in%terms)
+        common.terms <- setdiff(terms,columns[object$nonparallel])
+    }
+    selected <- intersect(selected,object$nonparallel)
+    q <- length(object$alpha);pc <- length(object$common);pn <- length(object$nonparallel)
+    L <- matrix(0,length(selected)*max(0L,q-1L),length(coef(object)),
+        dimnames=list(NULL,names(coef(object))))
+    if(nrow(L)) {
+        first <- q+pc+match(selected,object$nonparallel)
+        labels <- character(nrow(L))
+        for(j in 2:q) {
+            at <- (j-2L)*length(selected)+seq_along(selected)
+            later <- first+(j-1L)*pn
+            L[cbind(at,later)] <- 1;L[cbind(at,first)] <- -1
+            labels[at] <- paste(names(coef(object))[later],"-",names(coef(object))[first])
+        }
+        rownames(L) <- labels
+    }
+    list(index=selected,terms=terms,columns=columns[selected],common.terms=common.terms,contrast=L)
+}
+
+# Embed a reduced-null estimate in the full model without fitting the full
+# alternative. In particular, meanBR belongs to the reduced null, while the
+# ordinary score and expected information belong to the full partial model.
+.ordinal_partial_po_null_setup <- function(object,fit,x,offset,control) {
+    q <- length(object$alpha);pc <- length(object$common);pn <- length(object$nonparallel)
+    common.names <- object$design.columns[object$common]
+    varying.names <- object$design.columns[object$nonparallel]
+    gamma <- matrix(0,pn,q)
+    for(j in seq_len(pn)) gamma[j,] <- if(varying.names[j]%in%names(fit$working$beta))
+        fit$working$beta[varying.names[j]] else fit$working$gamma[varying.names[j],]
+    coefficients <- c(fit$working$alpha,fit$working$beta[common.names],as.vector(gamma))
+    xx <- .ordinal_prediction_scale(x,fit$working$center,fit$working$scale)
+    category <- fit$category
+    state <- ordinal_partial_native_evaluate(xx[,object$common,drop=FALSE],xx[,object$nonparallel,drop=FALSE],
+        category$codes,category$counts,category$weights,offset,q+1L,coefficients,FALSE,
+        object$block.size,control$condition.tol,.ordinal_link_code(.ordinal_link(object)))
+    state$coefficients <- as.numeric(coefficients)
+    state$converged <- TRUE;state$convergence.reason <- "reduced_null_fit"
+    state$iterations <- fit$iterations;state$evaluations <- fit$evaluations
+    state$history <- matrix(numeric(),0L,4L)
+    full <- .ordinal_partial_result(state,fit$working$center,fit$working$scale,category,
+        fit$frequency,fit$nobs.rows,fit$firth,.ordinal_link(object),fit$control,fit$tol,
+        fit$maxit,object$block.size,object$design.columns,object$nonparallel)
+    full$x <- x;full$offset <- offset
+    setup <- .ordinal_profile_setup(full,control,profile=FALSE)
+    list(setup=setup,state=state,coefficients=coef(full))
+}
+
+.ordinal_partial_po_test <- function(object,design,response,included,terms,control,
+                                      estimation="ML",by.term=FALSE,method="score") {
+    selected <- .ordinal_partial_po_columns(object,terms);ctl <- .ordinal_po_test_control(control)
+    inference.control <- .ordinal_profile_control(list(maxit=ctl$maxit,score.tol=ctl$tol,step.tol=ctl$tol))
+    title <- if(.ordinal_link(object)=="logit") "Partial proportional-odds" else
+        paste0("Partial common-slope (",.ordinal_link(object),")")
+    title <- paste(title,if(method=="lr") "likelihood ratio test" else "expected-information score test")
+    note <- if(method=="lr") "Both alternative and null are refitted by maximum likelihood; first-order chi-square approximation." else
+        if(estimation=="ML") "Ordinary efficient score at the ML null; first-order chi-square approximation." else
+        "Ordinary efficient score at a reduced-null mean-bias-reduced estimate; this is not the full-model adjusted-score test. First-order chi-square approximation."
+    selections <- list(Joint=selected)
+    if(by.term) {
+        selections <- c(selections,lapply(selected$terms,function(term) .ordinal_partial_po_columns(object,term)))
+        names(selections) <- make.unique(c("Joint",selected$terms))
+    }
+    separation <- NULL
+    template <- function(selection) structure(list(method=title,available=FALSE,statistic=NA_real_,
+        df=nrow(selection$contrast),parameter=c(df=nrow(selection$contrast)),p.value=NA_real_,
+        null.estimation=estimation,terms=selection$terms,columns=selection$columns,
+        already.common.terms=selection$common.terms,contrast=selection$contrast,
+        observations=sum(included),frequency=sum(response$totals[included]),reason="",detail="",
+        null.converged=FALSE,null.iterations=NA_integer_,information.rcond=NA_real_,
+        empty.categories=character(),warning=character(),separation=separation,
+        data.name="ordinal assessment outcomes",note=paste(note,
+            if(length(selection$common.terms)) paste0("Already-common terms add no restrictions: ",
+                paste(selection$common.terms,collapse=", "),".") else "")),
+        class=c("fastglm_po_test","fastglm_test","htest"))
+    collect <- function(results) if(!by.term) results[[1L]] else
+        structure(list(tests=results,method=title,null.estimation=estimation,note=paste(note,
+            "Each term-specific null restricts only that term; other varying effects remain unrestricted.",
+            "Term-specific p-values are unadjusted for multiple testing.")),class="fastglm_test_list")
+    unavailable <- function(reason,detail,empty=character()) collect(lapply(selections,function(selection) {
+        out <- template(selection);out$reason <- reason;out$detail <- detail;out$empty.categories <- empty;out
+    }))
+    if(!any(included)) return(unavailable("no_usable_outcomes","No positive-frequency complete assessment rows are available."))
+    if(!is.matrix(design$x) || !is.numeric(design$x))
+        return(unavailable("unsupported_design","The test requires a dense numeric evaluation design."))
+    index <- which(included);xx <- design$x[index,,drop=FALSE];off <- design$offset[index]
+    yy <- if(response$grouped) response$y[index,,drop=FALSE] else response$codes[index]
+    ww <- response$weights[index];K <- length(object$levels)
+    rr <- .ordinal_assessment_response(yy,ww,object$levels,length(index))
+    totals <- numeric(K)
+    for(first in seq.int(1L,length(index),by=object$block.size)) {
+        at <- seq.int(first,min(length(index),first+object$block.size-1L))
+        totals <- totals+colSums(.ordinal_assessment_counts(rr,at,K))
+    }
+    empty <- object$levels[totals==0]
+    if(length(empty)) return(unavailable("empty_categories",paste0(
+        "Every declared category must have positive frequency; empty: ",paste(empty,collapse=", "),"."),empty))
+    separation <- .ordinal_po_separation(xx,rr,K)
+    if(estimation=="ML" && !is.null(separation) &&
+       any(vapply(selections,function(s)nrow(s$contrast)>0,logical(1))))
+        return(unavailable("null_separation",paste0("Predictor '",separation$column,"' at ",
+            format(separation$value,trim=TRUE)," occurs only in endpoint category '",
+            object$levels[separation$category],"'. The ML null has no finite solution. ",
+            "A separately requested meanBR score-test null remains a first-order approximation.")))
+    fit <- function(nonparallel,firth) .ordinal_fit_matrix(xx,yy,ww,off,object$levels,
+        firth,ctl$tol,ctl$maxit,object$block.size,list(),link=.ordinal_link(object),nonparallel=nonparallel)
+    full <- NULL;full.error <- "";full.warning <- character()
+    if(method=="lr" && any(vapply(selections,function(s)nrow(s$contrast)>0,logical(1))))
+        full <- tryCatch(withCallingHandlers(fit(object$nonparallel,FALSE),warning=function(w) {
+            full.warning <<- c(full.warning,conditionMessage(w));invokeRestart("muffleWarning")
+        }),error=function(e) {full.error <<- conditionMessage(e);NULL})
+    collect(lapply(selections,function(selection) {
+        out <- template(selection);L <- selection$contrast
+        fail <- function(reason,detail) {out$reason <- reason;out$detail <- detail;out}
+        if(!nrow(L)) return(fail("no_slope_contrasts",if(K<3L)
+            "A binary outcome has only one threshold, so there is no common-slope restriction to test." else
+            "The selected terms already have common slopes; no equal-slope restrictions were added."))
+        warning <- full.warning;error <- ""
+        if(method=="lr") {
+            out$warning <- unique(warning)
+            if(is.null(full)) return(fail("full_fit_error",full.error))
+            out$full.converged <- isTRUE(full$converged);out$full.iterations <- full$iterations
+            if(!isTRUE(full$converged)) return(fail("full_fit_not_converged",paste0(
+                "The ML alternative did not converge: ",gsub("_"," ",full$convergence.reason,fixed=TRUE),".")))
+            result <- tryCatch(withCallingHandlers(.ordinal_profile_test(full,contrast=L,
+                control=inference.control),warning=function(w) {
+                warning <<- c(warning,conditionMessage(w));invokeRestart("muffleWarning")
+            }),error=function(e) {error <<- conditionMessage(e);NULL})
+            out$warning <- unique(warning)
+            if(is.null(result)) return(fail("constrained_fit_error",error))
+            out$diagnostics <- result$diagnostics;out$loglik <- result$loglik
+            out$full.converged <- isTRUE(result$diagnostics$full$converged)
+            out$full.iterations <- result$diagnostics$full$iterations
+            restricted <- result$diagnostics$restricted
+            out$null.converged <- isTRUE(restricted$converged)
+            out$null.iterations <- if(is.null(restricted)) NA_integer_ else restricted$iterations
+            if(!isTRUE(result$available)) return(fail("constrained_fit_not_converged",result$diagnostics$message))
+            out$statistic <- unname(result$statistic);out$p.value <- result$p.value
+        } else {
+            remaining <- setdiff(object$nonparallel,selection$index)
+            null <- tryCatch(withCallingHandlers(fit(remaining,estimation=="meanBR"),warning=function(w) {
+                warning <<- c(warning,conditionMessage(w));invokeRestart("muffleWarning")
+            }),error=function(e) {error <<- conditionMessage(e);NULL})
+            out$warning <- unique(warning)
+            if(is.null(null)) return(fail(if(grepl("rank|constant",error)) "rank_deficient_design" else "null_fit_error",error))
+            out$null.converged <- isTRUE(null$converged);out$null.iterations <- null$iterations
+            out$diagnostics <- list(null=list(converged=null$converged,iterations=null$iterations,
+                score=null$scaled.score,predictor.step=null$predictor.step,message=null$convergence.reason,
+                coefficients=coef(null),nonparallel=remaining,estimation=estimation))
+            if(!out$null.converged) return(fail("null_fit_not_converged",paste0(
+                "The ",estimation," null did not converge: ",gsub("_"," ",null$convergence.reason,fixed=TRUE),".")))
+            result <- tryCatch({
+                embedded <- .ordinal_partial_po_null_setup(object,null,xx,off,inference.control)
+                setup <- embedded$setup;state <- embedded$state
+                B <- .ordinal_constraint_basis(setup,L)$basis
+                ordinary <- as.numeric(state$ordinary.score)
+                efficient <- ordinary-state$information%*%B%*%
+                    solve(crossprod(B,state$information%*%B),crossprod(B,ordinary))
+                statistic <- drop(crossprod(efficient,state$cov.unscaled%*%efficient))
+                if(!is.finite(statistic) || statistic<0) stop("invalid efficient score quadratic",call.=FALSE)
+                list(statistic=statistic,condition=state$information.rcond,
+                    coefficients=embedded$coefficients,nuisance.score=drop(crossprod(B,ordinary)))
+            },error=function(e) {error <<- conditionMessage(e);NULL})
+            if(is.null(result)) return(fail("information_unavailable",error))
+            out$statistic <- result$statistic;out$p.value <- pchisq(out$statistic,nrow(L),lower.tail=FALSE)
+            out$information.rcond <- result$condition
+            out$null.coefficients <- result$coefficients;out$ordinary.nuisance.score <- result$nuisance.score
+        }
+        out$available <- TRUE;out$reason <- "available";out
+    }))
+}
+
 #' Test common slopes in a cumulative-link model
 #'
-#' Computes the expected-information score test directly, without calculating
+#' Computes a common-slope test directly, without calculating
 #' prediction losses or calibration summaries. Print the result for a compact
 #' test table, or use `as.data.frame()` or `broom::tidy()` for reporting.
 #' @param object a `fastglm_ordinal` fit retaining its design and outcomes.
 #'   Its original coefficient estimates are not used in the test. The requested
 #'   null is refitted and must converge, including if the original fit did not.
 #' @param terms formula terms, or named matrix columns, to test jointly.
-#'   The default tests all location predictors.
+#'   For a common-slope fit, the default tests all location predictors. For a
+#'   partial fit, the default selects all currently nonparallel terms. Complete
+#'   factor and interaction blocks are selected together. Terms that already
+#'   have common slopes add no restrictions; they are never tested for zero
+#'   effects by this function.
 #' @param null.estimation `"ML"` (default) or `"meanBR"`. The latter evaluates
 #'   the ordinary efficient score at a mean-bias-reduced null fit, with explicit
 #'   projection of the ordinary nuisance score. It can supply a finite null
 #'   under separation, but does not guarantee convergence or small-sample accuracy.
 #' @param newdata,y,weights,offset assessment data as in [fastglm_ordinal_assess()].
-#' @param control named list containing `tol` and/or `maxit` for the null refit.
+#' @param control named list containing `tol` and/or `maxit` for refitting.
+#'   For a partial likelihood ratio test these controls apply to both models
+#'   and their constrained convergence checks.
 #' @param by.term also test each selected formula term or matrix column
-#'   separately. All tests share one null refit and one information calculation.
-#'   Each term-specific alternative relaxes only that term's common-slope
-#'   restriction, retaining common slopes for the remaining predictors.
-#' @details Both choices use expected information and an asymptotic chi-square
+#'   separately. For a common-slope model, tests share one null refit; each
+#'   term-specific alternative relaxes only that term. For a partial model,
+#'   each term-specific null restricts only that term, leaving other varying
+#'   effects unrestricted. These tests require separate null fits.
+#' @param method `"score"` (default) for the expected-information ordinary
+#'   efficient score, or `"lr"` for a likelihood ratio test of a partial model.
+#'   Likelihood ratio tests require `null.estimation="ML"` and refit both
+#'   the full partial model and the constrained null by ML, including when
+#'   the supplied object was fitted with mean bias reduction.
+#' @details Both null-estimation choices for score tests use expected
+#'   information and an asymptotic chi-square
 #'   reference. Mean bias reduction gives a first-order equivalent score test
 #'   under a regular interior null with fixed predictor and category dimensions.
 #'   The nuisance projection is essential because the ordinary nuisance score
@@ -263,6 +466,24 @@
 #'   The fitted link is retained. For logit models the hypothesis is proportional
 #'   odds; for probit and complementary log-log models it is the common-slope
 #'   restriction on that link's scale.
+#'
+#'   For a partial model, a selected predictor with slopes `gamma[,j]` is tested
+#'   through `gamma[,j] - gamma[,1] = 0` for every threshold after the first.
+#'   Other varying effects remain unrestricted in both the null and alternative.
+#'   If `s` selected design columns have varying slopes across `K` categories,
+#'   this imposes `s*(K-2)` independent restrictions. Binary outcomes and
+#'   selections containing only already-common terms return an unavailable
+#'   test with zero degrees of freedom and an explanation.
+#'
+#'   For partial score tests, `null.estimation="meanBR"` fits bias reduction
+#'   in the reduced null model, embeds that estimate in the full partial model,
+#'   and projects its ordinary score using full-model expected information.
+#'   This preserves the common-slope test convention. It differs from
+#'   [fastglm_score_test()] with `null.estimation="meanBR"`, which uses the
+#'   full-model adjustment in constrained fitting and in the score statistic.
+#'   Likelihood ratio tests use ordinary ML likelihoods and first-order
+#'   chi-square references; an unsuccessful full or constrained fit is reported
+#'   as unavailable. No finite-sample or higher-order calibration is claimed.
 #'
 #'   Empty categories and deficient predictor rank remain unsupported. A
 #'   sufficient separation check identifies two-valued predictors with a level
@@ -290,10 +511,14 @@
 #' @md
 #' @export
 fastglm_po_test <- function(object,terms=NULL,null.estimation=c("ML","meanBR"),
-                            newdata=NULL,y=NULL,weights=NULL,offset=NULL,control=list(),by.term=FALSE) {
-    .ordinal_partial_require_common(object,"The common-slope diagnostic")
+                            newdata=NULL,y=NULL,weights=NULL,offset=NULL,control=list(),by.term=FALSE,
+                            method=c("score","lr")) {
     if(!inherits(object,"fastglm_ordinal")) stop("supply a fastglm_ordinal fit",call.=FALSE)
-    null.estimation <- match.arg(null.estimation)
+    null.estimation <- match.arg(null.estimation);method <- match.arg(method)
+    if(method=="lr" && null.estimation!="ML")
+        stop("likelihood ratio common-slope tests require null.estimation = 'ML'",call.=FALSE)
+    if(method=="lr" && !inherits(object,"fastglm_ordinal_partial"))
+        stop("method = 'lr' currently requires a partial ordinal model; use method = 'score' for a common-slope fit",call.=FALSE)
     if(!is.logical(by.term) || length(by.term)!=1L || is.na(by.term))
         stop("'by.term' must be TRUE or FALSE",call.=FALSE)
     training <- is.null(newdata) && is.null(y)
@@ -309,7 +534,7 @@ fastglm_po_test <- function(object,terms=NULL,null.estimation=c("ML","meanBR"),
             stop("ordinal test predictors and offsets must be finite or missing",call.=FALSE)
         included[index] <<- included[index] & rowSums(is.na(z))==0L & !is.na(off)
     },object$block.size)
-    result <- .ordinal_assessment_po_test(object,design,response,included,terms,control,null.estimation,by.term)
+    result <- .ordinal_assessment_po_test(object,design,response,included,terms,control,null.estimation,by.term,method)
     data.name <- paste(deparse(substitute(object)),collapse=" ")
     if(by.term) result$tests <- lapply(result$tests,function(z) {z$data.name <- data.name; z})
     else result$data.name <- data.name

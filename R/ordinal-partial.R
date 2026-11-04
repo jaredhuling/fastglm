@@ -69,6 +69,17 @@
     center <- setup$center;scale <- setup$scale;xx <- setup$x;good <- setup$positive
     common <- setdiff(seq_len(p),nonparallel);pc <- length(common);pn <- length(nonparallel)
     K <- length(response$levels);q <- K-1L;d <- q+pc+q*pn
+    boundary.check <- .ordinal_partial_boundary_start(pc,pn,K,firth,link)
+    if(!is.null(boundary.check)) {
+        .design_blocks(x,function(z,i) .ordinal_partial_boundary_add(boundary.check,
+            z[,nonparallel,drop=FALSE],if(response$grouped) integer() else response$codes[i],
+            if(response$grouped) response$counts[i,,drop=FALSE] else matrix(numeric(),0L,0L),
+            response$weights[i],offset[i]),as.integer(block.size))
+        certificate <- .ordinal_partial_boundary_finish(boundary.check)
+        if(!is.null(certificate)) stop(certificate$message,": ",
+            paste(unique(response$levels[certificate$empty.pattern.categories[,"category"]]),collapse=", "),
+            ".",call.=FALSE)
+    }
     working.offset <- offset;working.offset[!good] <- 0
     cumulative <- cumsum(response$category.totals)[seq_len(q)]
     remaining <- rev(cumsum(rev(response$category.totals)))[-1L]

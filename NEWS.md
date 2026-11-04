@@ -2,6 +2,27 @@
 
 ## Model interfaces and inference
 
+* Added a sufficient preflight check for saturated, fully varying logit models
+  with mean bias reduction. An absent intermediate category within a predictor
+  pattern can force a boundary solution despite all categories being observed
+  overall. Certified cases now explain the unavailable interior solution before
+  iteration; other boundary failures retain their existing diagnostics.
+* Partial ordinal fitting reuses the predictor-step bound already calculated
+  for its first scoring direction. This removes a duplicate source scan while
+  preserving direction scaling, probability ordering, and fallback checks.
+
+* Extended `fastglm_po_test()` to partial ordinal models. Complete terms can
+  be tested for common slopes while other varying effects remain unrestricted,
+  with joint or term-specific score tests and an ML likelihood-ratio option.
+  The meanBR null option retains its ordinary projected-score convention;
+  full-model adjusted-score hypotheses remain available through
+  `fastglm_score_test()`.
+* Added HC0/HC1 and clustered covariance for streamed common-slope and partial
+  ordinal fits. One source pass accumulates the same observed-information
+  and ordinary-score contributions as dense fits. Cluster labels are matched
+  across blocks without rounding numeric identifiers, and storage depends on
+  the block, coefficient dimension, and number of clusters.
+
 * Added selected threshold-specific effects through `nonparallel` in dense, prepared,
   and streamed ordinal fits. Partial proportional odds and nonparallel probit
   and complementary log-log models support maximum likelihood and full-model
@@ -33,7 +54,8 @@
   all blocks. The bias adjustment uses information from the complete source.
   Predictions, residuals, and weights support block destinations without
   collecting the complete result. Model-based covariance is retained;
-  robust and constrained inference require separate source implementations.
+  robust covariance rereads the source, while constrained coefficient
+  inference requires retained data.
 * Reduced binomial probit and complementary log-log post-fit overhead by
   combining accurate likelihood and residual summaries, reusing the solver's
   current deviance, and calculating prediction derivatives without allocating

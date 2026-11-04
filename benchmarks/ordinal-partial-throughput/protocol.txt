@@ -1,0 +1,63 @@
+Partial ordinal throughput and native-operation profiling
+Development protocol, baseline 17c4a8a, 2026-11-04
+
+Purpose
+-------
+Identify the computational cost of larger partial cumulative-link fits and
+source rereading before changing numerical algorithms. Fast operation on large
+data and storage bounded by a source block and parameter dimension are defining
+requirements. The statistical target remains the ordinary ML score root or
+the full-model mean-bias-adjusted root in the original linear coordinates.
+No calibration simulation, probability clipping, or convergence relaxation is
+part of this study.
+
+Native profile
+--------------
+profile.cpp measures information/ordinary-score accumulation, factorization,
+bias-adjustment accumulation, and the predictor-step scan separately using
+steady-clock elapsed times. The equations and their output are compared with
+the installed baseline evaluator with normalized absolute tolerance 5e-13,
+allowing ordinary compiler roundoff in the independently compiled harness. Constructor and R-to-C++ overhead are outside
+these component times. A proposed direction's feasibility scan is measured
+separately because it belongs to step search, not score evaluation.
+
+The fixed development cases are (rows, categories, varying predictors):
+  (20000,5,4), (200000,5,4), (1000000,5,4),
+  (10000,10,12), and (2000,20,24), with two common predictors.
+All links are profiled except that the million-row case uses logit only.
+Each case uses ML and meanBR at the same strictly ordered parameter point.
+Deterministic positive grouped counts examine computational scaling away
+from boundaries; boundary behavior is investigated separately. The largest
+case has 477 coefficients. Five complete repetitions are retained.
+
+Candidate rule
+--------------
+Consider eliminating a source scan only when its result is already available
+for exactly the same coefficient direction. For example, the first scoring
+direction is current.step, whose maximum predictor change was evaluated in
+the current state. Reusing that value preserves the subsequent direction
+scaling and feasibility arithmetic. Fallback directions still need their own
+checks. Any broader pass combination must preserve compensated gap arithmetic
+after scaling and must have separate numerical evidence.
+
+Do not replace dense factorization without evidence that its cost limits the
+intended dimensions. Component timings do not alone establish whole-fit gains.
+
+Fresh paired comparison
+-----------------------
+After selecting a concrete candidate, freeze its definition and compare with
+the saved baseline library in separate R processes. Use fresh seeded bounded
+designs at 20000 and 100000 rows and a million-row logit case, plus a larger
+parameter case. Retain all links and both estimators in the smaller cases.
+Compare convergence, coefficients, covariance, full native equations, history,
+iterations/evaluations, and source reads before interpreting timings. Successful
+interior cases must retain the same estimator and diagnostics; failed fits
+remain explicit records. Three paired timing repetitions are development
+evidence, with timer resolution, order effects, and external-storage limitations
+stated in the report. The study does not establish universal speedups.
+
+Run timed stages sequentially while other package tests and builds are idle,
+with OpenMP/OpenBLAS/vecLib threads fixed at one. Keep component profiling,
+candidate development, and fresh comparisons in distinct result directories.
+Scripts record input configuration, baseline/current library paths, source and
+binary hashes, package version, per-case results, and session information.

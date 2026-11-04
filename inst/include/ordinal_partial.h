@@ -259,10 +259,15 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
         const MatrixXd metric=current.inverse;const VectorXd score=current.score;
         const double merit0=.5*score.dot(metric*score);
         VectorXd accepted_b;PartialOrdinalState accepted_state(data.d);
-        auto search=[&](VectorXd direction) {
+        auto search=[&](VectorXd direction,double known_predictor_step=-1.0) {
             if(!direction.allFinite()) return false;
             const double bound=firth ? std::min(1.0,max_step) : max_step;
-            direction/=std::max(1.0,data.predictor_step(direction)/bound);
+            // The current state already checked its own scoring direction.
+            // Reuse that identical result, including for a repeatable source;
+            // fallback directions still require their own predictor scan.
+            const double predictor_step=known_predictor_step>=0 ? known_predictor_step :
+                data.predictor_step(direction);
+            direction/=std::max(1.0,predictor_step/bound);
             const double ascent=score.dot(direction);
             if(!firth && !(ascent>0)) return false;
             double fraction=data.feasible_fraction(b,direction);
@@ -284,7 +289,7 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
             }
             return false;
         };
-        bool accepted=search(current.step);
+        bool accepted=search(current.step,current.predictor_step);
         if(!accepted) {
             ++fallbacks;MatrixXd jacobian(data.d,data.d);bool valid=true;
             for(int j=0;j<data.d;++j) {

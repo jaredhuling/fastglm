@@ -83,7 +83,9 @@ Applying the inverse link gives the cumulative probabilities.}
 and processing block size, as in \code{\link[=fastglm_vcov]{fastglm_vcov()}}. Supplying \code{cluster}
 requires \code{type="HC0"} or \code{type="HC1"}. For mean-bias-reduced fits,
 sandwich covariance uses the same first-order ordinary-score convention
-and regularity assumptions described there.}
+and regularity assumptions described there. For a source fit, \code{cluster}
+is a function of block index returning identifiers in original block row
+order. Repeated identifiers may span source blocks.}
 
 \item{vcov.}{optional full coefficient covariance for a converged fit.}
 

@@ -902,13 +902,13 @@ categories observed</td>
 <tr>
 <td align="left">Assess common slopes</td>
 <td align="left"><code>fastglm_po_test()</code> tests the restriction
-jointly or by term from a retained dense common-slope fit</td>
+jointly or by term in common-slope or partial fits</td>
 </tr>
 <tr>
 <td align="left">Assess fit and uncertainty</td>
 <td align="left">Residuals, prediction scores, and calibration; robust
-covariance for eligible dense fits; refitting bootstraps for
-common-slope fits</td>
+covariance for eligible dense or streamed fits; refitting bootstraps for
+retained common-slope fits</td>
 </tr>
 <tr>
 <td align="left">Repeat fits or read large datasets</td>
@@ -921,10 +921,10 @@ models from repeatable blocks, including mean bias reduction</td>
 </table>
 <p>Dense partial fits support robust covariance, marginal effects, ML
 profiles, and constrained score tests, including equality of selected
-slopes across thresholds. Streamed fits retain model-based covariance
-and Wald inference; their robust covariance and constrained inference
-require separate implementations. Empty-category behavior also depends
-on the model and estimation method. The <a href="vignettes/ordinal-fastglm.Rmd">ordinal vignette</a> begins with
+slopes across thresholds. Streamed fits provide model-based or robust
+covariance and Wald inference. Profile intervals and constrained
+coefficient-score tests require retained data. Empty-category behavior
+also depends on the model and estimation method. The <a href="vignettes/ordinal-fastglm.Rmd">ordinal vignette</a> begins with
 the full support guide and develops examples for each workflow.</p>
 <h2 id="firth-bias-reduced-glms">Firth bias-reduced GLMs</h2>
 <p><code>firth=TRUE</code> adjusts the estimating equations to reduce

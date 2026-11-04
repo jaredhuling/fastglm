@@ -1,0 +1,43 @@
+Saturated logit boundary certificate: fresh deterministic confirmation
+Frozen 2026-11-04 before numerical evaluation of this study
+
+Claim and separation
+--------------------
+Confirm the established endpoint-half-count adjusted-score identity after an
+invertible affine pattern-coordinate map, and the bounded detector implementing
+its sufficient no-interior-root certificate. This is separate from development
+of the sparse 96-row fixture; that fixture is not confirmation evidence and its
+root-existence question remains unresolved. There are no inference simulations.
+
+Fixed designs
+-------------
+Use three distinct two-dimensional patterns (.2,-.4),(1.1,.3),(-.5,.8), offsets
+(.13,-.21,.08), weights (2,1,3), and count rows (4,0,3,2),(2,5,0,4),(1,3,2,5).
+The global category frequencies are positive. Two intermediate pattern counts
+are zero. The pattern matrix (1,-z) is square and full rank. Contrast this with
+the same counts after replacing zeros by 1: its exact meanBR root is interior.
+
+At three fixed interior coefficient vectors, compare the native full-model
+adjusted scores with independent endpoint-half-count likelihood scores in
+pattern coordinates, mapped affinely back to original coefficients (absolute
+tolerance 2e-10). Map the exact closed-simplex boundary target to finite original
+coefficients; verify its forced zero probabilities and adjacent predictor ties.
+For the positive-count case, require native convergence at the existing
+tol=1e-10 and all predicted probabilities equal the exact target within 2e-9.
+
+Detector invariants
+-------------------
+The same certificate must result for grouped and coded-expanded data, source
+blocks of 1 and 7 rows, and invertible centered/scaled predictor recoding. Zero
+effective rows, including multiplication underflow, must not add patterns.
+Decline certification for any common predictor, ML, other links, binary outcomes,
+an additional varying pattern, an exactly different offset within a pattern,
+or a rank-deficient pattern matrix (including a large affine location shift).
+Endpoint-only missing cells and positive intermediate counts must not be
+classified as this boundary case. Pattern state must never grow past p_n+1;
+an extra pattern disables and releases it.
+
+All failures are retained. Existing output is never replaced. Source hashes,
+full per-check records and environment are saved. Numerical success validates
+the implementation of the certificate; root absence in its stated saturated
+logit scope follows from the separate exact derivation, not optimizer failure.

@@ -1,0 +1,135 @@
+Partial ordinal mean-bias boundary failures
+2026-11-04; immutable baseline 17c4a8a
+
+Finding and scope
+-----------------
+The retained sparse fixture exposes different mechanisms across links. Probit
+has an interior solution and needs more than the test's 30 iterations. Logit
+and complementary log-log approach an ordering boundary, where one unobserved
+category probability vanishes and the information becomes ill-conditioned.
+Accurate evaluation alone does not resolve their nonzero adjusted scores.
+The existence of another interior root for those two fits remains unresolved.
+
+A separate, exactly characterized class does admit a decisive diagnosis:
+saturated fully varying cumulative-logit models with an empty intermediate
+category within a predictor pattern have no strictly positive mean-bias-reduced
+solution. A bounded-memory detector now identifies that class. This conclusion
+uses an explicit affine reduction to an established endpoint-half-count result;
+it is not inferred from a failed optimization. It does not apply to the original
+96-row fixture, whose varying predictors have many distinct patterns.
+
+Bounded development evidence
+----------------------------
+The frozen development protocol retains the original likelihood, adjusted
+equations, coefficient coordinates and convergence criteria. It reproduces
+18 dense/source fits, independently evaluates 12 stored states with 80-decimal
+arithmetic, and attempts 12 independent roots from four declared starts per
+link. All outputs and failures remain in separate development directories.
+
+At the final dense states:
+
+ link       minimum predictor gap   80-decimal scaled score   outcome
+ logit             1.22146e-9              5.92380e-6          cap 200
+ probit            2.26300e-2              9.59585e-9          converged at 56
+ cloglog           9.30390e-14             1.04401e-5          search failed
+
+The unchanged score tolerance is 1e-8. These are scores standardized by the
+square roots of the expected information's diagonal entries, not raw scores.
+The independent evaluator reconstructs probabilities, ordinary scores, expected
+information and its inverse, and the global mean-bias adjustment directly in
+Python Decimal arithmetic. It uses exact binary64 input values and 80 decimal
+digits. No production probability or matrix code is reused.
+
+For the final logit state, the maximum absolute error in the native adjustment
+is 1.22e-8 in coefficient score units, and its standardized score agrees with
+the high-precision result. Therefore cancellation does not explain that stall.
+For complementary log-log, the adjustment error is 1.61e-4 in coefficient score
+units at a gap near 1e-13. Its native standardized score is 1.30e-5, while the
+high-precision value is still 1.04e-5. There is secondary numerical error, but
+removing it would not satisfy the existing convergence criterion at that point.
+Early states agree to ordinary floating-point precision. Probit's converged
+state has adjustment error below 1.7e-15.
+
+The collapsing interval is between the first two cumulative predictors at
+row 12, whose observed outcome is category 4. It is category 2 that approaches
+zero probability. In the working coordinates, the final logit score has maximum
+absolute component 0.132, but its projection along the boundary has maximum
+absolute component only 4.38e-8. It is almost normal to the boundary. This is local
+evidence of attraction to a boundary, not a proof that all interior roots are
+absent. As the expected information grows in the collapsing interval's normal
+direction, a small Fisher step alone does not establish a vanishing raw score.
+
+Independent Newton/double-dogleg attempts use the same original adjusted scores
+and enforce ordering through a positive gap parameterization. The adjustment
+is not recomputed as a different estimator in those nonlinear coordinates.
+All four probit starts reach the same interior solution, with standardized
+scores below 1.7e-13. All four logit and four complementary log-log attempts
+stall near a boundary and fail the native acceptance criteria. Those failures
+are retained; no root-absence claim follows from them. Nonconverged dense/source
+paths differ near the boundary because aggregation and rounding affect the
+search; the converged probit fits agree. No alternative solver is promoted.
+
+Exact certificate and implementation
+-----------------------------------
+Assume a logit model with no common slopes, at least three categories, exactly
+p_n + 1 positive-frequency varying-predictor patterns, a square full-rank
+pattern matrix (1,-z), and a constant offset within each pattern. The map from
+the original coefficients to pattern-specific cumulative predictors is affine
+and invertible. Mean bias reduction is equivariant under this map, so the
+adjusted equations separate into saturated multinomial equations by pattern.
+
+For pooled counts y_1,...,y_K with total m, the unique closed-simplex target is
+
+  P = (y_1 + 1/2, y_2,...,y_(K-1), y_K + 1/2) / (m + 1).
+
+Any empty intermediate count forces a zero probability and equal adjacent
+cumulative predictors. Thus no root exists in the strictly positive domain.
+The original coefficients can remain finite, so coefficient finiteness is not
+a substitute for positive probabilities or regular interior inference. The
+complete algebra and primary-source applicability audit are in
+saturated-logit-certificate.txt.
+
+R/ordinal-partial-boundary.R implements this sufficient certificate. It retains
+at most p_n + 1 exact patterns, offsets and pooled counts: O(p_n^2 + p_n K)
+values, with no retained row arrays. It abandons the certificate when a further
+pattern or an offset difference is observed. Grouped zero-effective rows,
+including multiplication underflow, are ignored consistently with the fitter.
+The rank check anchors before scaling and conservatively declines poorly
+identified cases. It never approximately merges predictor patterns or offsets.
+
+The public behavior is an early, explanatory error for certified cases, with
+affected category labels, using existing dense/source preprocessing. It avoids
+expensive futile iterations and prevents a boundary value from being presented with an ordinary
+interior covariance. It does not pool outcome categories, clip probabilities,
+alter coefficients or adjust a convergence tolerance. Other links, common
+slopes, additional patterns and varying within-pattern offsets retain their
+existing fitting behavior.
+
+Fresh confirmation and limitations
+---------------------------------
+The separate ordinal-partial-boundary-confirmation protocol was fixed before
+evaluating its three-pattern example. All 28 checks passed against the immutable
+baseline. At three fixed interior points, the native adjusted score agrees with
+an independent affine endpoint-half-count calculation within 5.8e-15. The exact
+boundary targets have the required adjacent ties and map to finite original
+coefficients. A counterpart with positive intermediate counts converges to its
+known interior probabilities within 5.5e-12.
+
+The checks also cover grouped/coded expansion, block partitioning, invertible
+predictor recoding, zero effective frequencies, and all stated exclusions.
+The corresponding targeted test file initially passed 26 assertions. Public
+preflight integration and its dense/source tests are tracked separately from
+the immutable mathematical confirmation.
+
+Primary source: Kosmidis (2014), Improved estimation in cumulative link models,
+JRSS B 76, 169-196, DOI 10.1111/rssb.12025. The full published text was read,
+especially equations (6)-(9) and Sections 5.1 and 6.1. Section 6.1 establishes
+the saturated cumulative-logit endpoint-half-count result; Section 5.1 explains
+why adjusted counts do not justify generic likelihood concavity. The affine
+pattern reduction here states the additional assumptions explicitly.
+
+All study runs use the baseline native library with MD5
+427b33ffe560d4c04e3311a6a0e91cce. Session records and result digests identify the
+environment. The protocol snapshots preserve the pre-execution text; later
+editorial spacing corrections are recorded in provenance.json. There are no
+timing, universal finiteness, coverage or small-sample calibration claims.

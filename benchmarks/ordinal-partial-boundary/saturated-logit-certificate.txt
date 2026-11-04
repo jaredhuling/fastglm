@@ -1,0 +1,109 @@
+Certified boundary case: saturated fully varying cumulative-logit models
+2026-11-04; derivation before the fresh numerical confirmation
+
+Exact scope
+-----------
+Assume logit mean bias reduction, no common-slope columns, q=K-1>=2, and
+G=p_n+1 distinct positive-frequency varying-predictor patterns z_g. Require
+the square pattern matrix X_* with rows (1,-z_g') to be invertible, and each
+pattern to have one fixed offset o_g. Independent frequency observations at a
+pattern pool into multinomial counts y_g1,...,y_gK with positive total m_g.
+Zero-frequency rows impose neither a likelihood contribution nor a constraint.
+
+The original parameters at threshold j are (alpha_j,gamma_j). Their predictors
+satisfy eta_.j = X_* (alpha_j,gamma_j)' - o. Because X_* is invertible, the
+collection of all eta_gj is an invertible affine change of the original
+parameters. This is exact model saturation at the observed patterns: each
+pattern has its own q unconstrained cumulative predictors, subject only to
+ordering within that pattern. The full likelihood factors by pattern.
+
+Mean-bias reduction is equivariant under this affine change: its Jacobian is
+constant, the coordinate-map Hessian is zero, and the full adjustment transforms
+like the likelihood score. Thus the full original adjusted equations are
+equivalent to independent saturated cumulative-logit adjusted equations for
+each pattern. This is not bias reduction after a nonlinear probability or
+log-gap reparameterization.
+
+Single-pattern derivation
+-------------------------
+Write F_j=logit^(-1)(eta_j), P_j=F_j-F_(j-1), F_0=0, F_K=1, and
+g_j=F_j(1-F_j). In a positive multinomial model the diagonal of inverse
+expected information for eta is
+
+ V_jj = F_j(1-F_j)/(m*g_j^2).
+
+The cumulative mean-bias correction is therefore
+
+ c_j = (m/2) g'_j V_jj = (1-2F_j)/2 = 1/2-F_j,
+ c_0=c_K=0.
+
+Consequently a_k=c_k-c_(k-1) equals 1/2-P_k at the two endpoints and -P_k
+at every intermediate category. In the adjusted score,
+
+ U* = sum_k grad(P_k) (y_k+a_k)/P_k,
+
+the contribution -sum_k grad(P_k) is zero. These equations are exactly the
+ordinary multinomial likelihood scores for pseudo-counts
+
+ v=(y_1+1/2, y_2,...,y_(K-1), y_K+1/2).
+
+Their unique maximum on the closed probability simplex is
+ P_k=v_k/(m+1), and cumulative probabilities are
+ F_j=(sum_(k<=j)y_k+1/2)/(m+1).
+The map from ordered finite eta to the strictly positive simplex is bijective
+with nonsingular derivative. An interior adjusted-score root must therefore
+have those probabilities. If any intermediate count is zero, its probability
+must be zero and the two adjacent cumulative predictors coincide. No root
+exists in the strict positive-probability domain. Conversely, when every
+intermediate count is positive, the displayed probabilities give its unique
+interior root; endpoint counts may be zero because their pseudo-counts are
+positive. Boundary thresholds remain finite, but ordinary interior covariance
+and inference cannot be inferred from their finiteness.
+
+Concrete two-pattern example
+-----------------------------
+Take z=0 and 1, offsets -.2 and .3, and count rows (3,0,2,4) and (1,2,0,5).
+Every category is represented globally. The probability targets are
+(.35,0,.20,.45) and (1.5,2,0,5.5)/9. Within the first pattern the first two
+cumulative probabilities coincide; within the second the last two coincide.
+The affine map back to alpha/gamma is invertible and finite, so this gives
+an exact example where all global categories are represented but the requested
+strictly positive mean-bias-reduced model has no solution.
+
+Observable bounded-memory certificate
+-------------------------------------
+The proposed helper examines only logit meanBR with no common predictors.
+It tracks at most p_n+1 exact varying-predictor patterns, their offsets and
+pooled counts. A further distinct pattern or an offset difference within a
+pattern disables the certificate. It retains O(p_n^2+p_n*K) values and no row
+arrays. Add-block temporary work is proportional to the current input block.
+After the existing data pass, exact pattern count and a conservative full-rank
+check in anchored/scaled coordinates establish the saturated structure. An
+empty pooled intermediate category then supplies the mathematical certificate.
+Approximate pattern or offset matching is prohibited. Near-singular pattern
+designs are left uncertified. This numerical rank check is the same kind of
+finite-precision identification check used elsewhere, not formal exact rank
+arithmetic over arbitrary real input.
+
+Early failure is preferable to returning a boundary estimate as if it had a
+regular covariance. The proposed message explains that this fully flexible
+logit model has no mean-bias-reduced solution with all probabilities positive
+because an intermediate category is absent within a predictor pattern.
+It does not silently pool categories, clip probabilities, or change the
+estimator. Other links, common slopes, more patterns, nonconstant within-pattern
+offsets and the original sparse 96-row fixture remain outside the certificate.
+Failed independent optimizations do not prove root absence for those models.
+
+Primary source and applicability
+--------------------------------
+Kosmidis (2014), Improved estimation in cumulative link models, JRSS B 76,
+169-196, DOI 10.1111/rssb.12025, equations (6)-(9), Section 5.1 and Section 6.1,
+pages 176-177. These sections were read in the published cached full text.
+Section 6.1 derives the cumulative-logit endpoint-half-count adjustment;
+Section 5.1 explains why generic adjusted counts can be negative and why
+ordinary likelihood concavity cannot be assumed for them. The saturated
+pattern reduction and bounded observable certificate above specialize the
+established adjustment using an explicit invertible affine map. They make no
+new estimator, universal finiteness, or higher-order inference claim.
+https://wrap.warwick.ac.uk/id/eprint/98828/7/WRAP-improved-estimation-cumulative-link-models-Kosmidis-2014.pdf
+SHA256 dd66691df64cc60ec764460dfff70f426195e69c6a749a6c434a5f206c9776e2

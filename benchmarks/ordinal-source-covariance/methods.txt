@@ -1,0 +1,93 @@
+Robust covariance for repeatable ordinal sources
+================================================
+
+This extension changes data access and aggregation, not the estimator or its
+inferential interpretation. It is an implementation validation against baseline
+17c4a8a and independent numerical derivatives, not a coverage study. The
+established derivations, assumptions, and primary references are recorded in
+benchmarks/ordinal-partial-sandwich/README.md.
+
+Exact target
+------------
+Let m_ik be the effective frequency of category k in row i, s_ik the ordinary
+per-individual category score, and H_ik its observed negative Hessian. With
+N=sum(m_ik), H=sum(m_ik H_ik), and B=H^-1, independent covariance is
+
+  V = B [sum(m_ik s_ik s_ik')] B.
+
+For one-way clustering, replace the bracketed matrix by sum_g(S_g S_g'),
+where S_g=sum_{i in g,k}(m_ik s_ik). The scores, observed derivatives, and full
+coefficient transformations are identical for retained dense, prepared, and
+streamed fits. A grouped frequency row belongs entirely to one cluster.
+
+The implementation accumulates H/N and independent meat/N, or cluster score
+sums S_g/N, to avoid squaring large raw frequencies. Final normalization restores
+the expressions above. HC1 multiplies independent covariance by N/(N-d) and
+cluster covariance by (N-1)/(N-d). With cadjust=TRUE, cluster covariance also
+receives G/(G-1), where G counts positive-frequency clusters. All thresholds,
+common slopes, and varying slopes retain their joint covariance through T V T'.
+
+For mean bias reduction this remains the ordinary-score sandwich evaluated at
+the adjusted estimate. It does not differentiate the global adjustment or
+claim finite-sample calibration. Its first-order interpretation requires the
+existing regular interior limit, fixed dimension, nonsingular limiting ordinary
+score derivative, appropriate moments/central-limit conditions, and a bias
+adjustment negligible on the square-root sample-size scale. The analyst supplies
+independence of observations or clusters; convergence cannot verify it.
+
+Source and identifier contract
+------------------------------
+Covariance rereads the source once. The same source values, rows, category
+schema, and offsets used for fitting must remain available. Existing readers
+check dimensions, schemas, finite inputs, and frequency validity; unchanged
+numeric data across reads remain a source contract, not a fingerprint guarantee.
+Source formulas do not silently discard missing rows. Cluster callbacks return
+one identifier per original source-block row, before zero-frequency filtering,
+and are invoked once per block in order.
+
+A registry assigns internal integer identifiers using exact R matching across
+blocks. It never uses printed numeric values as cluster keys. Thus distinct
+binary64 identifiers that display identically remain distinct, while a repeated
+identifier in another block denotes the same cluster. Factors use their labels;
+integer and ordinary numeric blocks may mix. Other identifier types must agree
+across positive-frequency blocks. Missing identifiers are allowed only in rows
+whose effective frequency is zero. Zero-only blocks do not establish the label
+type. Labels with no positive-frequency rows are not retained or counted.
+
+Storage consists of the loaded source block, temporary block-by-parameter
+arrays, parameter-by-parameter matrices, distinct labels, and one score vector
+per positive-frequency cluster. The extra cluster storage is O(Gd). No complete
+design, response, or row-level score matrix is collected. The source callback
+itself must avoid retaining the full dataset when external-storage memory
+bounds are required.
+
+Failures
+--------
+The extension retains explicit failures for nonconvergence, empty declared
+categories, unsupported HC2/HC3, insufficient frequency for HC1, fewer than two
+positive-frequency clusters, unresolved curvature, and singular or indefinite
+observed bread. Invalid callback lengths, dimensions, types, and missing positive
+labels fail before aggregation. Expected information, a generalized inverse,
+a ridge, and adjusted-score derivatives are not substituted. Streamed profile
+intervals and refit bootstrap calculations remain unsupported.
+
+Reproduction
+------------
+With an installed native library available to pkgload, run from the repository
+root. The validation script does not compile native code:
+
+  Rscript benchmarks/ordinal-source-covariance/validate.R benchmarks/ordinal-source-covariance/validation-20261104
+
+The script freezes the baseline aggregation source from git revision 17c4a8a,
+records hashes and session information, and writes every check to checks.csv.
+It compares current dense covariance bit-for-bit with that baseline, source
+versus dense HC0/HC1 with and without clustering, and source HC0 against direct
+numerical category-score/likelihood-Hessian calculations under all three links,
+common/partial slopes, and ML/meanBR. No coverage simulation or tuning is used.
+
+The focused test file tests/testthat/test-ordinal-source-covariance.R additionally
+checks prepared and expanded representations, clusters spanning blocks, numeric
+identifier precision, all-zero blocks and missing labels, callback validation,
+formula coding and reread errors, supplied-covariance summaries, and extreme
+raw-count/frequency products. Existing dense inference and partial covariance
+tests retain their independent numerical and external-model comparisons.
