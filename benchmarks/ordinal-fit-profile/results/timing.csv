@@ -1,0 +1,9 @@
+"n","p","K","estimation","operation","seconds","converged","iterations","evaluations","fallbacks"
+100000,6,5,"ML","fit",0.139,TRUE,6,6,0
+100000,6,5,"ML","prepared_fit",0.109,TRUE,6,6,0
+100000,6,5,"meanBR","fit",0.245,TRUE,6,6,0
+100000,6,5,"meanBR","prepared_fit",0.205,TRUE,6,6,0
+1000000,3,4,"ML","fit",1.103,TRUE,6,6,0
+1000000,3,4,"ML","prepared_fit",0.879,TRUE,6,6,0
+1000000,3,4,"meanBR","fit",1.813,TRUE,6,6,0
+1000000,3,4,"meanBR","prepared_fit",1.778,TRUE,6,6,0

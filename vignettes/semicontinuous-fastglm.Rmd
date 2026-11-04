@@ -35,6 +35,16 @@ summary(fit)
 
 The first right-hand side specifies the positive-outcome regression, and the second specifies the probability of a positive outcome. A formula with a single right-hand side uses the same predictors in both regressions. The two regressions can therefore reflect different mechanisms when scientific knowledge supports that specification.
 
+An association can be tested within either component or jointly across both. The `positive` component describes the amount among positive outcomes, whereas the `binary` component describes the probability of a positive outcome. The default tests the selected term wherever it occurs in the two regressions.
+
+```{r}
+fastglm_wald_test(fit,terms="severity",component="positive")
+fastglm_wald_test(fit,terms="severity",component="binary")
+fastglm_wald_test(fit,terms="severity")
+```
+
+These Wald tests use a first-order chi-square approximation. They assess the specified regression coefficients and do not test whether the entire two-part distribution is appropriate. A factor with several levels is tested as a complete formula term, avoiding separate tests of each reference-level comparison.
+
 # Marginal predictions
 
 A coefficient in the positive-outcome regression describes a conditional association among observations with positive outcomes. Its effect on the overall mean also depends on the binary regression. Predictions make this distinction explicit.
@@ -78,9 +88,10 @@ Repeated outcomes within the same patient or site can make the model-based stand
 cluster <- rep(seq_len(160),each=5)
 V <- fastglm_vcov(fit,type="HC1",cluster=cluster,full=TRUE)
 fastglm_average(fit,contrast=change_severity,vcov.=V)
+fastglm_wald_test(fit,terms="severity",vcov.=V)
 ```
 
-The group identifiers in this example are illustrative. Actual identifiers should follow the sampling structure, and inference requires enough independent groups for the approximation to be useful. A cluster bootstrap through `fastglm_bootstrap()` provides a refitting-based alternative under the same independence assumption; the count-model vignette gives a worked example.
+The joint test uses the same cross-component covariance as the average comparison. The group identifiers in this example are illustrative. Actual identifiers should follow the sampling structure, and inference requires enough independent groups for the approximation to be useful. Robust covariance for mean-bias-reduced two-part fits is not currently supported; their Wald tests use the model-based first-order convention. A cluster bootstrap through `fastglm_bootstrap()` provides a refitting-based alternative under the same independence assumption; the count-model vignette gives a worked example.
 
 # Reading large outcome datasets in blocks
 

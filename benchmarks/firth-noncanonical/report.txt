@@ -1,0 +1,116 @@
+Noncanonical binomial Firth iteration: development and confirmation
+=================================================================
+
+Baseline: 3f4a407c3fbbcf483fee4680557ac1f21aec64c3 (fastglm 0.1.3).
+Candidate: baseline plus implementation.patch. protocol-sha256.txt records the
+patch and run.R hashes frozen before the confirmation outputs were inspected.
+Session information and installed native-library hashes accompany the results.
+This is an engineering validation of a numerical iteration, not a study of
+coverage, false-positive rates, or a new bias-reduction estimator.
+
+Mechanism and development decisions
+-----------------------------------
+The grouped housing cloglog example lost its working information after an
+oversized scoring proposal. The dense baseline QR fit returned rank zero and
+nonconvergence after six iterations; LLT rejected singular information. A
+coherent zero-coefficient start let both fastglm and brglm2 reach the same
+finite solution. The default brglm2 start also failed on this example.
+
+initial-prototype.R reproduces an R-level investigation of the adjusted score.
+Limiting the largest positive-weight predictor update to one link-scale unit
+recovered the finite root. A score-norm halving prototype had an inconsistent
+initial state and accepted its last trial after exhausting the search. It was
+rejected, and is retained as exploration rather than a correct solver.
+
+The first native candidate bounded updates but retained delayed information in
+sparse and mapped fits. The deliberately all-zero weighted housing example
+revealed persistent oscillation: cloglog remained around a standardized adjusted
+score of 0.18 after 200 iterations. The recorded lagged-adjustment.log preserves
+that failed candidate's behavior. Using current information for the adjustment
+removed this delay. Streamed all-zero/all-one fits with offsets also attempted
+an infinite ML null intercept; their null deviance is now evaluated as zero
+directly. This is a reporting calculation, separate from the adjusted fit.
+
+Operating rule
+--------------
+For binomial probit and cloglog Firth fits, form the existing adjusted scoring
+proposal. Multiply its direction by min(1, 1 / max_i |x_i' delta|), with the
+maximum over positive-weight observations. Nonfinite proposals are failures;
+a capped proposal cannot alone trigger coefficient-change convergence. Sparse,
+mapped, and source paths use current information for the adjustment with these
+links. Existing stopping checks and adjusted-score diagnostics remain in place.
+
+The multiplier is strictly positive for a finite, nonzero proposal and equals
+one near a regular root. It therefore preserves adjusted-score fixed points
+in exact arithmetic. Predictor-based limiting is invariant to invertible column
+recoding in exact arithmetic. Neither property is a proof of global or local
+convergence. Numerical derivative floors, conditioning, and stopping tolerances
+still matter. The rule does not change standard errors or calibrate inference.
+
+Frozen numerical confirmation
+-----------------------------
+run.R uses an untouched seed (111901): six ordinary family/link fits with 5,000
+rows and six coefficients, plus probit/cloglog separation, all-zero, all-one,
+and grouped responses with offsets and zero/integer weights. The latter use
+240 rows, three coefficients, and dense, sparse, mapped, streamed QR, and
+streamed LLT representations. Both baseline and candidate use tol=1e-9 and
+maxit=300. Independent brglm2 AS_mean comparisons use explicit zero starts,
+epsilon=1e-10 and maxit=500. Errors and warnings are retained, not discarded.
+
+Successful fits increased from 30/46 to 41/46, retaining every baseline success.
+All 41 candidate successes matched converged reference coefficients within
+6.4e-9. For separated probit data, sparse/mapped iterations fell from 260 to 70;
+streamed LLT fell from 259 to 68, and streamed QR converged in 69 rather than
+reaching its limit. For all-one probit data, sparse/mapped iterations fell from
+144 to 42. Housing regression tests separately cover both links, QR/LLT/LDLT,
+grouping, offsets, zero weights, mapped input, multiple block sizes, recoding,
+and rejection of false convergence after a capped tiny coefficient update.
+
+The remaining five failures are ONE separated cloglog dataset across all five
+representations. The reference also failed with its default scoring factor.
+Post-confirmation development, explore-separation.R, found that stronger fixed
+reference damping (slowit=0.1) reaches a finite solution in 285 iterations;
+slowit=0.5 still failed at 1,000. The ordinal solver also failed on the equivalent
+binary problem. This indicates an unresolved iteration problem, not evidence
+that the adjusted estimate must be infinite. Starting fastglm at the damped
+reference solution gave a one-step change of 9.5e-10 and a standardized adjusted
+score of 2.1e-10, confirming agreement at that root. The patch is not a universal cure
+for separated noncanonical models. Further work should assess a score-based
+step acceptance rule or locally adapted scoring direction; no such rule is
+selected from these results, and no new inferential claim follows from them.
+
+Timing tradeoffs
+----------------
+The small stress timings in results/*.csv use system.time and have millisecond
+resolution, so iteration counts and successful completion are more informative
+than precise speed ratios there. Source fits can need additional passes for
+current information and for proposals whose predictor bound exceeds one.
+They may be slower on easy data or slow storage despite improved robustness.
+
+time-ordinary.R is a separate fresh-seed (112001) timing check with 12,000 rows,
+six coefficients, warmup and 41 microbenchmark repetitions. The two libraries
+ran sequentially on the same machine. Median milliseconds (baseline / candidate):
+logit 5.586 / 5.415; probit 6.774 / 7.624; cloglog 8.917 / 9.357;
+Poisson log 6.109 / 6.054; Gamma log 4.402 / 4.395; Gaussian 1.533 / 1.636.
+Iteration counts were unchanged in this timing panel. In particular, ordinary
+probit and cloglog paid approximately 13% and 5% overhead in this run. The
+unaffected paths vary in both directions; these are single-machine timings,
+not formal equivalence tests or guarantees about another workload.
+
+Reproduction
+------------
+Install the pinned baseline in one isolated R library and the patched source
+in another, using a clean native rebuild for each. From the repository root:
+
+  Rscript benchmarks/firth-noncanonical/run.R BASELINE_LIBRARY baseline NEW_OUTPUT
+  Rscript benchmarks/firth-noncanonical/run.R CANDIDATE_LIBRARY safeguarded NEW_OUTPUT
+  Rscript benchmarks/firth-noncanonical/time-ordinary.R BASELINE_LIBRARY baseline NEW_OUTPUT
+  Rscript benchmarks/firth-noncanonical/time-ordinary.R CANDIDATE_LIBRARY safeguarded NEW_OUTPUT
+  Rscript benchmarks/firth-noncanonical/development/initial-prototype.R BASELINE_LIBRARY
+  Rscript benchmarks/firth-noncanonical/development/explore-separation.R CANDIDATE_LIBRARY
+
+Each runner refuses to replace its output CSV. Run timing processes sequentially
+without other fitting or compilation jobs. The frozen patch concerns fitting;
+the accompanying Wald interface and documentation changes do not affect this
+comparison. These tests cover a finite panel and do not establish global
+convergence, high-dimensional performance, or small-sample inferential accuracy.

@@ -49,6 +49,9 @@ protected:
     double gamma_step_phi = 1;
     bool gamma_step_failed = false;
     bool gamma_initial_consistent = false;
+    bool firth_step_failed = false;
+    bool firth_step_limited = false;
+    int firth_step_reductions = 0;
 
     // Sparse decompositions (analyzePattern done once, factorize per iter)
     SpLLT  Ch;
@@ -185,12 +188,12 @@ protected:
         return Rcpp::as<bool>(validmu(mu));
     }
 
-    bool failed() const override { return gamma_step_failed; }
+    bool failed() const override { return gamma_step_failed || firth_step_failed; }
 
     bool converged() override
     {
         if (firth_) {
-            if (gamma_step_failed || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
+            if (failed() || firth_step_limited || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
             if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
                 double phi = compute_firth_phi_sparse();
                 Eigen::VectorXd score = X.adjoint()*
@@ -204,6 +207,21 @@ protected:
 
     void run_step_halving(int &iterr) override
     {
+        firth_step_limited=false;
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            const Eigen::VectorXd delta=beta-beta_prev;
+            const Eigen::VectorXd change=X*delta;
+            const double fraction=fglm::firth_predictor_step_fraction(change,weights);
+            if(!delta.allFinite() || !std::isfinite(fraction)) {
+                firth_step_failed=true;beta=beta_prev;
+                update_eta();update_mu();update_dev_resids_dont_update_old();return;
+            }
+            if(fraction<1) {
+                beta=beta_prev+fraction*delta;
+                firth_step_limited=true;++firth_step_reductions;
+                update_eta();update_mu();update_dev_resids_dont_update_old();
+            }
+        }
         if (firth_ && fam_code == fglm::FAM_GAMMA_LOG && (iterr > 0 || gamma_initial_consistent) &&
             gamma_adjustment.size() == nvars) {
             const Eigen::VectorXd delta = beta-beta_prev;
@@ -386,7 +404,8 @@ protected:
         if (!reuse_factor)
             XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
 
-        if (fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) {
+        if ((fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) ||
+            fglm::bounded_firth_predictors(fam_code)) {
             factorize_information(XtWX);
             factor_ready = true; reuse_factor = true;
             compute_log_det_XtWX_sparse(); update_A_prev_sparse();
@@ -522,9 +541,10 @@ public:
     double get_bias_dispersion() { return compute_firth_phi_sparse(); }
     void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
     {
-        const std::string reason = gamma_step_failed ? "step_halving_failed" :
+        const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
             (conv ? "converged" : "iteration_limit");
         out["convergence.reason"] = reason;
+        if(fglm::bounded_firth_predictors(fam_code)) out["step.reductions"]=firth_step_reductions;
         if (!inference && !constant_weights) return;
         Eigen::VectorXd score;
         if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {

@@ -282,12 +282,13 @@ static double stream_pass_firth(Function& callback,
                                 VectorXd* Xtwz_out,
                                 int* n_total_out, double* phi_out,
                                 bool* constant_information,
-                                VectorXd* gamma_adjustment)
+                                VectorXd* gamma_adjustment,
+                                bool current_information = false)
 {
     double dev_sum = 0.0;
     int n_total = 0, n_positive = 0;
     fglm::GammaDispersionTerms dispersion_terms;
-    const bool reuse_information = *constant_information && A_prev != nullptr;
+    const bool reuse_information = (*constant_information || current_information) && A_prev != nullptr;
     const bool gamma_log = fam.code == fglm::FAM_GAMMA_LOG;
     const bool build_gamma_adjustment = gamma_log && A_prev != nullptr &&
         gamma_adjustment->size() == 0;
@@ -445,7 +446,8 @@ static double stream_qr_pass(Function& callback,int n_chunks,int p,
 {
     const bool gamma=fam.code==fglm::FAM_GAMMA_LOG;
     const bool constant=gamma || fam.code==fglm::FAM_GAUSSIAN_IDENTITY;
-    const bool cached=constant && previous!=nullptr;
+    const bool cached=previous!=nullptr && (constant ||
+        (firth && fglm::bounded_firth_predictors(fam.code) && previous_beta==nullptr));
     if(cached) current.project_with(*previous); else current.reset(p);
     const bool build_gamma=firth && gamma && previous && gamma_adjustment->size()==0;
     if(build_gamma) gamma_adjustment->setZero(p);
@@ -651,7 +653,8 @@ List fit_streaming_glm(Function chunk_callback,
                        Function validmu,
                        Nullable<NumericVector> start = R_NilValue,
                        Nullable<NumericVector> fam_params = R_NilValue,
-                       bool     firth = false)
+                       bool     firth = false,
+                       Nullable<NumericVector> column_maxabs = R_NilValue)
 {
     if (n_chunks < 1) Rcpp::stop("n_chunks must be >= 1");
     if (type != 0 && type != 2 && type != 3)
@@ -704,6 +707,33 @@ List fit_streaming_glm(Function chunk_callback,
     VectorXd gamma_adjustment;
 
     bool gamma_step_failed = false;
+    bool firth_step_failed = false;
+    int firth_step_reductions = 0;
+    VectorXd predictor_bound;
+    if(column_maxabs.isNotNull()) {
+        predictor_bound=as<VectorXd>(column_maxabs.get());
+        if(predictor_bound.size()!=p || !predictor_bound.allFinite() || (predictor_bound.array()<0).any())
+            stop("invalid predictor bounds for streaming step control");
+    }
+    auto limit_firth_step = [&](VectorXd& proposed) {
+        if(!firth || !fglm::bounded_firth_predictors(fam.code)) return false;
+        const VectorXd delta=proposed-beta;
+        if(!delta.allFinite()) {firth_step_failed=true;return false;}
+        // Column bounds, already available from source validation, avoid a
+        // source pass for small updates. An actual predictor check is required
+        // only when that conservative bound exceeds one link-scale unit.
+        if(predictor_bound.size()==p && predictor_bound.dot(delta.cwiseAbs())<=1) return false;
+        double fraction=1;
+        for(int k=1;k<=n_chunks;++k) {
+            Chunk c=pull_chunk(chunk_callback,k,p);
+            const VectorXd change=fglm::qr_linear_predictor(c.X,delta,VectorXd::Zero(c.y.size()));
+            const double value=fglm::firth_predictor_step_fraction(change,c.w);
+            if(!std::isfinite(value)) {firth_step_failed=true;return false;}
+            fraction=std::min(fraction,value);
+        }
+        if(fraction<1) {proposed=beta+fraction*delta;++firth_step_reductions;return true;}
+        return false;
+    };
     QRStationarity qr_stationarity;
     bool qr_stationarity_current=false;
     const bool safeguarded_gamma = firth && fam.code == fglm::FAM_GAMMA_LOG;
@@ -747,10 +777,22 @@ List fit_streaming_glm(Function chunk_callback,
             }
         } else for(iter=1;iter<=maxit;++iter) {
             double phi_new=phi_prev;
-            if(firth) dev_curr=stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,&previous,&leverage_beta,
-                true,phi_prev,&phi_new,&gamma_adjustment);
+            if(firth) {
+                const bool current_information=fglm::bounded_firth_predictors(fam.code);
+                if(current_information) {
+                    // Build current information before evaluating the adjustment.
+                    // Reusing this factor for projection avoids a second QR.
+                    stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,
+                        false,1,nullptr,&gamma_adjustment);
+                    previous=qr;
+                }
+                dev_curr=stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,&previous,
+                    current_information ? nullptr : &leverage_beta,true,phi_prev,&phi_new,&gamma_adjustment);
+            }
             VectorXd proposed=qr.solve();
             if(firth) {
+                limit_firth_step(proposed);
+                if(firth_step_failed) break;
                 const VectorXd direction=qr.coefficient_coordinates(proposed-beta);
                 if(direction.stableNorm()/std::sqrt(n_total*phi_prev)<=tol &&
                     std::abs(phi_new-phi_prev)/phi_prev<=tol) {
@@ -787,7 +829,7 @@ List fit_streaming_glm(Function chunk_callback,
             qr_stationarity=stream_qr_stationarity(chunk_callback,n_chunks,p,beta,fam,qr,phi_prev,tol);
         // The scheduling gate is not part of the convergence definition. A
         // final exact check can certify the last allowed accepted iterate.
-        if(firth && !gamma_step_failed && qr_stationarity.satisfied(tol)) converged=true;
+        if(firth && !gamma_step_failed && !firth_step_failed && qr_stationarity.satisfied(tol)) converged=true;
         log_det_XtWX=qr.logdet();
     }
     if (type!=0 && safeguarded_gamma) {
@@ -851,19 +893,27 @@ List fit_streaming_glm(Function chunk_callback,
 
     if (type!=0 && !safeguarded_gamma) for (iter = 1; iter <= maxit; ++iter) {
         double std_dev, phi_new = phi_prev;
+        const bool current_information=firth && fglm::bounded_firth_predictors(fam.code);
         if (firth) {
+            if(current_information) {
+                stream_pass(chunk_callback,n_chunks,p,beta,fam,true,&XtWX,&Xtwz,nullptr,nullptr);
+                spd_factorize_and_solve(type,XtWX,Xtwz,llt,ldlt);
+                const MatrixXd identity=MatrixXd::Identity(p,p);
+                if(type==2) A_prev=llt.solve(identity); else A_prev=ldlt.solve(identity);
+                A_prev_available=true;
+            }
             std_dev = stream_pass_firth(chunk_callback, n_chunks, p, beta, fam,
                                         A_prev_available ? &A_prev : nullptr,
                                         phi_prev,
                                         &XtWX, &Xtwz, nullptr, &phi_new,
-                                        &constant_information, &gamma_adjustment);
+                                        &constant_information, &gamma_adjustment,current_information);
         } else {
             // The accepted proposal already accumulated the next WLS system.
             std_dev = dev_curr;
         }
         dev_curr = std_dev;
 
-        const bool reuse_factor = firth && constant_information && A_prev_available;
+        const bool reuse_factor = firth && (constant_information || current_information) && A_prev_available;
         VectorXd beta_new;
         if (reuse_factor) {
             if (type == 2) beta_new = llt.solve(Xtwz);
@@ -871,7 +921,7 @@ List fit_streaming_glm(Function chunk_callback,
         } else beta_new = spd_factorize_and_solve(type, XtWX, Xtwz, llt, ldlt);
 
         if (firth) {
-            if (!reuse_factor) {
+            if (!reuse_factor || current_information) {
                 // Compute log|X'WX| for penalized deviance
                 double ld = 0.0;
                 if (type == 2) {
@@ -894,9 +944,11 @@ List fit_streaming_glm(Function chunk_callback,
             phi_prev = phi_new;
 
             // Firth convergence: sup-norm of coefficient change
+            const bool limited=limit_firth_step(beta_new);
+            if(firth_step_failed) break;
             double beta_change = (beta_new - beta).cwiseAbs().maxCoeff();
             beta = beta_new;
-            if (beta_change < tol && phi_change < tol) { converged = true; break; }
+            if (!limited && beta_change < tol && phi_change < tol) { converged = true; break; }
         } else {
             // Deviance at proposed beta (no accumulation).
             double dev_new;
@@ -1061,9 +1113,10 @@ List fit_streaming_glm(Function chunk_callback,
         VectorXd information = type==0 ? qr.information_diagonal()/phi_prev : VectorXd(XtWX.diagonal()/phi_prev);
         double ds, ds_scaled;
         fglm::dispersion_diagnostics(fam.code,dev_final,n_ok,p,phi_prev,final_dispersion_terms,ds,ds_scaled);
-        std::string reason = gamma_step_failed ? "step_halving_failed" :
+        std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
             (converged ? "converged" : "iteration_limit");
         fglm::append_adjusted_diagnostics(out,adjusted_score,information,ds,ds_scaled,reason);
+        if(fglm::bounded_firth_predictors(fam.code)) out["step.reductions"]=firth_step_reductions;
         if(type==0) {
             out["remaining.predictor.step"]=qr_stationarity.predictor_step;
             out["adjusted.score.rms"]=qr_stationarity.score_rms;

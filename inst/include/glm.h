@@ -78,6 +78,9 @@ protected:
     double gamma_step_phi = 1;
     bool gamma_step_failed = false;
     bool gamma_initial_consistent = false;
+    bool firth_step_failed = false;
+    bool firth_step_limited = false;
+    int firth_step_reductions = 0;
     
     
     FullPivHouseholderQR<MatrixXd> FPQR;
@@ -264,12 +267,12 @@ protected:
     // before the penalized score reaches zero.  Override converged() to test
     // the coefficient change ||Δβ||_∞ instead, which is the convergence
     // criterion every reference Firth implementation (logistf, brglm) uses.
-    bool failed() const override { return gamma_step_failed; }
+    bool failed() const override { return gamma_step_failed || firth_step_failed; }
 
     bool converged() override
     {
         if (firth_) {
-            if (gamma_step_failed || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
+            if (failed() || firth_step_limited || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
             if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
                 const double phi = compute_firth_phi();
                 const VectorXd score = X.adjoint() *
@@ -354,6 +357,21 @@ protected:
 
     virtual void run_step_halving(int &iterr) override
     {
+        firth_step_limited=false;
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            const VectorXd delta=beta-beta_prev;
+            const VectorXd change=X*delta;
+            const double fraction=fglm::firth_predictor_step_fraction(change,weights);
+            if(!delta.allFinite() || !std::isfinite(fraction)) {
+                firth_step_failed=true;beta=beta_prev;
+                update_eta();update_mu();update_dev_resids_dont_update_old();return;
+            }
+            if(fraction<1) {
+                beta=beta_prev+fraction*delta;
+                firth_step_limited=true;++firth_step_reductions;
+                update_eta();update_mu();update_dev_resids_dont_update_old();
+            }
+        }
         if (firth_ && fam_code == fglm::FAM_GAMMA_LOG && (iterr > 0 || gamma_initial_consistent) &&
             gamma_adjustment.size() == nvars) {
             // At fixed phi this objective has gradient -2 times the adjusted
@@ -640,7 +658,8 @@ protected:
 
         // --- Streaming path (big.matrix + Cholesky) ---
         if (use_streaming) {
-            if (fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) {
+            const bool current_information=fglm::bounded_firth_predictors(fam_code);
+            if ((fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) || current_information) {
                 fglm::accumulate_xtwx_streamed(X,w,XtWX_buf);
                 if (type == 2) {
                     Ch.compute(XtWX_buf.selfadjointView<Lower>());
@@ -653,7 +672,7 @@ protected:
                 }
                 compute_log_det_XtWX(); update_A_prev(); factor_ready = true;
             }
-            const bool reuse_factor = constant_weights && factor_ready;
+            const bool reuse_factor = (constant_weights || current_information) && factor_ready;
             if (!A_prev_available || fam_code == fglm::FAM_GAUSSIAN_IDENTITY) {
                 if (!reuse_factor) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
                 fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf);
@@ -1208,9 +1227,10 @@ public:
     double get_bias_dispersion() { return compute_firth_phi(); }
     void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
     {
-        const std::string reason = gamma_step_failed ? "step_halving_failed" :
+        const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
             (conv ? "converged" : "iteration_limit");
         out["convergence.reason"] = reason;
+        if(fglm::bounded_firth_predictors(fam_code)) out["step.reductions"]=firth_step_reductions;
         if (!inference && !constant_weights) return;
         VectorXd score;
         if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {

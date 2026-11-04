@@ -80,6 +80,29 @@ predict(zi,newdata=d[1:4,],type="response",se.fit=TRUE)
 
 The same `type="zero"` prediction reports the marginal probability of observing zero in both hurdle and zero-inflated models. The meaning of `type="count"` differs: it is the conditional positive mean for a hurdle model and the ordinary count-component mean for a zero-inflated model.
 
+## Testing associations within and across components
+
+A predictor can contribute to the count regression, the binary regression, or both. `fastglm_wald_test()` tests the corresponding coefficients jointly and prints the hypothesis, statistic, degrees of freedom, and p-value. By default, a term is tested in each component where it appears. Selecting `component="count"` or `component="zero"` restricts the hypothesis to that component. For a categorical predictor, all coefficients belonging to the formula term are included.
+
+```{r}
+fastglm_wald_test(hurdle,terms="x")
+fastglm_wald_test(hurdle,terms="x",component="count")
+fastglm_wald_test(zi,terms="x",component="zero")
+fastglm_wald_test(truncated,terms="x")
+```
+
+The binary coefficient describes positive-outcome probability in a hurdle model and structural-zero probability in a zero-inflated model. The printed component label makes this distinction explicit. These are first-order chi-square tests, so sparse outcomes, extreme coefficients, or weakly identified mixture components can make their approximation inaccurate. An estimated negative-binomial size at its numerical boundary returns an unavailable test with an explanation.
+
+Named contrasts can also combine coefficients from different components using the `count_` and `zero_` names returned by `coef()`. Such a hypothesis needs a substantive interpretation: equality between a log-mean coefficient and a log-odds coefficient does not mean equal changes in the outcome. For comparisons on the outcome scale, the average predictions below are often easier to interpret. The test retains cross-component covariance, including covariance supplied through `fastglm_vcov()`.
+
+For truncated, hurdle, and zero-inflated negative-binomial fits, the default regression covariance accounts for estimating size jointly. `fastglm_nb()` retains its conventional GLM covariance with size fixed. Its joint observed covariance can instead be used by selecting the regression rows and columns:
+
+```{r}
+regression <- names(coef(nb))
+joint_covariance <- vcov(nb,full=TRUE)[regression,regression,drop=FALSE]
+fastglm_wald_test(nb,terms="x",vcov.=joint_covariance)
+```
+
 Simulation from a fitted model can help assess whether its zero frequency and upper tail resemble those in the observed data. This comparison describes model adequacy and does not replace uncertainty assessment or validation on new observations.
 
 ```{r}

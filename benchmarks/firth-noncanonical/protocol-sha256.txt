@@ -1,0 +1,2 @@
+2a40d482506ded8144d03de583f47839f19c72f2e7fe1e767ac784929a2b7309  benchmarks/firth-noncanonical/run.R
+1feea23f709195347b18562ffe8f74aa5f8dbe8375759508c395ddcd15404eac  benchmarks/firth-noncanonical/implementation.patch

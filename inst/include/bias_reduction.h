@@ -7,6 +7,23 @@
 #include <vector>
 namespace fglm {
 
+inline bool bounded_firth_predictors(int code) {
+    return code==FAM_BINOMIAL_PROBIT || code==FAM_BINOMIAL_CLOGLOG;
+}
+
+// Limit a scoring update to one link-scale unit over positive-frequency rows.
+// This changes the path, not the adjusted-score root, and is invariant to
+// invertible recoding of the predictor columns. Small updates are unchanged.
+inline double firth_predictor_step_fraction(const Eigen::VectorXd& change,
+    const Eigen::Ref<const Eigen::VectorXd>& weights) {
+    double largest=0;
+    for(int i=0;i<change.size();++i) if(weights[i]>0) {
+        if(!std::isfinite(change[i])) return NA_REAL;
+        largest=std::max(largest,std::abs(change[i]));
+    }
+    return largest>1 ? 1/largest : 1;
+}
+
 using GammaWeightGroups = std::vector<std::pair<double, int>>;
 
 // Dispersion normalizers depend on prior weights, which stay fixed during

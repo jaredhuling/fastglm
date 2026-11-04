@@ -73,8 +73,8 @@ streaming_qr_finish <- function(state) {
     .Call(`_fastglm_streaming_qr_finish`, state)
 }
 
-fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start = NULL, fam_params = NULL, firth = FALSE) {
-    .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth)
+fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start = NULL, fam_params = NULL, firth = FALSE, column_maxabs = NULL) {
+    .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs)
 }
 
 prepare_glm_constant <- function(x, weights, leverage, code) {

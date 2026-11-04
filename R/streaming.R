@@ -192,7 +192,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         family$variance,family$mu.eta,family$linkinv,family$dev.resids,
         if(is.null(family$valideta)) function(x) TRUE else family$valideta,
         if(is.null(family$validmu)) function(x) TRUE else family$validmu,
-        as.numeric(start),family_params(family),firth)
+        as.numeric(start),family_params(family),firth,pmax(abs(low),abs(high)))
     cn <- state$columns
     if(is.null(cn)) { cn <- paste0("X",seq_len(p)); cn[is.int] <- paste0("(Intercept)",if(sum(is.int)>1) seq_len(sum(is.int)) else "") }
     names(res$coefficients) <- cn; dimnames(res$cov.unscaled) <- list(cn,cn)
@@ -229,7 +229,11 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     else res$aic <- -2*ll+2*p
     # An intercept with offsets is a one-parameter GLM, not a weighted mean.
     res$null.deviance <- null.dev
-    if(res$intercept && has.offset && fc!=10L) {
+    # At an all-zero/all-one binomial response the intercept-only ML supremum
+    # is at infinity, with zero deviance even when finite offsets are present.
+    boundary.null <- family$family=="binomial" && (sumwy==0 || sumwy==sumw)
+    if(res$intercept && boundary.null) res$null.deviance <- 0
+    if(res$intercept && has.offset && fc!=10L && !boundary.null) {
         nullfetch <- function(k) { z <- fetch(k); z$X <- matrix(1,length(z$y),1L); z }
         eta0 <- family$linkfun(sumwy/sumw)
         nf <- fit_streaming_glm(nullfetch,n_chunks,1L,if(method==0L) 0L else 2L,tol,as.integer(maxit),fc,

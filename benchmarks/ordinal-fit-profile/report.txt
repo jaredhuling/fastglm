@@ -1,0 +1,69 @@
+Ordinal fitting profile: development evidence
+============================================
+
+Baseline: 3f4a407c3fbbcf483fee4680557ac1f21aec64c3, fastglm 0.1.3.
+Environment and raw sampling records are in results/. No ordinal implementation
+changes were made for this study. Rprof samples R/native call boundaries; it
+does not distinguish individual routines inside the native evaluator.
+
+Question: does another substantial speed improvement primarily require changes
+to data preparation, iteration counts, or the native numerical calculations?
+
+Protocol and reproduction
+-------------------------
+Install the baseline in a separate R library. From the repository root run:
+
+  Rscript benchmarks/ordinal-fit-profile/run.R BASELINE_LIBRARY
+  Rscript benchmarks/ordinal-fit-profile/time.R BASELINE_LIBRARY
+
+The output paths must be absent before reproduction; archive existing outputs
+in a separate directory first. These scripts refuse to replace timing records.
+run.R uses seed 111601 and profiles one ordinary fit at each of four settings:
+100,000 rows, six slopes, five categories; and 1,000,000 rows, three slopes, four
+categories; each with logit ML and mean bias reduction. Prepared fits are also
+timed, but their measurements in timing.csv are UNPROFILED, whereas the ordinary
+fit measurements include profiling. Those times are not a speed comparison.
+
+time.R uses a fresh seed, 111801, and alternates five unprofiled ordinary and
+prepared fits at each setting after warmup. These are exploratory wall-clock
+measurements on one machine, not a scalability law or a formal method ranking.
+A brief unit-test run overlapped the beginning of the timing process; the raw
+repetitions are retained. The main conclusions below rely on sampled attribution
+and iteration records, not a small difference between timing medians.
+
+Findings
+--------
+All four profiled fits converged in six iterations with six evaluations and no
+solver fallbacks. The million-row mean-bias-reduced fit spent 91.54% of sampled
+time in the native call, 3.93% in design preparation, and 2.87% in response
+preparation. Inclusive percentages overlap and should not be added indiscriminately.
+Sampling time is not the same as elapsed time. Rprof allocation summaries are
+not peak resident memory and do not measure all native allocations.
+
+In the separate unprofiled repetitions, median seconds (ordinary / prepared)
+were 0.123 / 0.111 for 100,000-row ML, 0.226 / 0.206 for 100,000-row mean BR,
+0.976 / 0.909 for million-row ML, and 1.869 / 1.712 for million-row mean BR.
+Preparation reuse offers a modest saving here; the main cost remains fitting.
+These particular low-dimensional examples do not establish behavior for many
+predictors, many categories, near-singular designs, or slow external storage.
+
+Next engineering decisions
+--------------------------
+1. Profile inside ordinal_evaluate before choosing a kernel optimization. Source
+   inspection shows that mean BR visits rows once for information and again for
+   its adjustment after information is inverted. Both passes recompute linear
+   predictors and category probabilities. This is a candidate cost, not yet a
+   measured decomposition of the native time.
+2. Test limited reuse of per-row linear predictors in the dense/prepared path.
+   One double per observation costs about 8 MB at a million rows. Storing every
+   category derivative instead costs O(nK); that tradeoff needs direct memory
+   and timing evidence. A bounded block cache cannot retain all first-pass
+   values until the global information is available without rereading data.
+3. Extend the row-access abstraction to sparse designs and repeatable sources.
+   A streamed adjusted iteration needs current information before its adjustment
+   pass, so source reads must be explicit in both timing and API documentation.
+   Centering must be represented implicitly for sparse input. Global coefficient
+   information remains O((p+K)^2), even if predictor rows are read in blocks.
+
+These are concrete next targets; this study does not implement sparse or streamed
+ordinal fitting or claim that caching is already an optimization.

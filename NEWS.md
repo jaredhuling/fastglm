@@ -2,6 +2,16 @@
 
 ## Model interfaces and inference
 
+* Binomial probit and complementary log-log mean bias reduction now limits
+  oversized scoring updates on the linear-predictor scale. Sparse, mapped, and
+  streamed fits use current information for these adjustments, avoiding delayed
+  adjustment oscillation. Diagnostics report reduced steps. Streaming null
+  deviances handle all-zero/all-one binomial outcomes with offsets directly.
+* Extended `fastglm_wald_test()` to truncated, hurdle, zero-inflated, and two-part
+  fits. Component selection, complete formula terms, and named contrasts retain
+  joint regression covariance, including supplied cross-component covariance.
+  Estimated negative-binomial size boundaries return unavailable tests.
+
 * Ordinal models now support probit and complementary log-log links with
   maximum likelihood and mean bias reduction. Predictions, marginal effects,
   expected and robust covariance, assessment, common-slope score tests, prepared
