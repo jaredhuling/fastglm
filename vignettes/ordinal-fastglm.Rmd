@@ -91,6 +91,42 @@ Mean bias reduction uses the first and second derivatives of the selected cumula
 
 With two categories, the cumulative-link model is a binary regression for membership in the lower category. Under the convention above, its binary linear predictor is the threshold minus the location predictor and offset. The corresponding binomial GLM and ordinal model therefore solve the same mean bias-reduction equations after accounting for these signs. For binary probit and complementary log-log fits, bounded Fisher-scoring updates permit temporary increases in the score norm; requiring that norm to decrease at every step can prevent progress toward a solution. Convergence still requires a small adjusted score and a small remaining predictor change.
 
+# Likelihood and score inference
+
+A Wald interval summarizes uncertainty using a coefficient estimate and its standard error. A profile-likelihood interval instead considers candidate values of that coefficient and re-estimates all other parameters at each value. Those other parameters are called nuisance parameters for this calculation: they remain part of the model, but they are not the focus of the interval. Profiling allows the likelihood to describe different amounts of uncertainty on either side of the estimate.
+
+For maximum-likelihood ordinal fits, we can obtain profile intervals and test several coefficient values jointly. The following test assesses the contribution of housing type while re-estimating the thresholds and the other slopes.
+
+```{r}
+confint(fit_ml,parm="ContHigh",method="profile")
+fastglm_profile_test(fit_ml,
+    parm=c("TypeApartment","TypeAtrium","TypeTerrace"))
+```
+
+The test compares the unrestricted likelihood with the largest likelihood under the stated coefficient values, which default to zero. Its chi-square reference is a first-order approximation. Profile intervals invert the corresponding one-coefficient test. They can describe likelihood asymmetry, but they do not guarantee accurate coverage in small samples. These calculations support logit, probit, and complementary log-log models with retained dense data and every category observed. A failed constrained fit or interval search remains unavailable, with an explanation in the saved diagnostics. There is no automatic replacement by a Wald result.
+
+The score test requires fitting only the model under the hypothesis. It measures how strongly the likelihood would initially increase when the tested coefficients are allowed to move away from their hypothesized values, accounting for the estimation of the nuisance parameters.
+
+```{r}
+type_score <- fastglm_score_test(fit_br,terms="Type")
+type_score
+as.data.frame(type_score)
+```
+
+The default uses an ML null fit even when the supplied model was estimated with mean bias reduction. An explicit alternative uses the adjusted score equations under the hypothesis:
+
+```{r}
+fastglm_score_test(fit_br,terms="Type",null.estimation="meanBR")
+fastglm_score_test(fit_br,
+    contrast=c(InflHigh=1,InflMedium=-1),null.estimation="meanBR")
+```
+
+For this adjusted-score procedure, the bias adjustment is defined by the full model, including the tested coefficients. The constrained fit solves its equations in the directions left free by the hypothesis. Removing the tested predictors and fitting a smaller bias-reduced model would generally produce a different adjustment. The test then uses the full-model information to account for nuisance estimation. The implementation and its first-order justification are described in `?fastglm_score_test`.
+
+Both score procedures assume independent observations or integer frequency counts, a fixed number of parameters, an interior true parameter, and nonsingular limiting information. The adjustment does not change the leading chi-square reference under these conditions. This establishes an asymptotic procedure without resampling; it does not establish a higher-order correction or exact small-sample calibration. Finite bias-reduced estimates alone do not establish these conditions. Ordinal mean bias reduction generally has no scalar penalized-likelihood objective, so profile-likelihood intervals remain restricted to ML fits.
+
+These tests concern coefficient values within the common-slope model. The proportional-odds diagnostic later in this vignette addresses a different question: whether the slopes can be treated as common across thresholds.
+
 # Probabilities and average contrasts
 
 ```{r}
@@ -398,8 +434,8 @@ The numerical kernel evaluates likelihoods, scores, and information in C++. It p
 
 For logistic ordinal models, each fitting evaluation reuses calculations involving the differences between adjacent thresholds. Algebraic identities also reduce repeated exponential and logarithm calculations for category probabilities and their derivatives. These changes preserve the likelihood and bias-adjustment equations. The additional storage depends on the number of categories; it does not add an array of probabilities for every observation. The benefit depends on the predictor dimension, number of categories, and number of fitting evaluations.
 
-The current interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, common slopes, offsets, and frequency data. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. Sparse and repeatable-source fitting and nonparallel slopes require additional implementations.
+The current interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, common slopes, offsets, and frequency data. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. `fastglm_ordinal_streaming()` fits the same models by repeatedly reading blocks of observations, including the complete-data information calculation required for mean bias reduction. The large-data vignette demonstrates this interface and explains which summaries can be calculated without retaining the observations. Sparse ordinal matrices and nonparallel slopes require additional implementations.
 
 `logLik()` reports the ordinary categorical frequency likelihood at the returned estimate, omitting constants introduced by grouping observations. In contrast, `deviance()` compares the fit with a saturated model for the supplied response rows, so the grouped deviance depends on that grouping. For bias-reduced estimates, the reported likelihood is evaluated at those estimates rather than maximized by them.
 
-Model-based inference uses expected Fisher information and normal approximations. Robust covariance and refitting bootstrap calculations have the regularity and category-support requirements described above. Ordinal profile intervals are not supplied. Nonconverged fits retain their diagnostics and point predictions, while methods requiring a covariance refuse to report uncertainty. These distinctions are useful when deciding whether a fitted distribution is sufficiently well determined for the intended interpretation.
+Model-based Wald inference uses expected Fisher information and normal approximations. ML profile intervals and ordinary or adjusted-score tests use the first-order chi-square references described above. Robust covariance and refitting bootstrap calculations have their own regularity and category-support requirements. Nonconverged fits retain their diagnostics and point predictions, while methods requiring a covariance refuse to report uncertainty. These distinctions are useful when deciding whether a fitted distribution is sufficiently well determined for the intended interpretation.

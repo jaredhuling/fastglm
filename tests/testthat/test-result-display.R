@@ -25,6 +25,19 @@ test_that("hypothesis tests have compact printing and numeric table extraction",
     expect_s3_class(profile,"htest")
     expect_identical(as.data.frame(profile)$p.value,profile$p.value)
     expect_output(print(profile),"Statistic.*df.*p-value")
+    limits <- confint(profile.fit,"x",method="profile")
+    saved <- serialize(limits,NULL)
+    display <- capture.output(returned <- print(limits,digits=4))
+    expect_identical(returned,limits)
+    expect_identical(serialize(limits,NULL),saved)
+    expect_true(is.matrix(limits))
+    expect_true(all(is.finite(as.numeric(limits))))
+    expect_true(all(attr(limits,"diagnostics")$converged))
+    expect_true(any(grepl("Profile confidence intervals",display,fixed=TRUE)))
+    expect_false(any(grepl("^attr\\(|^\\$|^\\[1\\]",display)))
+    limits[1L,1L] <- NA_real_
+    expect_output(print(limits),"Unavailable limits: 1")
+    expect_error(print(limits,digits=0),"digits")
 })
 
 test_that("separation has a certificate and explicit bias-reduced inference", {

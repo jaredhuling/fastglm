@@ -137,6 +137,8 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #' @export
 fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
                           cadjust=TRUE,block.size=8192L,full=FALSE) {
+    if(inherits(object,"fastglm_ordinal_stream"))
+        stop("robust covariance is not yet available for ordinal source fits; vcov() returns model-based covariance",call.=FALSE)
     if(inherits(object,"fastglm_ordinal")) {
         if(missing(type)) type <- "HC0"
         return(.ordinal_robust_vcov(object,type,cluster,cadjust,block.size))

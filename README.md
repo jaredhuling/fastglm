@@ -511,6 +511,16 @@ explicit uncertainty limits. The [ordinal-outcome
 vignette](vignettes/ordinal-fastglm.Rmd) explains the coefficient convention,
 frequency weights, repeated fitting, category boundaries, and inference options.
 
+For retained dense ordinal fits with every category observed,
+`confint(..., method="profile")` and `fastglm_profile_test()` provide ML
+profile inference. `fastglm_score_test()` tests model terms or linear contrasts
+using an ML or explicitly requested full-model bias-adjusted null fit. These
+procedures use first-order chi-square approximations without resampling.
+`fastglm_ordinal_streaming()` fits the same common-slope models from repeatable
+blocks, including mean bias reduction. Predictions and residuals can be processed
+one block at a time; source fits retain model-based covariance but currently
+require separate implementations for robust and constrained inference.
+
 ### Firth bias-reduced GLMs
 
 `firth=TRUE` adjusts the estimating equations to reduce leading

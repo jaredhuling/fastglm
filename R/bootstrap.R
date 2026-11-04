@@ -80,6 +80,8 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
                               type=c("pairs","cluster","parametric"),
                               cluster=NULL,seed=NULL,workers=1L,level=.95,
                               control=list()) {
+    if(inherits(object,"fastglm_ordinal_stream"))
+        stop("bootstrap refitting is not yet available for ordinal source fits",call.=FALSE)
     if(inherits(object,"fastglm_ordinal"))
         return(.ordinal_bootstrap(object,R,statistic,type,cluster,seed,workers,level,control,
                                   call=match.call()))

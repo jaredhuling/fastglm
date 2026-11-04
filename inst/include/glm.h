@@ -1288,6 +1288,10 @@ public:
     // report them back to R.
     double get_log_det_XtWX() const { return log_det_XtWX_; }
     double get_bias_dispersion() { return compute_firth_phi(); }
+    double get_binomial_deviance() {
+        refresh_binomial_working();
+        return binomial_working.deviance;
+    }
     void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
     {
         const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :

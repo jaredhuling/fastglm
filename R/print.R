@@ -45,6 +45,36 @@
     .fastglm_print_field("Convergence",paste0(status,if(length(detail)) paste0(" (",paste(detail,collapse="; "),")")))
 }
 
+#' Display profile confidence intervals
+#'
+#' Profile intervals print a compact table while retaining endpoint and fit
+#' diagnostics as attributes. Matrix indexing and numeric extraction are
+#' unchanged. Failed limits remain missing rather than being replaced by Wald
+#' limits.
+#' @param x a profile confidence-interval matrix returned by `confint()`.
+#' @param digits number of significant digits used for display.
+#' @param ... additional arguments, currently unused.
+#' @return Invisibly returns `x` with all numerical values and attributes intact.
+#' @name fastglm-confint-methods
+#' @md
+#' @export
+print.fastglm_confint <- function(x,digits=max(3L,getOption("digits")-3L),...) {
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header("Profile confidence intervals")
+    .fastglm_print_field("Method",attr(x,"method"))
+    level <- attr(x,"level")
+    if(length(level)) .fastglm_print_field("Confidence level",paste0(format(100*level),"%"))
+    cat("\n")
+    values <- matrix(as.numeric(x),nrow=nrow(x),ncol=ncol(x),dimnames=dimnames(x))
+    .fastglm_print_table(values,digits=digits,row.names=TRUE)
+    if(anyNA(values)) {
+        cat("\n")
+        .fastglm_print_field("Unavailable limits",sum(is.na(values)))
+        .fastglm_print_field("Details","Inspect attr(x, 'diagnostics') for endpoint convergence and failure messages.")
+    }
+    invisible(x)
+}
+
 #' Display and extract numerical diagnostics
 #'
 #' Diagnostics use the same headings and numeric formatting as fitted models.

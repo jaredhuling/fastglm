@@ -25,8 +25,8 @@
 #' @param weights,offset optional column names in data-frame blocks. For
 #'   a two-component formula, two offset column names supply count/positive
 #'   and binary offsets, respectively.
-#' @returns A `fastglm_source` object for [fastglm_streaming()] or the count
-#'   and two-part fitting functions.
+#' @returns A `fastglm_source` object for [fastglm_streaming()],
+#'   [fastglm_ordinal_streaming()], or the count and two-part fitting functions.
 #' @export
 fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
                            prototype = NULL, weights = NULL, offset = NULL) {

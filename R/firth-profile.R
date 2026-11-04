@@ -137,18 +137,22 @@
     if(any(!diagnostics$converged)) warning(sum(!diagnostics$converged)," profile endpoints failed; inspect attr(result, 'diagnostics')",call.=FALSE)
     attr(out,"diagnostics")<-diagnostics;attr(out,"fit.diagnostics")<-full
     attr(out,"method")<-"Firth penalized profile likelihood"
+    attr(out,"level")<-level
+    class(out)<-c("fastglm_confint","matrix","array")
     out
 }
-#' Profile inference for Firth logistic regression
+#' Profile likelihood inference
 #'
-#' Tests one or more coefficient values by comparing the maximized Firth
-#' penalized likelihood with its maximum under those constraints. The remaining
-#' coefficients are re-estimated. For intervals, use
+#' Tests one or more coefficient values by comparing an unrestricted maximum
+#' with the maximum under those constraints. The remaining coefficients are
+#' re-estimated. Binomial-logit Firth fits use their penalized likelihood;
+#' ordinal maximum-likelihood fits use their ordinary likelihood. For intervals, use
 #' `confint(object, method = "profile")`; the default `confint()` method remains
 #' Wald inference.
 #'
-#' @param object a converged binomial-logit Firth model with a retained dense
-#'   design matrix and response, and a full-rank design.
+#' @param object a converged binomial-logit Firth model or an ordinal
+#'   maximum-likelihood model, with a retained dense design matrix and response
+#'   and a full-rank design. Ordinal models require every category to be observed.
 #' @param parm coefficient names or indices. The test treats all selected
 #'   coefficients jointly; confidence intervals profile each separately.
 #' @param null hypothesized coefficient values, in the order specified by
@@ -159,7 +163,8 @@
 #'   standard errors; `root.tol = 1e-6` is the endpoint tolerance in these same
 #'   standardized units; `max.expand = 25` limits bracket expansions; and
 #'   `max.root = 100` limits root iterations.
-#' @details The objective is the binomial log likelihood plus one half of
+#'   Ordinal controls are described in [fastglm_score_test()].
+#' @details For binomial-logit Firth models the objective is the binomial log likelihood plus one half of
 #'   the log determinant of the full Fisher information matrix. Tested columns
 #'   remain in that determinant when their coefficients are constrained.
 #'   Grouped binomial responses, frequency weights, and offsets retain their
@@ -167,18 +172,30 @@
 #'   integer counts, allowing arithmetic round-off. Fractional power or survey
 #'   weights are unsupported. Zero-weight observations make no contribution.
 #'
+#'   For ordinal maximum-likelihood fits, the objective is the joint
+#'   cumulative-link log likelihood. Thresholds and untested slopes are
+#'   re-estimated subject to the selected coefficient constraints. Logit,
+#'   probit, and complementary log-log links, grouped category counts,
+#'   frequency weights, and offsets retain their fitted meanings. Ordinal
+#'   mean bias reduction does not generally maximize a penalized likelihood
+#'   and is unsupported by this profile method; [fastglm_score_test()] provides
+#'   an analytic score procedure with an explicit null-estimation convention.
+#'
 #'   The likelihood-ratio statistic uses an asymptotic chi-square reference
 #'   with one degree of freedom per constraint. Profile intervals invert its
 #'   one-parameter version. These are approximations under an independent
-#'   binomial sampling model, including frequency-weighted observations; they
+#'   binomial or ordinal sampling model, including frequency-weighted observations; they
 #'   are not exact finite-sample or cluster-robust procedures.
 #'
 #'   Sparse, mapped, and streaming designs are currently unsupported rather
-#'   than converted to dense matrices. The native evaluator reads the retained
-#'   dense matrix in blocks and uses additional memory of order the squared
-#'   number of coefficients plus a fixed block of rows.
+#'   than converted to dense matrices. Native evaluation uses additional
+#'   memory of order the squared number of coefficients plus a fixed block
+#'   of rows. Ordinal constrained inference also creates a standardized dense
+#'   design, requiring additional storage proportional to observations times
+#'   predictors; it does not construct an observation-by-category-by-parameter
+#'   array.
 #'
-#'   Every constrained optimization checks the adjusted score of the free
+#'   Every constrained optimization checks the ordinary or adjusted score of the free
 #'   coefficients. The unrestricted fit is checked and refined when needed.
 #'   Failed tests return missing statistics and p-values with a warning;
 #'   failed confidence limits are missing, with endpoint diagnostics attached.
@@ -189,10 +206,10 @@
 #'   from `htest`, with a compact printed table and `as.data.frame()` and
 #'   optional `broom::tidy()` extraction. It retains the statistic,
 #'   degrees of freedom, p-value, coefficient estimates, hypothesized values,
-#'   the full and constrained penalized log likelihoods (excluding constants
+#'   the full and constrained log likelihoods (penalized for Firth fits, excluding constants
 #'   independent of coefficients), and `diagnostics` containing convergence,
 #'   scaled scores, optimizer codes, evaluation counts, and messages.
-#'   `confint(..., method = "profile")` returns a two-column matrix with
+#'   `confint(..., method = "profile")` returns a two-column `fastglm_confint` matrix with
 #'   `diagnostics`, `fit.diagnostics`, and `method` attributes. Each diagnostic
 #'   row identifies the coefficient and endpoint, convergence, likelihood-ratio
 #'   statistic and target, root error, scaled nuisance score, optimizer code,
@@ -208,6 +225,8 @@
 #' @export
 fastglm_profile_test <- function(object,parm,null=0,control=list()) {
     data.name<-deparse(substitute(object))
+    if(inherits(object,"fastglm_ordinal"))
+        return(.ordinal_profile_test(object,parm,null,control,data.name))
     setup<-.firth_profile_setup(object,control);parm<-.firth_profile_parameters(parm,setup$coefficients)
     if(length(null)==1L) null<-rep(null,length(parm))
     if(!is.numeric(null) || length(null)!=length(parm) || any(!is.finite(null)))
