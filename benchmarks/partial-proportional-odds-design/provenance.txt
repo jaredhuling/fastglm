@@ -1,0 +1,23 @@
+Exploratory prototype run: 2026-11-03, R 4.5.1, macOS arm64.
+Installed fastglm source commit: c3b3eeb2d217727e5a4194382bdd5925cc4d2cab
+Installed native binary SHA256:
+888fce85e9feb55b1c36de9d214c3f5a472b34a510947fb64ffa41e561934f59
+
+SHA256 of prototype.R:
+d0227cf643fe83cc987f1e0339360034cc8f98d4bda45372adba2b6260238225
+After the initial run, an overwritten unused intermediate was removed and an
+optional output-directory argument was added so reproduction need not move the
+original results. These changes do not affect the calculations. On 2026-11-04,
+all three numerical CSV files reproduced byte for byte in a fresh directory
+using the same baseline library. The original recorded results were preserved.
+
+Reference PDF SHA256, retrieved 2026-11-03:
+dd66691df64cc60ec764460dfff70f426195e69c6a749a6c434a5f206c9776e2  kosmidis2014.pdf
+866efec839a322c6269b68aba496e7c619eb7b1017b1d6f63737788fd1a79178  clm_article.pdf
+Full URLs and reading scope are recorded in design.txt.
+
+The wine table comparison was examined during prototype development. Its
+0.006 tolerance is descriptive and not an independent confirmation threshold.
+The alpha_2 rounding discrepancy is retained in design.txt. Numerical derivative,
+common-slope reduction, and root diagnostics establish only the stated local
+mathematical checks. No sampling-accuracy or performance study was conducted.

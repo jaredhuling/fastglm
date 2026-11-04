@@ -1,0 +1,18 @@
+"check","error","tolerance","passed"
+"logit score",4.49463849472309e-09,1e-07,TRUE
+"logit information",1.33063231544384e-08,2e-06,TRUE
+"logit PO reduction score",4.44089209850063e-15,1e-10,TRUE
+"logit PO reduction information",7.105427357601e-15,1e-10,TRUE
+"probit score",2.3862813947062e-09,1e-07,TRUE
+"probit information",2.76636225038374e-09,2e-06,TRUE
+"probit PO reduction score",8.88178419700125e-15,1e-10,TRUE
+"probit PO reduction information",1.4210854715202e-14,1e-10,TRUE
+"cloglog score",3.48463502497509e-09,1e-07,TRUE
+"cloglog information",4.47903758526991e-09,2e-06,TRUE
+"cloglog PO reduction score",3.5527136788005e-15,1e-10,TRUE
+"cloglog PO reduction information",7.105427357601e-15,1e-10,TRUE
+"valid interval endpoints",0,0.5,TRUE
+"invalid extrapolation detected",0,0.5,TRUE
+"wine published coefficients (two-decimal table)",0.00548842796289151,0.006,TRUE
+"wine adjusted-score root",1.57877560374327e-10,1e-08,TRUE
+"wine remaining predictor change",2.56036118865525e-10,1e-08,TRUE

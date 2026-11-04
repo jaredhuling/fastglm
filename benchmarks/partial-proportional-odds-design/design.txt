@@ -1,0 +1,220 @@
+Partial proportional odds: model, implementation plan, and mathematical prototype
+2026-11-03
+
+Status and purpose
+------------------
+This is a development design and a small mathematical prototype, not a public
+fitting interface. The intended extension lets selected predictors have different
+effects at different cumulative thresholds while retaining common effects for
+the other predictors. The first implementation should support maximum likelihood
+and mean bias reduction. Mixed-effects models are outside scope.
+
+Partial proportional odds and bias reduction for these models already exist in
+the literature. The opportunity for fastglm is an accurate, efficient implementation
+with explicit prediction-domain checks, frequency semantics, diagnostics, and the
+same interfaces as the existing ordinal models. We make no estimator-novelty claim.
+
+Model and coordinates
+---------------------
+For q = K - 1 thresholds, p_c common predictors, and p_n nonparallel predictors,
+
+  g{Pr(Y_i <= j)} = alpha_j - x_i' beta - z_i' gamma_j - offset_i.
+
+There are d = q + p_c + q p_n parameters. The location intercept is omitted;
+thresholds supply the intercepts. Common and nonparallel predictor columns are
+disjoint. A predictor cannot simultaneously have an unrestricted common slope
+and q unrestricted threshold-specific slopes because those coefficients would
+not be identifiable. With the logit link, exp(gamma_jr) is the odds ratio for
+being above threshold j after a unit increase in predictor r.
+For probit and complementary log-log links the same design gives a nonparallel
+cumulative-link model; the odds-ratio interpretation applies only to logit.
+
+Store the threshold-specific slopes directly. Baseline-plus-deviation and
+sum-to-zero parameterizations can be translated by invertible linear maps.
+Inference and mean bias reduction must transform with these maps. A nonlinear
+log-gap transformation must not silently redefine which coefficients have their
+leading bias reduced: solving transformed versions of the original adjusted
+equations differs from deriving a new adjustment for transformed parameters.
+
+Proposed interface, subject to implementation review:
+
+  fastglm_ordinal(y ~ x1 + x2, data = d, nonparallel = ~ x2, firth = TRUE)
+
+The selector denotes complete formula terms, including all factor or interaction
+columns. NULL preserves the current common-slope model. The formula remains the
+authoritative predictor specification. The selector should reject absent or
+ambiguous terms. Matrix input can select columns by name or position. Printed
+summaries separate thresholds, common slopes, and threshold-specific slopes while
+retaining one named coefficient vector and joint covariance. Probability output
+keeps the existing observation-by-category shape. Any threshold-specific link
+output must have an explicit column convention. Terms are selected by the user;
+the fitter should not automatically select them using common-slope test p-values.
+
+Probability validity is part of the model
+----------------------------------------
+Adjacent cumulative predictors must satisfy
+
+  gap_j(z) = alpha_(j+1) - alpha_j - z'(gamma_(j+1) - gamma_j) > 0.
+
+Ordering alpha alone is insufficient. For fixed observed z these are linear
+constraints on the original parameters and define a convex feasible region.
+Validity at every training design point implies validity on their convex hull,
+because each gap is affine in z. This statement concerns the expanded design:
+transformations and interactions need not preserve convex hulls of raw variables.
+
+An unequal pair of threshold slopes cannot give ordered cumulative probabilities
+on every point in an unbounded Euclidean predictor domain: along a direction
+having nonzero inner product with their difference, the gap eventually becomes
+negative. Categorical predictors and scientifically bounded continuous predictors
+are therefore useful first cases. Valid training probabilities do not establish
+validity under extrapolation.
+
+For a rectangular design domain l <= z <= u and delta = gamma_(j+1)-gamma_j,
+the exact smallest gap is
+
+  alpha_(j+1)-alpha_j - sum_r max(l_r delta_r, u_r delta_r).
+
+This requires no enumeration of 2^p_n vertices. For factors, valid combinations
+must be considered rather than treating each level independently. An optional
+declared domain can support stronger prediction guarantees later.
+
+Initial implementation: check all positive-frequency training rows, restrict
+each fitting step to remain strictly within the feasible region, and validate
+every prediction row. Report invalid predictions with row identifiers; an explicit
+NA policy may be offered. Do not repair invalid category probabilities by clipping,
+reordering thresholds, or renormalizing. Averages must not silently discard invalid
+rows. Zero-frequency rows do not constrain the fitted likelihood but still require
+validity if predictions are requested at their predictor values.
+
+Likelihood and mean bias reduction
+----------------------------------
+Write eta_i = Z_i theta - offset_i, where Z_i contains the threshold selectors,
+common predictors, and threshold-specific predictor blocks. Let P_ik denote a
+category probability, J_ik its derivative row with respect to theta, and m_i the
+effective row frequency. The ordinary score and expected information are
+
+  U = sum_ik y_ik J_ik' / P_ik,
+  I = sum_ik m_i J_ik' J_ik / P_ik.
+
+Here y_ik already includes the frequency weight. Using V_i = Z_i I^(-1) Z_i',
+the cumulative adjustment is
+
+  c_ij = (m_i / 2) G''(eta_ij) V_i[j,j],  c_i0 = c_iK = 0,
+  A = sum_ik J_ik' (c_ik - c_i,k-1) / P_ik.
+
+Solve U + A = 0 in the original coordinates. These are the general
+cumulative-link adjusted-count equations of Kosmidis (2014), equations (6)-(9),
+applied to this design. They do not require fitting independent binary models
+at each threshold; such models would discard the joint categorical likelihood.
+The adjustment is not generally the derivative of a scalar likelihood penalty.
+A generic Jeffreys-penalized ordinal profile method is therefore not justified.
+
+Numerical convergence requires a small adjusted score and a small remaining
+change in cumulative predictors, acceptable information conditioning, and valid
+category probabilities. Small coefficient updates alone are insufficient.
+Published finite-estimate examples do not prove universal existence, uniqueness,
+finiteness, or convergence for arbitrary nonparallel designs. Active probability
+boundaries require explicit failure or boundary diagnostics and different
+inferential arguments, not ordinary interior Wald intervals.
+
+Architecture and performance
+----------------------------
+Generalize the ordinal row operator without allocating an n q by d design.
+Retain the optimized common-slope kernel when p_n = 0. Each category derivative
+couples only adjacent threshold blocks. With threshold-specific blocks of size
+1 + p_n, the corresponding information block is block tridiagonal; the common
+slopes form a dense block coupled to it. A block-tridiagonal factorization plus
+a Schur complement is a possible later optimization. The initial implementation
+can use dense d by d information to establish correctness.
+
+The new ordinal source architecture already separates design reads from the
+likelihood evaluation and solver. A general row operator can reuse this structure.
+Mean bias reduction needs information aggregated over all rows before its
+adjustment is evaluated, so a second source pass is necessary at each state.
+Streaming must not compute a different bias correction separately in each block.
+Dense, source, and sparse paths must share the mathematical target. Their memory
+costs and supported covariance operations should be stated separately.
+
+Empty categories need additional care. Removing an interior category ties both
+the adjacent thresholds and their threshold-specific slopes, not just the
+thresholds. The existing common-slope category map cannot be reused unchanged.
+Begin with all categories represented; add boundary mappings after their
+parameter and covariance semantics have been derived and tested.
+
+Implementation stages and acceptance evidence
+---------------------------------------------
+1. General design, probability domain, and maximum likelihood. Check scores by
+   finite differences, expected information by expected Hessians, and constrained
+   ML fits against ordinal::clm nominal effects for all supported links. Test
+   grouped/expanded outcomes, offsets, zero-frequency rows, and categorical
+   predictors missing within individual source blocks.
+2. Mean bias reduction. Check the general adjustment independently, its common-
+   slope and binary reductions, and invariance under invertible linear recoding.
+   Use published examples and difficult deterministic designs. Investigate roots
+   and information conditioning without calibrating procedures to simulated
+   rejection rates. Preserve nonconvergence and invalid-domain diagnostics.
+3. Public formulas, selection, prediction, printing, and inference. Integrate
+   naturally into the ordinal vignette. ML profiles can reuse constrained fitting
+   after adding the row-dependent ordering domain. MeanBR inference requires
+   explicit first-order assumptions and a separately justified score procedure.
+   Tests at probability boundaries are not ordinary chi-square tests.
+4. Source fitting and structured information performance. Confirm agreement with
+   the validated dense implementation before making speed or memory claims.
+   Low-dimensional threshold trends and other constrained slope patterns can
+   follow, with their own identifiability and adjustment derivations.
+
+Prototype findings and limits
+-----------------------------
+prototype.R is intentionally small and uses dense information and ordinary
+distribution arithmetic. It is not stable-tail production code or a benchmark.
+Its exploratory checks verify score derivatives, expected information, reduction
+to the existing common-slope adjusted equations, and a simple prediction-domain
+counterexample. The largest derivative discrepancy is 1.33e-8; common-slope
+agreement with the installed c3b3eeb kernel is within 1.42e-14.
+
+For the wine partial proportional-odds example in Kosmidis (2014), the prototype
+reaches a standardized adjusted score of 1.58e-10 and a remaining cumulative-
+predictor update of 2.56e-10. Estimates lie within 0.00549 of the printed Table 6
+values. One rounding discrepancy remains: alpha_2 = 1.054511572 rounds to 1.05,
+whereas the table prints 1.06. This is approximate external agreement, not a
+high-precision reproduction. The 0.006 comparison tolerance in checks.csv is an
+exploratory descriptive check, not a prespecified scientific acceptance criterion.
+No claim about general convergence or finite-sample inference follows from these
+examples. Production work still requires the independent adjustment and external
+ML checks in stages 1 and 2.
+
+Reproduction and provenance
+--------------------------
+Run from the repository root in a clean result directory:
+
+  Rscript benchmarks/partial-proportional-odds-design/prototype.R LIBRARY OUTPUT_DIRECTORY
+
+LIBRARY must contain fastglm c3b3eeb; numDeriv and ordinal are required. The script
+creates OUTPUT_DIRECTORY and refuses to replace existing checks.csv. Use a new
+output directory for each reproduction; the original results remain unchanged.
+The study contains checks.csv, wine-fit.csv, wine-iteration.csv, and session.txt.
+It does not alter package code. Session and source hashes are in the adjacent
+provenance.txt. This is exploratory mathematical development; there is no
+simulation design, Monte Carlo calibration, or benchmark speed claim.
+
+Primary sources and reading scope
+---------------------------------
+Kosmidis (2014), Improved estimation in cumulative link models, JRSS B 76,
+169-196, DOI 10.1111/rssb.12025. Published open-access PDF (CC BY 3.0):
+https://wrap.warwick.ac.uk/id/eprint/98828/7/WRAP-improved-estimation-cumulative-link-models-Kosmidis-2014.pdf
+Read the model definitions, equations (6)-(9), wine example and Table 6, and
+Section 12 on inference. The general adjustment and published example above
+come from this source; the proposed interface and implementation are design work.
+
+Christensen, Cumulative Link Models for Ordinal Regression with the R Package
+ordinal, current CRAN vignette retrieved 2026-11-03:
+https://cran.r-project.org/web/packages/ordinal/vignettes/clm_article.pdf
+Read nominal effects, Section 2.6, and numerical implementation/domain discussion.
+This supports the external comparator and established nominal-effect terminology.
+
+Peterson and Harrell (1990), Partial Proportional Odds Models for Ordinal
+Response Variables, Applied Statistics 39, 205-217, DOI 10.2307/2347760, is an
+established antecedent cited by the sources above. The original full text was
+not obtained for this design; no derivation here relies on unseen content.
+
+The PDFs are held in an external reference cache, not bundled with the package.
