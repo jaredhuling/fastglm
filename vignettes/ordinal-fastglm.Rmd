@@ -13,9 +13,41 @@ knitr::opts_chunk$set(collapse=TRUE,comment="#>",message=FALSE)
 library(fastglm)
 ```
 
-Outcomes such as satisfaction or symptom severity have a natural ordering, but the differences between their categories need not have a numerical interpretation. Treating three severity levels as the numbers one, two, and three imposes equal spacing. An ordinal model instead estimates the probabilities of the ordered categories. We begin with a proportional-odds model, examine how mean bias reduction changes its estimation, and use category probabilities to summarize associations. Alternative cumulative links allow the probability model to reflect different distributional shapes.
+Outcomes such as satisfaction or symptom severity have a natural ordering, but the differences between their categories need not have a numerical interpretation. Ordinal regression estimates the probabilities of these categories while preserving their order. In *fastglm*, this includes common-slope and partial proportional-odds models, mean bias reduction, coefficient and model-assumption tests, probability summaries, and fitting from repeatable blocks of data.
 
-# The cumulative-logit model
+# Ordinal functionality at a glance {#ordinal-scope}
+
+## Models and estimation
+
+All three cumulative links, **logit, probit, and complementary log-log**, support maximum likelihood (ML) and **mean bias reduction through `firth=TRUE`**. With the logit link, common slopes give proportional odds; allowing selected slopes to differ across thresholds gives partial proportional odds. The corresponding probit and complementary log-log specifications are nonparallel cumulative-link models.
+
+| Model specification | Fitting interface | Data and scope |
+|:--|:--|:--|
+| Common slopes at all thresholds | `fastglm_ordinal()` | Formula or dense matrix; individual outcomes or grouped category frequencies, with offsets |
+| Selected effects that vary across thresholds | `fastglm_ordinal()` with `nonparallel=~term` | Dense formula or matrix; each declared category must have positive total frequency |
+| Common slopes with data read in blocks | `fastglm_ordinal_streaming()` | A repeatable source; the complete design and response need not be retained |
+
+## Inference, assessment, and computation
+
+The model specification and retained data determine which subsequent methods are available. The following guide separates tests of coefficient values from tests of the common-slope assumption.
+
+| Analysis task | Methods and interpretation | Availability and section |
+|:--|:--|:--|
+| Estimate category probabilities and associations | `predict()` gives category or cumulative probabilities; `fastglm_average()` gives averages and contrasts, with standard errors | All three specifications; source-fit averages require explicit evaluation data. [Prediction and effect summaries](#ordinal-prediction) |
+| Test coefficients or contrasts | `fastglm_wald_test()` and Wald `confint()` use coefficient covariance; selected nonparallel terms include their slopes at all thresholds | All three specifications when the relevant covariance is available. [Coefficient inference](#ordinal-inference) |
+| Obtain likelihood-based intervals and tests | ML profile intervals, `fastglm_profile_test()`, and ordinary or adjusted `fastglm_score_test()` | Retained dense common-slope fits with all categories observed; profile inference requires ML. [Profiles and score tests](#ordinal-coefficient-tests) |
+| Assess the common-slope restriction | `fastglm_po_test()` tests slopes jointly or by term; graphical comparisons help interpret departures | Retained dense common-slope models with all categories observed. [Common-slope tests](#ordinal-po-test) |
+| Change the uncertainty calculation | `fastglm_vcov()` gives robust or clustered covariance; `fastglm_bootstrap()` refits sampled data | Retained dense common-slope fits, subject to category-support and convergence requirements. [Sampling uncertainty](#ordinal-robust) |
+| Assess the predicted distribution | Residuals, logarithmic and ranked probability scores, and cumulative calibration through `fastglm_ordinal_assess()` | Dense fits; source fits require explicit evaluation data for assessment. [Model assessment](#ordinal-assessment) |
+| Reuse a design or read a large dataset in blocks | `fastglm_ordinal_prepare()` and `fastglm_ordinal_batch()` reuse dense predictor setup; `fastglm_ordinal_streaming()` rereads blocks | Common-slope models. [Repeated fits and streaming](#ordinal-computation) |
+
+Automatic marginal effects from `fastglm_marginal_effects()` currently require common slopes. Partial models support probability contrasts through `fastglm_average()`, but their profiles, constrained score tests, robust covariance, and refitting bootstraps require further implementations. Sparse ordinal matrices are not supported. [Empty-category handling](#ordinal-empty-categories) also depends on the model and estimation method.
+
+The examples proceed from [model specification and bias reduction](#ordinal-models) to [prediction](#ordinal-prediction), [inference](#ordinal-inference), [assessment](#ordinal-assessment), and [computation](#ordinal-computation). Wald, likelihood-ratio, and score procedures use large-sample reference distributions; finite bias-reduced estimates alone do not establish accurate small-sample inference.
+
+# Models and estimation {#ordinal-models}
+
+## Common slopes and the cumulative-logit model
 
 For categories numbered from lowest to highest, the default model fitted by `fastglm_ordinal()` is
 
@@ -29,7 +61,7 @@ The thresholds \(\alpha_j\) divide the outcome scale, and \(o_i\) is an optional
 
 Positive slopes shift probability toward higher categories under this sign convention, which also agrees with [`MASS::polr()`](https://stat.ethz.ch/R-manual/R-devel/library/MASS/html/polr.html). The thresholds already specify the model's location, so a separate location intercept would be redundant. Formula fits remove the ordinary model-matrix intercept. A matrix supplied directly must omit that intercept.
 
-# Housing satisfaction
+## Housing satisfaction: fitting and interpretation
 
 The [housing data in MASS](https://stat.ethz.ch/R-manual/R-devel/library/MASS/html/housing.html) describe satisfaction, perceived influence over property management, housing type, and contact with other residents. Each row represents a combination of these variables, and `Freq` gives its number of residents.
 
@@ -41,6 +73,7 @@ c(rows=nrow(housing),residents=sum(housing$Freq))
 fit_ml <- fastglm_ordinal(Sat~Infl+Type+Cont,data=housing,
                           weights=Freq,tol=1e-10)
 fit_br <- update(fit_ml,firth=TRUE)
+profiles <- unique(housing[,c("Infl","Type","Cont")])[1:4,]
 summary(fit_br)
 ```
 
@@ -91,46 +124,96 @@ Mean bias reduction uses the first and second derivatives of the selected cumula
 
 With two categories, the cumulative-link model is a binary regression for membership in the lower category. Under the convention above, its binary linear predictor is the threshold minus the location predictor and offset. The corresponding binomial GLM and ordinal model therefore solve the same mean bias-reduction equations after accounting for these signs. For binary probit and complementary log-log fits, bounded Fisher-scoring updates permit temporary increases in the score norm; requiring that norm to decrease at every step can prevent progress toward a solution. Convergence still requires a small adjusted score and a small remaining predictor change.
 
-# Likelihood and score inference
+## Partial proportional odds and nonparallel effects {#ordinal-nonparallel}
 
-A Wald interval summarizes uncertainty using a coefficient estimate and its standard error. A profile-likelihood interval instead considers candidate values of that coefficient and re-estimates all other parameters at each value. Those other parameters are called nuisance parameters for this calculation: they remain part of the model, but they are not the focus of the interval. Profiling allows the likelihood to describe different amounts of uncertainty on either side of the estimate.
+A predictor can have a different association with moving above the lowest outcome category than with reaching the highest category. A partial proportional-odds model represents this difference by estimating separate slopes at the cumulative thresholds for selected predictors. The other predictors retain a common slope, which limits the number of parameters when only some associations require this flexibility.
 
-For maximum-likelihood ordinal fits, we can obtain profile intervals and test several coefficient values jointly. The following test assesses the contribution of housing type while re-estimating the thresholds and the other slopes.
+For common predictors \(x_i\) and predictors \(z_i\) with threshold-specific effects, the model is
+
+\[
+g\{\Pr(Y_i\leq j\mid x_i,z_i)\}
+=\alpha_j-x_i^\mathsf{T}\beta-z_i^\mathsf{T}\gamma_j-o_i,
+\qquad j=1,\ldots,K-1.
+\]
+
+With the logit link, \(\exp(\gamma_{jr})\) is the odds ratio for an outcome above threshold \(j\) associated with a one-unit increase in predictor \(z_r\), holding the other predictors fixed. The probit and complementary log-log links support the same specification, with effects interpreted on their respective link scales. We refer to these more generally as nonparallel cumulative-link models because their slope vectors can differ across thresholds.
+
+The `nonparallel` argument selects the effects that vary. For the housing example, we allow contact with other residents to have separate effects on the odds of satisfaction above Low and above Medium. This illustrates the specification; the choice of terms should also reflect the scientific question and the information available to estimate the additional effects.
 
 ```{r}
-confint(fit_ml,parm="ContHigh",method="profile")
-fastglm_profile_test(fit_ml,
-    parm=c("TypeApartment","TypeAtrium","TypeTerrace"))
+fit_partial <- fastglm_ordinal(
+    Sat~Infl+Type+Cont,data=housing,weights=Freq,
+    nonparallel=~Cont,tol=1e-10)
+summary(fit_partial)
+exp(fit_partial$gamma)
 ```
 
-The test compares the unrestricted likelihood with the largest likelihood under the stated coefficient values, which default to zero. Its chi-square reference is a first-order approximation. Profile intervals invert the corresponding one-coefficient test. They can describe likelihood asymmetry, but they do not guarantee accurate coverage in small samples. These calculations support logit, probit, and complementary log-log models with retained dense data and every category observed. A failed constrained fit or interval search remains unavailable, with an explanation in the saved diagnostics. There is no automatic replacement by a Wald result.
+Selecting a factor includes all of its model-matrix columns at each threshold. Interactions and transformations can be selected as complete formula terms, such as `nonparallel=~exposure:group` when that term appears in the fitted formula. With a matrix interface, `nonparallel` accepts predictor column names or indices. Omitting this argument retains the common-slope model.
 
-The score test requires fitting only the model under the hypothesis. It measures how strongly the likelihood would initially increase when the tested coefficients are allowed to move away from their hypothesized values, accounting for the estimation of the nuisance parameters.
+The summary separates common slopes, threshold-specific slopes, and thresholds. `coef(fit_partial,component="nonparallel")` extracts the varying slopes as a named vector, while `fit_partial$gamma` arranges them by predictor and threshold. A joint term test includes all of the selected term's coefficients across thresholds:
 
 ```{r}
-type_score <- fastglm_score_test(fit_br,terms="Type")
-type_score
-as.data.frame(type_score)
+fastglm_wald_test(fit_partial,terms="Cont")
+predict(fit_partial,newdata=profiles,se.fit=TRUE)
+fastglm_average(fit_partial,weights=housing$Freq)
 ```
 
-The default uses an ML null fit even when the supplied model was estimated with mean bias reduction. An explicit alternative uses the adjusted score equations under the hypothesis:
+This Wald test assesses whether both contact effects are zero. To assess equality of the two contact effects, we specify their difference as a named coefficient contrast:
 
 ```{r}
-fastglm_score_test(fit_br,terms="Type",null.estimation="meanBR")
-fastglm_score_test(fit_br,
-    contrast=c(InflHigh=1,InflMedium=-1),null.estimation="meanBR")
+fastglm_wald_test(fit_partial,contrast=c(
+    "nonparallel:ContHigh:Low|Medium"=1,
+    "nonparallel:ContHigh:Medium|High"=-1))
 ```
 
-For this adjusted-score procedure, the bias adjustment is defined by the full model, including the tested coefficients. The constrained fit solves its equations in the directions left free by the hypothesis. Removing the tested predictors and fitting a smaller bias-reduced model would generally produce a different adjustment. The test then uses the full-model information to account for nuisance estimation. The implementation and its first-order justification are described in `?fastglm_score_test`.
-
-Both score procedures assume independent observations or integer frequency counts, a fixed number of parameters, an interior true parameter, and nonsingular limiting information. The adjustment does not change the leading chi-square reference under these conditions. This establishes an asymptotic procedure without resampling; it does not establish a higher-order correction or exact small-sample calibration. Finite bias-reduced estimates alone do not establish these conditions. Ordinal mean bias reduction generally has no scalar penalized-likelihood objective, so profile-likelihood intervals remain restricted to ML fits.
-
-These tests concern coefficient values within the common-slope model. The proportional-odds diagnostic later in this vignette addresses a different question: whether the slopes can be treated as common across thresholds.
-
-# Probabilities and average contrasts
+The contrast uses the covariance between the two estimated slopes. Its chi-square reference is a first-order approximation under a regular interior model. Probability standard errors and averages likewise use the covariance of all thresholds and slopes, including their correlations. They therefore account for the additional fitted parameters. Prediction assessment uses `fastglm_ordinal_assess()`:
 
 ```{r}
-profiles <- unique(housing[,c("Infl","Type","Cont")])[1:4,]
+fastglm_ordinal_assess(fit_partial)
+```
+
+These scores assess predictions on the fitting sample. As with the common-slope model, separate evaluation outcomes can be supplied through `newdata`, `y`, and frequency `weights` to assess predictions on observations not used for estimation.
+
+### The range of valid predictions
+
+Separate slopes can produce crossing cumulative probabilities at some predictor values. Valid category probabilities require each consecutive cumulative predictor to increase:
+
+\[
+\alpha_{j+1}-\alpha_j
+-z^\mathsf{T}(\gamma_{j+1}-\gamma_j)>0.
+\]
+
+The common predictors and offset cancel from this difference. The fitter enforces this condition at positive-frequency training rows, and prediction checks it again at the requested rows. For continuous predictors with varying effects, extrapolation can violate this condition even when fitting converges. An invalid prediction produces an error identifying the affected rows; clipping probabilities or reordering thresholds would change the specified model.
+
+The reported thresholds correspond to predictors and offset equal to zero. That combination can lie outside the valid prediction range, so the thresholds alone need not be ordered. `fastglm_diagnostics()` reports the smallest fitted cumulative-predictor gap, which assesses ordering at the observed predictor values. With `type="link"`, predictions are a matrix containing one cumulative predictor per threshold. Applying the fitted inverse link to this matrix gives the cumulative probabilities.
+
+### Mean bias reduction with varying effects
+
+Sparse category patterns can produce infinite maximum-likelihood estimates even when each category is represented somewhere in the data. Mean bias reduction adjusts the joint equations for thresholds, common slopes, and varying slopes. Because the adjustment uses their full expected information, it accounts for the parameters estimated together in the cumulative model.
+
+The wine example in [Kosmidis (2014)](https://doi.org/10.1111/rssb.12025) relates five ordered bitterness ratings to temperature during grape crushing and contact between juice and grape skins. We use the four groups of category counts from that example, with a common contact effect and threshold-specific temperature effects.
+
+```{r}
+wine <- data.frame(contact=c(0,1,0,1),temperature=c(0,0,1,1))
+wine$rating <- I(rbind(c(4,9,5,0,0),c(1,7,8,2,0),
+                       c(0,5,8,3,2),c(0,1,5,7,5)))
+colnames(wine$rating) <- paste0("rating",1:5)
+wine_br <- fastglm_ordinal(
+    rating~contact+temperature,data=wine,
+    nonparallel=~temperature,firth=TRUE,tol=1e-9)
+summary(wine_br)
+fastglm_diagnostics(wine_br)
+```
+
+The published analysis identifies infinite maximum-likelihood coefficients for this specification. The adjusted equations yield finite estimates here. This calculation reproduces the categorical frequency likelihood in that analysis. The original observations include repeated ratings by judges; the model-based covariance treats the represented observations as independent and does not account for dependence within judges.
+
+Mean bias reduction is available for all three links and targets the original threshold and slope coefficients. It does not guarantee a finite solution or accurate small-sample Wald inference for every design. The diagnostics check the adjusted score, remaining predictor change, information conditioning, and probability ordering. A small score alone is insufficient when the remaining update or information indicates an unstable fit.
+
+The current nonparallel interface requires a retained dense design and positive total frequency in every declared category. Wald intervals, joint coefficient tests, probability predictions, averages, and descriptive prediction assessment are available. Profiles, constrained score tests, robust covariance, refitting bootstraps, and automatic marginal effects require further implementations for these fits. The [empty-category handling below](#ordinal-empty-categories) applies to common-slope models.
+
+# Prediction and effect summaries {#ordinal-prediction}
+
+```{r}
 pred <- predict(fit_br,newdata=profiles,se.fit=TRUE)
 pred
 predict(fit_br,newdata=profiles,type="cumulative")
@@ -185,7 +268,47 @@ For formula fits, `variable="exposure"` refers to the original exposure variable
 
 The intervals account for uncertainty in the thresholds and slopes through the delta method. They condition on the supplied predictor distribution and averaging weights; frequency weights must be supplied again when those frequencies define the desired average. The `vcov.` argument accepts an alternative coefficient covariance, including an eligible robust covariance from `fastglm_vcov()`. These intervals use a first-order normal approximation and may be unreliable in small or extreme samples.
 
-# Sampling uncertainty and model assumptions
+# Hypothesis tests and uncertainty {#ordinal-inference}
+
+Coefficient tests ask whether specified effects or contrasts equal their hypothesized values. Tests of the common-slope restriction ask whether those effects can be shared across thresholds. We first consider coefficient inference and uncertainty calculations; the [common-slope tests](#ordinal-po-test) appear with model assessment.
+
+## Coefficient profiles and score tests {#ordinal-coefficient-tests}
+
+A Wald interval summarizes uncertainty using a coefficient estimate and its standard error. A profile-likelihood interval instead considers candidate values of that coefficient and re-estimates all other parameters at each value. Those other parameters are called nuisance parameters for this calculation: they remain part of the model, but they are not the focus of the interval. Profiling allows the likelihood to describe different amounts of uncertainty on either side of the estimate.
+
+For maximum-likelihood common-slope ordinal fits, we can obtain profile intervals and test several coefficient values jointly. The following test assesses the contribution of housing type while re-estimating the thresholds and the other slopes.
+
+```{r}
+confint(fit_ml,parm="ContHigh",method="profile")
+fastglm_profile_test(fit_ml,
+    parm=c("TypeApartment","TypeAtrium","TypeTerrace"))
+```
+
+The test compares the unrestricted likelihood with the largest likelihood under the stated coefficient values, which default to zero. Its chi-square reference is a first-order approximation. Profile intervals invert the corresponding one-coefficient test. They can describe likelihood asymmetry, but they do not guarantee accurate coverage in small samples. These calculations support logit, probit, and complementary log-log models with retained dense data and every category observed. A failed constrained fit or interval search remains unavailable, with an explanation in the saved diagnostics. There is no automatic replacement by a Wald result.
+
+The score test requires fitting only the model under the hypothesis. It measures how strongly the likelihood would initially increase when the tested coefficients are allowed to move away from their hypothesized values, accounting for the estimation of the nuisance parameters.
+
+```{r}
+type_score <- fastglm_score_test(fit_br,terms="Type")
+type_score
+as.data.frame(type_score)
+```
+
+The default uses an ML null fit even when the supplied model was estimated with mean bias reduction. An explicit alternative uses the adjusted score equations under the hypothesis:
+
+```{r}
+fastglm_score_test(fit_br,terms="Type",null.estimation="meanBR")
+fastglm_score_test(fit_br,
+    contrast=c(InflHigh=1,InflMedium=-1),null.estimation="meanBR")
+```
+
+For this adjusted-score procedure, the bias adjustment is defined by the full model, including the tested coefficients. The constrained fit solves its equations in the directions left free by the hypothesis. Removing the tested predictors and fitting a smaller bias-reduced model would generally produce a different adjustment. The test then uses the full-model information to account for nuisance estimation. The implementation and its first-order justification are described in `?fastglm_score_test`.
+
+Both score procedures assume independent observations or integer frequency counts, a fixed number of parameters, an interior true parameter, and nonsingular limiting information. The adjustment does not change the leading chi-square reference under these conditions. This establishes an asymptotic procedure without resampling; it does not establish a higher-order correction or exact small-sample calibration. Finite bias-reduced estimates alone do not establish these conditions. Ordinal mean bias reduction generally has no scalar penalized-likelihood objective, so profile-likelihood intervals remain restricted to ML fits.
+
+These tests concern coefficient values within the common-slope model. The proportional-odds diagnostic later in this vignette addresses a different question: whether the slopes can be treated as common across thresholds.
+
+## Robust covariance and bootstrap uncertainty {#ordinal-robust}
 
 The expected-information standard errors above use the fitted categorical distribution to describe sampling variation. Each observation also contributes a score, which measures how its log likelihood changes as the parameters change. A sandwich covariance combines the observed sensitivity of the score equations with the variation in these individual contributions, as described by [Zeileis (2006)](https://www.jstatsoft.org/article/view/v016i09). This permits a first-order variance estimate under distributional misspecification, provided observations are independent and the fitted parameter has a regular, identifiable population target. Robust standard errors do not correct an incorrect mean or probability model.
 
@@ -213,52 +336,9 @@ This calculation assumes the fitted response model. The alternatives `type="pair
 
 Each replicate records convergence, the empty categories, and whether its empty-category pattern differs from the original. An endpoint is the lowest or highest category of the ordered scale. Mean bias reduction keeps its threshold finite when an endpoint is empty, so the same set of model parameters remains available. For a parametric bootstrap with mean bias reduction, the package returns uncertainty summaries when the original fit and every refit contain all interior categories and all refits and statistics succeed. An empty interior category ties adjacent thresholds and changes the fitted model, so the package withholds summaries in that case. Endpoint-empty refits remain visible in the diagnostics. This exception applies only to parametric bootstrap with mean bias reduction; maximum likelihood and pairs or cluster resampling retain the stricter category requirement. Percentile intervals also have simulation error, so a substantive analysis needs enough refits to estimate the interval endpoints adequately.
 
-# Simulated responses
+# Model assessment {#ordinal-assessment}
 
-Simulation from the fitted distribution can help assess the range of category patterns implied by a model. The housing frequencies give the number of residents at each recorded predictor row. `simulate()` therefore returns a list of count matrices, with a simulated count for each satisfaction category at each row.
-
-```{r}
-simulated <- simulate(fit_br,nsim=2,seed=61104)
-head(simulated[[1]])
-all(rowSums(simulated[[1]])==housing$Freq)
-```
-
-These counts already include the fitting frequencies. Refitting a simulated count matrix uses unit weights, because applying the original weights again would count the same residents twice. For an individual response with unit frequency in each row, `simulate()` instead returns a data frame of ordered factors. Both forms preserve the declared category order. Simulation conditions on the fitted parameters and does not itself account for estimation uncertainty.
-
-# Repeated responses with common predictors
-
-Several ordered outcomes can share the same predictors, and simulation studies often fit many responses on a fixed design. A prepared ordinal design retains the predictor matrix and its formula transformations, so these calculations can be reused across responses. Each model still estimates its own thresholds and common slopes and has its own convergence assessment.
-
-The following preparation uses the housing predictors for both the observed satisfaction response and the two simulated count matrices above. The observed response uses the resident frequencies as weights. The simulated matrices already contain those frequencies and therefore use unit weights.
-
-```{r}
-prepared <- fastglm_ordinal_prepare(
-    ~Infl+Type+Cont,data=housing,
-    levels=levels(housing$Sat),firth=TRUE)
-prepared_original <- fastglm_ordinal(
-    prepared,housing$Sat,weights=housing$Freq,tol=1e-10)
-all.equal(coef(prepared_original),coef(fit_br),tolerance=1e-8)
-
-repeated <- fastglm_ordinal_batch(
-    prepared,simulated,weights=rep(1,nrow(housing)),tol=1e-10)
-vapply(repeated,function(fit) fit$converged,logical(1))
-predict(repeated[[1]],newdata=profiles)
-```
-
-The saved preparation includes centering, scaling, and rank checks. These depend on the predictors and each row's effective frequency, which is its individual frequency weight or the sum of its category counts times its weight. In this example, the effective row frequencies are the same for the observed and simulated responses. Changes to the predictor matrix, effective row frequencies, or standardization control rebuild the saved calculations. Offsets and the allocation of a fixed row total among categories can change while this preparation remains applicable. Category mappings, starting values, and parameter-dependent information are calculated separately for each fit.
-
-Prepared designs can also be saved and restored as R objects. This permits reuse across sessions without retaining a connection to a native fitting process. The following serialization reproduces the first refit using the restored preparation.
-
-```{r}
-restored <- unserialize(serialize(prepared,NULL))
-restored_fit <- fastglm_ordinal(
-    restored,simulated[[1]],weights=rep(1,nrow(housing)),tol=1e-10)
-all.equal(coef(restored_fit),coef(repeated[[1]]),tolerance=1e-10)
-```
-
-`saveRDS()` and `readRDS()` provide the corresponding file-based operation. Formula expressions that refer to external functions or objects still require those dependencies when constructing a new prediction design. Batch fitting currently processes a list of responses sequentially and retains the full fitted models. An individual response can be refitted with `fastglm_ordinal(prepared, response, ...)`; changing the formula requires preparing the revised design again. Preparation retains a dense design and, when standardization is used, its standardized values; its memory requirement therefore continues to grow with the number of rows and predictors.
-
-# Residual diagnostics
+## Residuals and reporting {#ordinal-residuals}
 
 A residual for ordered outcomes should preserve the direction of discrepancy without imposing numerical distances between categories. The probability-scale residual of [Li and Shepherd (2012)](https://doi.org/10.1093/biomet/asr073) compares the fitted probability below the observed category with the fitted probability above it. Its value is positive when the observed category is high relative to the fitted distribution, and negative when it is low.
 
@@ -284,7 +364,7 @@ if(requireNamespace("broom",quietly=TRUE)) {
 
 The `.fitted` matrix column from `augment()` contains one probability per category, and `.class` gives the category with the largest fitted probability. Training-data augmentation also includes probability-scale residuals. Supplied covariance matrices can be used in `summary()`, `broom::tidy()`, and average probability contrasts, while the prediction standard errors in this example use expected Fisher information.
 
-# Prediction quality and the common-slope assumption
+## Prediction scores, calibration, and graphical slope comparisons {#ordinal-prediction-assessment}
 
 Good numerical convergence establishes that the estimating equations were solved, but the fitted probabilities also need to describe the outcome distribution adequately. Prediction scores summarize discrepancies, while calibration plots indicate where those discrepancies occur. Assessing predictions on observations excluded from fitting helps distinguish predictive performance from agreement with the training sample.
 
@@ -322,7 +402,7 @@ plot(assumption_check,type="proportional.odds")
 
 Positive auxiliary slopes describe shifts toward higher outcomes, matching the ordinal model's sign convention. Dashed horizontal lines mark the common slopes from the ordinal fit, and the vertical intervals are separate 95% normal intervals for the auxiliary slopes. Variation across thresholds can suggest that the common-slope restriction deserves further investigation. The estimates use overlapping observations and are correlated, so their displayed uncertainty cannot be interpreted as independent tests of equal slopes. The comparison is a graphical diagnostic, with failed threshold fits retained in the returned table; it does not provide a formal proportional-odds test.
 
-## An analytic test of proportional odds
+## Testing the common-slope restriction {#ordinal-po-test}
 
 We can assess the common-slope restriction with `fastglm_po_test()`. The score measures how the log likelihood would initially change if the slopes were allowed to differ across thresholds. Its expected variation is calculated from the category probabilities under the fitted proportional-odds model, with adjustment for the estimated thresholds and common slopes. This calculation uses expected Fisher information, obtained by averaging over possible outcomes analytically. It requires neither simulated outcomes nor resampling to compute a p-value.
 
@@ -363,7 +443,7 @@ The chi-square approximation requires independent observations and a correctly s
 
 When assessment outcomes are supplied through `newdata` and `y`, the test refits its null to those outcomes using the complete rows with positive frequency. It then assesses proportional odds in that evaluation population. This differs from the prediction scores above, which assess predictions from the original fitted coefficients. Neither calculation establishes independence or correct specification of omitted predictors.
 
-## Separation and a bias-reduced null
+### Separation and a bias-reduced null
 
 When a predictor group contains only the highest outcome, increasing its slope can keep improving the likelihood without reaching a finite maximum. This is a form of separation. Additional iterations cannot produce a finite ML estimate in such a sample. The test checks for this configuration in predictors with two observed values and reports it directly.
 
@@ -385,7 +465,87 @@ This option has the same first-order chi-square limit under a regular interior n
 
 Bias reduction does not supply information about a predictor level that is entirely absent. Empty declared outcome categories and deficient designs therefore remain explicit unsupported cases for these tests. Failed null fits retain their convergence details. The printed explanation can be exported with `as.data.frame(result,details=TRUE)`.
 
-# Empty categories and the declared outcome scale
+# Repeated fits and large-data computation {#ordinal-computation}
+
+Repeated fitting reuses calculations for several responses on a retained predictor design. Streaming instead addresses storage by rereading observations in blocks. Both approaches support common-slope models with maximum likelihood or mean bias reduction, but they retain different information for later analysis.
+
+## Simulating responses from a fitted model
+
+Simulation from the fitted distribution can help assess the range of category patterns implied by a model. The housing frequencies give the number of residents at each recorded predictor row. `simulate()` therefore returns a list of count matrices, with a simulated count for each satisfaction category at each row.
+
+```{r}
+simulated <- simulate(fit_br,nsim=2,seed=61104)
+head(simulated[[1]])
+all(rowSums(simulated[[1]])==housing$Freq)
+```
+
+These counts already include the fitting frequencies. Refitting a simulated count matrix uses unit weights, because applying the original weights again would count the same residents twice. For an individual response with unit frequency in each row, `simulate()` instead returns a data frame of ordered factors. Both forms preserve the declared category order. Simulation conditions on the fitted parameters and does not itself account for estimation uncertainty.
+
+## Prepared designs and repeated outcomes
+
+Several ordered outcomes can share the same predictors, and simulation studies often fit many responses on a fixed design. A prepared ordinal design retains the predictor matrix and its formula transformations, so these calculations can be reused across responses. Each model still estimates its own thresholds and common slopes and has its own convergence assessment.
+
+The following preparation uses the housing predictors for both the observed satisfaction response and the two simulated count matrices above. The observed response uses the resident frequencies as weights. The simulated matrices already contain those frequencies and therefore use unit weights.
+
+```{r}
+prepared <- fastglm_ordinal_prepare(
+    ~Infl+Type+Cont,data=housing,
+    levels=levels(housing$Sat),firth=TRUE)
+prepared_original <- fastglm_ordinal(
+    prepared,housing$Sat,weights=housing$Freq,tol=1e-10)
+all.equal(coef(prepared_original),coef(fit_br),tolerance=1e-8)
+
+repeated <- fastglm_ordinal_batch(
+    prepared,simulated,weights=rep(1,nrow(housing)),tol=1e-10)
+vapply(repeated,function(fit) fit$converged,logical(1))
+predict(repeated[[1]],newdata=profiles)
+```
+
+The saved preparation includes centering, scaling, and rank checks. These depend on the predictors and each row's effective frequency, which is its individual frequency weight or the sum of its category counts times its weight. In this example, the effective row frequencies are the same for the observed and simulated responses. Changes to the predictor matrix, effective row frequencies, or standardization control rebuild the saved calculations. Offsets and the allocation of a fixed row total among categories can change while this preparation remains applicable. Category mappings, starting values, and parameter-dependent information are calculated separately for each fit.
+
+Prepared designs can also be saved and restored as R objects. This permits reuse across sessions without retaining a connection to a native fitting process. The following serialization reproduces the first refit using the restored preparation.
+
+```{r}
+restored <- unserialize(serialize(prepared,NULL))
+restored_fit <- fastglm_ordinal(
+    restored,simulated[[1]],weights=rep(1,nrow(housing)),tol=1e-10)
+all.equal(coef(restored_fit),coef(repeated[[1]]),tolerance=1e-10)
+```
+
+`saveRDS()` and `readRDS()` provide the corresponding file-based operation. Formula expressions that refer to external functions or objects still require those dependencies when constructing a new prediction design. Batch fitting currently processes a list of responses sequentially and retains the full fitted models. An individual response can be refitted with `fastglm_ordinal(prepared, response, ...)`; changing the formula requires preparing the revised design again. Preparation retains a dense design and, when standardization is used, its standardized values; its memory requirement therefore continues to grow with the number of rows and predictors.
+
+## Streaming from repeatable sources {#ordinal-streaming}
+
+When the complete predictor matrix would be too large to retain, `fastglm_ordinal_streaming()` fits a common-slope model by rereading blocks of observations. It supports all three links, maximum likelihood and mean bias reduction, frequency counts, and offsets. A source specifies how to read each block and how to construct the same predictor columns across blocks.
+
+The following example divides the housing table into four blocks. A file or database reader can provide those blocks without keeping the entire table in memory.
+
+```{r}
+housing_source <- fastglm_source(
+    function(k) housing[((k-1L)*18L+1L):(k*18L),,drop=FALSE],
+    n_chunks=4L,formula=Sat~Infl+Type+Cont,
+    prototype=housing,weights="Freq")
+fit_stream <- fastglm_ordinal_streaming(housing_source,firth=TRUE)
+fastglm_diagnostics(fit_stream)
+```
+
+The source must return the same observations and category definitions on each pass. Mean bias reduction first accumulates information from the complete source and then uses it to calculate the adjustment. Separate fits to individual blocks would estimate different models.
+
+Streamed fits retain coefficients and model-based covariance. Predictions and residuals can also be processed one block at a time, which avoids retaining the complete output. Averages and prediction assessment require explicit evaluation data; robust covariance, profiles, constrained score tests, and refitting bootstraps are not implemented for ordinal sources. The [large-data guide](large-data-fastglm.html#ordered-outcomes-from-repeatable-blocks) demonstrates block output and explains the memory and rereading costs. Selected nonparallel effects and prepared ordinal designs currently require dense data.
+
+## Numerical computation and likelihood conventions
+
+The numerical kernel evaluates likelihoods, scores, and information in C++. It processes probability calculations in blocks and avoids constructing a separate regression-design row for each observation and threshold. The dense input design is still retained in memory. Increasing the number of predictors or categories also increases the size of the parameter information matrix.
+
+For logistic ordinal models, each fitting evaluation reuses calculations involving the differences between adjacent thresholds. Algebraic identities also reduce repeated exponential and logarithm calculations for category probabilities and their derivatives. These changes preserve the likelihood and bias-adjustment equations. The additional storage depends on the number of categories; it does not add an array of probabilities for every observation. The benefit depends on the predictor dimension, number of categories, and number of fitting evaluations.
+
+The current interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, offsets, and frequency data. Dense models permit common slopes or selected threshold-specific slopes. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. `fastglm_ordinal_streaming()` fits common-slope models by repeatedly reading blocks of observations, including the complete-data information calculation required for mean bias reduction. The large-data vignette demonstrates this interface and explains which summaries can be calculated without retaining the observations. Sparse ordinal matrices and streamed nonparallel models require additional implementations.
+
+`logLik()` reports the ordinary categorical frequency likelihood at the returned estimate, omitting constants introduced by grouping observations. In contrast, `deviance()` compares the fit with a saturated model for the supplied response rows, so the grouped deviance depends on that grouping. For bias-reduced estimates, the reported likelihood is evaluated at those estimates rather than maximized by them.
+
+Model-based Wald inference uses expected Fisher information and normal approximations. ML profile intervals and ordinary or adjusted-score tests use the first-order chi-square references described above. Robust covariance and refitting bootstrap calculations have their own regularity and category-support requirements. Nonconverged fits retain their diagnostics and point predictions, while methods requiring a covariance refuse to report uncertainty. These distinctions are useful when deciding whether a fitted distribution is sufficiently well determined for the intended interpretation.
+
+# Category support and limits of inference {#ordinal-empty-categories}
 
 An outcome category can be absent from a sample even when it belongs to the intended scale. Removing an empty endpoint before bias reduction changes that scale. The following example retains an unobserved low category.
 
@@ -427,15 +587,3 @@ diag(vcov(interior_fit))
 ```
 
 The warning identifies the reduction, and the fitted object records the mapping. The tied thresholds have unavailable Wald standard errors, as does the probability of the removed category. A zero fitted gap does not justify ordinary uncertainty calculations for that gap. Other probability and cumulative-probability standard errors refer to the reduced category model. The convergence checks also use its parameters, because separate score components for the tied thresholds need not vanish at this boundary.
-
-# Computation and scope
-
-The numerical kernel evaluates likelihoods, scores, and information in C++. It processes probability calculations in blocks and avoids constructing a separate regression-design row for each observation and threshold. The dense input design is still retained in memory. Increasing the number of predictors or categories also increases the size of the parameter information matrix.
-
-For logistic ordinal models, each fitting evaluation reuses calculations involving the differences between adjacent thresholds. Algebraic identities also reduce repeated exponential and logarithm calculations for category probabilities and their derivatives. These changes preserve the likelihood and bias-adjustment equations. The additional storage depends on the number of categories; it does not add an array of probabilities for every observation. The benefit depends on the predictor dimension, number of categories, and number of fitting evaluations.
-
-The current interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, common slopes, offsets, and frequency data. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. `fastglm_ordinal_streaming()` fits the same models by repeatedly reading blocks of observations, including the complete-data information calculation required for mean bias reduction. The large-data vignette demonstrates this interface and explains which summaries can be calculated without retaining the observations. Sparse ordinal matrices and nonparallel slopes require additional implementations.
-
-`logLik()` reports the ordinary categorical frequency likelihood at the returned estimate, omitting constants introduced by grouping observations. In contrast, `deviance()` compares the fit with a saturated model for the supplied response rows, so the grouped deviance depends on that grouping. For bias-reduced estimates, the reported likelihood is evaluated at those estimates rather than maximized by them.
-
-Model-based Wald inference uses expected Fisher information and normal approximations. ML profile intervals and ordinary or adjusted-score tests use the first-order chi-square references described above. Robust covariance and refitting bootstrap calculations have their own regularity and category-support requirements. Nonconverged fits retain their diagnostics and point predictions, while methods requiring a covariance refuse to report uncertainty. These distinctions are useful when deciding whether a fitted distribution is sufficiently well determined for the intended interpretation.

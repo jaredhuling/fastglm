@@ -36,6 +36,7 @@ fastglm_ordinal(x, ...)
   block.size = 2048L,
   control = list(),
   link = "logit",
+  nonparallel = NULL,
   ...
 )
 
@@ -55,6 +56,7 @@ fastglm_ordinal(x, ...)
   control = list(),
   model = TRUE,
   link = "logit",
+  nonparallel = NULL,
   ...
 )
 }
@@ -98,6 +100,13 @@ link when \code{NULL} is supplied.}
 
 \item{...}{additional arguments to the default or formula method.}
 
+\item{nonparallel}{terms whose slopes may differ across cumulative
+thresholds. For a formula fit, supply a one-sided formula selecting
+complete terms from the fitted formula, such as \code{~ exposure} or
+\code{~ exposure:group}. \code{~ .} selects every predictor term. For a matrix,
+supply distinct column names or indices. \code{NULL} or an empty selection
+retains the common-slope model and its existing fitting path.}
+
 \item{data, subset, na.action, contrasts}{formula and model-frame arguments.}
 
 \item{model}{retain the formula model frame.}
@@ -106,21 +115,35 @@ link when \code{NULL} is supplied.}
 An object of class \code{fastglm_ordinal}, with thresholds \code{alpha},
 location coefficients \code{beta}, the full \code{coefficients} vector, category
 mapping, covariance, convergence diagnostics, and retained design.
+With selected nonparallel effects, the additional class
+\code{fastglm_ordinal_partial} provides threshold-specific slope methods;
+\code{gamma} stores these slopes as a predictor-by-threshold matrix, and \code{beta}
+contains only the common slopes.
 \code{nobs()} gives the total frequency, while \code{nobs.rows} counts rows with
 positive total frequency.
 }
 \description{
 Fits a cumulative-link model with common slopes and freely estimated
-thresholds, by maximum likelihood or mean bias reduction. Positive slopes
-shift probability toward higher outcome categories.
+thresholds, by maximum likelihood or mean bias reduction. Selected terms
+can have threshold-specific slopes in a dense fit with either estimation method.
+Positive slopes shift probability toward higher outcome categories.
 }
 \details{
-Thresholds are estimated in increasing order. The same location
+By default, thresholds are estimated in increasing order. The same location
 slopes apply to all cumulative probabilities. Full-rank location designs
 are required. Sparse matrices and
 repeatable sources are not accepted by this interface.
 
-An empty interior category is removed from the numerical fit and then
+With \code{nonparallel}, the model is
+\verb{link\{Pr(Y <= j)\} = alpha[j] - x_common beta - x_nonparallel gamma[,j] - offset}.
+A selected predictor has a separate slope at each threshold and no
+additional common slope. Fitting requires every declared category to
+have positive frequency. The cumulative predictors must remain ordered
+at the observed predictor values, and predictions check this condition
+at each supplied row. Ordering at training values does not establish
+validity under extrapolation. See \link{ordinal-partial-methods}.
+
+In common-slope models, an empty interior category is removed from the numerical fit and then
 restored to the declared scale with zero fitted probability and coincident
 thresholds. Convergence and information refer to the reduced model.
 Standard errors for the tied thresholds are unavailable. Bias-reduced fits
@@ -131,8 +154,8 @@ The covariance uses inverse expected Fisher information at the fitted
 estimate. It gives a first-order model-based approximation; this interface
 does not provide ordinal penalized-profile inference. Robust covariance
 is available through \code{fastglm_vcov()} or \code{vcov(type="HC0")} for converged
-fits with every declared category observed. Mean bias
-reduction solves the original threshold/common-slope adjusted equations.
+common-slope fits with every declared category observed. Mean bias
+reduction solves the adjusted equations for the original thresholds and slopes.
 It does not maximize a log-determinant penalized ordinal likelihood.
 
 \code{logLik()} evaluates the ordinary categorical frequency likelihood,

@@ -84,6 +84,7 @@ Pair resampling treats rows as independent sampling units. Cluster
   multiplicities, requiring memory proportional to the number of rows;
   neither procedure collects the full streaming design matrix.
 
+  Ordinal bootstrap support currently requires common slopes.
   For ordinal fits, pair and cluster resampling copy stored rows, including
   their frequency weights and grouped counts; they do not resample the
   individuals represented by a frequency row separately. Parametric

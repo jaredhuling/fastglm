@@ -291,6 +291,7 @@
 #' @export
 fastglm_po_test <- function(object,terms=NULL,null.estimation=c("ML","meanBR"),
                             newdata=NULL,y=NULL,weights=NULL,offset=NULL,control=list(),by.term=FALSE) {
+    .ordinal_partial_require_common(object,"The common-slope diagnostic")
     if(!inherits(object,"fastglm_ordinal")) stop("supply a fastglm_ordinal fit",call.=FALSE)
     null.estimation <- match.arg(null.estimation)
     if(!is.logical(by.term) || length(by.term)!=1L || is.na(by.term))

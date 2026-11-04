@@ -73,6 +73,14 @@ ordinal_native_fit <- function(x, y, counts, weights, offset, categories, start,
     .Call(`_fastglm_ordinal_native_fit`, x, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
 }
 
+ordinal_partial_native_evaluate <- function(x, z, y, counts, weights, offset, categories, coefficients, firth = FALSE, block_size = 2048L, condition_tol = 1e-14, link = 0L) {
+    .Call(`_fastglm_ordinal_partial_native_evaluate`, x, z, y, counts, weights, offset, categories, coefficients, firth, block_size, condition_tol, link)
+}
+
+ordinal_partial_native_fit <- function(x, z, y, counts, weights, offset, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L) {
+    .Call(`_fastglm_ordinal_partial_native_fit`, x, z, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
+}
+
 streaming_qr_eta <- function(x, beta, offset) {
     .Call(`_fastglm_streaming_qr_eta`, x, beta, offset)
 }

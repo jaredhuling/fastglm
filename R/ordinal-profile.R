@@ -17,6 +17,7 @@
 }
 
 .ordinal_profile_setup <- function(object,control,profile=TRUE) {
+    .ordinal_partial_require_common(object,"Constrained profile and score inference")
     if(!inherits(object,"fastglm_ordinal")) stop("ordinal inference requires an ordinal model",call.=FALSE)
     if(profile && isTRUE(object$firth))
         stop("ordinal profile likelihood requires maximum-likelihood estimation; use an ML fit or fastglm_score_test() for adjusted-score inference",call.=FALSE)
@@ -286,7 +287,7 @@
 #' Evaluates ordinary or mean-bias-adjusted likelihood scores under linear
 #' constraints, after re-estimating the nuisance parameters. The information
 #' matrix and, when requested, the bias adjustment refer to the full model.
-#' @param object a converged ordinal model with retained dense data and every
+#' @param object a converged common-slope ordinal model with retained dense data and every
 #'   declared category observed.
 #' @param terms formula terms, or location coefficient names for a matrix fit.
 #'   The default jointly tests all location slopes.
@@ -330,7 +331,7 @@
 #'   Infeasible starts, failed nuisance fits, singular information, or exhausted
 #'   iterations return an unavailable test with an explanation. A finite
 #'   bias-reduced estimate does not guarantee a successful constrained fit.
-#'   Streaming fits and collapsed or empty categories are currently unsupported.
+#'   Nonparallel and streaming fits, and collapsed or empty categories, are currently unsupported.
 #' @returns A \code{fastglm_test} object with the package's common printed table,
 #'   numeric \code{as.data.frame()} extraction, and constrained-fit diagnostics.
 #' @references Kosmidis, I. (2014). Improved estimation in cumulative link models.

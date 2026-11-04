@@ -3,7 +3,7 @@
 #' Estimates the average rate of change in each category probability as a
 #' continuous predictor changes. Uncertainty uses the delta method, conditional
 #' on the supplied predictor values and averaging weights.
-#' @param object a converged \code{fastglm_ordinal} fit.
+#' @param object a converged common-slope \code{fastglm_ordinal} fit.
 #' @param variable name of one continuous numeric variable. For a formula fit,
 #'   this names the original variable in the data; interactions and smooth
 #'   transformations are differentiated together. For a matrix fit, this names
@@ -61,6 +61,7 @@
 fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
                                      vcov.=NULL,level=.95,type="response",
                                      eps=NULL,offset=NULL) {
+    .ordinal_partial_require_common(object,"Marginal-effect inference")
     if(!inherits(object,"fastglm_ordinal"))
         stop("marginal effects currently require a fastglm_ordinal fit",call.=FALSE)
     .ordinal_check_inference(object)

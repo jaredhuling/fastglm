@@ -283,6 +283,8 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
         stop("'proportional.odds' must be TRUE or FALSE",call.=FALSE)
     po.test <- match.arg(po.test)
     po.estimation <- match.arg(po.estimation)
+    if(proportional.odds || po.test!="none")
+        .ordinal_partial_require_common(object,"The common-slope diagnostic within assessment")
     if(po.test=="none" && (!is.null(po.terms) || length(po.test.control) || po.estimation!="ML"))
         stop("'po.terms', 'po.test.control', and 'po.estimation' require po.test = 'score'",call.=FALSE)
     training <- is.null(newdata) && is.null(y)
@@ -314,20 +316,29 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
         good <- !missing & exclusion[index]==""
         if(!any(good)) return(invisible(NULL))
         ii <- index[good]; z <- z[good,,drop=FALSE]; off <- off[good]
-        xx <- .ordinal_prediction_scale(z,object$working$center,object$working$scale)
-        location <- streaming_qr_eta(xx,object$working$beta,off)
-        if(any(!is.finite(location))) stop("ordinal assessment linear predictor is nonfinite",call.=FALSE)
+        partial <- inherits(object,"fastglm_ordinal_partial")
+        if(partial) {
+            kernel <- .ordinal_probability_block(object,z,off,rows=ii)
+            location <- NULL
+        } else {
+            xx <- .ordinal_prediction_scale(z,object$working$center,object$working$scale)
+            location <- streaming_qr_eta(xx,object$working$beta,off)
+            if(any(!is.finite(location))) stop("ordinal assessment linear predictor is nonfinite",call.=FALSE)
+            kernel <- if(.ordinal_link(object)!="logit") .ordinal_link_kernel(
+                object$working$alpha,location,.ordinal_link(object))
+        }
         counts <- .ordinal_assessment_counts(response,ii,K)
         frequency <- response$totals[ii]
         suffix <- counts
         for(j in seq.int(K-1L,1L)) suffix[,j] <- suffix[,j]+suffix[,j+1L]
         low <- rps <- logloss <- numeric(length(ii))
         alpha <- object$working$alpha
-        kernel <- if(.ordinal_link(object)!="logit") .ordinal_link_kernel(alpha,location,.ordinal_link(object))
         for(j in seq_len(q)) {
             low <- low+counts[,j]
-            eta <- alpha[object$threshold.map[j]]-location
-            if(is.null(kernel)) {F <- plogis(eta); S <- plogis(-eta)} else {
+            if(is.null(kernel)) {
+                eta <- alpha[object$threshold.map[j]]-location
+                F <- plogis(eta); S <- plogis(-eta)
+            } else {
                 F <- kernel$cumulative[,object$threshold.map[j]]
                 S <- kernel$survival[,object$threshold.map[j]]
             }
