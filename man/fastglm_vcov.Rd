@@ -27,7 +27,7 @@ omission after any formula subset. Each represented individual in a grouped
 frequency row belongs to that row's cluster; split the row if its members
 belong to different clusters.}
 
-\item{cadjust}{multiply clustered covariance by `G/(G-1)`.}
+\item{cadjust}{multiply clustered covariance by \code{G/(G-1)}.}
 
 \item{block.size}{maximum number of design rows processed at once.}
 
@@ -44,37 +44,38 @@ clusters times the number of coefficients. Streaming fits reread the source.
 }
 \details{
 For count and two-part models, the sandwich covariance uses joint
-  estimating scores and the observed derivative of their sum. Cluster scores
-  include both model components, so within-cluster dependence can produce
-  nonzero covariance between them. The Gamma mean equation does not depend
-  on dispersion; removing its common dispersion multiplier preserves the
-  fitted mean parameters and their sandwich covariance. These approximations
-  require independent observations, or independent clusters when supplied,
-  and identifiable interior parameters. For GLM, count, and two-part models,
-  sandwich covariance for bias-adjusted scores is not implemented.
+estimating scores and the observed derivative of their sum. Cluster scores
+include both model components, so within-cluster dependence can produce
+nonzero covariance between them. The Gamma mean equation does not depend
+on dispersion; removing its common dispersion multiplier preserves the
+fitted mean parameters and their sandwich covariance. These approximations
+require independent observations, or independent clusters when supplied,
+and identifiable interior parameters. For GLM, count, and two-part models,
+sandwich covariance for bias-adjusted scores is not implemented.
 
-  Ordinal robust covariance currently requires a retained common-slope fit.
-  For ordinal fits, the covariance uses the inverse observed negative
-  Jacobian of the ordinary likelihood score, rather than inverse expected
-  Fisher information. Independent-observation meat sums individual score
-  outer products linearly in the effective category frequencies. Cluster meat
-  instead sums individual scores within each cluster before taking outer
-  products. Thus a frequency row represents repeated independent individuals
-  unless a cluster identifier groups them together. With total frequency
-  \eqn{N}, parameter count \eqn{d}, and positive-frequency cluster count
-  \eqn{G}, HC1 multiplies independent covariance by \eqn{N/(N-d)} and
-  cluster covariance by \eqn{(N-1)/(N-d)}; \code{cadjust = TRUE} additionally
-  applies \eqn{G/(G-1)} to cluster covariance. Every declared category must
-  have positive frequency, and the fit must have converged.
+Ordinal robust covariance requires a retained dense design and supports
+common and threshold-specific slopes jointly.
+For ordinal fits, the covariance uses the inverse observed negative
+Jacobian of the ordinary likelihood score, rather than inverse expected
+Fisher information. Independent-observation meat sums individual score
+outer products linearly in the effective category frequencies. Cluster meat
+instead sums individual scores within each cluster before taking outer
+products. Thus a frequency row represents repeated independent individuals
+unless a cluster identifier groups them together. With total frequency
+\eqn{N}, parameter count \eqn{d}, and positive-frequency cluster count
+\eqn{G}, HC1 multiplies independent covariance by \eqn{N/(N-d)} and
+cluster covariance by \eqn{(N-1)/(N-d)}; \code{cadjust = TRUE} additionally
+applies \eqn{G/(G-1)} to cluster covariance. Every declared category must
+have positive frequency, and the fit must have converged.
 
-  For mean-bias-reduced ordinal fits, this is explicitly a first-order
-  ordinary-score sandwich evaluated at the bias-reduced estimate, not the
-  covariance of the exact adjusted equations. Its asymptotic interpretation
-  requires an interior regular limit, fixed parameter dimension, nonsingular
-  limiting score derivative, an appropriate independent-observation or
-  independent-cluster central limit theorem, and a score adjustment negligible
-  relative to the square root of the sample size. Finite estimates under
-  separation do not establish those conditions. This convention does not
-  promise finite-sample calibration or bias reduction under misspecification.
-  See [fastglm_bootstrap()] for refit-based uncertainty.
+For mean-bias-reduced ordinal fits, this is explicitly a first-order
+ordinary-score sandwich evaluated at the bias-reduced estimate, not the
+covariance of the exact adjusted equations. Its asymptotic interpretation
+requires an interior regular limit, fixed parameter dimension, nonsingular
+limiting score derivative, an appropriate independent-observation or
+independent-cluster central limit theorem, and a score adjustment negligible
+relative to the square root of the sample size. Finite estimates under
+separation do not establish those conditions. This convention does not
+promise finite-sample calibration or bias reduction under misspecification.
+See \code{\link[=fastglm_bootstrap]{fastglm_bootstrap()}} for refit-based uncertainty.
 }

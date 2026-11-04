@@ -13,7 +13,8 @@ fastglm_ordinal_streaming(
   tol = 1e-08,
   maxit = 200L,
   block.size = 2048L,
-  control = list()
+  control = list(),
+  nonparallel = NULL
 )
 }
 \arguments{
@@ -32,6 +33,11 @@ including categories absent from that block.}
 \item{firth, link, tol, maxit, block.size, control}{as in \code{\link[=fastglm_ordinal]{fastglm_ordinal()}}.
 \code{block.size} limits temporary calculations within a supplied block;
 the source determines the size of the block loaded into memory.}
+
+\item{nonparallel}{predictors whose slopes may differ across thresholds.
+Select complete model terms with a one-sided formula for a formula source,
+or columns by name or index for a matrix source. All declared categories
+must have positive total frequency for these models.}
 }
 \value{
 A \code{fastglm_ordinal_stream} object inheriting from

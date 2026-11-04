@@ -4,7 +4,7 @@
 \alias{fastglm_profile_test}
 \title{Profile likelihood inference}
 \usage{
-fastglm_profile_test(object, parm, null = 0, control = list())
+fastglm_profile_test(object, parm, null = 0, control = list(), contrast = NULL)
 }
 \arguments{
 \item{object}{a converged binomial-logit Firth model or an ordinal
@@ -12,80 +12,88 @@ maximum-likelihood model, with a retained dense design matrix and response
 and a full-rank design. Ordinal models require every category to be observed.}
 
 \item{parm}{coefficient names or indices. The test treats all selected
-coefficients jointly; confidence intervals profile each separately.}
+coefficients jointly; confidence intervals profile each separately.
+Omit \code{parm} when supplying an ordinal \code{contrast} matrix.}
 
 \item{null}{hypothesized coefficient values, in the order specified by
-`parm`. A scalar is repeated for every selected coefficient.}
+\code{parm}, or one value per row of \code{contrast}. A scalar is repeated.}
 
-\item{control}{named list of numerical controls: `maxit = 300` limits each
-nuisance optimization; `reltol = 1e-12` is its objective tolerance;
-`score.tol = 1e-5` bounds the adjusted score after scaling by coefficient
-standard errors; `root.tol = 1e-6` is the endpoint tolerance in these same
-standardized units; `max.expand = 25` limits bracket expansions; and
-`max.root = 100` limits root iterations.
-Ordinal controls are described in [fastglm_score_test()].}
+\item{control}{named list of numerical controls: \code{maxit = 300} limits each
+nuisance optimization; \code{reltol = 1e-12} is its objective tolerance;
+\code{score.tol = 1e-5} bounds the adjusted score after scaling by coefficient
+standard errors; \code{root.tol = 1e-6} is the endpoint tolerance in these same
+standardized units; \code{max.expand = 25} limits bracket expansions; and
+\code{max.root = 100} limits root iterations.
+Ordinal controls are described in \code{\link[=fastglm_score_test]{fastglm_score_test()}}.}
+
+\item{contrast}{optional numeric vector or full-row-rank numeric matrix
+for ordinal tests. Columns correspond to the full coefficient vector;
+names may select a subset. Each matrix row specifies a linear hypothesis. For example,
+differences between a predictor's threshold-specific slopes test whether
+that predictor has a common effect while other effects remain unrestricted.}
 }
 \value{
-`fastglm_profile_test()` returns a `fastglm_test` object inheriting
-  from `htest`, with a compact printed table and `as.data.frame()` and
-  optional `broom::tidy()` extraction. It retains the statistic,
-  degrees of freedom, p-value, coefficient estimates, hypothesized values,
-  the full and constrained log likelihoods (penalized for Firth fits, excluding constants
-  independent of coefficients), and `diagnostics` containing convergence,
-  scaled scores, optimizer codes, evaluation counts, and messages.
-  `confint(..., method = "profile")` returns a two-column `fastglm_confint` matrix with
-  `diagnostics`, `fit.diagnostics`, and `method` attributes. Each diagnostic
-  row identifies the coefficient and endpoint, convergence, likelihood-ratio
-  statistic and target, root error, scaled nuisance score, optimizer code,
-  and failure message.
+\code{fastglm_profile_test()} returns a \code{fastglm_test} object inheriting
+from \code{htest}, with a compact printed table and \code{as.data.frame()} and
+optional \code{broom::tidy()} extraction. It retains the statistic,
+degrees of freedom, p-value, coefficient estimates, hypothesized values,
+the full and constrained log likelihoods (penalized for Firth fits, excluding constants
+independent of coefficients), and \code{diagnostics} containing convergence,
+scaled scores, optimizer codes, evaluation counts, and messages.
+\code{confint(..., method = "profile")} returns a two-column \code{fastglm_confint} matrix with
+\code{diagnostics}, \code{fit.diagnostics}, and \code{method} attributes. Each diagnostic
+row identifies the coefficient and endpoint, convergence, likelihood-ratio
+statistic and target, root error, scaled nuisance score, optimizer code,
+and failure message.
 }
 \description{
 Tests one or more coefficient values by comparing an unrestricted maximum
 with the maximum under those constraints. The remaining coefficients are
 re-estimated. Binomial-logit Firth fits use their penalized likelihood;
 ordinal maximum-likelihood fits use their ordinary likelihood. For intervals, use
-`confint(object, method = "profile")`; the default `confint()` method remains
+\code{confint(object, method = "profile")}; the default \code{confint()} method remains
 Wald inference.
 }
 \details{
 For binomial-logit Firth models the objective is the binomial log likelihood plus one half of
-  the log determinant of the full Fisher information matrix. Tested columns
-  remain in that determinant when their coefficients are constrained.
-  Grouped binomial responses, frequency weights, and offsets retain their
-  fitted meanings. Effective successes and failures must be nonnegative
-  integer counts, allowing arithmetic round-off. Fractional power or survey
-  weights are unsupported. Zero-weight observations make no contribution.
+the log determinant of the full Fisher information matrix. Tested columns
+remain in that determinant when their coefficients are constrained.
+Grouped binomial responses, frequency weights, and offsets retain their
+fitted meanings. Effective successes and failures must be nonnegative
+integer counts, allowing arithmetic round-off. Fractional power or survey
+weights are unsupported. Zero-weight observations make no contribution.
 
-  For ordinal maximum-likelihood fits, the objective is the joint
-  cumulative-link log likelihood. Thresholds and untested slopes are
-  re-estimated subject to the selected coefficient constraints. Logit,
-  probit, and complementary log-log links, grouped category counts,
-  frequency weights, and offsets retain their fitted meanings. Ordinal
-  mean bias reduction does not generally maximize a penalized likelihood
-  and is unsupported by this profile method; [fastglm_score_test()] provides
-  an analytic score procedure with an explicit null-estimation convention.
+For ordinal maximum-likelihood fits, the objective is the joint
+cumulative-link log likelihood, including partial proportional-odds
+and other nonparallel cumulative-link models. Thresholds and untested slopes are
+re-estimated subject to the selected coefficient constraints. Logit,
+probit, and complementary log-log links, grouped category counts,
+frequency weights, and offsets retain their fitted meanings. Ordinal
+mean bias reduction does not generally maximize a penalized likelihood
+and is unsupported by this profile method; \code{\link[=fastglm_score_test]{fastglm_score_test()}} provides
+an analytic score procedure with an explicit null-estimation convention.
 
-  The likelihood-ratio statistic uses an asymptotic chi-square reference
-  with one degree of freedom per constraint. Profile intervals invert its
-  one-parameter version. These are approximations under an independent
-  binomial or ordinal sampling model, including frequency-weighted observations; they
-  are not exact finite-sample or cluster-robust procedures.
+The likelihood-ratio statistic uses an asymptotic chi-square reference
+with one degree of freedom per constraint. Profile intervals invert its
+one-parameter version. These are approximations under an independent
+binomial or ordinal sampling model, including frequency-weighted observations; they
+are not exact finite-sample or cluster-robust procedures.
 
-  Sparse, mapped, and streaming designs are currently unsupported rather
-  than converted to dense matrices. Native evaluation uses additional
-  memory of order the squared number of coefficients plus a fixed block
-  of rows. Ordinal constrained inference also creates a standardized dense
-  design, requiring additional storage proportional to observations times
-  predictors; it does not construct an observation-by-category-by-parameter
-  array.
+Sparse, mapped, and streaming designs are currently unsupported rather
+than converted to dense matrices. Native evaluation uses additional
+memory of order the squared number of coefficients plus a fixed block
+of rows. Ordinal constrained inference also creates a standardized dense
+design, requiring additional storage proportional to observations times
+predictors; it does not construct an observation-by-category-by-parameter
+array.
 
-  Every constrained optimization checks the ordinary or adjusted score of the free
-  coefficients. The unrestricted fit is checked and refined when needed.
-  Failed tests return missing statistics and p-values with a warning;
-  failed confidence limits are missing, with endpoint diagnostics attached.
-  No Wald replacement is made.
-  Optimization starts from the fitted solution; convergence diagnostics do
-  not establish that a global maximum has been found in a multimodal problem.
+Every constrained optimization checks the ordinary or adjusted score of the free
+coefficients. The unrestricted fit is checked and refined when needed.
+Failed tests return missing statistics and p-values with a warning;
+failed confidence limits are missing, with endpoint diagnostics attached.
+No Wald replacement is made.
+Optimization starts from the fitted solution; convergence diagnostics do
+not establish that a global maximum has been found in a multimodal problem.
 }
 \examples{
 d <- data.frame(y = rep(0:1, each = 10), x = rep(0:1, each = 10))
@@ -95,6 +103,6 @@ fastglm_profile_test(fit, parm = "x")
 }
 \references{
 Heinze, G. and Schemper, M. (2002). A solution to the problem of
-  separation in logistic regression. Statistics in Medicine, 21, 2409--2419.
-  \doi{10.1002/sim.1047}.
+separation in logistic regression. Statistics in Medicine, 21, 2409--2419.
+\doi{10.1002/sim.1047}.
 }

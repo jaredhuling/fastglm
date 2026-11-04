@@ -136,8 +136,8 @@ test_that("partial predictions use the joint covariance and preserve missing row
     expect_error(predict(fit,transform(new,g="unknown")),"new level")
     expect_error(predict(fit,transform(new,x=Inf)),"finite or missing")
     expect_error(predict(fit,new,se.fit=NA),"TRUE or FALSE")
-    expect_error(confint(fit,method="profile"),"not yet available")
-    expect_error(vcov(fit,type="HC0"),"not yet available")
+    expect_true(all(is.finite(confint(fit,parm=3L,method="profile"))))
+    expect_equal(vcov(fit,type="HC0"),fastglm_vcov(fit))
     expect_error(confint(fit,parm=c(3,3)),"duplicated")
 })
 

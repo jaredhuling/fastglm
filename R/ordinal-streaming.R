@@ -18,6 +18,10 @@
 #' @param firth,link,tol,maxit,block.size,control as in [fastglm_ordinal()].
 #'   `block.size` limits temporary calculations within a supplied block;
 #'   the source determines the size of the block loaded into memory.
+#' @param nonparallel predictors whose slopes may differ across thresholds.
+#'   Select complete model terms with a one-sided formula for a formula source,
+#'   or columns by name or index for a matrix source. All declared categories
+#'   must have positive total frequency for these models.
 #' @details The rows and values returned for each block must remain unchanged
 #'   during fitting and later prediction or residual calculations. Empty
 #'   blocks are not accepted; blocks with zero total frequency are allowed.
@@ -55,7 +59,7 @@
 #' @md
 #' @export
 fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FALSE,
-    link="logit",tol=1e-8,maxit=200L,block.size=2048L,control=list()) {
+    link="logit",tol=1e-8,maxit=200L,block.size=2048L,control=list(),nonparallel=NULL) {
     call <- match.call();call[[1L]] <- quote(fastglm::fastglm_ordinal_streaming)
     source <- if(inherits(source,"fastglm_source")) source else fastglm_source(source,n_chunks)
     if(!is.null(source$schema$terms) && !inherits(source$schema$terms,"terms"))
@@ -169,12 +173,21 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         positive.rows <- positive.rows+sum(good);saturated <- saturated+z$saturated
     }
     if(!is.finite(frequency) || frequency<=0) stop("ordinal fitting requires finite positive total frequency",call.=FALSE)
+    selected <- if(!is.null(source$schema$terms))
+        .ordinal_nonparallel_terms(nonparallel,source$schema$terms,
+            source$schema$assign[source$schema$assign!=0L]) else
+        list(columns=.ordinal_nonparallel_columns(nonparallel,state$columns),terms=character())
+    partial <- length(selected$columns)>0L
+    if(partial && any(category.totals<=0))
+        stop("nonparallel ordinal fitting requires every declared category to have positive frequency",call.=FALSE)
     response <- .ordinal_response_data(matrix(category.totals,nrow=1,dimnames=list(NULL,state$levels)),
-        levels=state$levels,firth=firth)
+        levels=state$levels,firth=firth || partial)
     response$grouped <- state$grouped;response$response.kind <- if(state$grouped) "counts" else "codes"
     response$n <- sum(state$rows);response$weights <- response$totals <- NULL
     response$counts <- matrix(numeric(),0L,0L);response$codes <- response$original.codes <- integer()
     p <- state$p;q <- length(response$levels)-1L;d <- p+q
+    common <- setdiff(seq_len(p),selected$columns)
+    if(partial) d <- q+length(common)+q*length(selected$columns)
     scale <- rep(1,p)
     if(p) {
         variance <- numeric(p)
@@ -206,16 +219,31 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
             z$codes[is.na(z$codes) & !good] <- 1L
             z$codes <- as.integer(z$codes)
         }
+        if(partial) {
+            z$Z <- z$X[,selected$columns,drop=FALSE]
+            z$X <- z$X[,common,drop=FALSE]
+        }
         z
     }
     cumulative <- cumsum(response$category.totals)[seq_len(q)]
     remaining <- rev(cumsum(rev(response$category.totals)))[-1L]
     alpha <- .ordinal_start_thresholds(cumulative,remaining,link)+offset.mean
-    fit <- ordinal_stream_native_fit(fetch,source$n_chunks,p,q+1L,c(alpha,numeric(p)),firth,
-        ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),ctl$max.step,
-        as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
-    object <- .ordinal_stream_result(fit,center,scale,response,frequency,positive.rows,
-        firth,link,ctl,tol,maxit,block.size,state$columns)
+    if(partial) {
+        fit <- ordinal_partial_stream_native_fit(fetch,source$n_chunks,length(common),
+            length(selected$columns),q+1L,c(alpha,numeric(d-q)),firth,
+            ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),ctl$max.step,
+            as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
+        object <- .ordinal_partial_result(fit,center,scale,response,frequency,positive.rows,
+            firth,link,ctl,tol,maxit,block.size,state$columns,selected$columns)
+        class(object) <- c("fastglm_ordinal_stream",class(object))
+        object$nonparallel.terms <- selected$terms
+    } else {
+        fit <- ordinal_stream_native_fit(fetch,source$n_chunks,p,q+1L,c(alpha,numeric(p)),firth,
+            ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),ctl$max.step,
+            as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
+        object <- .ordinal_stream_result(fit,center,scale,response,frequency,positive.rows,
+            firth,link,ctl,tol,maxit,block.size,state$columns)
+    }
     object$source <- source;object$fetch <- read;object$state <- state;object$call <- call
     object$deviance <- 2*(saturated-fit$loglik)
     object$terms <- source$schema$terms;object$xlevels <- source$schema$xlevels
@@ -306,14 +334,16 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
 predict.fastglm_ordinal_stream <- function(object,newdata=NULL,type=c("probability","response","cumulative","class","link"),
     se.fit=FALSE,offset=NULL,sink=NULL,...) {
     type <- match.arg(type)
+    predictor <- if(inherits(object,"fastglm_ordinal_partial"))
+        predict.fastglm_ordinal_partial else predict.fastglm_ordinal
     if(!is.null(newdata)) {
         if(!is.null(sink)) stop("'sink' is used when predicting from the fitted source",call.=FALSE)
-        return(predict.fastglm_ordinal(object,newdata,type,se.fit,offset,...))
+        return(predictor(object,newdata,type,se.fit,offset,...))
     }
     if(!is.null(offset)) stop("source prediction uses its recorded block offsets",call.=FALSE)
     .ordinal_stream_collect(object,function(z) {
         model <- object;model$terms <- NULL;model$prediction.offset.required <- FALSE
-        predict.fastglm_ordinal(model,z$X,type,se.fit,z$offset,...)
+        predictor(model,z$X,type,se.fit,z$offset,...)
     },sink)
 }
 

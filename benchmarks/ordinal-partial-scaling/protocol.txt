@@ -1,0 +1,81 @@
+Partial ordinal model scaling: development study
+
+Purpose
+-------
+Determine how evaluation and fitting cost change as the number of categories
+and threshold-specific predictors grows. This is a computational development
+study, not a calibration simulation or a new inferential claim. The estimator
+is the package's cumulative-link maximum likelihood or mean-bias-reduced
+adjusted-score root, with its existing convergence and domain checks.
+
+The defining implementation requirement is bounded source storage: one source
+block, source metadata, and matrices determined by parameter dimension. No
+observation-by-threshold-by-parameter design may be materialized. Prepared
+fits may retain the dense original/transformed design and must rebuild setup
+when that design, effective frequencies, standardization, or selected terms
+change.
+
+Question and design
+-------------------
+The grid uses n=1200 rows, two common predictors, K in {3,5,9} categories,
+and r in {1,4,8} varying predictors. Thus d=(K-1)+2+(K-1)*r.
+Links are logit, probit, and complementary log-log. Each fixed, seeded design
+has bounded predictors and strictly ordered training cumulative predictors.
+Integer grouped counts keep every category represented. The same inputs are
+used for both estimators and every representation. These fixtures target
+dimension growth, not boundary behavior; boundary tests live in testthat.
+
+First collect an R profile at the largest grid cell to distinguish setup and
+reader overhead from native fitting. R profiling cannot separate operations
+inside a native call, so it cannot alone justify a structured solver rewrite.
+Then measure native evaluation with and without the global adjustment and
+whole-model fitting. Report the adjustment's marginal cost cautiously because
+it is the difference between two measured evaluation times. Additional native
+profiling is required before attributing all remaining cost to factorization.
+
+Dense, prepared, and streamed fits are compared at the four corners of the
+category/predictor grid. A streamed block contains at most 200 observations.
+Record agreement of coefficients and model-based covariance before interpreting
+timings. The source deliberately retains a dense fixture for paired comparison;
+that benchmark reader does not demonstrate end-to-end external-storage memory
+use. Fit fields must not retain the complete design/response, and the recorded
+maximum block size must agree with the supplied source.
+
+Execution and outputs
+---------------------
+Run only after correctness checks pass and the machine is available for an
+isolated timing run. Use one BLAS/OpenMP thread. Invoke from the repository root:
+
+  Rscript benchmarks/ordinal-partial-scaling/run.R /absolute/new/output-directory
+
+An additional paired regression check runs baseline.R in separate R processes
+against the installed baseline and current libraries:
+
+  Rscript benchmarks/ordinal-partial-scaling/baseline.R /baseline/library /new/baseline.rds
+  Rscript benchmarks/ordinal-partial-scaling/baseline.R /current/library /new/current.rds
+
+This check fixes 1200 rows, four predictors, and four categories. It covers
+both the optimized common-slope path and two varying predictors, all links,
+and both estimators. Compare native evaluation and whole-fit timings together
+with the stored equations, coefficients, and covariance. Baseline native
+templating should not alter the statistical result or common-slope path.
+
+The output directory must not already exist. The runner records the complete
+configuration, source hashes, installed package path/version, session info,
+profile, and per-cell RDS/CSV records. Failed fits remain explicit records;
+they are not silently removed from comparisons. Five timing repetitions are
+development diagnostics, not precise hardware-independent performance claims.
+
+After placing baseline.rds and current.rds in the output directory, regenerate
+the report, comparison tables, and artifact manifest with:
+
+  Rscript benchmarks/ordinal-partial-scaling/summarize.R /absolute/results/directory benchmarks/ordinal-partial-scaling/report.txt
+
+Decision
+--------
+Preserve the current dense factorization unless profiling supplies evidence
+that its cost materially limits useful model dimensions. Separate costs of
+source rereading, rowwise information, the bias adjustment, and optimizer
+iterations before changing any numerical algorithm. Any later optimization
+must preserve the exact equations, stable predictor/gap arithmetic, and dense
+versus source agreement, and be checked on fresh cases after development.

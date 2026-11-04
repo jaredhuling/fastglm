@@ -143,7 +143,7 @@ These calculations retain one block of design rows, matrices whose size depends 
 
 # Ordered outcomes from repeatable blocks
 
-Ordinal models with common slopes can also be fitted without retaining the complete design or response. `fastglm_ordinal_streaming()` uses the same cumulative-link likelihood and mean bias-reduction equations as the common-slope specification in `fastglm_ordinal()`. The source must preserve the category order and predictor definitions across all blocks. A category or factor level may be absent from an individual block; the category totals and predictor rank are assessed across the complete source. Selected threshold-specific effects through `nonparallel` currently require a retained dense design, as described in the ordinal vignette.
+Ordinal models with common or selected threshold-specific slopes can also be fitted without retaining the complete design or response. `fastglm_ordinal_streaming()` uses the same cumulative-link likelihood and mean bias-reduction equations as `fastglm_ordinal()`. The source must preserve the category order and predictor definitions across all blocks. A category or factor level may be absent from an individual block; the category totals and predictor rank are assessed across the complete source. Selected threshold-specific effects use `nonparallel=~term` for formula sources, or predictor column names or indices for matrix sources. These partial models require positive total frequency in every declared category.
 
 The housing satisfaction data provide a small example with frequency weights. Here the reader selects rows from an in-memory table to make the construction visible. For a dataset larger than memory, the reader would obtain each block from a file or database instead.
 
@@ -157,6 +157,16 @@ ordinal_stream <- fastglm_ordinal_streaming(housing_source,firth=TRUE)
 summary(ordinal_stream)
 fastglm_diagnostics(ordinal_stream)
 ```
+
+To allow contact with other residents to have a separate association at each satisfaction threshold, the same source can be fitted with `nonparallel=~Cont`:
+
+```{r}
+ordinal_partial_stream <- fastglm_ordinal_streaming(
+    housing_source,nonparallel=~Cont,firth=TRUE)
+summary(ordinal_partial_stream)
+```
+
+The varying effects must produce ordered cumulative probabilities at the observed predictor values. Predictions check that condition again, since it need not hold when extrapolating beyond the observed predictor range. The [ordinal guide](ordinal-fastglm.html#ordinal-nonparallel) explains the model and its interpretation.
 
 Logit, probit, and complementary log-log links are supported with either maximum likelihood or mean bias reduction. For bias reduction, the information matrix is first accumulated over every block. A subsequent pass uses that global information to calculate the adjustment. Fitting separate bias-reduced models to the blocks would not produce the same estimator.
 

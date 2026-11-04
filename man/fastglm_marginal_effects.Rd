@@ -17,7 +17,8 @@ fastglm_marginal_effects(
 )
 }
 \arguments{
-\item{object}{a converged common-slope \code{fastglm_ordinal} fit.}
+\item{object}{a converged \code{fastglm_ordinal} fit, with common or
+threshold-specific slopes.}
 
 \item{variable}{name of one continuous numeric variable. For a formula fit,
 this names the original variable in the data; interactions and smooth
@@ -82,6 +83,10 @@ A marginal effect is a derivative, measured in probability units
   observation-by-parameter-by-category derivatives. Normal intervals are
   first-order approximations; the covariance and reduced-category conventions
   match \code{fastglm_average()}.
+  For nonparallel models, each cumulative probability uses its own slope.
+  Evaluation rows must lie within the fitted model's valid predictor domain.
+  Supplied covariance, including cluster covariance, retains covariance among
+  thresholds, common slopes, and threshold-specific slopes.
 }
 \examples{
 set.seed(91)

@@ -17,7 +17,6 @@
 }
 
 .ordinal_profile_setup <- function(object,control,profile=TRUE) {
-    .ordinal_partial_require_common(object,"Constrained profile and score inference")
     if(!inherits(object,"fastglm_ordinal")) stop("ordinal inference requires an ordinal model",call.=FALSE)
     if(profile && isTRUE(object$firth))
         stop("ordinal profile likelihood requires maximum-likelihood estimation; use an ML fit or fastglm_score_test() for adjusted-score inference",call.=FALSE)
@@ -27,6 +26,7 @@
     if(isTRUE(object$boundary) || any(object$category$category.totals<=0))
         stop("ordinal constrained inference requires every declared category to be observed",call.=FALSE)
     ctl <- .ordinal_profile_control(control)
+    if(inherits(object,"fastglm_ordinal_partial")) return(.ordinal_partial_profile_setup(object,ctl))
     b <- coef(object);q <- length(object$alpha);p <- length(object$beta);d <- q+p
     if(length(b)!=d || any(!is.finite(b)) || object$rank!=d)
         stop("ordinal constrained inference requires a full-rank identifiable model",call.=FALSE)
@@ -73,6 +73,7 @@
 }
 
 .ordinal_constraint_start <- function(setup,L,null,start,constraint) {
+    if(isTRUE(setup$partial)) return(.ordinal_partial_constraint_start(setup,null,start,constraint))
     b <- start
     if(nrow(L)) {
         nonzero <- L!=0
@@ -127,6 +128,7 @@
 }
 
 .ordinal_profile_predictor_step <- function(setup,delta) {
+    if(isTRUE(setup$partial)) return(.ordinal_partial_profile_predictor_step(setup,delta))
     shift <- if(setup$p) drop(setup$x%*%delta[setup$q+seq_len(setup$p)])[setup$positive] else 0
     alpha <- range(delta[seq_len(setup$q)])
     max(abs(alpha[1L]-shift),abs(alpha[2L]-shift))
@@ -139,7 +141,14 @@
     calls <- 0L
     evaluate <- function(gamma) {calls <<- calls+1L;setup$evaluate(gamma,adjusted)}
     finish <- function(gamma,state,code,message,iterations,score=Inf,step=Inf) {
-        coefficients <- if(length(gamma)) drop(setup$T%*%gamma) else rep(NA_real_,setup$d)
+        coefficients <- if(length(gamma)) if(isTRUE(setup$partial))
+            streaming_qr_eta(setup$T,gamma,numeric(setup$d)) else drop(setup$T%*%gamma) else rep(NA_real_,setup$d)
+        if(code==0L && isTRUE(setup$partial) && nrow(L)) {
+            residual <- streaming_qr_eta(L,coefficients,numeric(nrow(L)))-null
+            if(any(!is.finite(residual)) || any(abs(residual)>512*.Machine$double.eps*(1+abs(null)))) {
+                code <- 6L;message <- "linear constraints cannot be represented accurately in the reported coefficients"
+            }
+        }
         names(coefficients) <- names(setup$coefficients)
         list(coefficients=coefficients,working.coefficients=gamma,
             value=if(isTRUE(state$valid)) state$loglik else NA_real_,converged=code==0L,
@@ -166,7 +175,8 @@
         direction <- direction/max(1,step/(if(adjusted) min(1,ctl$max.step) else ctl$max.step))
         fraction <- 1
         if(setup$q>1L) {
-            gap <- diff(gamma[seq_len(setup$q)]);change <- diff(direction[seq_len(setup$q)])
+            gap <- if(isTRUE(setup$partial)) .ordinal_partial_profile_gaps(setup,gamma) else diff(gamma[seq_len(setup$q)])
+            change <- if(isTRUE(setup$partial)) .ordinal_partial_profile_gaps(setup,direction) else diff(direction[seq_len(setup$q)])
             decreasing <- change<0
             if(any(decreasing)) fraction <- min(fraction,.9*min(-gap[decreasing]/change[decreasing]))
         }
@@ -197,14 +207,21 @@
     max(0,value)
 }
 
-.ordinal_profile_test <- function(object,parm,null=0,control=list(),data.name=deparse(substitute(object))) {
+.ordinal_profile_test <- function(object,parm=NULL,null=0,control=list(),data.name=deparse(substitute(object)),contrast=NULL) {
     setup <- .ordinal_profile_setup(object,control)
-    parm <- .firth_profile_parameters(parm,setup$coefficients)
-    if(length(null)==1L) null <- rep(null,length(parm))
-    if(!is.numeric(null) || is.complex(null) || length(null)!=length(parm) || any(!is.finite(null)))
-        stop("'null' must contain one finite value per tested coefficient",call.=FALSE)
-    names(null) <- names(setup$coefficients)[parm]
-    L <- diag(setup$d)[parm,,drop=FALSE]
+    if(!is.null(contrast)) {
+        if(!is.null(parm)) stop("supply either 'parm' or 'contrast', not both",call.=FALSE)
+        L <- .fastglm_wald_contrast(object,NULL,contrast)$contrast
+    } else {
+        parm <- .firth_profile_parameters(parm,setup$coefficients)
+        L <- diag(setup$d)[parm,,drop=FALSE]
+        dimnames(L) <- list(names(setup$coefficients)[parm],names(setup$coefficients))
+    }
+    if(length(null)==1L) null <- rep(null,nrow(L))
+    if(!is.numeric(null) || is.complex(null) || length(null)!=nrow(L) || any(!is.finite(null)))
+        stop("'null' must contain one finite value per constraint",call.=FALSE)
+    names(null) <- rownames(L)
+    .ordinal_constraint_basis(setup,L)
     full <- .ordinal_constrained_fit(setup);restricted <- NULL;statistic <- NA_real_
     message <- tryCatch({
         if(!full$converged) stop(paste("unrestricted fit:",full$message),call.=FALSE)
@@ -215,9 +232,10 @@
     # Full native states are useful during computation but are not duplicated
     # in the public diagnostic record.
     strip <- function(fit) {fit$state <- fit$basis <- NULL;fit}
-    structure(list(statistic=c(`likelihood ratio`=statistic),parameter=c(df=length(parm)),
-        p.value=if(is.finite(statistic)) pchisq(statistic,length(parm),lower.tail=FALSE) else NA_real_,
-        estimate=full$coefficients[parm],null.value=null,alternative="two.sided",
+    structure(list(statistic=c(`likelihood ratio`=statistic),parameter=c(df=nrow(L)),
+        p.value=if(is.finite(statistic)) pchisq(statistic,nrow(L),lower.tail=FALSE) else NA_real_,
+        estimate=setNames(drop(L%*%full$coefficients),rownames(L)),null.value=null,
+        contrast=if(!is.null(contrast)) L else NULL,alternative="two.sided",
         method="Ordinal likelihood ratio test (asymptotic chi-square reference)",data.name=data.name,
         loglik=c(full=full$value,restricted=if(is.null(restricted)) NA_real_ else restricted$value),
         null.estimation="ML",frequency=setup$frequency,observations=setup$observations,
@@ -287,7 +305,8 @@
 #' Evaluates ordinary or mean-bias-adjusted likelihood scores under linear
 #' constraints, after re-estimating the nuisance parameters. The information
 #' matrix and, when requested, the bias adjustment refer to the full model.
-#' @param object a converged common-slope ordinal model with retained dense data and every
+#' @param object a converged ordinal model, including a nonparallel model,
+#'   with retained dense data and every
 #'   declared category observed.
 #' @param terms formula terms, or location coefficient names for a matrix fit.
 #'   The default jointly tests all location slopes.
@@ -331,7 +350,12 @@
 #'   Infeasible starts, failed nuisance fits, singular information, or exhausted
 #'   iterations return an unavailable test with an explanation. A finite
 #'   bias-reduced estimate does not guarantee a successful constrained fit.
-#'   Nonparallel and streaming fits, and collapsed or empty categories, are currently unsupported.
+#'   For nonparallel models, constraints and all nuisance updates retain ordered
+#'   cumulative predictors at each positive-frequency training row. Equality
+#'   contrasts between a predictor's threshold-specific slopes test its common
+#'   slope restriction while allowing other predictors to remain nonparallel.
+#'   Tests of a term's zero effects are different from tests of equal slopes.
+#'   Streaming fits and collapsed or empty categories are currently unsupported.
 #' @returns A \code{fastglm_test} object with the package's common printed table,
 #'   numeric \code{as.data.frame()} extraction, and constrained-fit diagnostics.
 #' @references Kosmidis, I. (2014). Improved estimation in cumulative link models.

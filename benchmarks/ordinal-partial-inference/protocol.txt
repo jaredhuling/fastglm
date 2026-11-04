@@ -1,0 +1,37 @@
+Fresh deterministic confirmation of partial ordinal inference
+Frozen 2026-11-04 after development equation checks and before this confirmation
+
+Use the eighteen-row fixture in confirm.R, distinct from development and unit
+test data. All four categories are represented; two predictors are nonparallel,
+one is common, offsets are nonzero, and integer frequency weights include zeros.
+Run logit, probit and complementary log-log. No random inference simulation,
+rejection-rate calibration, timing comparison or tuning to results is included.
+
+Check a two-degree-of-freedom hypothesis equating z1 slopes across thresholds
+while z2 remains nonparallel. For ML, compare its constrained likelihood with
+a reduced native model and compare both full/reduced likelihoods and all-row
+probabilities with ordinal::clm nominal-effect fits. Likelihood tolerance 2e-7,
+probability tolerance 2e-6, likelihood-ratio tolerance 2e-7.
+
+For ML and full-model meanBR score tests, recompute joint category log-score
+derivatives, Hessians and the generic cumulant adjustment using numDeriv. Check
+the returned nuisance equations (standardized tolerance 5e-7), efficient
+quadratic (absolute tolerance 2e-5), and linear constraints (2e-11). Verify
+invariance under nonsingular changes of constraint row basis (2e-7).
+
+Compute an 80% ML profile interval for a specified threshold-specific coefficient.
+Independently maximize the ordinary likelihood using nlminb at both endpoints,
+with that coefficient fixed. Check constrained log likelihood at 2e-7 and the
+likelihood-ratio endpoint target at 3e-5. Require independent convergence.
+
+Expanded integer-frequency rows must reproduce both LR and adjusted-score
+statistics within 2e-7, and identical offset semantics. Failures, including a
+failed external optimizer, are retained. The runner writes comparisons as they
+are completed, refuses existing output, and preserves session/source hashes.
+No tolerance or hypothesis changes after viewing these results.
+
+Unit tests separately cover observed-domain validity with unordered raw
+thresholds, infeasible row-gap constraints, zero-frequency extrapolation rows,
+failed iteration limits, unrepresentable affine constraints, and compensated
+extreme-covariate arithmetic. Their fixtures are development regressions, not
+the fresh confirmation dataset.

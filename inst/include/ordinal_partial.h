@@ -13,8 +13,8 @@ struct PartialOrdinalData : OrdinalData {
     int pn;
     PartialOrdinalData(Rcpp::NumericMatrix X,Rcpp::NumericMatrix Z,
         Rcpp::IntegerVector y,Rcpp::NumericMatrix Y,Rcpp::NumericVector w,
-        Rcpp::NumericVector off,int categories,int block_size,int link_code=0) :
-        OrdinalData(X,y,Y,w,off,categories,block_size,link_code),
+        Rcpp::NumericVector off,int categories,int block_size,int link_code=0,bool require_positive=true) :
+        OrdinalData(X,y,Y,w,off,categories,block_size,link_code,require_positive),
         z(Z.begin(),Z.nrow(),Z.ncol()),pn(Z.ncol()) {
         if(Z.nrow()!=n || !z.allFinite())
             Rcpp::stop("nonparallel ordinal design must be finite and match the common design rows");
@@ -22,6 +22,7 @@ struct PartialOrdinalData : OrdinalData {
         if(dimension>std::numeric_limits<int>::max()) Rcpp::stop("ordinal parameter dimension is too large");
         d=static_cast<int>(dimension);
     }
+    template<class Function> void visit(Function&& function) const { function(*this); }
     void predictors(int i,const VectorXd& b,VectorXd& eta,bool with_offset=true) const {
         // Accumulate the complete predictor before rounding. Separately
         // rounded common/nonparallel locations can cancel after losing alpha.
@@ -211,13 +212,14 @@ inline void partial_add_adjustment(const PartialOrdinalData& data,const VectorXd
     }
 }
 
-inline PartialOrdinalState partial_evaluate(const PartialOrdinalData& data,
+template<class Data>
+inline PartialOrdinalState partial_evaluate(const Data& data,
     const VectorXd& b,bool firth,double condition_tol) {
     if(b.size()!=data.d || !b.allFinite()) throw OrdinalEvaluationError("invalid nonparallel ordinal parameters");
     PartialOrdinalState state(data.d);
-    partial_add_information(data,b,state);
+    data.visit([&](const PartialOrdinalData& block) {partial_add_information(block,b,state);});
     ordinal_factor_information(state,data.d-data.q,data.q,condition_tol);
-    if(firth) partial_add_adjustment(data,b,state);
+    if(firth) data.visit([&](const PartialOrdinalData& block) {partial_add_adjustment(block,b,state);});
     state.score=state.ordinary+state.adjustment;
     if(!state.score.allFinite() || !state.inverse.allFinite())
         throw OrdinalEvaluationError("non-finite nonparallel ordinal score or covariance");
@@ -233,7 +235,8 @@ inline Rcpp::List partial_state_list(const PartialOrdinalState& state) {
     Rcpp::List out=ordinal_state_list(state);out["minimum.gap"]=state.minimum_gap;return out;
 }
 
-inline Rcpp::List partial_fit(const PartialOrdinalData& data,const VectorXd& start,
+template<class Data>
+inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
     bool firth,double score_tol,double step_tol,int maxit,double max_step,int max_halves,
     double condition_tol,bool trace) {
     if(!(score_tol>0) || !(step_tol>0) || maxit<1 || !(max_step>0) || max_halves<1 ||

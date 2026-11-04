@@ -101,6 +101,14 @@ ordinal_stream_native_fit <- function(fetch, n_chunks, predictors, categories, s
     .Call(`_fastglm_ordinal_stream_native_fit`, fetch, n_chunks, predictors, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
 }
 
+ordinal_partial_stream_native_evaluate <- function(fetch, n_chunks, common_predictors, nonparallel_predictors, categories, coefficients, firth = FALSE, block_size = 2048L, condition_tol = 1e-14, link = 0L) {
+    .Call(`_fastglm_ordinal_partial_stream_native_evaluate`, fetch, n_chunks, common_predictors, nonparallel_predictors, categories, coefficients, firth, block_size, condition_tol, link)
+}
+
+ordinal_partial_stream_native_fit <- function(fetch, n_chunks, common_predictors, nonparallel_predictors, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L) {
+    .Call(`_fastglm_ordinal_partial_stream_native_fit`, fetch, n_chunks, common_predictors, nonparallel_predictors, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
+}
+
 prepare_glm_constant <- function(x, weights, leverage, code) {
     .Call(`_fastglm_prepare_glm_constant`, x, weights, leverage, code)
 }

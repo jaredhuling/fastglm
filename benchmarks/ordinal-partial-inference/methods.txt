@@ -1,0 +1,183 @@
+Analytic inference for partial cumulative-link models
+Development specification, baseline 351d808, 2026-11-04
+
+Scientific target
+-----------------
+Test a specified linear hypothesis L theta = h within an identified partial
+cumulative-link model. Examples include a zero common effect, a particular
+threshold-specific effect, or equality of one predictor's slopes across all
+thresholds while other predictors remain nonparallel. A zero-effect test and
+a common-slope test are different hypotheses. Parameters and frequency weights
+retain the definitions validated in partial-proportional-odds-validation/.
+
+Maximum-likelihood inference
+----------------------------
+The ordinary likelihood is optimized in the affine constraint L theta = h,
+intersected with the strict row-specific probability domain. The unrestricted
+and restricted likelihoods yield LR = 2(l_full-l_restricted). The chi-square
+reference has rank(L) degrees of freedom under an interior true null, fixed
+finite dimension, full limiting information, independent ordinal observations
+or integer frequency counts, and regular consistent ML fits. Convergence is
+not a proof of these assumptions or of a global maximum. Probability boundaries
+are not ordinary chi-square cases. Failed optimization returns unavailable
+inference; it does not turn a finite search bound into an infinite interval.
+
+A profile confidence limit for one coefficient solves LR = chi-square(1)
+quantile, with every nuisance fit constrained to remain in the probability
+domain. This is ordinary likelihood inference only. The mean-bias adjustment
+is not generally a gradient, so no scalar Firth penalty is invented for these
+ordinal profiles.
+
+Full-model adjusted-score inference
+-----------------------------------
+Let B be a full-column-rank basis of null(L) in the fitted linear coordinates,
+I the full-model expected information, and U* = U+A the full-model adjusted
+score. The constrained nuisance estimate solves B' U* = 0 without replacing A
+by the adjustment of a smaller model. Define
+
+ M = Identity - I B (B' I B)^(-1) B',
+ e = M U*,      T = e' I^(-1) e.
+
+For ordinary ML scores use A=0. The projection removes residual nuisance score
+numerically and is also necessary when the chosen constrained nuisance rule
+does not make the ordinary nuisance score zero. Algebraically M I M' equals
+I - I B (B' I B)^(-1) B' I, an efficient information matrix of rank rank(L).
+Whitening by I^(-1/2) makes the corresponding matrix an orthogonal projection
+of rank rank(L), so a standard normal limiting score gives chi-square(rank(L)).
+
+Under local smoothness and an interior consistent root, I=O(n), U=O_p(sqrt(n)),
+A=O(1), and its local derivatives have order one. A Taylor expansion of the
+projected nuisance equation gives a root-n-consistent nuisance estimate. Its
+leading score shift is I B times a nuisance displacement, annihilated by M.
+The adjustment contributes O(1), hence o_p(1) after score normalization by
+sqrt(n). The statistic therefore has the same first-order limit as the ordinary
+efficient-score statistic. This argument requires a regular fixed-dimensional
+sequence with nonsingular limiting information and an appropriate score CLT;
+it is not a higher-order or small-sample calibration theorem. The parameter
+design may contain unrestricted threshold-specific slopes: the proof uses
+only the full model, linear constraints, and interior regularity.
+
+For an invertible constant coordinate change theta=S delta, transform L to LS,
+U* to S'U*, I to S'IS, and the nuisance basis accordingly. The constrained
+equations and efficient quadratic are unchanged. Linear equality contrasts
+between threshold slopes are therefore valid even when other slopes remain
+nonparallel. A nonlinear reparameterization has a different mean-bias target
+and is outside this argument. A reduced-model meanBR fit cannot generally be
+substituted for the constrained full-model adjusted root.
+
+Feasibility and failure contract
+--------------------------------
+For every positive-frequency row, adjacent cumulative-predictor gaps are
+ alpha_(j+1)-alpha_j - z'(gamma_(j+1)-gamma_j) > 0.
+Common slopes and offsets cancel. The intersection of these linear halfspaces
+and the null affine space is convex. Raw thresholds need not be ordered when
+the predictor origin is outside the data domain. Feasible-start searches and
+step bounds must use row-specific gaps. Zero-frequency rows do not impose
+fitted-likelihood constraints. All native probability and information checks
+remain active, including at a proposed constrained solution.
+
+Nearest sources and status
+---------------------------
+Kosmidis (2014), Improved estimation in cumulative link models, JRSS B 76,
+169-196, DOI 10.1111/rssb.12025. Re-read equations (5)-(9), Section 11's equality
+contrasts, and Section 12's adjusted-score discussion in the cached published
+PDF. The full-model adjustment and first-order motivation are established.
+The exact nuisance projection and constrained-full-model-root convention above
+specify this package's procedure beyond that paper's general discussion.
+The paper's wine score statistic uses a different nuisance convention and is
+not a numerical target for this implementation. Source location and SHA256:
+https://wrap.warwick.ac.uk/id/eprint/98828/7/WRAP-improved-estimation-cumulative-link-models-Kosmidis-2014.pdf
+dd66691df64cc60ec764460dfff70f426195e69c6a749a6c434a5f206c9776e2
+
+The adjustment's independent generic-cumulant derivation, coordinate audit,
+primary-source reading, and frozen validation are retained in the preceding
+partial-proportional-odds-validation study. This pass adapts established
+likelihood and efficient-score inference to its row-dependent domain; it makes
+no estimator or inference novelty claim. No inference calibration simulation
+is used. Development checks precede production changes; fresh deterministic
+confirmation and independent constrained likelihood checks follow.
+
+Assumption and implementation audit
+-----------------------------------
+Checked directly: declared categories and effective frequency-count semantics
+come from ordinal response validation; full-rank constraints come from scaled
+QR; full-model information is checked by the native evaluator; all proposed
+states have positive probabilities on positive-frequency rows. Step bounds
+are obtained from the row-specific linear gaps. Constraint starts remain in
+the affine null space and search its intersection with those halfspaces.
+Failure to find a start is reported as a failed search, not a proof of global
+infeasibility. Starting margin reductions do not modify the statistical domain.
+
+Guaranteed to numerical tolerance: row-gap sums retain original threshold and
+slope coefficients, with compensated accumulation before rounding. Predictor
+steps use one compensated sum across threshold, common and varying effects.
+Affine projection checks representability, and final reported coefficients
+are checked against the original constraints. A requested difference smaller
+than representable coefficient spacing returns unavailable inference rather
+than silently changing the null hypothesis. No probability clipping, scalar
+penalty, pseudoinverse, degrees-of-freedom reduction or Wald fallback is used.
+
+Taken as statistical assumptions: independence, correct model specification,
+an interior true parameter, fixed dimension, nonsingular limiting information,
+and consistent roots/local quadratic likelihood expansion. The fixed bounded
+designs with positive probabilities and all cells sampled at growing integer
+frequencies provide a concrete nondegenerate regime in which the ordinary
+multinomial CLT and smooth fixed-dimensional arguments apply. Under those
+conditions, expanding both constrained and unrestricted log likelihoods gives
+LR equal to the ordinary efficient-score quadratic plus o_p(1). The adjusted
+score argument above supplies only the same first-order reference. Arbitrary
+model selection, clustered observations, increasing dimension, and probability
+boundary nulls are outside this justification. Robust covariance elsewhere in
+the package does not convert these likelihood-based tests into clustered tests.
+
+Evidence and status after implementation
+----------------------------------------
+The pointwise development preflight passed 21 of 21 checks before enabling
+partial adjusted-score inference. Independent numerical category-log-score
+cumulants agreed with the native adjustment within 8.29e-10; efficient
+quadratics agreed within 2.11e-9. Projection identities agreed within 2.48e-14.
+These are algebraic and numerical development checks, not calibration evidence.
+
+The fresh confirmation passed 84 of 84 prespecified comparisons across all
+three links. Results are in confirmation-2026-11-04-corrected/. Maximum errors:
+ full/reduced ML log likelihood versus ordinal::clm: 5.69e-13;
+ all-row ML probabilities versus ordinal::clm: 2.15e-11;
+ generic-cumulant efficient score quadratic: 2.86e-9;
+ independent standardized nuisance equation: 1.01e-7;
+ contrast row-basis invariance: 1.14e-13;
+ independent profile endpoint log likelihood: 1.71e-13;
+ profile likelihood-ratio target: 2.73e-7;
+ grouped versus expanded test statistics: 3.19e-12;
+ linear-constraint residual: 1.39e-17.
+The nuisance equation error includes numerical differentiation and falls below
+its prespecified 5e-7 tolerance. The production solver checks its own score and
+predictor-update tolerances separately.
+
+The initial confirmation attempt is retained in confirmation-2026-11-04/.
+It stopped at a script error: grouped and expanded responses used different
+category labels, so a named contrast correctly failed validation. All completed
+comparisons passed. The only correction copied grouped category labels to the
+expanded response; no data values, hypotheses, tolerances, solvers or package
+code changed. The original runner and explanation remain with that attempt.
+
+The new partial-profile test file passes 129 expectations, including source
+domain checks, equality contrasts with other slopes still nonparallel, generic
+adjusted-score validation, independent profile maximization, impossible row-gap
+nulls, exhausted iterations, zero-frequency rows, extreme cancellation,
+unrepresentable constraints, invalid interval levels and default parameters.
+Existing common-slope profile tests also pass. Production changes are limited
+to generalized constrained inference and contrast dispatch; dense native model
+equations are unchanged. Streaming constrained inference remains unsupported.
+
+The matrix identities and linear-domain geometry are exact algebra. The
+chi-square interpretation is conditional on the stated regularity assumptions.
+The reported implementation agreements are empirical numerical evidence.
+Higher-order calibration, universal finite roots and global convergence remain
+unestablished; none is claimed. No inference calibration simulation was run.
+
+Reproduction from the repository root:
+ Rscript benchmarks/ordinal-partial-inference/preflight.R INSTALLED_LIBRARY NEW_OUTPUT
+ Rscript benchmarks/ordinal-partial-inference/confirm.R NEW_OUTPUT
+The second command loads current R source with pkgload and the already compiled
+library, without rebuilding. Each output directory must be new. Source hashes,
+session details, comparisons and fitted diagnostic records are preserved.

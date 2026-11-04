@@ -1,0 +1,22 @@
+"link","check","error","tolerance","passed"
+0,"ordinary.score",2.31934960126523e-09,2e-05,TRUE
+0,"information",1.22601591101557e-08,2e-05,TRUE
+0,"adjustment",4.26044532986225e-10,2e-05,TRUE
+0,"score",2.52331444627885e-09,2e-05,TRUE
+0,"efficient quadratic",1.23381749261853e-09,2e-05,TRUE
+0,"annihilation",1.80098374538211e-14,1e-10,TRUE
+0,"covariance",1.3427988895057e-14,1e-10,TRUE
+1,"ordinary.score",4.87284346206707e-09,2e-05,TRUE
+1,"information",1.05726485344348e-08,2e-05,TRUE
+1,"adjustment",5.50208101302019e-10,2e-05,TRUE
+1,"score",4.82551598679493e-09,2e-05,TRUE
+1,"efficient quadratic",2.02003747062918e-10,2e-05,TRUE
+1,"annihilation",1.85734562782777e-14,1e-10,TRUE
+1,"covariance",2.47656152020348e-14,1e-10,TRUE
+2,"ordinary.score",1.16704406138979e-08,2e-05,TRUE
+2,"information",1.35093785047502e-08,2e-05,TRUE
+2,"adjustment",8.28020457754874e-10,2e-05,TRUE
+2,"score",1.24984609328749e-08,2e-05,TRUE
+2,"efficient quadratic",2.10486872376237e-09,2e-05,TRUE
+2,"annihilation",2.25305005974026e-14,1e-10,TRUE
+2,"covariance",2.44984059448332e-14,1e-10,TRUE

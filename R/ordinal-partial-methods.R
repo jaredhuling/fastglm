@@ -42,6 +42,7 @@
 NULL
 
 #' @rdname ordinal-partial-methods
+#' @md
 #' @export
 coef.fastglm_ordinal_partial <- function(object,component=c("all","location","threshold","common","nonparallel"),...) {
     if(length(list(...))) stop("unused nonparallel coefficient arguments",call.=FALSE)
@@ -49,29 +50,42 @@ coef.fastglm_ordinal_partial <- function(object,component=c("all","location","th
 }
 
 #' @rdname ordinal-partial-methods
-#' @param type for `vcov()`, the covariance convention (`"model"` only).
+#' @md
+#' @param type for `vcov()`, `"model"` for inverse expected information, or
+#'   `"HC0"` or `"HC1"` for ordinary-score sandwich covariance. All thresholds
+#'   and both slope blocks enter the joint observed-information calculation.
 #'   For `predict()`, the scale: `"probability"` (or `"response"`),
 #'   `"cumulative"`, `"class"`, or `"link"`. Nonparallel link predictions
 #'   are an observation-by-threshold matrix of cumulative predictors
 #'   `alpha[j] - x_common beta - x_nonparallel gamma[,j] - offset`.
 #'   Applying the inverse link gives the cumulative probabilities.
-#' @param cluster,cadjust,block.size accepted for interface consistency;
-#'   robust covariance is not yet implemented for these fits.
+#' @param cluster,cadjust,block.size cluster identifiers, cluster adjustment,
+#'   and processing block size, as in [fastglm_vcov()]. Supplying `cluster`
+#'   requires `type="HC0"` or `type="HC1"`. For mean-bias-reduced fits,
+#'   sandwich covariance uses the same first-order ordinary-score convention
+#'   and regularity assumptions described there.
 #' @export
 vcov.fastglm_ordinal_partial <- function(object,component=c("all","location","threshold","common","nonparallel"),
     type=c("model","HC0","HC1"),cluster=NULL,cadjust=TRUE,block.size=8192L,...) {
     if(length(list(...))) stop("unused nonparallel covariance arguments",call.=FALSE)
     component <- match.arg(component);type <- match.arg(type)
-    if(type!="model" || !is.null(cluster))
-        stop("robust covariance is not yet available for nonparallel ordinal fits",call.=FALSE)
+    if(type=="model" && !is.null(cluster))
+        stop("cluster identifiers require type = 'HC0' or 'HC1'",call.=FALSE)
     .ordinal_check_inference(object)
     i <- .ordinal_partial_indices(object,component)
+    if(type!="model") {
+        full <- fastglm_vcov(object,type,cluster,cadjust,block.size)
+        out <- full[i,i,drop=FALSE]
+        for(nm in setdiff(names(attributes(full)),c("dim","dimnames"))) attr(out,nm) <- attr(full,nm)
+        return(out)
+    }
     out <- object$mapped.covariance[i,i,drop=FALSE]
     attr(out,"covariance.scope") <- "expected Fisher information"
     out
 }
 
 #' @rdname ordinal-partial-methods
+#' @md
 #' @export
 summary.fastglm_ordinal_partial <- function(object,vcov.=NULL,...) {
     if(length(list(...))) stop("unused nonparallel summary arguments",call.=FALSE)
@@ -98,6 +112,7 @@ summary.fastglm_ordinal_partial <- function(object,vcov.=NULL,...) {
     "Partial proportional-odds regression" else paste0("Nonparallel cumulative-link regression (",.ordinal_link(object),")")
 
 #' @rdname ordinal-partial-methods
+#' @md
 #' @export
 print.summary.fastglm_ordinal_partial <- function(x,digits=max(3L,getOption("digits")-3L),...) {
     digits <- .fastglm_print_digits(digits)
@@ -116,6 +131,7 @@ print.summary.fastglm_ordinal_partial <- function(x,digits=max(3L,getOption("dig
 }
 
 #' @rdname ordinal-partial-methods
+#' @md
 #' @export
 print.fastglm_ordinal_partial <- function(x,digits=max(3L,getOption("digits")-3L),...) {
     digits <- .fastglm_print_digits(digits)
@@ -131,19 +147,22 @@ print.fastglm_ordinal_partial <- function(x,digits=max(3L,getOption("digits")-3L
 }
 
 #' @rdname ordinal-partial-methods
+#' @md
 #' @param parm parameters by name or position; defaults to all parameters.
 #' @param level confidence level.
-#' @param method interval method; only `"wald"` is currently supported for
-#'   nonparallel fits.
-#' @param control reserved for future profile fitting controls.
+#' @param method interval method: `"wald"` or, for maximum-likelihood fits
+#'   with retained data, `"profile"`.
+#' @param control numerical controls for profile fitting, as described in
+#'   [fastglm_score_test()].
 #' @export
 confint.fastglm_ordinal_partial <- function(object,parm,level=.95,method=c("wald","profile"),control=list(),...) {
     if(length(list(...))) stop("unused nonparallel confidence-interval arguments",call.=FALSE)
-    if(match.arg(method)!="wald") stop("profile intervals are not yet available for nonparallel ordinal fits",call.=FALSE)
-    if(length(control)) stop("nonparallel Wald intervals do not use optimizer controls",call.=FALSE)
+    method <- match.arg(method)
     if(!is.numeric(level) || is.complex(level) || length(level)!=1L || !is.finite(level) || level<=0 || level>=1)
         stop("'level' must lie between zero and one",call.=FALSE)
     b <- coef(object);if(missing(parm)) parm <- seq_along(b)
+    if(method=="profile") return(.ordinal_profile_confint(object,parm,level,control))
+    if(length(control)) stop("nonparallel Wald intervals do not use optimizer controls",call.=FALSE)
     if(is.character(parm)) parm <- match(parm,names(b))
     if(!is.numeric(parm) || is.complex(parm) || anyNA(parm) ||
        any(parm<1 | parm>length(b) | parm!=floor(parm)) || anyDuplicated(parm))
@@ -156,6 +175,7 @@ confint.fastglm_ordinal_partial <- function(object,parm,level=.95,method=c("wald
 }
 
 #' @rdname ordinal-partial-methods
+#' @md
 #' @param newdata prediction data, as in [predict.fastglm_ordinal()].
 #' @param se.fit include full-model delta-method standard errors.
 #' @param offset optional replacement location offset.
@@ -201,6 +221,7 @@ predict.fastglm_ordinal_partial <- function(object,newdata=NULL,
 }
 
 #' @rdname ordinal-partial-methods
+#' @md
 #' @param conf.int include Wald confidence limits in `broom::tidy()` output.
 #' @param conf.level confidence level for `broom::tidy()`.
 #' @param exponentiate exponentiate slopes and their confidence limits.

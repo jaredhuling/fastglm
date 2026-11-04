@@ -70,15 +70,20 @@ tidy.fastglm_ordinal_partial(
 
 \item{...}{further method arguments.}
 
-\item{type}{for `vcov()`, the covariance convention (`"model"` only).
-For `predict()`, the scale: `"probability"` (or `"response"`),
-`"cumulative"`, `"class"`, or `"link"`. Nonparallel link predictions
+\item{type}{for \code{vcov()}, \code{"model"} for inverse expected information, or
+\code{"HC0"} or \code{"HC1"} for ordinary-score sandwich covariance. All thresholds
+and both slope blocks enter the joint observed-information calculation.
+For \code{predict()}, the scale: \code{"probability"} (or \code{"response"}),
+\code{"cumulative"}, \code{"class"}, or \code{"link"}. Nonparallel link predictions
 are an observation-by-threshold matrix of cumulative predictors
-`alpha[j] - x_common beta - x_nonparallel gamma[,j] - offset`.
+\verb{alpha[j] - x_common beta - x_nonparallel gamma[,j] - offset}.
 Applying the inverse link gives the cumulative probabilities.}
 
-\item{cluster, cadjust, block.size}{accepted for interface consistency;
-robust covariance is not yet implemented for these fits.}
+\item{cluster, cadjust, block.size}{cluster identifiers, cluster adjustment,
+and processing block size, as in \code{\link[=fastglm_vcov]{fastglm_vcov()}}. Supplying \code{cluster}
+requires \code{type="HC0"} or \code{type="HC1"}. For mean-bias-reduced fits,
+sandwich covariance uses the same first-order ordinary-score convention
+and regularity assumptions described there.}
 
 \item{vcov.}{optional full coefficient covariance for a converged fit.}
 
@@ -88,20 +93,21 @@ robust covariance is not yet implemented for these fits.}
 
 \item{level}{confidence level.}
 
-\item{method}{interval method; only `"wald"` is currently supported for
-nonparallel fits.}
+\item{method}{interval method: \code{"wald"} or, for maximum-likelihood fits
+with retained data, \code{"profile"}.}
 
-\item{control}{reserved for future profile fitting controls.}
+\item{control}{numerical controls for profile fitting, as described in
+\code{\link[=fastglm_score_test]{fastglm_score_test()}}.}
 
-\item{newdata}{prediction data, as in [predict.fastglm_ordinal()].}
+\item{newdata}{prediction data, as in \code{\link[=predict.fastglm_ordinal]{predict.fastglm_ordinal()}}.}
 
 \item{se.fit}{include full-model delta-method standard errors.}
 
 \item{offset}{optional replacement location offset.}
 
-\item{conf.int}{include Wald confidence limits in `broom::tidy()` output.}
+\item{conf.int}{include Wald confidence limits in \code{broom::tidy()} output.}
 
-\item{conf.level}{confidence level for `broom::tidy()`.}
+\item{conf.level}{confidence level for \code{broom::tidy()}.}
 
 \item{exponentiate}{exponentiate slopes and their confidence limits.
 Odds-ratio interpretation applies to the logit link, with separate ratios

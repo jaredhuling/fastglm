@@ -3,7 +3,8 @@
 #' Estimates the average rate of change in each category probability as a
 #' continuous predictor changes. Uncertainty uses the delta method, conditional
 #' on the supplied predictor values and averaging weights.
-#' @param object a converged common-slope \code{fastglm_ordinal} fit.
+#' @param object a converged \code{fastglm_ordinal} fit, with common or
+#'   threshold-specific slopes.
 #' @param variable name of one continuous numeric variable. For a formula fit,
 #'   this names the original variable in the data; interactions and smooth
 #'   transformations are differentiated together. For a matrix fit, this names
@@ -47,6 +48,10 @@
 #'   observation-by-parameter-by-category derivatives. Normal intervals are
 #'   first-order approximations; the covariance and reduced-category conventions
 #'   match \code{fastglm_average()}.
+#'   For nonparallel models, each cumulative probability uses its own slope.
+#'   Evaluation rows must lie within the fitted model's valid predictor domain.
+#'   Supplied covariance, including cluster covariance, retains covariance among
+#'   thresholds, common slopes, and threshold-specific slopes.
 #' @returns A data frame with \code{variable}, \code{category}, \code{estimate},
 #'   \code{std.error}, \code{conf.low}, and \code{conf.high}. Category effects
 #'   sum to zero. Removed categories have zero effects and unavailable standard
@@ -61,7 +66,6 @@
 fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
                                      vcov.=NULL,level=.95,type="response",
                                      eps=NULL,offset=NULL) {
-    .ordinal_partial_require_common(object,"Marginal-effect inference")
     if(!inherits(object,"fastglm_ordinal"))
         stop("marginal effects currently require a fastglm_ordinal fit",call.=FALSE)
     .ordinal_check_inference(object)
@@ -110,8 +114,10 @@ fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
         stop("invalid averaging weights",call.=FALSE)
     total <- if(is.null(weights)) n else sum(weights)
     if(!is.finite(total) || total<=0) stop("averaging weights must have positive finite total",call.=FALSE)
-    q <- length(object$working$alpha); p <- length(object$beta)
-    estimate <- numeric(q); gradient <- matrix(0,q+p,q)
+    partial <- inherits(object,"fastglm_ordinal_partial")
+    q <- length(object$working$alpha);p <- length(object$design.columns)
+    d <- length(object$working$coefficients)
+    estimate <- numeric(q);gradient <- matrix(0,d,q)
     .design_blocks(design$x,function(z,i) {
         w <- if(is.null(weights)) rep(1,length(i)) else weights[i]
         keep <- w>0; i <- i[keep]; w <- w[keep]/total; z <- z[keep,,drop=FALSE]
@@ -136,15 +142,27 @@ fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
             dx[,match(variable,object$design.columns)] <- 1
         }
         dx <- sweep(dx,2L,object$working$scale,"/")
-        parts <- .ordinal_probability_block(object,z,off,what="all")
-        slope <- drop(dx%*%object$working$beta)
+        parts <- .ordinal_probability_block(object,z,off,what="all",rows=i)
+        if(!partial) slope <- drop(dx%*%object$working$beta)
         for(j in seq_len(q)) {
+            if(partial) {
+                slopes <- numeric(p);slopes[object$common] <- object$working$beta
+                slopes[object$nonparallel] <- object$working$gamma[,j]
+                slope <- streaming_qr_eta(dx,slopes,numeric(length(i)))
+            }
             density <- parts$derivative[,j]
             curvature <- if(is.null(parts$curvature)) density*(parts$survival[,j]-parts$cumulative[,j]) else parts$curvature[,j]
             value <- -density*slope
-            g <- matrix(0,length(i),q+p)
+            g <- matrix(0,length(i),d)
             g[,j] <- -curvature*slope
-            if(p) g[,q+seq_len(p)] <- parts$x*(curvature*slope)-dx*density
+            if(partial) {
+                pc <- length(object$common);pn <- length(object$nonparallel)
+                if(pc) g[,q+seq_len(pc)] <- parts$x[,object$common,drop=FALSE]*(curvature*slope)-
+                    dx[,object$common,drop=FALSE]*density
+                at <- q+pc+(j-1L)*pn+seq_len(pn)
+                g[,at] <- parts$x[,object$nonparallel,drop=FALSE]*(curvature*slope)-
+                    dx[,object$nonparallel,drop=FALSE]*density
+            } else if(p) g[,q+seq_len(p)] <- parts$x*(curvature*slope)-dx*density
             if(any(!is.finite(value)) || any(!is.finite(g)))
                 stop("marginal effect or parameter derivative is nonfinite",call.=FALSE)
             estimate[j] <<- estimate[j]+sum(w*value)
