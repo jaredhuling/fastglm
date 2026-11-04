@@ -1,0 +1,8 @@
+Independent numerical confirmation, 2026-11-04
+Role: deterministic equation and fitted-root confirmation
+Source baseline: 45c0ff0 with native partial ordinal implementation under development
+No Monte Carlo calibration or timing study
+Installed reference packages: gnm 1.1-5, qvcalc 1.0.4, relimp 1.0-5
+Installed candidate file MD5 values:
+/private/tmp/fastglm-ppo-lib/fastglm/DESCRIPTION eca14a72a51834becc9ef061212c05b4
+/private/tmp/fastglm-ppo-lib/fastglm/libs/fastglm.so 105febecfafc9e8e3fe6168b71196ef2

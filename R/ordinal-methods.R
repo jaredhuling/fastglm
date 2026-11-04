@@ -1,5 +1,14 @@
 .ordinal_retained_probabilities <- function(object) {
     object$na.action <- NULL
+    if(inherits(object,"fastglm_ordinal_partial") && any(object$category$totals==0)) {
+        active <- object$category$totals>0
+        out <- matrix(0,nrow(object$x),length(object$levels),
+            dimnames=list(rownames(object$x),object$levels))
+        object$x <- object$x[active,,drop=FALSE]
+        object$offset <- object$offset[active]
+        out[active,] <- predict(object,type="probability")
+        return(out)
+    }
     predict(object,type="probability")
 }
 
@@ -130,7 +139,7 @@ residuals.fastglm_ordinal <- function(object,type=c("probability","cumulative","
         m <- object$category$totals[i]; positive <- m>0
         if(!any(positive)) return(invisible(NULL))
         ii <- i[positive]; x <- x[positive,,drop=FALSE]; m <- m[positive]
-        parts <- .ordinal_probability_block(object,x,object$offset[ii])
+        parts <- .ordinal_probability_block(object,x,object$offset[ii],rows=ii)
         F <- parts$cumulative[,object$threshold.map,drop=FALSE]
         S <- parts$survival[,object$threshold.map,drop=FALSE]
         if(object$category$grouped) {
@@ -158,7 +167,7 @@ residuals.fastglm_ordinal <- function(object,type=c("probability","cumulative","
             }
         }
         if(type=="pearson") {
-            denominator <- sqrt(parts$derivative[,object$threshold.map,drop=FALSE])
+            denominator <- sqrt(F)*sqrt(S)
             value <- sqrt(m)*value/denominator
             value[denominator==0 & is.nan(value)] <- NA_real_
         }

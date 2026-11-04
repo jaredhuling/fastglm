@@ -1,0 +1,89 @@
+Dense partial ordinal fitting: bounded performance results
+2026-11-04
+
+All twelve fastglm partial-model cases completed their warm-up and three measured
+fits with valid convergence, covariance, and probabilities. Four of six ML
+comparisons with ordinal::clm met both packages' convergence criteria; their
+clm/fastglm median-time ratios were 1.19 to 2.62. The two unsuccessful comparator
+warm-ups are retained and excluded from ratios. No runtime-budget reductions
+were needed.
+
+Median complete fitting time, milliseconds
+------------------------------------------
+                      n = 10000                    n = 100000
+Link             fastglm ML  meanBR  clm ML    fastglm ML  meanBR  clm ML
+logit                   13      21      31           113     203     296
+probit                  22      38      31           216     380       *
+complementary log-log   26      46      31           283     409       *
+
+Timings include the public formula interface, fitting, and covariance extraction.
+ML and mean bias reduction used the same data within each size/link combination.
+MeanBR has no timed external comparator here. The partial model has four ordered
+categories, two common predictors, and one predictor whose slope differs across
+the three thresholds. Its eight coefficients have a dense joint covariance.
+
+* At n = 100000, clm reached its iteration limit for probit and complementary
+  log-log under the frozen gradTol=1e-7 setting. Absolute maximum gradients were
+  2.47e-7 and 8.43e-6, respectively. Both covariance matrices were positive
+  definite, and their probabilities agreed with fastglm within 5.97e-12 and
+  2.17e-10; log-likelihood differences were below 1.87e-9. This is consistent
+  with difficulty meeting a stringent absolute gradient criterion near the
+  numerical optimum, rather than a materially different fitted model. Their
+  approximately ten-second unsuccessful warm-ups are not speed-comparison
+  evidence. The stopping rule was not relaxed after inspecting these results.
+
+For the four successful comparator pairs, all-row probability differences were
+below 3.01e-11 and log-likelihood differences below 1.46e-10. The fastglm partial
+and common-slope fits all passed the prespecified checks: maximum standardized
+score 8.64e-9, remaining predictor update 1.54e-10, normalization error 4.45e-16,
+and minimum information reciprocal condition number 0.110. Each fit's actual
+diagnostics, warnings and status appear in results-2026-11-04/all-fits.csv.
+
+Common-slope regression check
+----------------------------
+For n = 100000, four categories and three common predictors, candidate and
+preserved-baseline outputs agreed exactly in returned coefficients, covariance,
+log likelihood, and probabilities at the fixed comparison rows. Input hashes
+also matched exactly. Both libraries completed all warm-ups and three repeats.
+
+                               ML                     Mean bias reduction
+Link                    baseline candidate          baseline candidate
+logit                         57        57                90        85
+probit                       131       130               245       234
+complementary log-log        164       165               296       319
+
+Times are milliseconds. ML medians differed by less than 1%; meanBR candidate/
+baseline ratios ranged from 0.944 to 1.078. Three desktop repeats cannot resolve
+small timing changes reliably, especially with overlapping observed ranges.
+These results do not establish a speed improvement or regression in the
+unchanged common-slope path.
+
+Environment and interpretation
+------------------------------
+The run used R 4.5.1 on aarch64 macOS Sequoia 15.7.3, base R BLAS/LAPACK, and
+ordinal 2023.12-4.1. Numerical-library thread counts were requested as one.
+Workers ran serially, with no concurrent package compilation, tests, rendering,
+or other package work. Ordinary desktop background load remained: one unrelated
+process was using approximately one CPU core. These are descriptive timings
+from this machine and workload, not a universal performance claim.
+
+The retained record contains 114 fits: 96 valid fastglm fits, 16 valid clm fits,
+and two clm warm-ups with convergence warnings. All three worker processes
+exited successfully. Output was written to a fresh directory; the protocol and
+timing scripts remained frozen. No inference simulation or calibration was
+performed, and no package code changed in response to the timing results.
+
+Files and reproduction
+----------------------
+protocol.txt specifies the workload, fixed seeds, numerical criteria, and
+five-minute budget before the run. results-2026-11-04/ contains complete
+per-fit records, medians/ranges, paired comparisons, input hashes, library and
+script hashes, session details, worker logs, and compact fitted solutions.
+
+ Rscript benchmarks/ordinal-partial-performance/run.R \
+   /private/tmp/fastglm-ppo-lib /private/tmp/fastglm-ppo-baseline/library \
+   NEW_OUTPUT_DIRECTORY
+
+The candidate shared-library MD5 is 70816109ba64764b048a0f30701fa386; the preserved
+baseline shared-library MD5 is 7e3c5510b4193d1a5feac2a4e9c9ee46. Full installed
+R-code and source-script hashes are recorded separately for each worker.

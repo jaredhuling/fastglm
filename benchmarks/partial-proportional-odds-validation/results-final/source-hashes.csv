@@ -1,0 +1,7 @@
+"path","md5"
+"benchmarks/partial-proportional-odds-validation/protocol.txt","553fe291c729fe7b895dda6a37461589"
+"benchmarks/partial-proportional-odds-validation/reference.R","4522d8ea6a3f9705d88958443f5eba1b"
+"benchmarks/partial-proportional-odds-validation/confirm.R","42f7aa061bb6084451ed4ebb1d66c8de"
+"inst/include/ordinal_partial.h","439739f2d09c87300a089aa1a8a46f61"
+"src/fit_ordinal_partial.cpp","0982138c6e7c0606f974c092e15a6079"
+"/private/tmp/fastglm-ordinal-reference-cache/supplementary/bpolr.R","2379bda72594531b285b92b7674b0571"

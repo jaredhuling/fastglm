@@ -1,0 +1,97 @@
+Dense partial proportional odds and nonparallel cumulative links
+2026-11-04
+
+Implemented scope
+-----------------
+fastglm_ordinal(nonparallel=...) now estimates selected threshold-specific
+slopes with logit, probit, or complementary log-log links. Formula selection
+uses complete model terms; matrix selection uses column names or indices.
+Both ML and mean bias reduction use the joint categorical likelihood, with
+grouped frequency counts and offsets. The original common-slope fitting path
+is retained when no predictors are selected.
+
+The native code evaluates expected information in blocks without constructing
+one expanded design row per observation and threshold. The full dense input
+design and parameter information matrix remain in memory. Feasibility is
+checked at positive-frequency training rows and again at requested prediction
+rows. Convergence requires both a small standardized score and a small
+remaining change in cumulative predictors, with usable expected information.
+
+Public methods include readable summaries, full model-based covariance, Wald
+intervals and joint coefficient tests, category/cumulative probabilities and
+standard errors, averages and contrasts, residuals, simulation from the fitted
+distribution, and descriptive prediction assessment. Simulation is an optional
+existing interface; the implemented inference does not require resampling.
+Nonparallel fits currently require every declared category to be observed.
+Streaming, prepared partial designs, robust covariance, profiles, constrained
+score inference, refitting bootstraps, and automatic marginal effects require
+additional implementations. Unsupported operations report explicit errors.
+
+Independent numerical comparisons
+---------------------------------
+results-final contains the nine final ML comparisons specified in protocol.txt:
+six initially fresh grouped fixtures and the previously inspected housing
+application, each covering all three links. All nine comparisons passed.
+Maximum absolute log-likelihood difference from ordinal::clm was 1.82e-12;
+maximum category-probability difference was 2.73e-11. Affine recoding changed
+predicted probabilities by at most 1.95e-16 in the six grouped fixtures.
+Both estimators converged, and the final comparator emitted no warnings.
+
+The independent adjustment audit is in
+../partial-proportional-odds-validation/methods-audit.txt. Its final repeat is
+../partial-proportional-odds-validation/results-final: 185/185 comparisons
+passed, including numerical differentiation of the generic mean-bias adjustment,
+twelve ML/meanBR root comparisons with the author's original bpolr code, and
+the published wine example. The largest generic-adjustment discrepancy was
+1.73e-9. The wine coefficients agreed within 7.76e-12. These checks establish
+agreement of equations and selected numerical solutions. They do not establish
+universal root existence, global convergence, or finite-sample coverage.
+
+Development and confirmation records
+------------------------------------
+results-2026-11-04 records the first ML run. The clm reference initially used
+the varying predictor in both its location and nominal formulas; clm removed
+the redundant location columns and matched the fitted model, but emitted
+prediction warnings. results-explicit-nominal repeats the same inputs with
+varying predictors only in the nominal formula. The earlier records and
+their source hashes are retained. protocol-at-run.txt preserves the initial
+protocol; the current run.R uses the explicit nominal reference formula.
+
+After those comparisons, arithmetic review identified cancellation when large
+common and threshold-specific contributions oppose each other. The final
+implementation accumulates original threshold, offset, and slope terms in
+compensated sums. Gaps similarly use original terms, avoiding an intermediate
+rounded coefficient difference. These arithmetic changes preserve the equations.
+results-final repeats the comparison block after these corrections; it reuses
+the original inputs and is a regression confirmation, not a new independent
+sample. Package tests separately exercise the cancellation counterexamples.
+
+Integration review also corrected cumulative Pearson residuals for probit and
+complementary log-log models to use F(1-F), and avoids evaluating invalid
+zero-frequency predictor rows when simulating their necessarily zero counts.
+
+Separate bounded timing evidence is recorded in
+../ordinal-partial-performance/. Source and library hashes, session details,
+all fitting outcomes, and measured repetitions accompany its results.
+
+Package verification
+--------------------
+The final full test suite passed 5172 expectations with no failed expectations,
+errors, or test warnings. Three worker tests were skipped under the main suite's
+CRAN-style setting and then exercised in a separate 314-expectation run, which
+passed without skips or failures. That run overlaps other tests in the main
+suite, so these counts should not be added as distinct expectations. Arrow was
+not installed; its optional Parquet test was the remaining unavailable check.
+
+R CMD build --no-manual completed with vignette creation. R CMD check
+--no-manual on the resulting fastglm_0.1.3.tar.gz finished with Status: OK,
+including examples, installed-package tests, and vignette rebuilding. Optional
+suggestions were permitted to be absent through _R_CHECK_FORCE_SUGGESTS_=false;
+the check records Arrow as unavailable. Repository-index requests were blocked
+by the local network environment and are visible in the check record.
+
+The ordinal and large-data vignettes were also rendered directly to HTML in
+vignettes/. Public reference documentation, NEWS, and the README were updated.
+The version remains 0.1.3. Unit-test summaries and the package check record are
+retained in results-final/. No Windows builder was used for this development
+check.

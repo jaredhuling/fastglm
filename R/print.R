@@ -135,7 +135,8 @@ print.fastglm_diagnostics <- function(x,digits=max(3L,getOption("digits")-3L),..
         remaining.dispersion.step="Remaining relative dispersion change",
         adjusted.dispersion.score.rms="Joint dispersion score per row",
         covariance.condition="Covariance condition number",
-        information.rcond="Reciprocal information condition number")
+        information.rcond="Reciprocal information condition number",
+        minimum.gap="Smallest fitted cumulative-predictor gap")
     fields <- intersect(names(labels),names(x))
     values <- vapply(fields,function(nm) {
         z <- x[[nm]]
@@ -201,7 +202,8 @@ print.fastglm_prediction <- function(x,digits=max(3L,getOption("digits")-3L),max
         stop("'max.rows' must be a positive integer or Inf",call.=FALSE)
     .fastglm_print_header("Predictions with standard errors")
     .fastglm_print_field("Scale",switch(attr(x,"prediction.type"),
-        response="response mean",link="linear predictor",terms="term contributions to the linear predictor",
+        response="response mean",link="linear predictor",cumulative.link="cumulative linear predictor",
+        terms="term contributions to the linear predictor",
         probability="category probabilities",cumulative="cumulative probabilities",
         prob="probability masses",zero="probability of zero",count="component mean"))
     .fastglm_print_field("Covariance",x$covariance.scope)

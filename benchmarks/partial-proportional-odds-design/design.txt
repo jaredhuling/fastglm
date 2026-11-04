@@ -183,6 +183,16 @@ No claim about general convergence or finite-sample inference follows from these
 examples. Production work still requires the independent adjustment and external
 ML checks in stages 1 and 2.
 
+Follow-up, 2026-11-04: the independent validation in
+../partial-proportional-odds-validation/methods-audit.txt now compares with the
+author's original supplementary bpolr code. Its full-precision alpha_2 is
+1.054511572048214, agreeing with the prototype and native implementation.
+The supplement prints 1.055, consistent with the paper's 1.06 after another
+rounding step. The original exploratory comparison above is retained as its
+historical record; this discrepancy no longer indicates a differing fitted root.
+The native generic-adjustment and external ML/meanBR confirmations are recorded
+separately, without changing the original prototype's results or tolerances.
+
 Reproduction and provenance
 --------------------------
 Run from the repository root in a clean result directory:

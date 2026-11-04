@@ -53,6 +53,7 @@ For count and two-part models, the sandwich covariance uses joint
   and identifiable interior parameters. For GLM, count, and two-part models,
   sandwich covariance for bias-adjusted scores is not implemented.
 
+  Ordinal robust covariance currently requires a retained common-slope fit.
   For ordinal fits, the covariance uses the inverse observed negative
   Jacobian of the ordinary likelihood score, rather than inverse expected
   Fisher information. Independent-observation meat sums individual score

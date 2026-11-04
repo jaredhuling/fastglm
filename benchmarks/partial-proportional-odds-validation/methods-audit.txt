@@ -1,0 +1,202 @@
+Partial proportional odds: adjustment, assumptions, and independent validation
+2026-11-04
+
+Conclusion and scope
+--------------------
+The dense adjustment implements the expected-information mean-bias-reducing
+equations for the specified cumulative-link model in its original coefficients.
+The independent confirmation passed 185 of 185 prespecified comparisons. This
+supports exposing mean bias reduction for identifiable, interior dense models,
+provided the fitter retains explicit probability, conditioning, and convergence
+checks. It does not establish universal finite estimates, a unique root, global
+convergence, or accurate finite-sample Wald coverage. Empty-category boundary
+mapping and special likelihood/score inference need separate work.
+
+Model and sampling assumptions
+------------------------------
+For q = K - 1, let eta_ij = alpha_j - x_i' beta - z_i' gamma_j - offset_i,
+P_ik = G(eta_ik) - G(eta_i,k-1), with endpoint cumulative probabilities 0 and 1.
+The common and nonparallel design columns are disjoint. Parameters are stored
+as alpha, beta, and threshold-major gamma blocks; there is no extra intercept.
+The logit link gives partial proportional odds. The same design with probit or
+complementary log-log is a nonparallel cumulative-link model.
+
+The likelihood conditions on the design and offsets. Independent categorical
+outcomes, or independent multinomial groups with fixed totals, supply its
+sampling interpretation. Integer frequency weights reproduce independent
+observations; multiplying a whole row's log likelihood is not a cluster model.
+Noninteger weights extend the estimating equations algebraically but are not
+literal replications and are not justified as survey or inverse-probability
+weights by this audit. The published wine calculation is reproduced under its
+stated likelihood, without making claims about independence of repeated ratings.
+
+For bias and asymptotic covariance claims, additional regularity is required:
+fixed finite parameter dimension; an identifiable true parameter in the interior
+of the probability domain; sufficiently smooth probabilities and differentiation
+under expectation; nonsingular information increasing at the regular sample
+size rate; and a consistent local root. Uniform integrability and higher-order
+conditions needed by a bias expansion are not supplied by a convergence flag.
+These conditions concern sequences of models and samples, not just this finite
+test suite. Covariance I(theta)^(-1) is first-order model-based covariance.
+
+Independent derivation from joint categorical contributions
+----------------------------------------------------------
+This calculation starts from the general expected-cumulant expression and does
+not assume the cumulative adjusted-count formula. For a single categorical draw
+in row i, let u_ik = grad log P_ik and H_ik = Hess log P_ik when category k occurs.
+Write m_i for the effective number of draws, and I for total expected information.
+Independence and zero expected scores eliminate cross-observation contributions:
+
+ I = sum_i m_i sum_k P_ik u_ik u_ik'
+ P_t + Q_t = sum_i m_i sum_k P_ik (u_ik u_ik' + H_ik) u_ik,t
+ A_t = (1/2) trace{I^(-1) (P_t + Q_t)}.
+
+Here Q_t = E[H U_t], equivalently minus the expected observed-information/score
+product; using the opposite sign would give the wrong adjustment. Since
+
+ Hess P_ik = P_ik (H_ik + u_ik u_ik'),
+
+the expression reduces exactly to
+
+ A_t = (1/2) sum_i m_i sum_k (grad P_ik)_t / P_ik
+                                      * trace{I^(-1) Hess P_ik}.
+
+Let a_ij be row j of the linear predictor design. Its Hessian is zero and
+
+ Hess G(eta_ij) = G''(eta_ij) a_ij a_ij'.
+
+Defining c_ij = (m_i/2) G''(eta_ij) a_ij' I^(-1) a_ij, with c_i0=c_iK=0,
+therefore gives A = sum_ik grad P_ik (c_ik-c_i,k-1)/P_ik. This derives the
+native expression from the full joint categorical likelihood. It applies to
+any identified linear cumulative predictor, including the proposed partial
+design, and does not replace a categorical outcome by independent binaries.
+
+The numerical reference computes u and H with numDeriv from log probabilities
+and constructs P_t+Q_t directly. It never uses G'', leverage diagonals, or the
+adjusted cumulative counts. It also verifies I against the expected negative
+log-probability Hessian. Thus the reference is independent of the native
+adjustment formula, although both necessarily describe the same model.
+
+Linear coordinates, replication, and domains
+-------------------------------------------
+For an invertible constant map theta = S delta, category scores and Hessians
+transform as u_delta=S'u_theta and H_delta=S'H_theta S. Substitution in the
+trace expression gives A_delta=S'A_theta and I_delta=S'I_theta S. The adjusted
+root and its covariance transform accordingly. Centering/scaling predictors
+and baseline-plus-deviation slope coordinates are covered by this result.
+Nonlinear maps introduce Hessians of the map; reducing bias after a nonlinear
+log-gap reparameterization generally targets a different estimator.
+
+Grouping independent identical design points adds their information, scores,
+and cumulant contributions, so grouped and expanded frequency data agree.
+Scaling all frequencies by c scales I, U, and P_t+Q_t by c, leaving A unchanged.
+Offsets enter the probabilities but have no coefficient derivatives. Zero
+frequency contributes neither likelihood nor adjustment and imposes no training
+domain constraint, although prediction at that row must still be validated.
+
+For a positive-frequency row, each adjacent gap is affine in z:
+ alpha_(j+1)-alpha_j - z'(gamma_(j+1)-gamma_j) > 0.
+Consequently training feasibility extends to the convex hull of its expanded
+nonparallel design. Ordering alpha alone is insufficient; conversely alpha may
+be unordered if the design origin is outside that domain. Unless consecutive
+slopes coincide, the gap fails in some unbounded direction. Extrapolated
+probabilities require checks and cannot be repaired by clipping or reordering.
+
+Numerical results and limits
+----------------------------
+The frozen protocol precedes the native confirmation. Results are under
+results-2026-11-04/, separate from the earlier exploratory prototype.
+Across two fresh fixed fixtures and three links, maximum absolute differences:
+ ordinary score versus numerical derivatives: 1.18e-8;
+ generic cumulant adjustment versus native adjustment: 1.73e-9;
+ baseline-plus-deviation adjustment transformation: 2.04e-10;
+ native predictor-recoding identities: 1.43e-14.
+All common-slope, binary, grouped expansion, frequency scaling, offsets, and
+zero-frequency domain checks pass. The twelve fresh fitted roots (two designs,
+three links, ML and mean bias reduction) agree with the original external
+bpolr implementation within 3.91e-11 for coefficients and 2.46e-12 for covariance.
+Both solvers converged in every case. These are deterministic equation/root
+checks, not a study of bias, rejection probabilities, or coverage.
+
+The wine mean-bias-reduced fit agrees with the original author implementation
+within 7.76e-12 for coefficients and 1.63e-11 for covariance. Its standardized
+adjusted score is 5.10e-12 and remaining predictor update 8.39e-12. The original
+implementation gives alpha_2 = 1.054511572048214. Its archived Section1_11.R
+output prints 1.055 at three decimals; the paper prints 1.06 at two decimals.
+This is consistent with double rounding during presentation. Direct rounding
+to two decimals gives 1.05. There is no evidence of a different statistical
+target, and no coefficient or comparison tolerance was tuned to the table.
+
+The native solver and bpolr are distinct implementations but use the same
+established adjustment, which is why the independent generic calculation is
+also necessary. Moderate interior fixtures do not validate extreme-tail
+arithmetic or every difficult design. Production unit tests separately cover
+probability boundaries, rejected extrapolations, and solver failure handling.
+
+Primary-source audit
+--------------------
+Kosmidis (2014), Improved estimation in cumulative link models, JRSS B 76,
+169-196, DOI 10.1111/rssb.12025. The model, equations (5)-(9), binary reduction,
+Section 11, Table 6, and inference discussion were read in the published text.
+The cumulative adjustment and wine model are established results from this
+source; the independent derivation and implementation checks above are this
+study's verification, not an estimator-novelty claim. Published open PDF:
+https://wrap.warwick.ac.uk/id/eprint/98828/7/WRAP-improved-estimation-cumulative-link-models-Kosmidis-2014.pdf
+SHA256 dd66691df64cc60ec764460dfff70f426195e69c6a749a6c434a5f206c9776e2
+
+Author's original supplementary materials, linked from the author's research
+page, retrieved 2026-11-04:
+https://www.ikosmidis.com/files/rssb12025-sup-0002-supplementary-materials-ikosmidis.zip
+SHA256 0b1ea344d8a7545fd2051b2033c0bd7e36a922d7599e832c1dffc9b881445ca7
+Read README, Section1_11.R, and bpolr.R data organization, probability,
+information, adjustment, iteration, coefficient-order, and covariance code.
+Unmodified bpolr.R, version 1.1 (April 2014), is the external fitting reference.
+bpolr.R SHA256 aafc2d0ec6776c3dbca7699745bea233fd56c9fa0c8bb0b25f8110d3d9e8b487
+Section1_11.R SHA256 5d2585fe2df1d9dbb01f9f1da7068c11118bbcd53fcb91b573ab00030b53a3c5
+No source files from the supplement are redistributed here.
+
+Kosmidis (2007), Bias Reduction in Exponential Family Nonlinear Models, PhD
+thesis, University of Warwick. Read Section 3.2.1, especially equation (3.4)
+and the definitions of P_t and Q_t, and Section 3.4 on parameter transformations.
+These give the general expected-cumulant form and distinguish linear from
+nonlinear equivariance. Its regular-problem bias result is conditional, not
+a theorem about finite roots in every partial proportional-odds dataset.
+https://www.ikosmidis.com/files/ikosmidis_thesis.pdf
+SHA256 928fec541233c960f8f216f0a481365b562a50eac5c9e1cfffc767d11a7e156f
+Firth (1993) is the underlying attribution in these primary sources; the
+original 1993 article was not independently read for this confirmation.
+
+Reproduction
+------------
+Install the candidate fastglm into a separate library. Cache the cited PDF and
+supplement outside the package, extracting supplementary/bpolr.R unchanged.
+The external implementation needs ordinal, Formula, and gnm; numDeriv supplies
+numerical derivatives. No package-runtime dependency is added. Run from the
+repository root, always with a fresh output directory:
+
+ Rscript benchmarks/partial-proportional-odds-validation/confirm.R \
+   FASTGLM_LIBRARY NEW_OUTPUT_DIRECTORY REFERENCE_CACHE REFERENCE_LIBRARY
+
+The original run used /private/tmp/fastglm-ppo-lib and reference cache/library
+under /private/tmp/fastglm-ordinal-reference-cache and
+/private/tmp/fastglm-ordinal-reference-lib. Session details, source hashes,
+all comparisons, and fitted objects are retained with the results. The source
+baseline was commit 45c0ff0 plus the new native partial-model implementation.
+The retained results document equations and numerical roots only; their hashes
+identify the exact implementation tested if subsequent code changes occur.
+
+Final arithmetic regression confirmation, 2026-11-04
+---------------------------------------------------
+After the initial confirmation, the native implementation was revised to
+accumulate cumulative predictors and adjacent gaps using compensated sums of
+their original coefficient terms. This prevents large opposing contributions
+from erasing thresholds, offsets, or coefficient-difference bits before they
+cancel. The adjustment and fitting equations are unchanged. The final header
+SHA256 is 9f3014ef7953e236513a3cfc508ad86242a3fb34becc33c5a85b59d172be7aa6.
+
+The complete protocol was repeated in results-final, with 185/185 comparisons
+passing. This repeat uses the same fixtures and external examples and is a
+regression confirmation, not additional independent samples. Its source hashes
+and fits identify the final tested implementation. Separate package tests cover
+the arithmetic counterexamples and retain an extreme complementary-log-log
+case whose information is too poorly conditioned for reliable covariance.

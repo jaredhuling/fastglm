@@ -17,7 +17,7 @@ fastglm_marginal_effects(
 )
 }
 \arguments{
-\item{object}{a converged \code{fastglm_ordinal} fit.}
+\item{object}{a converged common-slope \code{fastglm_ordinal} fit.}
 
 \item{variable}{name of one continuous numeric variable. For a formula fit,
 this names the original variable in the data; interactions and smooth

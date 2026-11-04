@@ -1,0 +1,86 @@
+Dense partial ordinal performance: bounded descriptive study
+Frozen before timing, 2026-11-04
+
+Purpose and comparison
+----------------------
+Measure complete public fitting calls, including covariance, on a small fixed
+workload. This is a timing study, not simulation-based inference calibration.
+Run only after the native build is stable and with no competing compilation,
+tests, rendering, or other substantial computation. All workers run serially,
+in separate R processes with one numerical-library thread requested.
+
+Partial models: n = 10000 and 100000, K = 4, two common predictors and one
+nonparallel predictor; logit, probit, complementary log-log; ML and mean bias
+reduction (12 fastglm cases). For ML, compare ordinal::clm with nominal = ~ z
+and location formula y ~ x1 + x2 + offset(off); z must not also enter location.
+Both packages receive the same data and offsets through their formula APIs.
+Mean bias reduction has no timed external comparator in this study.
+
+Common-slope regression check: n = 100000, K = 4, three common predictors,
+each link, ML and mean bias reduction. Run candidate and preserved baseline in
+separate processes; baseline library is supplied explicitly. Compare returned
+coefficients, covariance, likelihood, and probabilities on fixed design rows.
+
+Fixed data
+----------
+For each size/link, set seed 761000 + n + 101 * link_index (indices 1,2,3).
+Generate x1,x2,z independently Uniform(-1,1), off = .1*x1*z. Partial thresholds
+are (-1.1,.1,1.3), common slopes (.45,-.35), varying slopes (.2,-.15,.3).
+Every adjacent gap exceeds .75 on the entire generated support. Draw one
+ordered category from the implied cumulative probabilities using one uniform
+draw per observation. ML and meanBR reuse exactly the same generated dataset.
+Common-slope data use seed 881000 + n + 101*link_index, thresholds as above,
+and slopes (.45,-.35,.25), with the same predictor and offset construction.
+Input hashes, category counts, parameter values, and seeds are retained.
+
+Timing and diagnostics
+----------------------
+Target one warm-up fit and three measured repeats per method/case. Garbage
+collection occurs before each fit and outside the timed region. Record elapsed
+time for the full formula fit plus vcov extraction; model setup and covariance
+are included. Probability checks and file writes occur outside timing. Do not
+compare an internal kernel with another package's public formula interface.
+
+Use fastglm tol=1e-8 and maxit=200; ordinal::clm gradTol=1e-7 and maxIter=200.
+Record all warnings/errors, convergence indicators, iterations, scores,
+conditioning, remaining predictor updates where available, finite covariance,
+minimum predicted probability, and probability normalization error. Native
+scaled score and predictor update must be below 1e-7. Predicted probabilities
+must be finite, strictly positive, and sum to one within 1e-10. Covariance must
+be finite and positive definite. A failed fit is retained and excluded from
+speed ratios; no failed case is silently removed from the workload.
+
+Every ML clm fit is checked against the fastglm warm-up on all observations:
+maximum probability difference <2e-6 and absolute log-likelihood difference
+<1e-5. Their covariance estimators need not agree (observed versus expected
+information). Common-slope baseline/candidate results must agree within 1e-9
+in coefficients, covariance, log likelihood, and fixed-row probabilities.
+These checks establish comparable fitted targets, not equivalent estimators
+for the ML and meanBR timings. Report medians, all repeats and diagnostics;
+make no broad speed claim from these selected cases.
+
+Bounded-runtime policy fixed before timing
+-----------------------------------------
+The entire serial run has a five-minute wall-clock budget, including diagnostic
+and process overhead. Before each worker/method starts, retain a budget-skipped
+record if less than two seconds remain. Fits receive the remaining time limit.
+After its warm-up, use that elapsed time to estimate the requested three repeats.
+Reserve 25% of remaining time for other cases/diagnostics. If three repeats would
+consume more than the other 75%, use one measured repeat for that case instead;
+record this explicitly. If even one repeat exceeds the 75% allowance, retain
+only the warm-up with a budget-skipped measurement. Recheck the wall-clock
+budget before every fit. No replacement dataset or selectively easier model
+is substituted. A timeout is retained as a failure; later cases may be skipped.
+The five-minute limit is a practical safeguard, not an exact real-time guarantee
+for R calls that cannot be interrupted immediately.
+
+Execution and output
+--------------------
+From the repository root, after confirming a quiet machine:
+ Rscript benchmarks/ordinal-partial-performance/run.R CANDIDATE_LIBRARY \
+   BASELINE_LIBRARY NEW_OUTPUT_DIRECTORY
+The output directory must not already exist. The script runs partial candidate,
+common baseline, and common candidate workers sequentially. It records each
+library's session and hashes and writes per-fit results immediately. A summary
+retains missing or failed cases and computes ratios only from valid measured
+fits with the required agreement checks.

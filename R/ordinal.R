@@ -1,8 +1,9 @@
 #' Fit a cumulative-link model for ordered outcomes
 #'
 #' Fits a cumulative-link model with common slopes and freely estimated
-#' thresholds, by maximum likelihood or mean bias reduction. Positive slopes
-#' shift probability toward higher outcome categories.
+#' thresholds, by maximum likelihood or mean bias reduction. Selected terms
+#' can have threshold-specific slopes in a dense fit with either estimation method.
+#' Positive slopes shift probability toward higher outcome categories.
 #' @param x a formula, an object from [fastglm_ordinal_prepare()], or a finite
 #'   dense numeric matrix of location predictors.
 #'   A matrix must omit the intercept; formula fits remove the model-matrix
@@ -23,6 +24,12 @@
 #' @param link cumulative link: `"logit"` (proportional odds), `"probit"`,
 #'   or `"cloglog"` (complementary log-log). Prepared fits use their saved
 #'   link when `NULL` is supplied.
+#' @param nonparallel terms whose slopes may differ across cumulative
+#'   thresholds. For a formula fit, supply a one-sided formula selecting
+#'   complete terms from the fitted formula, such as `~ exposure` or
+#'   `~ exposure:group`. `~ .` selects every predictor term. For a matrix,
+#'   supply distinct column names or indices. `NULL` or an empty selection
+#'   retains the common-slope model and its existing fitting path.
 #' @param tol tolerance for the remaining change in cumulative linear
 #'   predictors and the standardized adjusted score.
 #' @param maxit maximum fitting iterations.
@@ -32,12 +39,21 @@
 #'   `max.step`, `max.halves`, `condition.tol`, `standardize`, and `trace`.
 #' @param model retain the formula model frame.
 #' @param ... additional arguments to the default or formula method.
-#' @details Thresholds are estimated in increasing order. The same location
+#' @details By default, thresholds are estimated in increasing order. The same location
 #'   slopes apply to all cumulative probabilities. Full-rank location designs
 #'   are required. Sparse matrices and
 #'   repeatable sources are not accepted by this interface.
 #'
-#'   An empty interior category is removed from the numerical fit and then
+#'   With `nonparallel`, the model is
+#'   `link{Pr(Y <= j)} = alpha[j] - x_common beta - x_nonparallel gamma[,j] - offset`.
+#'   A selected predictor has a separate slope at each threshold and no
+#'   additional common slope. Fitting requires every declared category to
+#'   have positive frequency. The cumulative predictors must remain ordered
+#'   at the observed predictor values, and predictions check this condition
+#'   at each supplied row. Ordering at training values does not establish
+#'   validity under extrapolation. See [ordinal-partial-methods].
+#'
+#'   In common-slope models, an empty interior category is removed from the numerical fit and then
 #'   restored to the declared scale with zero fitted probability and coincident
 #'   thresholds. Convergence and information refer to the reduced model.
 #'   Standard errors for the tied thresholds are unavailable. Bias-reduced fits
@@ -48,8 +64,8 @@
 #'   estimate. It gives a first-order model-based approximation; this interface
 #'   does not provide ordinal penalized-profile inference. Robust covariance
 #'   is available through `fastglm_vcov()` or `vcov(type="HC0")` for converged
-#'   fits with every declared category observed. Mean bias
-#'   reduction solves the original threshold/common-slope adjusted equations.
+#'   common-slope fits with every declared category observed. Mean bias
+#'   reduction solves the adjusted equations for the original thresholds and slopes.
 #'   It does not maximize a log-determinant penalized ordinal likelihood.
 #'
 #'   `logLik()` evaluates the ordinary categorical frequency likelihood,
@@ -62,6 +78,10 @@
 #' @returns An object of class `fastglm_ordinal`, with thresholds `alpha`,
 #'   location coefficients `beta`, the full `coefficients` vector, category
 #'   mapping, covariance, convergence diagnostics, and retained design.
+#'   With selected nonparallel effects, the additional class
+#'   `fastglm_ordinal_partial` provides threshold-specific slope methods;
+#'   `gamma` stores these slopes as a predictor-by-threshold matrix, and `beta`
+#'   contains only the common slopes.
 #'   `nobs()` gives the total frequency, while `nobs.rows` counts rows with
 #'   positive total frequency.
 #' @references Kosmidis, I. (2014). Improved estimation in cumulative link
@@ -83,16 +103,17 @@ fastglm_ordinal <- function(x, ...) UseMethod("fastglm_ordinal")
 #' @export
 fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
                                     firth=FALSE,tol=1e-8,maxit=200L,
-                                    block.size=2048L,control=list(),link="logit",...) {
+                                    block.size=2048L,control=list(),link="logit",nonparallel=NULL,...) {
     if(length(list(...))) stop("unused ordinal fitting arguments",call.=FALSE)
     if(missing(y)) stop("an ordinal response is required",call.=FALSE)
-    fit <- .ordinal_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,link=link)
+    fit <- .ordinal_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,
+        link=link,nonparallel=nonparallel)
     fit$call <- match.call()
     fit$call[[1L]] <- quote(fastglm::fastglm_ordinal)
     fit
 }
 
-.ordinal_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache=NULL,link="logit") {
+.ordinal_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache=NULL,link="logit",nonparallel=NULL) {
     if(!is.matrix(x) || !is.numeric(x))
         stop("ordinal fitting currently requires a dense numeric matrix or formula",call.=FALSE)
     if(is.factor(y) && !is.ordered(y) && is.null(levels))
@@ -100,6 +121,10 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
     if(ncol(x)>0L && is.null(colnames(x))) colnames(x) <- paste0("x",seq_len(ncol(x)))
     if(anyNA(colnames(x)) || any(!nzchar(colnames(x))) || anyDuplicated(colnames(x)))
         stop("ordinal predictor column names must be distinct and nonmissing",call.=FALSE)
+    selected <- .ordinal_nonparallel_columns(nonparallel,colnames(x))
+    if(length(selected))
+        return(.ordinal_partial_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,
+            block.size,control,link,selected))
     fit <- .ordinal_fit_core(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache,link)
     q <- length(fit$alpha)
     names(fit$coefficients) <- c(paste0("threshold:",names(fit$alpha)),names(fit$beta))
@@ -119,7 +144,7 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
 fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
                                     contrasts=NULL,levels=NULL,firth=FALSE,
                                     tol=1e-8,maxit=200L,block.size=2048L,
-                                    control=list(),model=TRUE,link="logit",...) {
+                                    control=list(),model=TRUE,link="logit",nonparallel=NULL,...) {
     if(length(list(...))) stop("unused ordinal fitting arguments",call.=FALSE)
     if(!is.logical(model) || length(model)!=1L || is.na(model))
         stop("'model' must be TRUE or FALSE",call.=FALSE)
@@ -134,15 +159,18 @@ fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
     coding <- attr(design,"contrasts")
     assignment <- attr(design,"assign")
     design <- design[,attr(design,"assign")!=0L,drop=FALSE]
+    selected <- .ordinal_nonparallel_terms(nonparallel,terms,assignment[assignment!=0L])
     fit <- fastglm_ordinal.default(design,model.response(mf),
         weights=model.weights(mf),offset=model.offset(mf),levels=levels,
-        firth=firth,tol=tol,maxit=maxit,block.size=block.size,control=control,link=link)
+        firth=firth,tol=tol,maxit=maxit,block.size=block.size,control=control,link=link,
+        nonparallel=selected$columns)
     fit$terms <- terms
     fit$design.assign <- assignment[assignment!=0L]
     fit$xlevels <- stats::.getXlevels(terms,mf)
     fit$contrasts <- coding
     fit$na.action <- attr(mf,"na.action")
     fit$offset.expression <- call$offset
+    if(inherits(fit,"fastglm_ordinal_partial")) fit$nonparallel.terms <- selected$terms
     if(model) fit$model <- mf
     fit$call <- call
     fit$call[[1L]] <- quote(fastglm::fastglm_ordinal)
@@ -396,7 +424,8 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profi
     if((is.matrix(x) && (!is.numeric(x) || is.complex(x))) ||
        (inherits(x,"Matrix") && !inherits(x,"dMatrix")))
         stop("ordinal prediction requires a real numeric design matrix",call.=FALSE)
-    if(ncol(x)!=length(object$beta)) stop("ordinal prediction design has the wrong number of columns",call.=FALSE)
+    expected.columns <- if(inherits(object,"fastglm_ordinal_partial")) length(object$design.columns) else length(object$beta)
+    if(ncol(x)!=expected.columns) stop("ordinal prediction design has the wrong number of columns",call.=FALSE)
     if(!is.null(colnames(x)) && length(object$design.columns)) {
         if(anyDuplicated(colnames(x)) || !setequal(colnames(x),object$design.columns))
             stop("ordinal prediction columns do not match the fitted design",call.=FALSE)
@@ -418,7 +447,9 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profi
     out
 }
 
-.ordinal_probability_block <- function(object,x,offset,what="all",derivatives=TRUE) {
+.ordinal_probability_block <- function(object,x,offset,what="all",derivatives=TRUE,rows=NULL) {
+    if(inherits(object,"fastglm_ordinal_partial"))
+        return(.ordinal_partial_probability_block(object,x,offset,what,derivatives,rows))
     p <- length(object$beta); a <- object$working$alpha; q <- length(a)
     xx <- .ordinal_prediction_scale(x,object$working$center,object$working$scale)
     location <- streaming_qr_eta(xx,object$working$beta,offset)
@@ -464,6 +495,7 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profi
 }
 
 .ordinal_gradient <- function(parts,j,type) {
+    if(!is.null(parts$partial)) return(.ordinal_partial_gradient(parts,j,type))
     q <- ncol(parts$derivative); p <- ncol(parts$x); n <- nrow(parts$x)
     g <- matrix(0,n,q+p)
     if(type=="cumulative") {
@@ -573,7 +605,7 @@ predict.fastglm_ordinal <- function(object,newdata=NULL,
 fitted.fastglm_ordinal <- function(object,...) predict(object,...)
 
 .ordinal_diagnostics <- function(object) {
-    list(converged=object$converged,convergence.reason=object$convergence.reason,
+    out <- list(converged=object$converged,convergence.reason=object$convergence.reason,
         iterations=object$iterations,evaluations=object$evaluations,fallbacks=object$fallbacks,
         rank=object$rank,boundary=object$boundary,
         collapsed.categories=object$levels[object$collapsed.categories],
@@ -584,6 +616,8 @@ fitted.fastglm_ordinal <- function(object,...) predict(object,...)
         information.rcond=object$information.rcond,
         minimum.log.probability=object$minimum.log.probability,
         last.rejected.evaluation=object$last.rejected.evaluation)
+    if(inherits(object,"fastglm_ordinal_partial")) out$minimum.gap <- object$minimum.gap
+    out
 }
 
 .ordinal_average <- function(object,newdata,contrast,weights,vcov.,level,type) {
@@ -604,7 +638,7 @@ fitted.fastglm_ordinal <- function(object,...) predict(object,...)
         stop("contrast must preserve design dimensions",call.=FALSE)
     q <- length(object$effective$alpha); p <- length(object$beta)
     m <- if(type=="probability") q+1L else q
-    estimate <- numeric(m); gradient <- matrix(0,q+p,m)
+    estimate <- numeric(m); gradient <- matrix(0,nrow(object$working$covariance),m)
     .design_blocks(design$x,function(z,i) {
         w <- if(is.null(weights)) rep(1,length(i)) else weights[i]
         positive <- w>0
@@ -612,13 +646,13 @@ fitted.fastglm_ordinal <- function(object,...) predict(object,...)
         z <- z[positive,,drop=FALSE]; off <- design$offset[i[positive]]; w <- w[positive]
         if(!is.numeric(z) || is.complex(z) || any(!is.finite(z)) || any(!is.finite(off)))
             stop("ordinal averages require complete finite prediction rows with positive averaging weight",call.=FALSE)
-        parts <- .ordinal_probability_block(object,z,off)
+        parts <- .ordinal_probability_block(object,z,off,rows=i[positive])
         value <- parts[[type]]
         if(!is.null(contrast)) {
             zz <- as.matrix(altered[i[positive],,drop=FALSE])
             if(!is.numeric(zz) || is.complex(zz) || any(!is.finite(zz)))
                 stop("ordinal contrast must return finite numeric predictor values",call.=FALSE)
-            alternative <- .ordinal_probability_block(object,zz,off)
+            alternative <- .ordinal_probability_block(object,zz,off,rows=i[positive])
             value <- alternative[[type]]-value
         }
         estimate <<- estimate+colSums(w*value)
@@ -634,12 +668,13 @@ fitted.fastglm_ordinal <- function(object,...) predict(object,...)
 
 .ordinal_average_summary <- function(object,estimate,gradient,vcov.,level,type) {
     q <- length(object$effective$alpha); p <- length(object$beta)
+    d <- nrow(object$working$covariance)
     if(is.null(vcov.)) covariance <- object$working$covariance
     else {
         if(object$boundary)
             stop("a supplied covariance is not supported for ordinal averages with collapsed categories",call.=FALSE)
         if(!is.matrix(vcov.) || !is.numeric(vcov.) || is.complex(vcov.) ||
-           !identical(dim(vcov.),c(q+p,q+p)) || any(!is.finite(vcov.)) ||
+           !identical(dim(vcov.),c(d,d)) || any(!is.finite(vcov.)) ||
            !isSymmetric(vcov.,tol=1e-8))
             stop("ordinal averages require a finite symmetric full coefficient covariance",call.=FALSE)
         cn <- names(coef(object))
@@ -650,7 +685,9 @@ fitted.fastglm_ordinal <- function(object,...) predict(object,...)
             vcov. <- vcov.[cn,cn,drop=FALSE]
         }
         covariance <- vcov.
-        if(p) gradient[q+seq_len(p),] <-
+        if(inherits(object,"fastglm_ordinal_partial"))
+            gradient <- crossprod(object$working$Ti,gradient)
+        else if(p) gradient[q+seq_len(p),] <-
             gradient[q+seq_len(p),,drop=FALSE]*object$working$scale -
             outer(object$working$center,colSums(gradient[seq_len(q),,drop=FALSE]))
     }

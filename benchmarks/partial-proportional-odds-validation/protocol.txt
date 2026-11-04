@@ -1,0 +1,65 @@
+Partial proportional odds: independent numerical confirmation
+Protocol fixed before evaluating the new native implementation, 2026-11-04
+
+Role and separation
+-------------------
+This is a deterministic confirmation of equations and transformations, not a
+simulation calibration or a timing study. The earlier prototype and its wine
+rounding discrepancy are development evidence and remain unchanged. The two
+fixtures in reference.R differ from that prototype and were fixed before this
+confirmation. No rejection probabilities or coverage thresholds are tuned.
+
+reference.R obtains single-category log-probability derivatives using numDeriv.
+It constructs the general expected-cumulant mean-bias adjustment, independently
+of the native cumulative adjusted-count implementation. Probabilities are kept
+away from machine-precision tails because numerical differentiation is the
+reference, not a test of tail arithmetic. Native tail and feasibility tests are
+separate. Group counts, integer frequency weights, zero-weight observations,
+and nonzero offsets are present in both fixtures.
+
+Fixed comparisons and absolute maximum-error tolerances
+-------------------------------------------------------
+For each of logit, probit, and complementary log-log, and each fixture:
+ ordinary score versus numerical category derivatives: 2e-6
+ expected information versus score outer products: 2e-6
+ expected information versus expected negative Hessian: 2e-6
+ mean-bias adjustment versus generic P_t + Q_t formula: 2e-5
+ covariance versus inverse numerical information: 2e-6
+ log likelihood versus direct category probabilities: 1e-10
+
+All links additionally check the common-slope reduction, binary reduction,
+grouped-frequency expansion with offsets, and centered/scaled predictor
+recoding at tolerance 2e-9. A nonorthogonal baseline-plus-deviation map checks
+the generic adjustment's linear equivariance at tolerance 2e-5. A multiplied
+frequency sample must multiply information and ordinary score, leaving the
+adjustment unchanged (2e-9). Zero-frequency rows outside the probability domain
+must not change the fit state; positive-frequency invalid rows must be rejected.
+
+External wine example
+---------------------
+The author's unmodified supplementary bpolr.R implementation is sourced from an
+external cache, with its dependencies in a temporary library. Refit the published
+model with its stated original coordinates, recording estimates at full
+precision. Compare native coefficients and covariance with this independently
+maintained solver at tolerance 2e-6, and require native standardized adjusted
+score and remaining predictor update below 1e-8. Printed Table 6 is not used as
+a high-precision numerical target. Any discrepancy is retained and investigated.
+
+Fresh fitted-root comparison, fixed before the first native confirmation run
+-------------------------------------------------------------------------
+Refit both fixed fixtures by ML and mean bias reduction for all three links.
+Use the original bpolr implementation on frequency-expanded rows with the same
+offsets and compare coefficients and covariance at 2e-6. Require native adjusted
+(or ordinary for ML) standardized scores and remaining predictor updates below
+1e-8 and record both solvers' convergence indicators. These comparisons address
+implementation at roots in addition to the prespecified pointwise equations.
+
+Outcome handling
+----------------
+The runner refuses to replace existing output. Record every comparison, source
+hashes, session details and native fitted-root diagnostics in a fresh directory.
+Failures cannot be removed or tolerances changed after seeing their values.
+An implementation correction requires a separately identified rerun. These
+checks validate equations and selected numerical roots; they do not establish
+universal root existence, uniqueness, finiteness, convergence, or finite-sample
+inferential calibration.

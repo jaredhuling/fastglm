@@ -20,7 +20,8 @@ ordinal, truncated-count, hurdle, zero-inflated, or two-part fit.}
 \item{terms}{formula terms, or coefficient names for a matrix fit, to test
 jointly. The default selects all formula terms or all matrix coefficients
 except a coefficient named \code{(Intercept)}. For ordinal models it selects
-location slopes. Formula terms refer to their fitted design columns;
+location slopes. A nonparallel ordinal term includes its slopes at all
+thresholds. Formula terms refer to their fitted design columns;
 a main-effect test with interactions depends on their coding and reference
 values and is not a test of every effect involving that variable.
 For two-component models, names select complete terms in the selected

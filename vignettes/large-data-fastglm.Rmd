@@ -143,7 +143,7 @@ These calculations retain one block of design rows, matrices whose size depends 
 
 # Ordered outcomes from repeatable blocks
 
-Ordinal models can also be fitted without retaining the complete design or response. `fastglm_ordinal_streaming()` uses the same cumulative-link likelihood and mean bias-reduction equations as `fastglm_ordinal()`. The source must preserve the category order and predictor definitions across all blocks. A category or factor level may be absent from an individual block; the category totals and predictor rank are assessed across the complete source.
+Ordinal models with common slopes can also be fitted without retaining the complete design or response. `fastglm_ordinal_streaming()` uses the same cumulative-link likelihood and mean bias-reduction equations as the common-slope specification in `fastglm_ordinal()`. The source must preserve the category order and predictor definitions across all blocks. A category or factor level may be absent from an individual block; the category totals and predictor rank are assessed across the complete source. Selected threshold-specific effects through `nonparallel` currently require a retained dense design, as described in the ordinal vignette.
 
 The housing satisfaction data provide a small example with frequency weights. Here the reader selects rows from an in-memory table to make the construction visible. For a dataset larger than memory, the reader would obtain each block from a file or database instead.
 

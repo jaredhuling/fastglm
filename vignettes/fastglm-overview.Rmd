@@ -1,9 +1,9 @@
 ---
-title: "Estimation and inference with fastglm"
+title: "Models, inference, and computation with fastglm"
 author: "Jared Huling"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Estimation and inference with fastglm}
+  %\VignetteIndexEntry{Models, inference, and computation with fastglm}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,7 +12,49 @@ vignette: >
 knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE)
 ```
 
-Generalized linear models (GLMs) relate an outcome mean to explanatory variables while allowing different response distributions, such as binomial outcomes or Poisson counts. Analyses involving many observations or repeated model fits can become computationally expensive even when the number of coefficients is modest. The *fastglm* package performs the fitting calculations in C++. It uses iteratively reweighted least squares (IRLS), which updates the coefficients by solving a sequence of weighted regressions. We describe how to specify a model, assess the fit, obtain uncertainty estimates, and reuse calculations across repeated outcomes.
+The *fastglm* package provides regression models for continuous, binary, count, and ordered outcomes, with an emphasis on efficient computation and numerical stability. Its scope includes model-specific mean bias reduction, coefficient and model-assumption tests, probability and mean-response summaries, and methods for repeated fitting or data too large to retain as a dense design. This overview identifies the available models and methods before developing a common workflow for specification, diagnostics, uncertainty, and repeated outcomes.
+
+# Package scope and model selection {#package-scope}
+
+## Models and estimation
+
+| Outcome or modeling need | Main interface | Estimation and worked guide |
+|:--|:--|:--|
+| Generalized linear models (GLMs): continuous responses, binary outcomes, or counts | `fastglm()`; also `glm(method=fastglm_fit)` | Likelihood or quasi-likelihood fitting; mean bias reduction for supported likelihood family/link combinations. [GLM specification](#specifying-the-mean-model) and [bias reduction](firth-fastglm.html) |
+| Counts with variation beyond the Poisson model | `fastglm_nb()` | Maximum likelihood (ML) estimation of regression coefficients and negative-binomial size. [Count models](count-firth-fastglm.html#negative-binomial-variation) |
+| Counts sampled conditional on being positive | `fastglm_truncated()` | Zero-truncated Poisson or negative-binomial likelihood. [Truncation and hurdles](count-firth-fastglm.html#positive-counts-and-hurdle-models) |
+| Separate models for occurrence and positive counts | `fastglm_hurdle()` | Binary occurrence and zero-truncated Poisson or negative-binomial components, fitted by ML. [Hurdle models](count-firth-fastglm.html#positive-counts-and-hurdle-models) |
+| Zeros arising from an additional component and a count distribution | `fastglm_zi()` | Zero-inflated Poisson or negative-binomial likelihood. [Zero-inflated models](count-firth-fastglm.html#zero-inflated-counts) |
+| A point mass at zero and a positive continuous amount | `fastglm_twopart()` | Binary and Gamma components, with ML or mean bias reduction. [Two-part models](semicontinuous-fastglm.html) |
+| Ordered outcome categories | `fastglm_ordinal()` | Common or selected threshold-specific slopes; logit, probit, and complementary log-log links; ML or mean bias reduction. [Ordinal models, inference, and computation](ordinal-fastglm.html#ordinal-scope) |
+
+Mean bias reduction is requested with `firth=TRUE` in the interfaces that support it. For GLMs, support depends on the family and link; a fixed-size negative-binomial family supplied through `negbin(theta)` differs from jointly estimating size with `fastglm_nb()`. The truncated, hurdle, and zero-inflated count interfaces above currently use ML. The [bias-reduction guide](firth-fastglm.html) lists the supported GLM combinations, while the ordinal and two-part guides describe their respective adjustments.
+
+## Inference, prediction, and assessment
+
+| Analysis task | Interface | Scope |
+|:--|:--|:--|
+| Coefficient intervals and joint tests | `confint()` and `fastglm_wald_test()` | Model-based Wald inference for supported fitted classes; formula terms and named contrasts can combine several coefficients |
+| Profile intervals and likelihood-ratio tests | `confint(method="profile")`, `fastglm_profile_test()`, and `fastglm_confint_theta()` | Dense binomial-logit Firth fits, dense common-slope ordinal ML fits, and negative-binomial size profiles, respectively |
+| Score tests of coefficients or the common-slope restriction | `fastglm_score_test()` and `fastglm_po_test()` | Retained dense common-slope ordinal models; the two functions address different hypotheses |
+| Robust or clustered standard errors | `fastglm_vcov()` and supported `vcov(type=...)` methods | GLMs, count and two-part models, and retained dense common-slope ordinal fits, subject to each class's requirements |
+| Response or probability summaries | `predict(se.fit=TRUE)`, `fastglm_average()`, and `fastglm_marginal_effects()` | Predictions and averages for supported classes; automatic marginal effects currently target common-slope ordinal probabilities |
+| Refitting uncertainty and model assessment | `fastglm_bootstrap()`, `fastglm_diagnostics()`, residuals, and `fastglm_ordinal_assess()` | Bootstrap support depends on retained data and model class; ordinal assessment includes prediction scores and calibration |
+
+These methods use different assumptions and are not interchangeable across model classes. In particular, partial ordinal fits currently use model-based covariance and Wald inference; streamed ordinal fits also lack robust covariance and constrained inference. The [ordinal support guide](ordinal-fastglm.html#ordinal-scope) states these distinctions explicitly. The sections below explain [coefficient uncertainty and population averages](#inference-and-population-averages), [joint tests](#joint-coefficient-tests), and [readable result displays](#specifying-the-mean-model).
+
+## Data size and repeated fitting
+
+| Computational setting | Available approach | Scope and guide |
+|:--|:--|:--|
+| Ordinary in-memory analysis | Formula and dense-design interfaces | Model-specific fitting with coefficient, prediction, and diagnostic methods |
+| Predictors with many zeros or stored outside ordinary R matrices | Sparse matrices and `bigmemory::big.matrix` inputs | GLMs; selected count interfaces also accept sparse designs. [Large-data guide](large-data-fastglm.html#sparse-and-mapped-matrices) |
+| Data read repeatedly from files or databases | `fastglm_source()`, Arrow and DBI adapters, and streaming fitters | GLMs, negative-binomial, hurdle, two-part, and common-slope ordinal models. [Streaming computation](large-data-fastglm.html) |
+| Several responses with the same predictors | `fastglm_prepare()` / `fastglm_batch()` and their ordinal counterparts | GLMs and common-slope ordinal models; supported calculations are reused across responses. [Repeated outcomes](#repeated-outcomes-on-a-shared-design) |
+
+Data representation changes the amount of retained information and the cost of rereading observations. It can therefore affect both fitting time and which later procedures are available. The [large-data vignette](large-data-fastglm.html) explains these requirements. [Benchmark examples](benchmarks-fastglm.html) examine speed together with numerical agreement.
+
+The remaining sections demonstrate the shared workflow with a Poisson model: [specify the mean](#specifying-the-mean-model), [choose a numerical decomposition and assess convergence](#choosing-a-decomposition), [quantify uncertainty](#inference-and-population-averages), and [reuse a design](#repeated-outcomes-on-a-shared-design). Generalized linear model fitting uses iteratively reweighted least squares, which updates coefficients through a sequence of weighted regressions.
 
 # Specifying the mean model
 

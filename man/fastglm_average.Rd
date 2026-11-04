@@ -50,4 +50,7 @@ Uncertainty conditions on the supplied covariate distribution.
 For ordinal fits, returns an average for each category or cumulative
 probability. With collapsed categories, inference refers to the reduced
 category model and removed-category standard errors are unavailable.
+Nonparallel ordinal fits include the joint uncertainty of thresholds,
+common slopes, and threshold-specific slopes and check prediction validity
+at all rows with positive averaging weight.
 }

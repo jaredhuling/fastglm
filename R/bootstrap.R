@@ -41,6 +41,7 @@
 #'   multiplicities, requiring memory proportional to the number of rows;
 #'   neither procedure collects the full streaming design matrix.
 #'
+#'   Ordinal bootstrap support currently requires common slopes.
 #'   For ordinal fits, pair and cluster resampling copy stored rows, including
 #'   their frequency weights and grouped counts; they do not resample the
 #'   individuals represented by a frequency row separately. Parametric
@@ -80,6 +81,7 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
                               type=c("pairs","cluster","parametric"),
                               cluster=NULL,seed=NULL,workers=1L,level=.95,
                               control=list()) {
+    .ordinal_partial_require_common(object,"Bootstrap refitting")
     if(inherits(object,"fastglm_ordinal_stream"))
         stop("bootstrap refitting is not yet available for ordinal source fits",call.=FALSE)
     if(inherits(object,"fastglm_ordinal"))

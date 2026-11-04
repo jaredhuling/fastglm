@@ -2,6 +2,21 @@
 
 ## Model interfaces and inference
 
+* Added selected threshold-specific effects through `nonparallel` in dense
+  `fastglm_ordinal()` fits. Partial proportional odds and nonparallel probit
+  and complementary log-log models support maximum likelihood and full-model
+  mean bias reduction, formula terms or matrix column selections, grouped
+  frequencies, and offsets. Training and prediction checks enforce valid
+  cumulative probabilities at the relevant predictor values.
+* Added readable partial-model summaries, full expected-information covariance,
+  Wald intervals and term tests, probability standard errors, averages, and
+  prediction assessment. The ordinal vignette explains the model, prediction
+  domain, and bias-reduced wine example. Empty categories, streaming, robust
+  covariance, profiles, and constrained score inference remain unsupported for
+  these nonparallel fits, with explicit errors for unavailable operations.
+* Corrected cumulative Pearson residuals for ordinal probit and complementary
+  log-log fits to use the binomial variance of each cumulative indicator.
+
 * Added ML profile-likelihood intervals and joint likelihood-ratio tests for
   retained dense ordinal fits, and `fastglm_score_test()` for ordinary or
   full-model mean-bias-adjusted ordinal scores under linear constraints.
