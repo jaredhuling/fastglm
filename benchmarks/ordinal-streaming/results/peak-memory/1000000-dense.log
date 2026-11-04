@@ -1,0 +1,20 @@
+1000000 dense ML 0.734 seconds
+1000000 dense meanBR 0.964 seconds
+        2.84 real         2.44 user         0.35 sys
+          1040564224  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               67052  page reclaims
+                  31  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  55  voluntary context switches
+                 650  involuntary context switches
+         40370681769  instructions retired
+         11248195450  cycles elapsed
+           647349472  peak memory footprint

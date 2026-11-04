@@ -5,6 +5,14 @@ binomial_firth_moments <- function(eta, y, weights, code) {
     .Call(`_fastglm_binomial_firth_moments`, eta, y, weights, code)
 }
 
+binomial_firth_summary <- function(eta, y, weights, trials, code) {
+    .Call(`_fastglm_binomial_firth_summary`, eta, y, weights, trials, code)
+}
+
+binomial_firth_derivative <- function(eta, code) {
+    .Call(`_fastglm_binomial_firth_derivative`, eta, code)
+}
+
 colMax_dense <- function(A) {
     .Call(`_fastglm_colMax_dense`, A)
 }
@@ -79,6 +87,10 @@ streaming_qr_finish <- function(state) {
 
 fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start = NULL, fam_params = NULL, firth = FALSE, column_maxabs = NULL) {
     .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs)
+}
+
+ordinal_stream_native_fit <- function(fetch, n_chunks, predictors, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L) {
+    .Call(`_fastglm_ordinal_stream_native_fit`, fetch, n_chunks, predictors, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
 }
 
 prepare_glm_constant <- function(x, weights, leverage, code) {

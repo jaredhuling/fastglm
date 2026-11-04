@@ -1,0 +1,144 @@
+Ordinal fitting from repeatable sources: development validation
+==============================================================
+
+Baseline source: c3b3eeb Correct binomial Firth tail calculations and accelerate
+ordinal fitting. The completed source hashes, installed library hashes, and
+session records identify the implementation checked here. This is engineering
+validation of equivalent equations and bounded design storage, not a formal
+inferential-calibration study or a claim that source fitting is faster.
+
+Mathematical and computational contract
+--------------------------------------
+The model is G^{-1}{Pr(Y<=j)}=alpha_j-x'beta-offset. Cumulative logit, probit,
+and complementary log-log links, grouped counts, frequency weights, and
+mean bias reduction have the same definitions as dense fastglm_ordinal().
+Frequency counts are not normalized in the likelihood or estimating equations.
+
+A shared native header now separates accumulation of ordinary scores and
+expected information from accumulation of the mean-bias adjustment. The
+information is combined across the complete source and inverted before any
+row's adjustment is calculated. This is the same global-information adjustment
+used by the dense implementation, evaluated during a subsequent source pass.
+A further pass evaluates the largest remaining cumulative-predictor change.
+The dense evaluator and optimizer use the same kernels and preserve their
+previous operation ordering. No probability floor or inferential correction
+is added by the source implementation.
+
+Category totals and the predictor schema are established globally. Empty
+interior categories have the same reduced-model mapping as dense fits; empty
+endpoints require mean bias reduction. Zero-frequency blocks are allowed.
+Weighted centering/scaling and an incremental QR rank check combine all blocks;
+a single block may be deficient in rank or omit categories. The starting
+thresholds and final parameter/covariance transformations match dense fitting.
+The declared data source must return unchanged rows and values on every pass.
+Structural checks cannot establish immutability of an external database.
+
+With B rows in the largest supplied block, p predictors, K categories, and
+C source blocks, additional storage is O(B*(p+K)+(p+K)^2+C), plus the stored
+optimizer trace and the source's own metadata. The source callback must itself
+read data in blocks; a closure over a full in-memory matrix does not provide
+bounded total memory. Predictor matrices, responses, and row-frequency vectors
+are not retained in the fitted model. Prediction and residual callbacks keep
+output storage bounded; collecting the complete result necessarily uses O(n)
+or O(nK) output memory.
+
+Validation scope
+----------------
+The test suite compares all three links under ML and mean bias reduction,
+several source and inner-block sizes, grouped counts, individual outcomes,
+frequency weights, zero weights, offsets, and formula sources. It checks
+coefficient, covariance, ordinary/adjusted score, likelihood, deviance,
+prediction, standard-error, residual, and global-category mapping agreement.
+Resettable sources check that each pass begins at block one. Tests reject
+changing column/response schemas, redundant global designs, unsupported
+noninteger frequencies, and missing numeric category specifications.
+
+run.R fixes seed 114101 before any source comparison. It writes data to
+uncompressed temporary RDS files one block at a time (B=2000,p=6,K=4), then
+fits ML and mean bias reduction at n=5000 and n=200000. Dense and source
+runs execute in separate R processes. The source retains filenames only.
+On macOS, /usr/bin/time -l reports maximum process RSS, including R startup,
+package loading, data generation and both fits. This is not an isolated native
+allocation measurement. R object.size excludes closure environments, so the
+reported object size alone cannot establish the memory claim; the allocation
+structure and process RSS provide separate evidence. A single timing per case
+illustrates rereading costs and is not a precision speed comparison.
+
+Observed results and limits
+---------------------------
+The initial isolated comparisons converged in seven iterations for both
+estimators and implementations. At n=5000, dense/source elapsed seconds were
+0.005/0.034 for both ML and meanBR. At n=200000, they were 0.169/1.025 for ML
+and 0.219/1.374 for meanBR. The source used 23 and 30 complete passes,
+respectively, including preparation. Repeated reads and block validation have
+a material cost: this feature offers bounded design storage, not a speedup
+over an already available dense matrix. These are single development timings.
+
+Across these comparisons, maximum absolute coefficient, covariance, and score
+differences were 2.23e-16, 6.51e-19, and 1.34e-11. Likelihood and deviance
+differences were at most 1.82e-12 and 3.64e-12. Predicted probabilities and
+their standard errors differed by at most 1.12e-16 and 6.94e-18. All raw
+solutions and derived errors are retained in results/.
+
+The initial sandboxed processes could not obtain macOS memory statistics
+(the raw logs retain the sysctl failure). Separate fresh processes repeated
+the same comparisons with access to those statistics. A one-million-row
+comparison then tested whether the source's live storage remained bounded.
+Other verification jobs could run concurrently with these memory reruns;
+their elapsed times are not used for speed claims. Both macOS process
+statistics are reported here, rather than selecting the more favorable one:
+
+                 maximum resident bytes       peak memory footprint bytes
+rows             dense         source          dense         source
+5,000            226066432     296255488         188072728     226263856
+200,000          472219648     584056832         311018456     248923000
+1,000,000       1040564224     657686528         647349472     246678392
+
+Source fitting used more maximum resident memory at the two smaller sizes.
+At one million rows it used less by both metrics. Its peak footprint was
+approximately 247-249 MB at 200000 and one million rows, while its maximum
+resident size still increased. Thus the observed operating-system high-water
+mark is not identical to bounded live design storage. R allocation, garbage
+collection, and operating-system accounting affect these measurements.
+
+At one million rows the source's post-collection live R heap was 107.9 MB
+after ML and 108.7 MB after meanBR, with a maximum vector heap of 64 MiB.
+For dense fitting the corresponding live-heap measurements were 180.3 MB
+and 181.1 MB, and maximum vector heaps were 448.9 and 456.7 MiB. The raw
+one-million-row heap CSVs inadvertently label maximum cell counts as
+maximum_used_mb; their original numbers are preserved. summarize.R derives
+the vector-heap values from the documented 8-byte Vcell unit and does not
+infer a byte size for Ncells. Future run.R records both units explicitly.
+The live-before/live-after MB fields in the raw records are already correct.
+
+The million-row fits all converged in six iterations. Their maximum
+coefficient/covariance/score differences were 1.12e-16, 8.48e-21, and
+7.93e-11; likelihood and deviance agreed exactly. Prediction errors were
+at most 1.12e-16 and standard-error errors at most 1.52e-18. These checks
+support the shared-equations and bounded-design-storage implementation.
+They do not establish inferential calibration, precision timing rankings,
+or an unconditional bound on memory consumed by a user-supplied callback.
+
+The 5k/200k runs preceded the final R-only removal of repeated category-total
+and saturated-likelihood calculations after preparation. Their native-library
+hashes are preserved; the historical installed-R database hash was not
+recorded and is unavailable. The million-row runs use the final R reader,
+whose source and installed-R hashes are in peak-memory/1000000-source-provenance.csv.
+The original harness is preserved as results/run-initial.R. The final
+source hashes and patch identify the package implementation used for focused
+tests; results/source-tests.log records that passing suite. Structural source
+validation and all numerical equations were unchanged by the R allocation
+reduction. The two stages remain separately identified in the raw results.
+
+Source-fit methods include coefficients, model-based covariance, summaries,
+Wald intervals, stored numerical diagnostics, likelihood/deviance, and
+predictions/residuals/weights with optional per-block output callbacks. Profile
+inference, robust covariance, refitting bootstraps, and methods requiring the
+retained fitted observations are not implemented for source fits. Explicit
+prediction/evaluation data remain usable by compatible inherited methods.
+
+Reproduce from the repository root with a separately installed candidate:
+  /usr/bin/time -l Rscript benchmarks/ordinal-streaming/run.R LIBRARY 5000 dense benchmarks/ordinal-streaming/results/5000-dense > benchmarks/ordinal-streaming/results/5000-dense.log 2>&1
+Repeat for n=5000,200000 and method=dense,source, then run summarize.R.
+Raw outputs are not overwritten. Use a new results destination for a new
+candidate or execution; preserve earlier results and their source provenance.

@@ -1,0 +1,50 @@
+Noncanonical binomial Firth performance: engineering confirmation
+===============================================================
+
+Baseline: c3b3eeb, the accurate-tail implementation committed before this work.
+The performance objective is to remove duplicated arithmetic and allocations
+while keeping the adjusted equations, stopping controls, covariance, likelihood,
+and residual definitions. This is a numerical/software optimization, not a new
+statistical procedure or an inference-calibration experiment.
+
+Development and confirmation are separate. development/profile.R uses seed
+113101 at n=12,000 and 100,000 to distinguish native fitting from finalization
+and derivative requests. It informs the implementation and is not untouched
+confirmation. Its baseline and first-candidate profiles are retained.
+
+The fixed confirmation runner run.R uses seed 113201 on five designs:
+  small: n=600, p=3 including intercept;
+  ordinary: n=12,000, p=6;
+  wide: n=12,000, p=20;
+  large: n=120,000, p=6;
+  grouped: n=12,000, p=6, binomial trial totals 4/9/20, frequency weights
+           0/1/2/1, and varying location offsets.
+Both probit and cloglog are fitted by QR and LLT. Ordinary logit is an unaffected
+control. Each complete fit and derivative request is timed 11 times after a
+warm-up. Both libraries run in separate R processes without competing numerical
+or compilation jobs. The runner refuses to overwrite existing raw timings.
+
+summarize.R records all cases, median speed ratios, coefficient/covariance and
+post-fit differences, and whether iteration counts agree. The correctness
+requirement is mathematical-equation identity, not a selected speed target.
+The comparison requires identical iteration counts and numerical errors below
+1e-9 (relative for extensive likelihood/deviance sums). Small summation-order
+roundoff does not alter the estimand. Neither coefficients nor stopping rules
+may be changed to achieve a speed target. Timing results are descriptive of
+these designs and machine; they do not establish uniform speed dominance.
+
+The previous 146-case independent adjusted-score panel is also rerun unchanged
+in meaning, with outputs written under this study rather than replacing prior
+evidence. Focused tests check count/weight conventions, zero-weight rows,
+extreme tails, missing values, derivatives, and compact inference modes.
+
+Final source hashes are to be frozen before confirmation results are read.
+The archived source delta identifies the candidate independently of the package
+version string. Session information and installed native-library hashes record
+the environment. A separate baseline library and source archive remain immutable.
+
+Reproduction from repository root:
+  Rscript benchmarks/firth-tail-performance/run.R BASELINE_LIBRARY baseline RESULTS_DIRECTORY
+  Rscript benchmarks/firth-tail-performance/run.R CANDIDATE_LIBRARY candidate RESULTS_DIRECTORY
+  Rscript benchmarks/firth-tail-performance/summarize.R RESULTS_DIRECTORY baseline candidate
+The profiling script accepts LIBRARY and OUTPUT_DIRECTORY separately.

@@ -217,6 +217,8 @@ The display reports how many scoring steps were reduced and the adjusted score a
 
 Accurate probability calculations are also necessary when outcomes are almost determined by the predictors. A probability can be so close to one that ordinary floating-point subtraction loses the complementary probability, even though that small quantity still affects the bias adjustment. Replacing small probabilities and derivatives separately by numerical lower bounds can therefore change the equations being solved. Probit and complementary log-log bias reduction evaluates these quantities using logarithms of probabilities and stable tail formulas. The likelihood, residuals, covariance, and score diagnostics follow the same calculations. Displayed probabilities can still round to zero or one.
 
+These probability calculations also enter post-fit likelihood and residual summaries and prediction standard errors. The required summaries are computed together, and prediction derivatives are evaluated separately when only those derivatives are needed. This avoids repeated probability calculations and temporary vectors while preserving the adjusted equations and reported quantities. The computational benefit depends on the design and the requested calculations.
+
 The following example separates the binary outcomes at zero exposure. The nuisance predictor, frequency weights, and offsets remain part of the model. The adjusted-score diagnostic assesses the numerical solution directly; agreement between two coefficient vectors would not establish accuracy if both calculations used the same probability approximation.
 
 ```{r}

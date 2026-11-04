@@ -1,0 +1,1434 @@
+diff --git a/src/fit_ordinal.cpp b/src/fit_ordinal.cpp
+index 41dc0ca..91aa5dd 100644
+--- a/src/fit_ordinal.cpp
++++ b/src/fit_ordinal.cpp
+@@ -1,315 +1,6 @@
+-#include <RcppEigen.h>
+-#include <algorithm>
+-#include <cmath>
+-#include <limits>
+-#include <stdexcept>
+-#include <string>
++#include "../inst/include/ordinal.h"
+ // [[Rcpp::depends(RcppEigen)]]
+-
+-namespace {
+-using Eigen::MatrixXd;
+-using Eigen::VectorXd;
+-
+-struct OrdinalEvaluationError : std::runtime_error {
+-    explicit OrdinalEvaluationError(const std::string& message) : std::runtime_error(message) {}
+-};
+-
+-inline double ordinal_log1mexp(double x) {
+-    return x < -std::log(2.0) ? std::log1p(-std::exp(x)) : std::log(-std::expm1(x));
+-}
+-
+-// Factor responses stay as category indexes. A grouped response is already an
+-// n by K input; neither representation is expanded into an ordinal design.
+-struct OrdinalData {
+-    Eigen::Map<const MatrixXd> x;
+-    Rcpp::IntegerVector codes;
+-    Rcpp::NumericMatrix counts;
+-    Rcpp::NumericVector weights, offset;
+-    VectorXd totals;
+-    int n,p,K,q,d,block,link;
+-    bool grouped;
+-
+-    OrdinalData(Rcpp::NumericMatrix X,Rcpp::IntegerVector y,Rcpp::NumericMatrix Y,
+-        Rcpp::NumericVector w,Rcpp::NumericVector off,int categories,int block_size,int link_code=0) :
+-        x(X.begin(),X.nrow(),X.ncol()),codes(y),counts(Y),weights(w),offset(off),
+-        n(X.nrow()),p(X.ncol()),K(categories),q(categories-1),d(p+q),block(block_size),link(link_code),
+-        grouped(Y.nrow()!=0 || Y.ncol()!=0) {
+-        if(n<1 || K<2 || block<1 || link<0 || link>2 || w.size()!=n || off.size()!=n ||
+-           (grouped && (Y.nrow()!=n || Y.ncol()!=K)) || (!grouped && y.size()!=n))
+-            Rcpp::stop("incompatible ordinal data dimensions");
+-        if(!x.allFinite()) Rcpp::stop("ordinal design must be finite");
+-        totals.resize(n);
+-        for(int i=0;i<n;++i) {
+-            if(!std::isfinite(w[i]) || w[i]<0 || !std::isfinite(off[i]))
+-                Rcpp::stop("ordinal weights and offsets must be finite, with nonnegative weights");
+-            double total=w[i];
+-            if(grouped) {
+-                total=0;
+-                for(int k=0;k<K;++k) {
+-                    if(!std::isfinite(Y(i,k)) || Y(i,k)<0)
+-                        Rcpp::stop("ordinal category counts must be finite and nonnegative");
+-                    // Effective counts are the model frequencies. Their sum
+-                    // can be finite even when the unweighted row sum overflows;
+-                    // zero-frequency rows likewise must not form 0 * Inf.
+-                    total+=w[i]*Y(i,k);
+-                }
+-            } else if(y[i]<1 || y[i]>K) Rcpp::stop("invalid ordinal category index");
+-            totals[i]=total;
+-            if(!std::isfinite(totals[i])) Rcpp::stop("ordinal total frequency overflow");
+-        }
+-        if(!(totals.sum()>0) || !std::isfinite(totals.sum()))
+-            Rcpp::stop("ordinal fitting requires a finite positive total frequency");
+-    }
+-
+-    double linear(int i,const VectorXd& beta) const {
+-        double sum=0,error=0;
+-        for(int j=0;j<p;++j) {
+-            const double product=x(i,j)*beta[j],next=sum+product;
+-            error+=std::abs(sum)>=std::abs(product) ? (sum-next)+product : (product-next)+sum;
+-            error+=std::fma(x(i,j),beta[j],-product);
+-            sum=next;
+-        }
+-        return sum+error;
+-    }
+-
+-    double predictor_step(const VectorXd& direction) const {
+-        const VectorXd beta=direction.tail(p);
+-        const double low=direction.head(q).minCoeff(),high=direction.head(q).maxCoeff();
+-        double ans=0;
+-        for(int first=0;first<n;first+=block) {
+-            Rcpp::checkUserInterrupt();
+-            const int last=std::min(n,first+block);
+-            for(int i=first;i<last;++i) if(totals[i]>0) {
+-                const double dx=linear(i,beta);
+-                ans=std::max(ans,std::max(std::abs(low-dx),std::abs(high-dx)));
+-            }
+-        }
+-        return ans;
+-    }
+-};
+-
+-struct OrdinalRow {
+-    VectorXd eta,g,cdf,survival,logp,left,right,neighbor,gprime,logg,logcdf,logsurvival,location,logden;
+-    VectorXd loggap,inverse_gap,neighbor_gap;
+-    int link=0;
+-    explicit OrdinalRow(const VectorXd& alpha) : eta(alpha.size()),g(alpha.size()),cdf(alpha.size()),
+-        survival(alpha.size()),logp(alpha.size()+1),left(alpha.size()),right(alpha.size()),neighbor(alpha.size()),
+-        gprime(alpha.size()),logg(alpha.size()),logcdf(alpha.size()),logsurvival(alpha.size()),
+-        location(alpha.size()+1),logden(alpha.size()),loggap(alpha.size()),inverse_gap(alpha.size()),neighbor_gap(alpha.size()) {
+-        for(int s=1;s<alpha.size();++s) {
+-            const double gap=alpha[s]-alpha[s-1];
+-            loggap[s]=ordinal_log1mexp(-gap);inverse_gap[s]=1/std::expm1(gap);
+-        }
+-        for(int s=1;s+1<alpha.size();++s)
+-            neighbor_gap[s]=-std::expm1(alpha[s-1]-alpha[s+1]);
+-    }
+-    void evaluate(const VectorXd& alpha,double linear,int link_code=0) {
+-        link=link_code;
+-        const int q=alpha.size();
+-        if(link!=0) {
+-            for(int s=0;s<q;++s) {
+-                eta[s]=alpha[s]-linear;
+-                if(link==1) {
+-                    logcdf[s]=R::pnorm(eta[s],0,1,true,true);
+-                    logsurvival[s]=R::pnorm(eta[s],0,1,false,true);
+-                    logg[s]=R::dnorm(eta[s],0,1,true);
+-                    g[s]=std::exp(logg[s]);gprime[s]=-eta[s]*g[s];
+-                } else {
+-                    const double e=std::exp(eta[s]);
+-                    logcdf[s]=eta[s]<-36 ? eta[s] : ordinal_log1mexp(-e);
+-                    logsurvival[s]=-e;logg[s]=eta[s]-e;
+-                    g[s]=std::exp(logg[s]);gprime[s]=std::isfinite(e) ? g[s]*(1-e) : 0;
+-                }
+-                cdf[s]=std::exp(logcdf[s]);survival[s]=std::exp(logsurvival[s]);
+-            }
+-            logp[0]=logcdf[0];logp[q]=logsurvival[q-1];
+-            for(int s=1;s<q;++s) {
+-                if(link==2) {
+-                    const double ld=eta[s]+std::log(-std::expm1(alpha[s-1]-alpha[s]));
+-                    logden[s]=ld < -36 ? ld : std::log(-std::expm1(-std::exp(ld)));
+-                }
+-                logp[s]=eta[s]<=0 ? logcdf[s]+ordinal_log1mexp(logcdf[s-1]-logcdf[s]) :
+-                    logsurvival[s-1]+(link==2 ? logden[s] : ordinal_log1mexp(logsurvival[s]-logsurvival[s-1]));
+-            }
+-            for(int s=0;s<q;++s) {
+-                left[s]=std::exp(logg[s]-logp[s]);right[s]=std::exp(logg[s]-logp[s+1]);
+-            }
+-            if(link==2) {
+-                right[q-1]=std::exp(eta[q-1]);
+-                for(int s=1;s<q;++s) {
+-                    const double difference=std::exp(eta[s])*(-std::expm1(alpha[s-1]-alpha[s]));
+-                    left[s]=std::exp(eta[s]-difference-logden[s]);
+-                    right[s-1]=std::exp(eta[s-1]-logden[s]);
+-                }
+-            }
+-            location[0]=left[0];location[q]=-right[q-1];
+-            for(int s=1;s<q;++s) {
+-                const double gap=alpha[s]-alpha[s-1];
+-                const double delta=link==1 ? -.5*gap*(eta[s]+eta[s-1]) :
+-                    gap-std::exp(eta[s])*(-std::expm1(-gap));
+-                location[s]=delta>=0 ? left[s]*(-std::expm1(-delta)) :
+-                    -right[s-1]*(-std::expm1(delta));
+-            }
+-            for(int s=0;s<q;++s) neighbor[s]=location[s]-location[s+1];
+-            if(!logp.allFinite() || !left.allFinite() || !right.allFinite() ||
+-               !location.allFinite() || !gprime.allFinite())
+-                throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
+-            return;
+-        }
+-        for(int s=0;s<q;++s) {
+-            eta[s]=alpha[s]-linear;
+-            const double e=std::exp(-std::abs(eta[s])),den=1+e;
+-            cdf[s]=eta[s]>=0 ? 1/den : e/den;
+-            survival[s]=eta[s]>=0 ? e/den : 1/den;
+-            g[s]=e/(den*den);
+-            const double logden=std::log1p(e);
+-            logcdf[s]=eta[s]>=0 ? -logden : eta[s]-logden;
+-            logsurvival[s]=eta[s]>=0 ? -eta[s]-logden : -logden;
+-        }
+-        logp[0]=logcdf[0];logp[q]=logsurvival[q-1];
+-        for(int s=1;s<q;++s)
+-            logp[s]=logcdf[s]+logsurvival[s-1]+loggap[s];
+-        for(int s=0;s<q;++s) {
+-            // g_s / P_s and g_s / P_{s+1} simplify exactly for the logit link.
+-            // Threshold gaps are common to every row and computed only once.
+-            left[s]=survival[s]+(s ? inverse_gap[s] : 0);
+-            right[s]=cdf[s]+(s+1<q ? inverse_gap[s+1] : 0);
+-            neighbor[s]=q==1 ? 1 : (s==0 ? cdf[1] : (s==q-1 ? survival[q-2] :
+-                cdf[s+1]*survival[s-1]*neighbor_gap[s]));
+-        }
+-        if(!logp.allFinite() || !left.allFinite() || !right.allFinite())
+-            throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
+-    }
+-    double location_score(int category) const {
+-        if(link!=0) return location[category];
+-        return (category<eta.size() ? survival[category] : 0)-
+-            (category>0 ? cdf[category-1] : 0);
+-    }
+-};
+-
+-struct OrdinalState {
+-    MatrixXd information,inverse;
+-    VectorXd ordinary,adjustment,score,step;
+-    double loglik=0,scaled_score=0,predictor_step=0,rcond=0,min_logp=0;
+-    explicit OrdinalState(int d=0) : information(MatrixXd::Zero(d,d)),inverse(d,d),
+-        ordinary(VectorXd::Zero(d)),adjustment(VectorXd::Zero(d)),score(d),step(d) {}
+-};
+-
+-// Global expected information is formed before any bias adjustment. The
+-// adjustment is Kosmidis (2014), equations (7)-(9), in threshold/slope coordinates.
+-OrdinalState ordinal_evaluate(const OrdinalData& data,const VectorXd& parameters,
+-    bool firth,double condition_tol) {
+-    const int p=data.p,q=data.q,d=data.d;
+-    if(parameters.size()!=d || !parameters.allFinite())
+-        throw OrdinalEvaluationError("invalid ordinal parameters");
+-    const VectorXd alpha=parameters.head(q),beta=parameters.tail(p);
+-    for(int s=1;s<q;++s) if(!(alpha[s]>alpha[s-1]))
+-        throw OrdinalEvaluationError("ordinal thresholds are not strictly ordered");
+-    OrdinalState result(d);OrdinalRow row(alpha);
+-    for(int first=0;first<data.n;first+=data.block) {
+-        Rcpp::checkUserInterrupt();
+-        const int length=std::min(data.block,data.n-first);
+-        MatrixXd rowsums=MatrixXd::Zero(length,q);
+-        VectorXd slope_score=VectorXd::Zero(length),slope_weight=VectorXd::Zero(length);
+-        for(int r=0;r<length;++r) {
+-            const int i=first+r;const double m=data.totals[i];
+-            if(m==0) continue;
+-            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link);
+-            result.min_logp=std::min(result.min_logp,row.logp.minCoeff());
+-            if(data.grouped) {
+-                for(int k=0;k<data.K;++k) {
+-                    const double y=data.weights[i]*data.counts(i,k);
+-                    result.loglik+=y*row.logp[k];
+-                    slope_score[r]-=y*row.location_score(k);
+-                    if(k<q) result.ordinary[k]+=y*row.left[k];
+-                    if(k>0) result.ordinary[k-1]-=y*row.right[k-1];
+-                }
+-            } else {
+-                const int k=data.codes[i]-1;
+-                result.loglik+=m*row.logp[k];
+-                slope_score[r]=-m*row.location_score(k);
+-                if(k<q) result.ordinary[k]+=m*row.left[k];
+-                if(k>0) result.ordinary[k-1]-=m*row.right[k-1];
+-            }
+-            for(int s=0;s<q;++s) {
+-                result.information(s,s)+=m*row.g[s]*(row.left[s]+row.right[s]);
+-                rowsums(r,s)=m*row.g[s]*row.neighbor[s];
+-                slope_weight[r]+=rowsums(r,s);
+-                if(s+1<q) result.information(s,s+1)-=m*row.g[s+1]*row.right[s];
+-            }
+-        }
+-        if(p) {
+-            const auto xx=data.x.middleRows(first,length);
+-            result.ordinary.tail(p).noalias()+=xx.transpose()*slope_score;
+-            result.information.topRightCorner(q,p).noalias()-=rowsums.transpose()*xx;
+-            MatrixXd weighted=slope_weight.asDiagonal()*xx;
+-            result.information.bottomRightCorner(p,p).noalias()+=xx.transpose()*weighted;
+-        }
+-    }
+-    for(int s=1;s<q;++s) result.information(s,s-1)=result.information(s-1,s);
+-    if(p) result.information.bottomLeftCorner(p,q)=result.information.topRightCorner(q,p).transpose();
+-    VectorXd diagonal=result.information.diagonal().array().sqrt();
+-    if(!diagonal.allFinite() || (diagonal.array()<=0).any() || !std::isfinite(result.loglik))
+-        throw OrdinalEvaluationError("nonpositive or non-finite ordinal information");
+-    const VectorXd inverse_scale=diagonal.cwiseInverse();
+-    MatrixXd correlation=inverse_scale.asDiagonal()*result.information*inverse_scale.asDiagonal();
+-    Eigen::LLT<MatrixXd> factor(correlation);
+-    if(factor.info()!=Eigen::Success)
+-        throw OrdinalEvaluationError("ordinal information is not positive definite");
+-    result.rcond=factor.rcond();
+-    if(!std::isfinite(result.rcond) || result.rcond<condition_tol)
+-        throw OrdinalEvaluationError("ordinal information is numerically singular");
+-    result.inverse=inverse_scale.asDiagonal()*factor.solve(MatrixXd::Identity(d,d))*inverse_scale.asDiagonal();
+-    result.inverse=(result.inverse+result.inverse.transpose()).eval()/2;
+-
+-    if(firth) for(int first=0;first<data.n;first+=data.block) {
+-        Rcpp::checkUserInterrupt();
+-        const int length=std::min(data.block,data.n-first);
+-        const auto xx=data.x.middleRows(first,length);
+-        MatrixXd xb,xa;
+-        if(p) {
+-            xb.noalias()=xx*result.inverse.bottomRightCorner(p,p);
+-            xa.noalias()=xx*result.inverse.bottomLeftCorner(p,q);
+-        }
+-        VectorXd slope=VectorXd::Zero(length),c(q);
+-        for(int r=0;r<length;++r) {
+-            const int i=first+r;const double m=data.totals[i];
+-            if(m==0) continue;
+-            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link);
+-            const double quadratic=p ? xb.row(r).dot(xx.row(r)) : 0;
+-            for(int s=0;s<q;++s) {
+-                const double v=result.inverse(s,s)+quadratic-(p ? 2*xa(r,s) : 0);
+-                c[s]=data.link==0 ? .5*m*row.g[s]*(1-2*row.cdf[s])*v : .5*m*row.gprime[s]*v;
+-                slope[r]-=c[s]*row.neighbor[s];
+-            }
+-            for(int s=0;s<q;++s)
+-                result.adjustment[s]+=(c[s]-(s ? c[s-1] : 0))*row.left[s]-
+-                    ((s+1<q ? c[s+1] : 0)-c[s])*row.right[s];
+-        }
+-        if(p) result.adjustment.tail(p).noalias()+=xx.transpose()*slope;
+-    }
+-    result.score=result.ordinary+result.adjustment;
+-    if(!result.score.allFinite() || !result.inverse.allFinite())
+-        throw OrdinalEvaluationError("non-finite ordinal adjusted score or covariance");
+-    result.step.noalias()=result.inverse*result.score;
+-    result.scaled_score=(result.score.array().abs()/diagonal.array()).maxCoeff();
+-    if(!result.step.allFinite() || !std::isfinite(result.scaled_score))
+-        throw OrdinalEvaluationError("non-finite ordinal convergence diagnostic");
+-    result.predictor_step=data.predictor_step(result.step);
+-    if(!std::isfinite(result.predictor_step))
+-        throw OrdinalEvaluationError("non-finite ordinal predictor step");
+-    return result;
+-}
+-
+-Rcpp::List ordinal_state_list(const OrdinalState& state) {
+-    return Rcpp::List::create(Rcpp::_["loglik"]=state.loglik,
+-        Rcpp::_["score"]=state.score,Rcpp::_["ordinary.score"]=state.ordinary,
+-        Rcpp::_["adjustment"]=state.adjustment,Rcpp::_["information"]=state.information,
+-        Rcpp::_["cov.unscaled"]=state.inverse,Rcpp::_["step"]=state.step,
+-        Rcpp::_["predictor.step"]=state.predictor_step,Rcpp::_["scaled.score"]=state.scaled_score,
+-        Rcpp::_["information.rcond"]=state.rcond,Rcpp::_["minimum.log.probability"]=state.min_logp);
+-}
+-}
++using namespace fglm_ordinal;
+ 
+ // [[Rcpp::export]]
+ Rcpp::List ordinal_native_evaluate(Rcpp::NumericMatrix x,Rcpp::IntegerVector y,
+@@ -327,95 +18,7 @@ Rcpp::List ordinal_native_fit(Rcpp::NumericMatrix x,Rcpp::IntegerVector y,
+     int categories,Rcpp::NumericVector start,bool firth=false,double score_tol=1e-8,
+     double step_tol=1e-8,int maxit=200,int block_size=2048,double max_step=4,
+     int max_halves=35,double condition_tol=1e-14,bool trace=false,int link=0) {
+-    if(!(score_tol>0) || !(step_tol>0) || maxit<1 || !(max_step>0) || max_halves<1 ||
+-       !(condition_tol>0) || !std::isfinite(score_tol+step_tol+max_step+condition_tol))
+-        Rcpp::stop("invalid ordinal optimizer controls");
+     OrdinalData data(x,y,counts,weights,offset,categories,block_size,link);
+-    VectorXd parameters=Rcpp::as<VectorXd>(start);
+-    int evaluations=0,fallbacks=0,iterations=0;
+-    auto evaluate=[&](const VectorXd& b) { ++evaluations;return ordinal_evaluate(data,b,firth,condition_tol); };
+-    OrdinalState current=evaluate(parameters);
+-    bool converged=false;std::string reason="iteration_limit",last_rejection;
+-    // A two-category cumulative-link model is a binomial GLM. Use its bounded
+-    // adjusted scoring iteration: a likelihood-score norm need not decrease
+-    // along this non-gradient direction, even on a path to a regular root.
+-    const bool binary_scoring=firth && data.q==1 && data.link!=0;
+-    MatrixXd history(maxit,4);
+-    for(int iter=1;iter<=maxit;++iter) {
+-        Rcpp::checkUserInterrupt();iterations=iter;
+-        double gap=std::numeric_limits<double>::infinity();
+-        for(int s=1;s<data.q;++s) gap=std::min(gap,parameters[s]-parameters[s-1]);
+-        history.row(iter-1)<<current.loglik,current.scaled_score,current.predictor_step,gap;
+-        if(trace) Rcpp::Rcout<<"iteration "<<iter<<": score "<<current.scaled_score<<
+-            ", predictor step "<<current.predictor_step<<"\n";
+-        if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
+-            converged=true;reason="score_and_predictor_step";break;
+-        }
+-        const MatrixXd metric=current.inverse;
+-        const VectorXd score=current.score;
+-        const double merit0=.5*score.dot(metric*score);
+-        VectorXd accepted_parameters;OrdinalState accepted_state(data.d);
+-        auto search=[&](VectorXd direction) {
+-            if(!direction.allFinite()) return false;
+-            const double bound=binary_scoring ? std::min(1.0,max_step) : max_step;
+-            direction/=std::max(1.0,data.predictor_step(direction)/bound);
+-            double fraction=1;
+-            for(int s=1;s<data.q;++s) {
+-                const double change=direction[s]-direction[s-1];
+-                if(change<0) fraction=std::min(fraction,.9*(parameters[s]-parameters[s-1])/(-change));
+-            }
+-            for(int h=0;h<=max_halves;++h) {
+-                const VectorXd candidate=parameters+fraction*direction;
+-                try {
+-                    OrdinalState trial=evaluate(candidate);
+-                    const double merit=.5*trial.score.dot(metric*trial.score);
+-                    if(std::isfinite(merit) && (binary_scoring || merit<=(1-1e-4*fraction)*merit0)) {
+-                        accepted_parameters=candidate;accepted_state=std::move(trial);return true;
+-                    }
+-                } catch(const OrdinalEvaluationError& error) { last_rejection=error.what(); }
+-                fraction/=2;
+-            }
+-            return false;
+-        };
+-        bool accepted=search(current.step);
+-        if(!accepted) {
+-            ++fallbacks;MatrixXd jacobian(data.d,data.d);bool valid=true;
+-            for(int j=0;j<data.d;++j) {
+-                double h=std::cbrt(std::numeric_limits<double>::epsilon())*(1+std::abs(parameters[j]));
+-                if(j<data.q) {
+-                    if(j>0) h=std::min(h,.1*(parameters[j]-parameters[j-1]));
+-                    if(j+1<data.q) h=std::min(h,.1*(parameters[j+1]-parameters[j]));
+-                }
+-                VectorXd upper=parameters,lower=parameters;upper[j]+=h;lower[j]-=h;
+-                try {
+-                    const OrdinalState up=evaluate(upper),down=evaluate(lower);
+-                    jacobian.col(j)=(up.score-down.score)/(2*h);
+-                } catch(const OrdinalEvaluationError& error) { last_rejection=error.what();valid=false;break; }
+-            }
+-            if(valid && jacobian.allFinite()) {
+-                MatrixXd gram=jacobian.transpose()*metric*jacobian;
+-                gram=(gram+gram.transpose()).eval()/2;
+-                const VectorXd rhs=-jacobian.transpose()*metric*score;
+-                const double damping[]={0,1e-8,1e-6,1e-4,.01,1,100};
+-                for(double lambda:damping) {
+-                    MatrixXd system=gram;system.diagonal().array()+=lambda;
+-                    Eigen::LDLT<MatrixXd> factor(system);
+-                    if(factor.info()==Eigen::Success) accepted=search(factor.solve(rhs));
+-                    if(accepted) break;
+-                }
+-            }
+-        }
+-        if(!accepted) { reason="score_search_failed";break; }
+-        parameters=accepted_parameters;current=std::move(accepted_state);
+-    }
+-    if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
+-        converged=true;reason="score_and_predictor_step";
+-    }
+-    Rcpp::List out=ordinal_state_list(current);
+-    out["coefficients"]=parameters;out["converged"]=converged;
+-    out["convergence.reason"]=reason;out["iterations"]=iterations;
+-    out["evaluations"]=evaluations;out["fallbacks"]=fallbacks;
+-    out["last.rejected.evaluation"]=last_rejection;
+-    out["history"]=MatrixXd(history.topRows(iterations));
+-    return out;
++    return ordinal_fit(data,Rcpp::as<VectorXd>(start),firth,score_tol,step_tol,maxit,
++        max_step,max_halves,condition_tol,trace);
+ }
+diff --git a/src/fit_streaming_ordinal.cpp b/src/fit_streaming_ordinal.cpp
+new file mode 100644
+index 0000000..0dcb5f6
+--- /dev/null
++++ b/src/fit_streaming_ordinal.cpp
+@@ -0,0 +1,41 @@
++#include "../inst/include/ordinal.h"
++// [[Rcpp::depends(RcppEigen)]]
++using namespace fglm_ordinal;
++
++namespace {
++struct OrdinalSource {
++    Rcpp::Function fetch;
++    int chunks,p,K,q,d,block,link;
++    OrdinalSource(Rcpp::Function callback,int n_chunks,int predictors,int categories,int block_size,int link_code) :
++        fetch(callback),chunks(n_chunks),p(predictors),K(categories),q(K-1),d(p+q),block(block_size),link(link_code) {}
++    template<class Function> void visit(Function&& function) const {
++        for(int k=1;k<=chunks;++k) {
++            Rcpp::checkUserInterrupt();
++            Rcpp::List value=fetch(k);
++            Rcpp::NumericMatrix x=value["X"],counts=value["counts"];
++            Rcpp::IntegerVector codes=value["codes"];
++            Rcpp::NumericVector weights=value["weights"],offset=value["offset"];
++            if(x.ncol()!=p) Rcpp::stop("ordinal source predictor dimension changed");
++            OrdinalData data(x,codes,counts,weights,offset,K,block,link,false);
++            function(data);
++        }
++    }
++    double predictor_step(const VectorXd& direction) const {
++        double largest=0;
++        visit([&](const OrdinalData& data) { largest=std::max(largest,data.predictor_step(direction)); });
++        return largest;
++    }
++};
++}
++
++// [[Rcpp::export]]
++Rcpp::List ordinal_stream_native_fit(Rcpp::Function fetch,int n_chunks,int predictors,
++    int categories,Rcpp::NumericVector start,bool firth=false,double score_tol=1e-8,
++    double step_tol=1e-8,int maxit=200,int block_size=2048,double max_step=4,
++    int max_halves=35,double condition_tol=1e-14,bool trace=false,int link=0) {
++    if(n_chunks<1 || predictors<0 || categories<2 || block_size<1 || link<0 || link>2)
++        Rcpp::stop("invalid ordinal source dimensions");
++    OrdinalSource data(fetch,n_chunks,predictors,categories,block_size,link);
++    return ordinal_fit(data,Rcpp::as<VectorXd>(start),firth,score_tol,step_tol,maxit,
++        max_step,max_halves,condition_tol,trace);
++}
+diff --git a/inst/include/ordinal.h b/inst/include/ordinal.h
+new file mode 100644
+index 0000000..f2df787
+--- /dev/null
++++ b/inst/include/ordinal.h
+@@ -0,0 +1,430 @@
++#ifndef FASTGLM_ORDINAL_H
++#define FASTGLM_ORDINAL_H
++#include <RcppEigen.h>
++#include <algorithm>
++#include <cmath>
++#include <limits>
++#include <stdexcept>
++#include <string>
++namespace fglm_ordinal {
++using Eigen::MatrixXd;
++using Eigen::VectorXd;
++
++struct OrdinalEvaluationError : std::runtime_error {
++    explicit OrdinalEvaluationError(const std::string& message) : std::runtime_error(message) {}
++};
++
++inline double ordinal_log1mexp(double x) {
++    return x < -std::log(2.0) ? std::log1p(-std::exp(x)) : std::log(-std::expm1(x));
++}
++
++// Factor responses stay as category indexes. A grouped response is already an
++// n by K input; neither representation is expanded into an ordinal design.
++struct OrdinalData {
++    Eigen::Map<const MatrixXd> x;
++    Rcpp::IntegerVector codes;
++    Rcpp::NumericMatrix counts;
++    Rcpp::NumericVector weights, offset;
++    VectorXd totals;
++    int n,p,K,q,d,block,link;
++    bool grouped;
++
++    OrdinalData(Rcpp::NumericMatrix X,Rcpp::IntegerVector y,Rcpp::NumericMatrix Y,
++        Rcpp::NumericVector w,Rcpp::NumericVector off,int categories,int block_size,int link_code=0,bool require_positive=true) :
++        x(X.begin(),X.nrow(),X.ncol()),codes(y),counts(Y),weights(w),offset(off),
++        n(X.nrow()),p(X.ncol()),K(categories),q(categories-1),d(p+q),block(block_size),link(link_code),
++        grouped(Y.nrow()!=0 || Y.ncol()!=0) {
++        if(n<1 || K<2 || block<1 || link<0 || link>2 || w.size()!=n || off.size()!=n ||
++           (grouped && (Y.nrow()!=n || Y.ncol()!=K)) || (!grouped && y.size()!=n))
++            Rcpp::stop("incompatible ordinal data dimensions");
++        if(!x.allFinite()) Rcpp::stop("ordinal design must be finite");
++        totals.resize(n);
++        for(int i=0;i<n;++i) {
++            if(!std::isfinite(w[i]) || w[i]<0 || !std::isfinite(off[i]))
++                Rcpp::stop("ordinal weights and offsets must be finite, with nonnegative weights");
++            double total=w[i];
++            if(grouped) {
++                total=0;
++                for(int k=0;k<K;++k) {
++                    if(!std::isfinite(Y(i,k)) || Y(i,k)<0)
++                        Rcpp::stop("ordinal category counts must be finite and nonnegative");
++                    // Effective counts are the model frequencies. Their sum
++                    // can be finite even when the unweighted row sum overflows;
++                    // zero-frequency rows likewise must not form 0 * Inf.
++                    total+=w[i]*Y(i,k);
++                }
++            } else if(y[i]<1 || y[i]>K) Rcpp::stop("invalid ordinal category index");
++            totals[i]=total;
++            if(!std::isfinite(totals[i])) Rcpp::stop("ordinal total frequency overflow");
++        }
++        if((require_positive && !(totals.sum()>0)) || !std::isfinite(totals.sum()))
++            Rcpp::stop("ordinal fitting requires a finite positive total frequency");
++    }
++
++    template<class Function> void visit(Function&& function) const { function(*this); }
++
++    double linear(int i,const VectorXd& beta) const {
++        double sum=0,error=0;
++        for(int j=0;j<p;++j) {
++            const double product=x(i,j)*beta[j],next=sum+product;
++            error+=std::abs(sum)>=std::abs(product) ? (sum-next)+product : (product-next)+sum;
++            error+=std::fma(x(i,j),beta[j],-product);
++            sum=next;
++        }
++        return sum+error;
++    }
++
++    double predictor_step(const VectorXd& direction) const {
++        const VectorXd beta=direction.tail(p);
++        const double low=direction.head(q).minCoeff(),high=direction.head(q).maxCoeff();
++        double ans=0;
++        for(int first=0;first<n;first+=block) {
++            Rcpp::checkUserInterrupt();
++            const int last=std::min(n,first+block);
++            for(int i=first;i<last;++i) if(totals[i]>0) {
++                const double dx=linear(i,beta);
++                ans=std::max(ans,std::max(std::abs(low-dx),std::abs(high-dx)));
++            }
++        }
++        return ans;
++    }
++};
++
++struct OrdinalRow {
++    VectorXd eta,g,cdf,survival,logp,left,right,neighbor,gprime,logg,logcdf,logsurvival,location,logden;
++    VectorXd loggap,inverse_gap,neighbor_gap;
++    int link=0;
++    explicit OrdinalRow(const VectorXd& alpha) : eta(alpha.size()),g(alpha.size()),cdf(alpha.size()),
++        survival(alpha.size()),logp(alpha.size()+1),left(alpha.size()),right(alpha.size()),neighbor(alpha.size()),
++        gprime(alpha.size()),logg(alpha.size()),logcdf(alpha.size()),logsurvival(alpha.size()),
++        location(alpha.size()+1),logden(alpha.size()),loggap(alpha.size()),inverse_gap(alpha.size()),neighbor_gap(alpha.size()) {
++        for(int s=1;s<alpha.size();++s) {
++            const double gap=alpha[s]-alpha[s-1];
++            loggap[s]=ordinal_log1mexp(-gap);inverse_gap[s]=1/std::expm1(gap);
++        }
++        for(int s=1;s+1<alpha.size();++s)
++            neighbor_gap[s]=-std::expm1(alpha[s-1]-alpha[s+1]);
++    }
++    void evaluate(const VectorXd& alpha,double linear,int link_code=0) {
++        link=link_code;
++        const int q=alpha.size();
++        if(link!=0) {
++            for(int s=0;s<q;++s) {
++                eta[s]=alpha[s]-linear;
++                if(link==1) {
++                    logcdf[s]=R::pnorm(eta[s],0,1,true,true);
++                    logsurvival[s]=R::pnorm(eta[s],0,1,false,true);
++                    logg[s]=R::dnorm(eta[s],0,1,true);
++                    g[s]=std::exp(logg[s]);gprime[s]=-eta[s]*g[s];
++                } else {
++                    const double e=std::exp(eta[s]);
++                    logcdf[s]=eta[s]<-36 ? eta[s] : ordinal_log1mexp(-e);
++                    logsurvival[s]=-e;logg[s]=eta[s]-e;
++                    g[s]=std::exp(logg[s]);gprime[s]=std::isfinite(e) ? g[s]*(1-e) : 0;
++                }
++                cdf[s]=std::exp(logcdf[s]);survival[s]=std::exp(logsurvival[s]);
++            }
++            logp[0]=logcdf[0];logp[q]=logsurvival[q-1];
++            for(int s=1;s<q;++s) {
++                if(link==2) {
++                    const double ld=eta[s]+std::log(-std::expm1(alpha[s-1]-alpha[s]));
++                    logden[s]=ld < -36 ? ld : std::log(-std::expm1(-std::exp(ld)));
++                }
++                logp[s]=eta[s]<=0 ? logcdf[s]+ordinal_log1mexp(logcdf[s-1]-logcdf[s]) :
++                    logsurvival[s-1]+(link==2 ? logden[s] : ordinal_log1mexp(logsurvival[s]-logsurvival[s-1]));
++            }
++            for(int s=0;s<q;++s) {
++                left[s]=std::exp(logg[s]-logp[s]);right[s]=std::exp(logg[s]-logp[s+1]);
++            }
++            if(link==2) {
++                right[q-1]=std::exp(eta[q-1]);
++                for(int s=1;s<q;++s) {
++                    const double difference=std::exp(eta[s])*(-std::expm1(alpha[s-1]-alpha[s]));
++                    left[s]=std::exp(eta[s]-difference-logden[s]);
++                    right[s-1]=std::exp(eta[s-1]-logden[s]);
++                }
++            }
++            location[0]=left[0];location[q]=-right[q-1];
++            for(int s=1;s<q;++s) {
++                const double gap=alpha[s]-alpha[s-1];
++                const double delta=link==1 ? -.5*gap*(eta[s]+eta[s-1]) :
++                    gap-std::exp(eta[s])*(-std::expm1(-gap));
++                location[s]=delta>=0 ? left[s]*(-std::expm1(-delta)) :
++                    -right[s-1]*(-std::expm1(delta));
++            }
++            for(int s=0;s<q;++s) neighbor[s]=location[s]-location[s+1];
++            if(!logp.allFinite() || !left.allFinite() || !right.allFinite() ||
++               !location.allFinite() || !gprime.allFinite())
++                throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
++            return;
++        }
++        for(int s=0;s<q;++s) {
++            eta[s]=alpha[s]-linear;
++            const double e=std::exp(-std::abs(eta[s])),den=1+e;
++            cdf[s]=eta[s]>=0 ? 1/den : e/den;
++            survival[s]=eta[s]>=0 ? e/den : 1/den;
++            g[s]=e/(den*den);
++            const double logden=std::log1p(e);
++            logcdf[s]=eta[s]>=0 ? -logden : eta[s]-logden;
++            logsurvival[s]=eta[s]>=0 ? -eta[s]-logden : -logden;
++        }
++        logp[0]=logcdf[0];logp[q]=logsurvival[q-1];
++        for(int s=1;s<q;++s)
++            logp[s]=logcdf[s]+logsurvival[s-1]+loggap[s];
++        for(int s=0;s<q;++s) {
++            // g_s / P_s and g_s / P_{s+1} simplify exactly for the logit link.
++            // Threshold gaps are common to every row and computed only once.
++            left[s]=survival[s]+(s ? inverse_gap[s] : 0);
++            right[s]=cdf[s]+(s+1<q ? inverse_gap[s+1] : 0);
++            neighbor[s]=q==1 ? 1 : (s==0 ? cdf[1] : (s==q-1 ? survival[q-2] :
++                cdf[s+1]*survival[s-1]*neighbor_gap[s]));
++        }
++        if(!logp.allFinite() || !left.allFinite() || !right.allFinite())
++            throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
++    }
++    double location_score(int category) const {
++        if(link!=0) return location[category];
++        return (category<eta.size() ? survival[category] : 0)-
++            (category>0 ? cdf[category-1] : 0);
++    }
++};
++
++struct OrdinalState {
++    MatrixXd information,inverse;
++    VectorXd ordinary,adjustment,score,step;
++    double loglik=0,scaled_score=0,predictor_step=0,rcond=0,min_logp=0;
++    explicit OrdinalState(int d=0) : information(MatrixXd::Zero(d,d)),inverse(d,d),
++        ordinary(VectorXd::Zero(d)),adjustment(VectorXd::Zero(d)),score(d),step(d) {}
++};
++
++inline void ordinal_add_information(const OrdinalData& data,const VectorXd& parameters,OrdinalState& result) {
++    const int p=data.p,q=data.q;
++    const VectorXd alpha=parameters.head(q),beta=parameters.tail(p);
++    OrdinalRow row(alpha);
++    for(int first=0;first<data.n;first+=data.block) {
++        Rcpp::checkUserInterrupt();
++        const int length=std::min(data.block,data.n-first);
++        MatrixXd rowsums=MatrixXd::Zero(length,q);
++        VectorXd slope_score=VectorXd::Zero(length),slope_weight=VectorXd::Zero(length);
++        for(int r=0;r<length;++r) {
++            const int i=first+r;const double m=data.totals[i];
++            if(m==0) continue;
++            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link);
++            result.min_logp=std::min(result.min_logp,row.logp.minCoeff());
++            if(data.grouped) {
++                for(int k=0;k<data.K;++k) {
++                    const double y=data.weights[i]*data.counts(i,k);
++                    result.loglik+=y*row.logp[k];
++                    slope_score[r]-=y*row.location_score(k);
++                    if(k<q) result.ordinary[k]+=y*row.left[k];
++                    if(k>0) result.ordinary[k-1]-=y*row.right[k-1];
++                }
++            } else {
++                const int k=data.codes[i]-1;
++                result.loglik+=m*row.logp[k];
++                slope_score[r]=-m*row.location_score(k);
++                if(k<q) result.ordinary[k]+=m*row.left[k];
++                if(k>0) result.ordinary[k-1]-=m*row.right[k-1];
++            }
++            for(int s=0;s<q;++s) {
++                result.information(s,s)+=m*row.g[s]*(row.left[s]+row.right[s]);
++                rowsums(r,s)=m*row.g[s]*row.neighbor[s];
++                slope_weight[r]+=rowsums(r,s);
++                if(s+1<q) result.information(s,s+1)-=m*row.g[s+1]*row.right[s];
++            }
++        }
++        if(p) {
++            const auto xx=data.x.middleRows(first,length);
++            result.ordinary.tail(p).noalias()+=xx.transpose()*slope_score;
++            result.information.topRightCorner(q,p).noalias()-=rowsums.transpose()*xx;
++            MatrixXd weighted=slope_weight.asDiagonal()*xx;
++            result.information.bottomRightCorner(p,p).noalias()+=xx.transpose()*weighted;
++        }
++    }
++}
++
++inline void ordinal_factor_information(OrdinalState& result,int p,int q,double condition_tol) {
++    const int d=p+q;
++    for(int s=1;s<q;++s) result.information(s,s-1)=result.information(s-1,s);
++    if(p) result.information.bottomLeftCorner(p,q)=result.information.topRightCorner(q,p).transpose();
++    VectorXd diagonal=result.information.diagonal().array().sqrt();
++    if(!diagonal.allFinite() || (diagonal.array()<=0).any() || !std::isfinite(result.loglik))
++        throw OrdinalEvaluationError("nonpositive or non-finite ordinal information");
++    const VectorXd inverse_scale=diagonal.cwiseInverse();
++    MatrixXd correlation=inverse_scale.asDiagonal()*result.information*inverse_scale.asDiagonal();
++    Eigen::LLT<MatrixXd> factor(correlation);
++    if(factor.info()!=Eigen::Success)
++        throw OrdinalEvaluationError("ordinal information is not positive definite");
++    result.rcond=factor.rcond();
++    if(!std::isfinite(result.rcond) || result.rcond<condition_tol)
++        throw OrdinalEvaluationError("ordinal information is numerically singular");
++    result.inverse=inverse_scale.asDiagonal()*factor.solve(MatrixXd::Identity(d,d))*inverse_scale.asDiagonal();
++    result.inverse=(result.inverse+result.inverse.transpose()).eval()/2;
++}
++
++inline void ordinal_add_adjustment(const OrdinalData& data,const VectorXd& parameters,OrdinalState& result) {
++    const int p=data.p,q=data.q;
++    const VectorXd alpha=parameters.head(q),beta=parameters.tail(p);
++    OrdinalRow row(alpha);
++    for(int first=0;first<data.n;first+=data.block) {
++        Rcpp::checkUserInterrupt();
++        const int length=std::min(data.block,data.n-first);
++        const auto xx=data.x.middleRows(first,length);
++        MatrixXd xb,xa;
++        if(p) {
++            xb.noalias()=xx*result.inverse.bottomRightCorner(p,p);
++            xa.noalias()=xx*result.inverse.bottomLeftCorner(p,q);
++        }
++        VectorXd slope=VectorXd::Zero(length),c(q);
++        for(int r=0;r<length;++r) {
++            const int i=first+r;const double m=data.totals[i];
++            if(m==0) continue;
++            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link);
++            const double quadratic=p ? xb.row(r).dot(xx.row(r)) : 0;
++            for(int s=0;s<q;++s) {
++                const double v=result.inverse(s,s)+quadratic-(p ? 2*xa(r,s) : 0);
++                c[s]=data.link==0 ? .5*m*row.g[s]*(1-2*row.cdf[s])*v : .5*m*row.gprime[s]*v;
++                slope[r]-=c[s]*row.neighbor[s];
++            }
++            for(int s=0;s<q;++s)
++                result.adjustment[s]+=(c[s]-(s ? c[s-1] : 0))*row.left[s]-
++                    ((s+1<q ? c[s+1] : 0)-c[s])*row.right[s];
++        }
++        if(p) result.adjustment.tail(p).noalias()+=xx.transpose()*slope;
++    }
++}
++
++// A source completes the information pass before rereading rows for the bias
++// adjustment. Dense and streamed fits use these same mathematical kernels.
++template<class Data>
++OrdinalState ordinal_evaluate(const Data& data,const VectorXd& parameters,
++    bool firth,double condition_tol) {
++    const int p=data.p,q=data.q,d=data.d;
++    if(parameters.size()!=d || !parameters.allFinite())
++        throw OrdinalEvaluationError("invalid ordinal parameters");
++    for(int s=1;s<q;++s) if(!(parameters[s]>parameters[s-1]))
++        throw OrdinalEvaluationError("ordinal thresholds are not strictly ordered");
++    OrdinalState result(d);
++    data.visit([&](const OrdinalData& block) { ordinal_add_information(block,parameters,result); });
++    ordinal_factor_information(result,p,q,condition_tol);
++    if(firth) data.visit([&](const OrdinalData& block) { ordinal_add_adjustment(block,parameters,result); });
++    result.score=result.ordinary+result.adjustment;
++    if(!result.score.allFinite() || !result.inverse.allFinite())
++        throw OrdinalEvaluationError("non-finite ordinal adjusted score or covariance");
++    result.step.noalias()=result.inverse*result.score;
++    result.scaled_score=(result.score.array().abs()/result.information.diagonal().array().sqrt()).maxCoeff();
++    if(!result.step.allFinite() || !std::isfinite(result.scaled_score))
++        throw OrdinalEvaluationError("non-finite ordinal convergence diagnostic");
++    result.predictor_step=data.predictor_step(result.step);
++    if(!std::isfinite(result.predictor_step))
++        throw OrdinalEvaluationError("non-finite ordinal predictor step");
++    return result;
++}
++
++inline Rcpp::List ordinal_state_list(const OrdinalState& state) {
++    return Rcpp::List::create(Rcpp::_["loglik"]=state.loglik,
++        Rcpp::_["score"]=state.score,Rcpp::_["ordinary.score"]=state.ordinary,
++        Rcpp::_["adjustment"]=state.adjustment,Rcpp::_["information"]=state.information,
++        Rcpp::_["cov.unscaled"]=state.inverse,Rcpp::_["step"]=state.step,
++        Rcpp::_["predictor.step"]=state.predictor_step,Rcpp::_["scaled.score"]=state.scaled_score,
++        Rcpp::_["information.rcond"]=state.rcond,Rcpp::_["minimum.log.probability"]=state.min_logp);
++}
++
++template<class Data>
++Rcpp::List ordinal_fit(const Data& data,const VectorXd& start,bool firth,
++    double score_tol,double step_tol,int maxit,double max_step,int max_halves,
++    double condition_tol,bool trace) {
++    if(!(score_tol>0) || !(step_tol>0) || maxit<1 || !(max_step>0) || max_halves<1 ||
++       !(condition_tol>0) || !std::isfinite(score_tol+step_tol+max_step+condition_tol))
++        Rcpp::stop("invalid ordinal optimizer controls");
++    VectorXd parameters=start;
++    int evaluations=0,fallbacks=0,iterations=0;
++    auto evaluate=[&](const VectorXd& b) { ++evaluations;return ordinal_evaluate(data,b,firth,condition_tol); };
++    OrdinalState current=evaluate(parameters);
++    bool converged=false;std::string reason="iteration_limit",last_rejection;
++    // A two-category cumulative-link model is a binomial GLM. Use its bounded
++    // adjusted scoring iteration: a likelihood-score norm need not decrease
++    // along this non-gradient direction, even on a path to a regular root.
++    const bool binary_scoring=firth && data.q==1 && data.link!=0;
++    MatrixXd history(maxit,4);
++    for(int iter=1;iter<=maxit;++iter) {
++        Rcpp::checkUserInterrupt();iterations=iter;
++        double gap=std::numeric_limits<double>::infinity();
++        for(int s=1;s<data.q;++s) gap=std::min(gap,parameters[s]-parameters[s-1]);
++        history.row(iter-1)<<current.loglik,current.scaled_score,current.predictor_step,gap;
++        if(trace) Rcpp::Rcout<<"iteration "<<iter<<": score "<<current.scaled_score<<
++            ", predictor step "<<current.predictor_step<<"\n";
++        if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
++            converged=true;reason="score_and_predictor_step";break;
++        }
++        const MatrixXd metric=current.inverse;
++        const VectorXd score=current.score;
++        const double merit0=.5*score.dot(metric*score);
++        VectorXd accepted_parameters;OrdinalState accepted_state(data.d);
++        auto search=[&](VectorXd direction) {
++            if(!direction.allFinite()) return false;
++            const double bound=binary_scoring ? std::min(1.0,max_step) : max_step;
++            direction/=std::max(1.0,data.predictor_step(direction)/bound);
++            double fraction=1;
++            for(int s=1;s<data.q;++s) {
++                const double change=direction[s]-direction[s-1];
++                if(change<0) fraction=std::min(fraction,.9*(parameters[s]-parameters[s-1])/(-change));
++            }
++            for(int h=0;h<=max_halves;++h) {
++                const VectorXd candidate=parameters+fraction*direction;
++                try {
++                    OrdinalState trial=evaluate(candidate);
++                    const double merit=.5*trial.score.dot(metric*trial.score);
++                    if(std::isfinite(merit) && (binary_scoring || merit<=(1-1e-4*fraction)*merit0)) {
++                        accepted_parameters=candidate;accepted_state=std::move(trial);return true;
++                    }
++                } catch(const OrdinalEvaluationError& error) { last_rejection=error.what(); }
++                fraction/=2;
++            }
++            return false;
++        };
++        bool accepted=search(current.step);
++        if(!accepted) {
++            ++fallbacks;MatrixXd jacobian(data.d,data.d);bool valid=true;
++            for(int j=0;j<data.d;++j) {
++                double h=std::cbrt(std::numeric_limits<double>::epsilon())*(1+std::abs(parameters[j]));
++                if(j<data.q) {
++                    if(j>0) h=std::min(h,.1*(parameters[j]-parameters[j-1]));
++                    if(j+1<data.q) h=std::min(h,.1*(parameters[j+1]-parameters[j]));
++                }
++                VectorXd upper=parameters,lower=parameters;upper[j]+=h;lower[j]-=h;
++                try {
++                    const OrdinalState up=evaluate(upper),down=evaluate(lower);
++                    jacobian.col(j)=(up.score-down.score)/(2*h);
++                } catch(const OrdinalEvaluationError& error) { last_rejection=error.what();valid=false;break; }
++            }
++            if(valid && jacobian.allFinite()) {
++                MatrixXd gram=jacobian.transpose()*metric*jacobian;
++                gram=(gram+gram.transpose()).eval()/2;
++                const VectorXd rhs=-jacobian.transpose()*metric*score;
++                const double damping[]={0,1e-8,1e-6,1e-4,.01,1,100};
++                for(double lambda:damping) {
++                    MatrixXd system=gram;system.diagonal().array()+=lambda;
++                    Eigen::LDLT<MatrixXd> factor(system);
++                    if(factor.info()==Eigen::Success) accepted=search(factor.solve(rhs));
++                    if(accepted) break;
++                }
++            }
++        }
++        if(!accepted) { reason="score_search_failed";break; }
++        parameters=accepted_parameters;current=std::move(accepted_state);
++    }
++    if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
++        converged=true;reason="score_and_predictor_step";
++    }
++    Rcpp::List out=ordinal_state_list(current);
++    out["coefficients"]=parameters;out["converged"]=converged;
++    out["convergence.reason"]=reason;out["iterations"]=iterations;
++    out["evaluations"]=evaluations;out["fallbacks"]=fallbacks;
++    out["last.rejected.evaluation"]=last_rejection;
++    out["history"]=MatrixXd(history.topRows(iterations));
++    return out;
++}
++
++}
++#endif
+diff --git a/R/ordinal-streaming.R b/R/ordinal-streaming.R
+new file mode 100644
+index 0000000..974fe88
+--- /dev/null
++++ b/R/ordinal-streaming.R
+@@ -0,0 +1,349 @@
++#' Fit an ordinal model from repeatable blocks of observations
++#'
++#' Fits the same cumulative-link likelihood and mean bias-reduction equations
++#' as [fastglm_ordinal()] while retaining one source block and matrices whose
++#' dimensions depend on the number of coefficients. The source is read again
++#' for successive fitting evaluations. Mean bias reduction first combines the
++#' information from every block, then rereads the blocks to evaluate its
++#' adjustment using that global information.
++#' @param source a [fastglm_source()] or a function returning a list with
++#'   `X`, `y`, and optional `weights` and `offset` for a block index.
++#'   Matrix blocks must omit the location intercept. Formula sources remove
++#'   their model-matrix intercept automatically.
++#' @param n_chunks number of blocks when `source` is a function.
++#' @param levels category labels in increasing order. May be inferred from an
++#'   ordered factor or the column names of a category-count matrix in the
++#'   first block. Every block must retain the same category specification,
++#'   including categories absent from that block.
++#' @param firth,link,tol,maxit,block.size,control as in [fastglm_ordinal()].
++#'   `block.size` limits temporary calculations within a supplied block;
++#'   the source determines the size of the block loaded into memory.
++#' @details The rows and values returned for each block must remain unchanged
++#'   during fitting and later prediction or residual calculations. Empty
++#'   blocks are not accepted; blocks with zero total frequency are allowed.
++#'   Category reduction and rank checks use the complete source, so individual
++#'   blocks may omit categories or have deficient predictor rank.
++#'
++#'   Storage depends on the largest source block, the number of coefficients,
++#'   and block-size metadata. The source itself must also obtain blocks without
++#'   retaining the complete dataset if bounded memory is required. Formula
++#'   sources use their recorded predictor schema and fixed transformation basis.
++#'
++#'   Coefficients, model-based covariance, summaries, diagnostics, and Wald
++#'   intervals use the usual ordinal methods. Predictions, residuals, and
++#'   weights can be returned one block at a time through a callback. Collecting
++#'   their complete output requires memory proportional to the number of rows.
++#'   The fitted design and response are not retained. Procedures requiring
++#'   retained observations, including robust covariance, model assessment on
++#'   the fitted source, profile intervals, and refitting bootstrap calculations,
++#'   require a separate implementation; prediction-based summaries can instead
++#'   receive explicit evaluation data.
++#' @returns A `fastglm_ordinal_stream` object inheriting from
++#'   `fastglm_ordinal`, with source and reader references, source pass counts,
++#'   and the usual ordinal estimates and convergence diagnostics.
++#' @examples
++#' set.seed(104)
++#' x <- matrix(rnorm(120),ncol=1,dimnames=list(NULL,"exposure"))
++#' y <- ordered(cut(.4*x[,1]+rlogis(120),c(-Inf,-.5,.7,Inf)))
++#' reader <- function(k) {
++#'     i <- ((k-1)*30+1):(k*30)
++#'     list(X=x[i,,drop=FALSE],y=y[i])
++#' }
++#' fit <- fastglm_ordinal_streaming(reader,4,firth=TRUE)
++#' summary(fit)
++#' head(predict(fit))
++#' @md
++#' @export
++fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FALSE,
++    link="logit",tol=1e-8,maxit=200L,block.size=2048L,control=list()) {
++    call <- match.call();call[[1L]] <- quote(fastglm::fastglm_ordinal_streaming)
++    source <- if(inherits(source,"fastglm_source")) source else fastglm_source(source,n_chunks)
++    if(!is.null(source$schema$terms) && !inherits(source$schema$terms,"terms"))
++        stop("ordinal fitting requires a source with one predictor formula",call.=FALSE)
++    if(!is.logical(firth) || length(firth)!=1L || is.na(firth)) stop("'firth' must be TRUE or FALSE",call.=FALSE)
++    link.code <- .ordinal_link_code(link);link <- c("logit","probit","cloglog")[link.code+1L]
++    .check_iterations(tol,maxit);.check_iterations(tol,block.size)
++    defaults <- list(score.tol=tol,step.tol=tol,max.step=4,max.halves=35L,
++        condition.tol=1e-14,standardize=TRUE,trace=FALSE)
++    if(!is.list(control) || (length(control) && (is.null(names(control)) || anyNA(names(control)) ||
++       any(!nzchar(names(control))) || anyDuplicated(names(control)))) || length(setdiff(names(control),names(defaults))))
++        stop("unknown or duplicated ordinal optimizer control",call.=FALSE)
++    ctl <- utils::modifyList(defaults,control)
++    for(nm in c("score.tol","step.tol","max.step","max.halves","condition.tol")) {
++        z <- ctl[[nm]]
++        if(!is.numeric(z) || is.complex(z) || length(z)!=1L || !is.finite(z) || z<=0 ||
++           (nm=="max.halves" && (z!=floor(z) || z>.Machine$integer.max)))
++            stop("invalid ordinal optimizer control: ",nm,call.=FALSE)
++    }
++    for(nm in c("standardize","trace"))
++        if(!is.logical(ctl[[nm]]) || length(ctl[[nm]])!=1L || is.na(ctl[[nm]]))
++            stop("invalid ordinal optimizer flag: ",nm,call.=FALSE)
++    state <- new.env(parent=emptyenv())
++    state$passes <- state$reads <- 0L;state$rows <- integer(source$n_chunks)
++    state$p <- NULL;state$columns <- NULL;state$levels <- levels
++    state$grouped <- NULL;state$factor.levels <- NULL;state$count.columns <- NULL
++    state$maximum.block.rows <- 0L
++    integer.frequency <- function(x) all(abs(x-round(x))<=pmin(1e-7,16*.Machine$double.eps*pmax(1,abs(x))))
++    read <- function(k,summaries=FALSE) {
++        if(k==1L) state$passes <- state$passes+1L
++        state$reads <- state$reads+1L
++        z <- source$callback(k)
++        if(!is.list(z)) stop("an ordinal source block must be a list",call.=FALSE)
++        x <- z$X;y <- z$y;grouped <- is.matrix(y)
++        if(!is.matrix(x) || !is.numeric(x) || is.complex(x) || any(!is.finite(x)))
++            stop("each ordinal block$X must be a finite dense numeric matrix",call.=FALSE)
++        if(!is.null(source$schema$assign)) x <- x[,source$schema$assign!=0L,drop=FALSE]
++        n <- nrow(x)
++        if(n<1L || NROW(y)!=n) stop("ordinal source blocks require matching, nonempty design and response rows",call.=FALSE)
++        if(ncol(x)>0L && is.null(colnames(x))) colnames(x) <- paste0("x",seq_len(ncol(x)))
++        if(anyNA(colnames(x)) || any(!nzchar(colnames(x))) || anyDuplicated(colnames(x)))
++            stop("ordinal predictor column names must be distinct and nonmissing",call.=FALSE)
++        if(is.null(state$p)) {state$p <- ncol(x);state$columns <- colnames(x);state$grouped <- grouped}
++        if(ncol(x)!=state$p || !identical(colnames(x),state$columns))
++            stop("ordinal source predictor columns changed from the schema",call.=FALSE)
++        if(!identical(grouped,state$grouped)) stop("ordinal source response representation changed",call.=FALSE)
++        if(state$rows[k]!=0L && state$rows[k]!=n) stop("ordinal source block size changed between passes",call.=FALSE)
++        state$rows[k] <- n;state$maximum.block.rows <- max(state$maximum.block.rows,n)
++        if(is.null(state$levels)) {
++            state$levels <- if(grouped) colnames(y) else if(is.ordered(y)) base::levels(y)
++            if(is.null(state$levels)) stop("supply 'levels' or retain ordered-factor levels or count column names in every block",call.=FALSE)
++        }
++        labels <- as.character(state$levels);K <- length(labels)
++        if(K<2L || anyNA(labels) || any(!nzchar(labels)) || anyDuplicated(labels))
++            stop("at least two distinct, nonmissing ordinal category labels are required",call.=FALSE)
++        state$levels <- labels
++        w <- if(is.null(z$weights)) rep(1,n) else z$weights
++        off <- if(is.null(z$offset)) numeric(n) else z$offset
++        if(!is.numeric(w) || is.complex(w) || !is.null(dim(w)) || length(w)!=n || any(!is.finite(w)|w<0))
++            stop("ordinal frequency weights must be finite and nonnegative",call.=FALSE)
++        if(!is.numeric(off) || is.complex(off) || !is.null(dim(off)) || length(off)!=n || any(!is.finite(off)))
++            stop("ordinal source offsets must be finite and match block rows",call.=FALSE)
++        counts <- matrix(numeric(),0L,0L);codes <- integer()
++        if(grouped) {
++            if(!is.numeric(y) || is.complex(y) || ncol(y)!=K || any(!is.finite(y)|y<0))
++                stop("ordinal count blocks require finite nonnegative counts in the declared columns",call.=FALSE)
++            if(is.null(state$count.columns)) state$count.columns <- list(colnames(y))
++            if(!identical(colnames(y),state$count.columns[[1L]])) stop("ordinal count columns changed from the category schema",call.=FALSE)
++            if(!is.null(colnames(y)) && !identical(colnames(y),labels))
++                stop("ordinal count column names must match 'levels' in order",call.=FALSE)
++            effective <- y*w
++            if(any(!is.finite(effective)) || !integer.frequency(effective))
++                stop("ordinal fitting requires finite integer effective category counts",call.=FALSE)
++            counts <- y;storage.mode(counts) <- "double"
++            totals <- rowSums(effective);category.totals <- if(summaries) colSums(effective)
++            saturated <- 0
++            if(summaries) {
++                take <- effective>0
++                saturated <- sum(effective[take]*log((effective/totals)[take]))
++            }
++        } else {
++            if(!is.null(dim(y))) stop("invalid ordinal source response dimensions",call.=FALSE)
++            if(is.factor(y)) {
++                if(is.null(state$factor.levels)) state$factor.levels <- base::levels(y)
++                if(!identical(base::levels(y),state$factor.levels)) stop("ordinal factor levels changed from the category schema",call.=FALSE)
++            }
++            if(is.numeric(y)) {
++                if(any(!is.finite(y)|y!=floor(y)|y<1|y>K)) stop("numeric ordinal responses must be category codes",call.=FALSE)
++                codes <- as.integer(y)
++            } else codes <- match(as.character(y),labels)
++            if(anyNA(codes) || !integer.frequency(w)) stop("ordinal source responses and integer frequency weights must match the category schema",call.=FALSE)
++            totals <- w;category.totals <- if(summaries) vapply(seq_len(K),function(j)sum(w[codes==j]),numeric(1));saturated <- 0
++        }
++        if(any(!is.finite(totals)) || any(!is.finite(category.totals))) stop("ordinal source frequencies overflow",call.=FALSE)
++        storage.mode(x) <- "double"
++        list(X=x,codes=as.integer(codes),counts=counts,weights=as.numeric(w),offset=as.numeric(off),
++            totals=as.numeric(totals),category.totals=category.totals,saturated=saturated)
++    }
++    frequency <- positive.rows <- saturated <- 0;center <- NULL;offset.mean <- 0;category.totals <- NULL
++    for(k in seq_len(source$n_chunks)) {
++        z <- read(k,summaries=TRUE);total <- sum(z$totals);good <- z$totals>0
++        if(is.null(center)) {center <- numeric(ncol(z$X));category.totals <- numeric(length(state$levels))}
++        category.totals <- category.totals+z$category.totals
++        if(total>0) {
++            next.frequency <- frequency+total
++            block.mean <- colSums(z$X[good,,drop=FALSE]*(z$totals[good]/total))
++            center <- center*(frequency/next.frequency)+block.mean*(total/next.frequency)
++            offset.mean <- offset.mean*(frequency/next.frequency)+sum(z$offset[good]*(z$totals[good]/total))*(total/next.frequency)
++            frequency <- next.frequency
++        }
++        positive.rows <- positive.rows+sum(good);saturated <- saturated+z$saturated
++    }
++    if(!is.finite(frequency) || frequency<=0) stop("ordinal fitting requires finite positive total frequency",call.=FALSE)
++    response <- .ordinal_response_data(matrix(category.totals,nrow=1,dimnames=list(NULL,state$levels)),
++        levels=state$levels,firth=firth)
++    response$grouped <- state$grouped;response$response.kind <- if(state$grouped) "counts" else "codes"
++    response$n <- sum(state$rows);response$weights <- response$totals <- NULL
++    response$counts <- matrix(numeric(),0L,0L);response$codes <- response$original.codes <- integer()
++    p <- state$p;q <- length(response$levels)-1L;d <- p+q
++    scale <- rep(1,p)
++    if(p) {
++        variance <- numeric(p)
++        for(k in seq_len(source$n_chunks)) {
++            z <- read(k);good <- z$totals>0
++            if(any(good)) variance <- variance+colSums(sweep(z$X[good,,drop=FALSE],2,center,"-")^2*(z$totals[good]/frequency))
++        }
++        scale <- sqrt(variance)
++        if(any(!is.finite(scale)|scale<=0)) stop("the ordinal location design contains a redundant constant column or cannot be scaled",call.=FALSE)
++        qr.state <- NULL
++        for(k in seq_len(source$n_chunks)) {
++            z <- read(k);good <- z$totals>0
++            if(any(good)) {
++                xx <- sweep(sweep(z$X[good,,drop=FALSE],2,center,"-"),2,scale,"/")
++                xx <- cbind(1,xx)
++                qr.state <- streaming_qr_update(xx,numeric(nrow(xx)),rep(1,nrow(xx)),qr.state)
++            }
++        }
++        tryCatch(streaming_qr_finish(qr.state),error=function(e)
++            stop("the ordinal source location design must be full rank with a separate threshold intercept",call.=FALSE))
++        if(!ctl$standardize) {center <- numeric(p);scale <- rep(1,p)}
++    }
++    fetch <- function(k) {
++        z <- read(k);good <- z$totals>0
++        if(p) z$X <- sweep(sweep(z$X,2,center,"-"),2,scale,"/")
++        z$X[!good,] <- 0;z$offset[!good] <- 0
++        if(state$grouped) z$counts <- z$counts[,response$retained.categories,drop=FALSE] else {
++            z$codes <- match(z$codes,response$retained.categories)
++            z$codes[is.na(z$codes) & !good] <- 1L
++            z$codes <- as.integer(z$codes)
++        }
++        z
++    }
++    cumulative <- cumsum(response$category.totals)[seq_len(q)]
++    remaining <- rev(cumsum(rev(response$category.totals)))[-1L]
++    alpha <- .ordinal_start_thresholds(cumulative,remaining,link)+offset.mean
++    fit <- ordinal_stream_native_fit(fetch,source$n_chunks,p,q+1L,c(alpha,numeric(p)),firth,
++        ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),ctl$max.step,
++        as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
++    object <- .ordinal_stream_result(fit,center,scale,response,frequency,positive.rows,
++        firth,link,ctl,tol,maxit,block.size,state$columns)
++    object$source <- source;object$fetch <- read;object$state <- state;object$call <- call
++    object$deviance <- 2*(saturated-fit$loglik)
++    object$terms <- source$schema$terms;object$xlevels <- source$schema$xlevels
++    object$contrasts <- source$schema$contrasts
++    object$design.assign <- if(!is.null(source$schema$assign)) source$schema$assign[source$schema$assign!=0L]
++    object$prediction.offset.required <- length(source$schema$offset)>0L
++    object$source.passes <- state$passes;object$source.reads <- state$reads
++    object$maximum.block.rows <- state$maximum.block.rows
++    object
++}
++
++.ordinal_stream_result <- function(fit,center,scale,response,frequency,positive.rows,
++    firth,link,ctl,tol,maxit,block.size,columns) {
++    q <- length(response$levels)-1L;p <- length(columns);d <- q+p
++    T <- Ti <- diag(d)
++    if(p) {
++        T[seq_len(q),q+seq_len(p)] <- matrix(center/scale,q,p,byrow=TRUE)
++        T[q+seq_len(p),q+seq_len(p)] <- diag(1/scale,nrow=p)
++        Ti[seq_len(q),q+seq_len(p)] <- matrix(-center,q,p,byrow=TRUE)
++        Ti[q+seq_len(p),q+seq_len(p)] <- diag(scale,nrow=p)
++    }
++    nms <- c(paste(response$levels[-(q+1L)],response$levels[-1L],sep="|"),columns)
++    effective <- list(coefficients=drop(T%*%fit$coefficients),covariance=T%*%fit$cov.unscaled%*%t(T),
++        information=crossprod(Ti,fit$information%*%Ti),score=drop(crossprod(Ti,fit$score)),
++        ordinary.score=drop(crossprod(Ti,fit$ordinary.score)),adjustment=drop(crossprod(Ti,fit$adjustment)),
++        step=drop(T%*%fit$step),levels=response$levels)
++    for(nm in c("coefficients","score","ordinary.score","adjustment","step")) names(effective[[nm]]) <- nms
++    for(nm in c("covariance","information")) dimnames(effective[[nm]]) <- list(nms,nms)
++    effective$alpha <- effective$coefficients[seq_len(q)];effective$beta <- effective$coefficients[q+seq_len(p)]
++    working <- list(coefficients=as.numeric(fit$coefficients),center=center,scale=scale,
++        covariance=fit$cov.unscaled,information=fit$information,score=as.numeric(fit$score),
++        ordinary.score=as.numeric(fit$ordinary.score),adjustment=as.numeric(fit$adjustment),
++        step=as.numeric(fit$step),scaled.score=fit$scaled.score,predictor.step=fit$predictor.step,
++        information.rcond=fit$information.rcond)
++    names(working$coefficients) <- nms
++    working$alpha <- working$coefficients[seq_len(q)];working$beta <- working$coefficients[q+seq_len(p)]
++    K <- length(response$original.levels);expand <- c(response$threshold.map,q+seq_len(p))
++    original.names <- c(paste0("threshold:",paste(response$original.levels[-K],response$original.levels[-1L],sep="|")),columns)
++    b <- effective$coefficients[expand];names(b) <- original.names
++    V <- effective$covariance[expand,expand,drop=FALSE];dimnames(V) <- list(original.names,original.names)
++    colnames(fit$history) <- c("loglik","scaled.score","predictor.step","minimum.gap")
++    if(response$boundary) warning("empty interior ordinal categories were collapsed for fitting; their labels are retained with zero probability and coincident thresholds",call.=FALSE)
++    if(!fit$converged) warning("ordinal fitting did not converge: ",fit$convergence.reason,call.=FALSE)
++    object <- list(coefficients=b,alpha=b[seq_len(K-1L)],beta=b[K-1L+seq_len(p)],thresholds=b[seq_len(K-1L)],
++        levels=response$original.levels,effective.levels=response$levels,threshold.map=response$threshold.map,
++        retained.categories=response$retained.categories,collapsed.categories=response$collapsed.categories,
++        boundary=response$boundary,empty.end.categories=response$empty.end.categories,
++        tied.thresholds=duplicated(response$threshold.map)|duplicated(response$threshold.map,fromLast=TRUE),
++        effective=effective,working=working,mapped.covariance=V,cov.unscaled=V,information=effective$information,
++        score=effective$score,ordinary.score=effective$ordinary.score,adjustment=effective$adjustment,
++        scaled.score=fit$scaled.score,predictor.step=fit$predictor.step,information.rcond=fit$information.rcond,
++        minimum.log.probability=fit$minimum.log.probability,converged=fit$converged,convergence.reason=fit$convergence.reason,
++        iterations=fit$iterations,evaluations=fit$evaluations,fallbacks=fit$fallbacks,
++        last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,loglik=fit$loglik,
++        rank=d,df.residual=frequency-d,nobs=frequency,nobs.rows=positive.rows,frequency=frequency,
++        category=response,response=response,preparation.reused=FALSE,firth=firth,link=link,
++        method=if(firth) "meanBR" else "ML",control=ctl,tol=tol,maxit=as.integer(maxit),
++        block.size=as.integer(block.size),design.columns=columns)
++    class(object) <- c("fastglm_ordinal_stream","fastglm_ordinal")
++    names(object$alpha) <- names(object$thresholds) <- sub("^threshold:","",names(object$alpha))
++    object
++}
++
++.ordinal_stream_collect <- function(object,fun,sink=NULL) {
++    if(!is.null(sink) && !is.function(sink)) stop("'sink' must be a function",call.=FALSE)
++    out <- if(is.null(sink)) vector("list",object$source$n_chunks)
++    for(k in seq_len(object$source$n_chunks)) {
++        value <- fun(object$fetch(k))
++        if(is.null(sink)) out[[k]] <- value else sink(value,k)
++    }
++    if(!is.null(sink)) return(invisible(object$source$n_chunks))
++    bind <- function(x) if(is.matrix(x[[1L]])) do.call(rbind,x) else do.call(c,x)
++    if(inherits(out[[1L]],"fastglm_prediction")) {
++        value <- out[[1L]];value$fit <- bind(lapply(out,`[[`,"fit"));value$se.fit <- bind(lapply(out,`[[`,"se.fit"));value
++    } else bind(out)
++}
++
++#' Predictions and residuals from an ordinal source fit
++#' @param object a `fastglm_ordinal_stream` fit.
++#' @param newdata,offset,type,se.fit as in [predict.fastglm_ordinal()].
++#' @param sink optional function of `(value, chunk_index)` that receives each
++#'   result block, for example to write it to a file. Its return value is ignored.
++#'   Without a function, all blocks are collected into a single R object.
++#' @param ... further method arguments.
++#' @returns Collected predictions or residuals, or invisibly the number of
++#'   blocks supplied to `sink`.
++#' @export
++predict.fastglm_ordinal_stream <- function(object,newdata=NULL,type=c("probability","response","cumulative","class","link"),
++    se.fit=FALSE,offset=NULL,sink=NULL,...) {
++    type <- match.arg(type)
++    if(!is.null(newdata)) {
++        if(!is.null(sink)) stop("'sink' is used when predicting from the fitted source",call.=FALSE)
++        return(predict.fastglm_ordinal(object,newdata,type,se.fit,offset,...))
++    }
++    if(!is.null(offset)) stop("source prediction uses its recorded block offsets",call.=FALSE)
++    .ordinal_stream_collect(object,function(z) {
++        model <- object;model$terms <- NULL;model$prediction.offset.required <- FALSE
++        predict.fastglm_ordinal(model,z$X,type,se.fit,z$offset,...)
++    },sink)
++}
++
++#' @rdname predict.fastglm_ordinal_stream
++#' @export
++residuals.fastglm_ordinal_stream <- function(object,type=c("probability","cumulative","pearson"),sink=NULL,...) {
++    type <- match.arg(type)
++    .ordinal_stream_collect(object,function(z) {
++        model <- object;model$x <- z$X;model$offset <- z$offset;model$weights <- z$weights
++        model$category$totals <- z$totals;model$category$original.codes <- z$codes
++        if(model$category$grouped) model$category$counts <- z$counts[,model$retained.categories,drop=FALSE]
++        residuals.fastglm_ordinal(model,type,...)
++    },sink)
++}
++
++#' @export
++weights.fastglm_ordinal_stream <- function(object,sink=NULL,...) {
++    if(length(list(...))) stop("unused ordinal source weights arguments",call.=FALSE)
++    .ordinal_stream_collect(object,function(z) z$weights,sink)
++}
++
++#' @export
++deviance.fastglm_ordinal_stream <- function(object,...) object$deviance
++
++#' @export
++model.matrix.fastglm_ordinal_stream <- function(object,...) {
++    stop("ordinal source fits do not retain a model matrix; read the source blocks explicitly",call.=FALSE)
++}
++
++#' @export
++simulate.fastglm_ordinal_stream <- function(object,nsim=1L,seed=NULL,...) {
++    stop("simulation from ordinal source fits is not implemented",call.=FALSE)
++}
+diff --git a/tests/testthat/test-ordinal-streaming.R b/tests/testthat/test-ordinal-streaming.R
+new file mode 100644
+index 0000000..58578c9
+--- /dev/null
++++ b/tests/testthat/test-ordinal-streaming.R
+@@ -0,0 +1,170 @@
++ordinal_test_source <- function(x,y,weights=NULL,offset=NULL,size=17L,resettable=FALSE) {
++    rows <- split(seq_len(nrow(x)),ceiling(seq_len(nrow(x))/size))
++    position <- 0L
++    fastglm_source(function(k) {
++        if(resettable) {stopifnot(k==position+1L);position <<- k}
++        i <- rows[[k]]
++        list(X=x[i,,drop=FALSE],y=if(is.matrix(y)) y[i,,drop=FALSE] else y[i],
++            weights=if(!is.null(weights)) weights[i],offset=if(!is.null(offset)) offset[i])
++    },length(rows),reset=if(resettable) function() position <<- 0L)
++}
++
++test_that("ordinal source fits reproduce dense likelihood and adjusted equations", {
++    set.seed(114001)
++    x <- cbind(exposure=rnorm(100),modifier=runif(100,-1,1))
++    y <- ordered(cut(.5*x[,1]+rlogis(100),c(-Inf,-.7,.4,Inf)),labels=c("low","middle","high"))
++    weights <- rep(c(0,1,2,3),25);offset <- .15*sin(seq_len(100))
++    for(link in c("logit","probit","cloglog")) for(firth in c(FALSE,TRUE)) {
++        ref <- fastglm_ordinal(x,y,weights=weights,offset=offset,link=link,firth=firth,tol=1e-9)
++        for(size in c(9L,23L)) {
++            fit <- fastglm_ordinal_streaming(ordinal_test_source(x,y,weights,offset,size,TRUE),
++                link=link,firth=firth,tol=1e-9,block.size=7L)
++            expect_true(fit$converged)
++            expect_equal(coef(fit),coef(ref),tolerance=2e-7)
++            expect_equal(vcov(fit),vcov(ref),tolerance=2e-7)
++            expect_equal(as.numeric(logLik(fit)),as.numeric(logLik(ref)),tolerance=1e-10)
++            expect_equal(deviance(fit),deviance(ref),tolerance=1e-10)
++            expect_equal(fit$effective$score,ref$effective$score,tolerance=1e-7)
++            expect_equal(nobs(fit),nobs(ref));expect_equal(fit$nobs.rows,ref$nobs.rows)
++            expect_null(fit$x);expect_null(fit$y);expect_null(fit$category$totals)
++            expect_identical(fit$state$maximum.block.rows,size)
++            expect_gt(fit$state$passes,3L)
++            if(!firth) expect_error(confint(fit,parm="exposure",method="profile"),"retained dense")
++        }
++    }
++})
++
++test_that("source predictions and residuals agree and support block callbacks", {
++    d <- MASS::housing;x <- model.matrix(~Infl+Type+Cont,d)[,-1,drop=FALSE]
++    counts <- cbind(low=d$Freq*(d$Sat=="Low"),middle=d$Freq*(d$Sat=="Medium"),high=d$Freq*(d$Sat=="High"))
++    weights <- rep(c(0,1,2),length.out=nrow(x));offset <- cos(seq_len(nrow(x)))/5
++    fit <- fastglm_ordinal_streaming(ordinal_test_source(x,counts,weights,offset,13L),firth=TRUE,tol=1e-10)
++    ref <- fastglm_ordinal(x,counts,weights=weights,offset=offset,firth=TRUE,tol=1e-10)
++    expect_equal(coef(fit),coef(ref),tolerance=1e-8)
++    expect_equal(deviance(fit),deviance(ref),tolerance=1e-10)
++    for(type in c("probability","cumulative","class","link")) {
++        expect_equal(predict(fit,type=type),predict(ref,type=type),tolerance=1e-8)
++        if(type!="class") {
++            a <- predict(fit,type=type,se.fit=TRUE);b <- predict(ref,type=type,se.fit=TRUE)
++            expect_equal(a$fit,b$fit,tolerance=1e-8);expect_equal(a$se.fit,b$se.fit,tolerance=1e-8)
++        }
++    }
++    for(type in c("probability","cumulative","pearson")) expect_equal(residuals(fit,type),residuals(ref,type),tolerance=1e-8)
++    expect_equal(weights(fit),weights)
++    blocks <- list()
++    result <- predict(fit,se.fit=TRUE,sink=function(value,k) blocks[[k]] <<- value)
++    expect_identical(result,fit$source$n_chunks)
++    expect_equal(do.call(rbind,lapply(blocks,`[[`,"fit")),predict(ref),tolerance=1e-8)
++    blocks <- list();residuals(fit,sink=function(value,k) blocks[[k]] <<- value)
++    expect_equal(do.call(c,blocks),residuals(ref),tolerance=1e-8)
++    expect_output(print(summary(fit)),"Location coefficients")
++    expect_output(print(fastglm_diagnostics(fit)),"converged")
++    restored <- unserialize(serialize(fit,NULL))
++    expect_equal(predict(restored),predict(fit))
++    expect_error(model.matrix(fit),"do not retain")
++    expect_error(simulate(fit),"not implemented")
++    expect_error(predict(fit,sink=1),"function")
++    expect_error(fastglm_vcov(fit),"not yet available")
++    expect_error(vcov(fit,type="HC0"),"not yet available")
++    expect_error(fastglm_bootstrap(fit,R=2),"not yet available")
++    expect_error(fastglm_average(fit),"source")
++    expect_error(fastglm_ordinal_assess(fit),"source")
++    expect_error(fastglm_po_test(fit),"source")
++    expect_error(fastglm_marginal_effects(fit,"InflMedium"),"source")
++    if(requireNamespace("broom",quietly=TRUE)) {
++        expect_error(broom::augment(fit),"do not retain")
++        expect_equal(broom::augment(fit,newdata=x[1:8,,drop=FALSE]),
++            broom::augment(ref,newdata=x[1:8,,drop=FALSE]),tolerance=1e-8)
++        expect_equal(broom::glance(fit),broom::glance(ref),tolerance=1e-8)
++    }
++})
++
++test_that("ordinal formula sources preserve columns, offsets, and category order", {
++    d <- MASS::housing;d$off <- sin(seq_len(nrow(d)))/10
++    rows <- split(seq_len(nrow(d)),ceiling(seq_len(nrow(d))/11))
++    source <- fastglm_source(function(k) d[rows[[k]],],length(rows),
++        formula=Sat~Infl+Type+Cont+offset(off),prototype=d,weights="Freq")
++    fit <- fastglm_ordinal_streaming(source,firth=TRUE,link="probit",tol=1e-10)
++    ref <- fastglm_ordinal(Sat~Infl+Type+Cont+offset(off),d,weights=Freq,firth=TRUE,link="probit",tol=1e-10)
++    expect_equal(coef(fit),coef(ref),tolerance=1e-8)
++    expect_equal(predict(fit),unname(predict(ref)),tolerance=1e-8,ignore_attr=TRUE)
++    expect_equal(predict(fit,d[1:8,]),predict(ref,d[1:8,]),tolerance=1e-8)
++    expect_equal(fit$design.columns,ref$design.columns)
++    expect_equal(fit$design.assign,ref$design.assign)
++    expect_error(update(fit,.~.-Type),"source schema")
++    updated <- update(fit,link="cloglog")
++    expect_equal(coef(updated),coef(update(ref,link="cloglog")),tolerance=1e-8)
++    expect_error(fastglm_marginal_effects(fit,"off"),"supply 'newdata'")
++})
++
++test_that("global ordinal category reduction permits locally empty and zero blocks", {
++    x <- matrix(seq(-1,1,length.out=12),ncol=1,dimnames=list(NULL,"x"))
++    counts <- cbind(low=rep(c(3,2,1),4),middle=0,high=rep(c(1,2,4),4))
++    w <- c(rep(0,4),rep(1,8))
++    expect_warning(fit <- fastglm_ordinal_streaming(ordinal_test_source(x,counts,w,size=4),firth=TRUE),"empty interior")
++    expect_warning(ref <- fastglm_ordinal(x,counts,weights=w,firth=TRUE),"empty interior")
++    expect_equal(coef(fit),coef(ref),tolerance=1e-7)
++    expect_equal(predict(fit),predict(ref),tolerance=1e-7)
++    expect_equal(vcov(fit),vcov(ref),tolerance=1e-7)
++    expect_equal(residuals(fit),residuals(ref),tolerance=1e-7)
++    none <- cbind(low=0,middle=counts[,1],high=counts[,3])
++    expect_error(fastglm_ordinal_streaming(ordinal_test_source(x,none,size=3)),"empty endpoint")
++    a <- fastglm_ordinal_streaming(ordinal_test_source(x,none,size=3),firth=TRUE)
++    b <- fastglm_ordinal(x,none,firth=TRUE)
++    expect_equal(coef(a),coef(b),tolerance=1e-7)
++})
++
++test_that("ordinal source rank and schema checks use all blocks", {
++    x <- cbind(x=rep(c(-1,0,1),each=4),z=rep(c(-1,1),6));y <- ordered(rep(1:3,4),levels=1:3)
++    a <- fastglm_ordinal_streaming(ordinal_test_source(x,y,size=2),firth=TRUE)
++    b <- fastglm_ordinal(x,y,firth=TRUE)
++    expect_equal(coef(a),coef(b),tolerance=1e-7)
++    expect_error(fastglm_ordinal_streaming(ordinal_test_source(cbind(x,alias=x[,1]),y,size=2)),"full rank")
++    expect_error(fastglm_ordinal_streaming(ordinal_test_source(cbind(intercept=1,x),y,size=2)),"constant")
++    bad <- function(k) list(X=if(k==1) x[1:6,] else `colnames<-`(x[7:12,],c("z","x")),y=y[1:6])
++    expect_error(fastglm_ordinal_streaming(bad,2),"columns changed")
++    bad <- function(k) list(X=x[1:6,],y=if(k==1) y[1:6] else ordered(y[1:6],levels=3:1))
++    expect_error(fastglm_ordinal_streaming(bad,2),"factor levels changed")
++    expect_error(fastglm_ordinal_streaming(function(k) list(X=x,y=as.integer(y)),1),"supply 'levels'")
++    expect_error(fastglm_ordinal_streaming(ordinal_test_source(x,y,weights=rep(.5,12)),firth=TRUE),"integer frequency")
++    zero <- matrix(numeric(),12,0)
++    fit <- fastglm_ordinal_streaming(ordinal_test_source(zero,y,size=2),firth=TRUE)
++    ref <- fastglm_ordinal(zero,y,firth=TRUE)
++    expect_equal(coef(fit),coef(ref),tolerance=1e-8)
++})
++
++test_that("binary source bias reduction retains accurate separated-tail equations", {
++    set.seed(112101)
++    x <- cbind(x=seq(-2,2,length.out=240),z=rnorm(240,sd=.25))
++    y <- cbind(low=as.numeric(x[,1]>0),high=as.numeric(x[,1]<=0))
++    w <- rep(c(0,1,2,1),60);off <- -cos(seq_len(240))/8
++    for(link in c("probit","cloglog")) {
++        ref <- fastglm_ordinal(-x,y,weights=w,offset=off,link=link,firth=TRUE,tol=1e-9,maxit=500)
++        fit <- fastglm_ordinal_streaming(ordinal_test_source(-x,y,w,off,31L),
++            link=link,firth=TRUE,tol=1e-9,maxit=500)
++        expect_true(fit$converged)
++        expect_equal(coef(fit),coef(ref),tolerance=1e-7)
++        expect_equal(vcov(fit),vcov(ref),tolerance=1e-7)
++        expect_lt(fit$scaled.score,1e-8);expect_lt(fit$predictor.step,1e-8)
++    }
++})
++
++test_that("ordinal sources preserve recoding and explicit nonconvergence", {
++    set.seed(114002)
++    x <- cbind(x=rnorm(80),z=runif(80,-1,1));y <- ordered(rep(1:4,20),levels=1:4)
++    x <- sweep(sweep(x,2,c(1e-4,1e3),"*"),2,c(1e5,-1e7),"+")
++    ref <- fastglm_ordinal(x,y,firth=TRUE,tol=1e-9)
++    fit <- fastglm_ordinal_streaming(ordinal_test_source(x,y,size=13),firth=TRUE,tol=1e-9)
++    expect_true(fit$converged)
++    expect_equal(predict(fit),predict(ref),tolerance=2e-7)
++    expect_equal(predict(fit,se.fit=TRUE)$se.fit,predict(ref,se.fit=TRUE)$se.fit,tolerance=2e-7)
++    expect_warning(failed <- fastglm_ordinal_streaming(ordinal_test_source(x,y,size=13),firth=TRUE,maxit=1),"did not converge")
++    expect_false(failed$converged)
++    expect_error(vcov(failed),"converged fit")
++    calls <- 0L
++    changing <- function(k) {
++        calls <<- calls+1L;i <- seq_len(if(calls<=2L) 20L else 21L)
++        list(X=x[i,,drop=FALSE],y=y[i])
++    }
++    expect_error(fastglm_ordinal_streaming(changing,2,firth=TRUE),"size changed")
++})

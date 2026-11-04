@@ -241,6 +241,8 @@ glance.fastglm_ordinal <- function(x,...) {
 #' @rdname ordinal-tidy
 augment.fastglm_ordinal <- function(x,data=NULL,newdata=NULL,se_fit=FALSE,...) {
     if(length(list(...))) stop("unused ordinal augment arguments",call.=FALSE)
+    if(inherits(x,"fastglm_ordinal_stream") && is.null(data) && is.null(newdata))
+        stop("ordinal source fits do not retain observations; supply explicit data or newdata for augmentation",call.=FALSE)
     if(!is.null(data) && !is.null(newdata)) stop("supply either data or newdata",call.=FALSE)
     if(!is.logical(se_fit) || length(se_fit)!=1L || is.na(se_fit))
         stop("'se_fit' must be TRUE or FALSE",call.=FALSE)

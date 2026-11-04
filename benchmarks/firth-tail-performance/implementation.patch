@@ -1,0 +1,212 @@
+diff --git a/R/binomial-tails.R b/R/binomial-tails.R
+index 5ff1c7a..5345a36 100644
+--- a/R/binomial-tails.R
++++ b/R/binomial-tails.R
+@@ -52,8 +52,5 @@
+ .glm_mu_eta <- function(object,eta) {
+     code <- .stable_binomial_code(object)
+     if(code<0L) return(object$family$mu.eta(eta))
+-    n <- length(eta)
+-    out <- binomial_firth_moments(as.numeric(eta),numeric(n),numeric(n),code)$derivative
+-    out[is.infinite(eta)] <- 0
+-    out
++    binomial_firth_derivative(as.numeric(eta),code)
+ }
+diff --git a/R/validation.R b/R/validation.R
+index 8ec80ae..a5da698 100644
+--- a/R/validation.R
++++ b/R/validation.R
+@@ -95,20 +95,20 @@
+     res$nobs <- sum(positive)
+     res$df.residual <- res$nobs - res$rank
+     res$df.null <- res$nobs - as.integer(intercept)
+-    derivative <- fam$mu.eta(res$linear.predictors)
+-    res$residuals <- (y - res$fitted.values) / derivative
+-    res$residuals[!positive] <- 0
+-    if (identical(res$inference, "none"))
+-        res$weights <- w * derivative^2 / fam$variance(res$fitted.values)
+-    res$weights[!positive] <- 0
+     binomial.code <- .stable_binomial_code(res)
+     if(binomial.code>=0L) {
+-        moments <- binomial_firth_moments(res$linear.predictors,as.numeric(y),w,binomial.code)
++        moments <- binomial_firth_summary(res$linear.predictors,as.numeric(y),w,res$n,binomial.code)
+         res$weights <- moments$working
+-        res$residuals <- .binomial_working_residual(moments,y,res$linear.predictors,binomial.code)
++        res$residuals <- moments$residuals
+         names(res$residuals) <- names(y)
++        res$deviance <- moments$deviance
++    } else {
++        derivative <- fam$mu.eta(res$linear.predictors)
++        res$residuals <- (y - res$fitted.values) / derivative
+         res$residuals[!positive] <- 0
+-        res$deviance <- sum(moments$deviance)
++        if (identical(res$inference, "none"))
++            res$weights <- w * derivative^2 / fam$variance(res$fitted.values)
++        res$weights[!positive] <- 0
+     }
+     disp <- .fixed_dispersion(fam)
+     res$estimated.dispersion <- is.na(disp)
+@@ -137,7 +137,7 @@
+         }
+     }
+     if(binomial.code>=0L) {
+-        res$aic <- .binomial_tail_aic(moments,y,res$n,w)+2*res$rank
++        res$aic <- moments$aic+2*res$rank
+     } else if (all(positive)) {
+         res$aic <- .family_aic(fam,y, res$n, res$fitted.values, w, res$deviance) + 2 * res$rank
+     } else {
+diff --git a/inst/include/glm.h b/inst/include/glm.h
+index 0ee0294..3f5445d 100644
+--- a/inst/include/glm.h
++++ b/inst/include/glm.h
+@@ -1288,6 +1288,10 @@ public:
+     // report them back to R.
+     double get_log_det_XtWX() const { return log_det_XtWX_; }
+     double get_bias_dispersion() { return compute_firth_phi(); }
++    double get_binomial_deviance() {
++        refresh_binomial_working();
++        return binomial_working.deviance;
++    }
+     void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
+     {
+         const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
+diff --git a/inst/include/glm_sparse.h b/inst/include/glm_sparse.h
+index f73e8cd..f38c2d5 100644
+--- a/inst/include/glm_sparse.h
++++ b/inst/include/glm_sparse.h
+@@ -566,6 +566,10 @@ public:
+     Eigen::VectorXd get_weights() override { return weights; }
+     double get_log_det_XtWX() const { return log_det_XtWX_; }
+     double get_bias_dispersion() { return compute_firth_phi_sparse(); }
++    double get_binomial_deviance() {
++        refresh_binomial_working();
++        return binomial_working.deviance;
++    }
+     void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
+     {
+         const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
+diff --git a/src/binomial_firth.cpp b/src/binomial_firth.cpp
+index bd4f35a..378138b 100644
+--- a/src/binomial_firth.cpp
++++ b/src/binomial_firth.cpp
+@@ -22,3 +22,60 @@ Rcpp::List binomial_firth_moments(Rcpp::NumericVector eta,Rcpp::NumericVector y,
+         Rcpp::_["mean"]=mean,Rcpp::_["derivative"]=derivative,
+         Rcpp::_["logp"]=logp,Rcpp::_["logq"]=logq,Rcpp::_["deviance"]=deviance);
+ }
++
++// Complete post-fit accounting in one pass without materializing all moment
++// vectors. Binomial trial totals retain stats::binomial()$aic conventions.
++// [[Rcpp::export]]
++Rcpp::List binomial_firth_summary(Rcpp::NumericVector eta,Rcpp::NumericVector y,
++    Rcpp::NumericVector weights,Rcpp::NumericVector trials,int code) {
++    const int n=eta.size();
++    if(y.size()!=n || weights.size()!=n || (trials.size()!=1 && trials.size()!=n) ||
++        !fglm::bounded_firth_predictors(code))
++        Rcpp::stop("incompatible binomial summary inputs");
++    bool grouped=false;
++    for(double value:trials) if(value>1) {grouped=true;break;}
++    Rcpp::NumericVector working(n),residual(n);
++    double deviance=0,aic=0;
++    for(int i=0;i<n;++i) {
++        const auto row=fglm::binomial_firth_terms(code,eta[i],y[i],weights[i]);
++        working[i]=row.weight;
++        if(weights[i]==0) continue;
++        if(code==fglm::FAM_BINOMIAL_CLOGLOG) {
++            if(y[i]>0) residual[i]=y[i]*std::exp(-eta[i]);
++            if(y[i]<1) {
++                const double t=std::exp(eta[i]);
++                const double ratio=t==0 ? 1 : (std::isinf(t) ? R_PosInf : std::expm1(t)/t);
++                residual[i]-=(1-y[i])*ratio;
++            }
++        } else {
++            const double logd=-.5*eta[i]*eta[i]-.91893853320467274178;
++            if(y[i]>0) residual[i]=y[i]*std::exp(row.logq-logd);
++            if(y[i]<1) residual[i]-=(1-y[i])*std::exp(row.logp-logd);
++        }
++        if(y[i]>0) deviance+=2*weights[i]*y[i]*(std::log(y[i])-row.logp);
++        if(y[i]<1) deviance+=2*weights[i]*(1-y[i])*(std::log1p(-y[i])-row.logq);
++        const double m=grouped ? trials[trials.size()==1 ? 0 : i] : weights[i];
++        if(m>0) {
++            const double total=R::fround(m,0),successes=R::fround(m*y[i],0),failures=total-successes;
++            double value=(successes==0 || successes==total) ? 0 : R::lchoose(total,successes);
++            if(successes>0) value+=successes*row.logp;
++            if(failures>0) value+=failures*row.logq;
++            aic-=2*(weights[i]/m)*value;
++        }
++    }
++    return Rcpp::List::create(Rcpp::_["working"]=working,Rcpp::_["residuals"]=residual,
++        Rcpp::_["deviance"]=deviance,Rcpp::_["aic"]=aic);
++}
++
++// [[Rcpp::export]]
++Rcpp::NumericVector binomial_firth_derivative(Rcpp::NumericVector eta,int code) {
++    if(!fglm::bounded_firth_predictors(code)) Rcpp::stop("unsupported binomial derivative link");
++    Rcpp::NumericVector derivative(eta.size());
++    for(R_xlen_t i=0;i<eta.size();++i) {
++        if(std::isinf(eta[i])) derivative[i]=0;
++        else derivative[i]=code==fglm::FAM_BINOMIAL_PROBIT ?
++            std::exp(-.5*eta[i]*eta[i]-.91893853320467274178) :
++            std::exp(eta[i]-std::exp(eta[i]));
++    }
++    return derivative;
++}
+diff --git a/src/fit_glm_dense.cpp b/src/fit_glm_dense.cpp
+index 025ab78..19a1e36 100644
+--- a/src/fit_glm_dense.cpp
++++ b/src/fit_glm_dense.cpp
+@@ -218,14 +218,12 @@ List bigfastglm(XPtr<BigMatrix> Xs,
+                             _["cov.unscaled"]      = vcov);
+     if (firth) {
+         double log_det = solver->get_log_det_XtWX();
+-        VectorXd mu_final = solver->get_mu();
+         Eigen::Map<const Eigen::ArrayXd> y_arr(y.data(), y.size());
+-        Eigen::Map<const Eigen::ArrayXd> mu_arr(mu_final.data(), mu_final.size());
++        Eigen::Map<const Eigen::ArrayXd> mu_arr(mu.data(), mu.size());
+         Eigen::Map<const Eigen::ArrayXd> w_arr(weights.data(), weights.size());
+-        double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr)
+-            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
+-        if(fglm::bounded_firth_predictors(fam_code))
+-            std_dev=fglm::binomial_firth_deviance(fam_code,solver->get_eta_ref(),y_arr.matrix(),w_arr.matrix());
++        double std_dev = fglm::bounded_firth_predictors(fam_code) ? solver->get_binomial_deviance() :
++            (fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr)
++            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr)))));
+         out["deviance"]           = std_dev;
+         out["penalized.deviance"] = dev;
+         out["log.det.XtWX"]       = log_det;
+@@ -324,10 +322,9 @@ List fit_sparse_glm(SEXP x_sparse,
+         Eigen::Map<const Eigen::ArrayXd> y_arr(Y.data(), Y.size());
+         Eigen::Map<const Eigen::ArrayXd> mu_arr(m.data(), m.size());
+         Eigen::Map<const Eigen::ArrayXd> w_arr(wts.data(), wts.size());
+-        double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
+-            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
+-        if(fglm::bounded_firth_predictors(fam_code))
+-            std_dev=fglm::binomial_firth_deviance(fam_code,e,Y,w_arr.matrix());
++        double std_dev = fglm::bounded_firth_predictors(fam_code) ? solver.get_binomial_deviance() :
++            (fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
++            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr)))));
+         out["deviance"]           = std_dev;
+         out["penalized.deviance"] = dev;
+         out["log.det.XtWX"]       = log_det;
+diff --git a/src/fit_glm_firth.cpp b/src/fit_glm_firth.cpp
+index fb53709..17290b3 100644
+--- a/src/fit_glm_firth.cpp
++++ b/src/fit_glm_firth.cpp
+@@ -93,14 +93,13 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
+     bool conv = solver.get_converged();
+     double log_det = solver.get_log_det_XtWX();
+ 
+-    // Recompute the unpenalized (standard) deviance for reporting.
++    // Stable binomial deviance is already cached at the returned predictor.
+     Eigen::Map<const Eigen::ArrayXd> y_arr(Y.data(), Y.size());
+     Eigen::Map<const Eigen::ArrayXd> mu_arr(m.data(), m.size());
+     Eigen::Map<const Eigen::ArrayXd> w_arr(W.data(), W.size());
+-    double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
+-            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
+-    if(fglm::bounded_firth_predictors(fam_code))
+-        std_dev=fglm::binomial_firth_deviance(fam_code,e,Y,W);
++    double std_dev = fglm::bounded_firth_predictors(fam_code) ? solver.get_binomial_deviance() :
++        (fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
++            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr)))));
+ 
+     List out = List::create(
+         _["coefficients"]      = b,

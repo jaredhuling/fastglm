@@ -218,14 +218,12 @@ List bigfastglm(XPtr<BigMatrix> Xs,
                             _["cov.unscaled"]      = vcov);
     if (firth) {
         double log_det = solver->get_log_det_XtWX();
-        VectorXd mu_final = solver->get_mu();
         Eigen::Map<const Eigen::ArrayXd> y_arr(y.data(), y.size());
-        Eigen::Map<const Eigen::ArrayXd> mu_arr(mu_final.data(), mu_final.size());
+        Eigen::Map<const Eigen::ArrayXd> mu_arr(mu.data(), mu.size());
         Eigen::Map<const Eigen::ArrayXd> w_arr(weights.data(), weights.size());
-        double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr)
-            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
-        if(fglm::bounded_firth_predictors(fam_code))
-            std_dev=fglm::binomial_firth_deviance(fam_code,solver->get_eta_ref(),y_arr.matrix(),w_arr.matrix());
+        double std_dev = fglm::bounded_firth_predictors(fam_code) ? solver->get_binomial_deviance() :
+            (fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, y_arr, mu_arr, w_arr)
+            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr)))));
         out["deviance"]           = std_dev;
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;
@@ -324,10 +322,9 @@ List fit_sparse_glm(SEXP x_sparse,
         Eigen::Map<const Eigen::ArrayXd> y_arr(Y.data(), Y.size());
         Eigen::Map<const Eigen::ArrayXd> mu_arr(m.data(), m.size());
         Eigen::Map<const Eigen::ArrayXd> w_arr(wts.data(), wts.size());
-        double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
-            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
-        if(fglm::bounded_firth_predictors(fam_code))
-            std_dev=fglm::binomial_firth_deviance(fam_code,e,Y,w_arr.matrix());
+        double std_dev = fglm::bounded_firth_predictors(fam_code) ? solver.get_binomial_deviance() :
+            (fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
+            : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr)))));
         out["deviance"]           = std_dev;
         out["penalized.deviance"] = dev;
         out["log.det.XtWX"]       = log_det;

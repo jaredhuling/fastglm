@@ -1,0 +1,124 @@
+Binomial Firth finalization and derivative performance
+=====================================================
+
+Role and baseline
+-----------------
+This is an implementation optimization of the accurate-tail equations from
+c3b3eeb2d217727e5a4194382bdd5925cc4d2cab. It aims to recover avoidable cost while
+retaining that commit's estimator, numerical safeguards, and reported quantities.
+It does not change statistical assumptions, inference approximations, tuning,
+mean-bias adjustment, or convergence criteria. This study compares accurate
+implementations; an older calculation using probability floors is not an
+accuracy comparator.
+
+The baseline source was archived from that commit and its matching installed
+library was copied into an immutable separate library before editing. The final
+source delta is implementation.patch; apply it to the baseline and regenerate
+Rcpp exports before installation. protocol-sha256.txt records the candidate,
+protocol, runner, tests, and reused reference-script hashes before confirmation.
+The installed native-library hashes and session files identify measured builds.
+Other ordinal extensions may coexist in the candidate package, but are not
+called by this binomial benchmark or changed by this patch.
+
+Development findings
+--------------------
+Separate profiling at n=12,000 and 100,000 identified post-fit accounting as
+roughly a quarter of complete fitting time for the probit/cloglog examples.
+The previous R finalization first computed ordinary residuals and then replaced
+them with accurate-tail residuals. It materialized seven moment vectors before
+constructing additional vectors for likelihoods and residuals. Probability
+standard-error requests also computed all seven vectors, plus two dummy input
+vectors, although only a derivative was needed.
+
+The first candidate replaces finalization with one native pass returning the
+two required row vectors and scalar deviance/AIC totals. Its trial and frequency
+conventions remain those of the existing helper: use original trial totals if
+any exceed one, otherwise use prior weights; round trial and success counts for
+the binomial normalizer. Zero-count products with infinite log probabilities
+remain excluded. Working residuals use the stable formulas already implemented,
+including tails where the ordinary derivative underflows. A separate derivative
+kernel allocates only its requested result. Older saved fits and other families
+retain their existing derivative convention.
+
+The first candidate reduced finalization from about 17–19 ms to 5.5–6.0 ms at
+n=100,000 in the development inputs. Complete fits improved about 18–19% and
+these derivative requests improved about 3.6–5.9 times. These profiles informed
+the implementation; final performance claims use the separate confirmation
+runner and fresh seed, not selected development timings.
+
+A second exact duplication occurred in native reporting. Dense, sparse, and
+mapped return wrappers evaluated ordinary deviance and then stable binomial
+deviance although the solver cache already held that stable total at the
+returned predictor. The final candidate reads the cache instead. Tests check
+both converged fits and deliberately exhausted one-iteration fits, including
+inference='none', so this reuse cannot silently report an earlier state.
+
+The initial new scalar-trial unit test compared against stats::binomial()$aic
+with an unrecycled scalar vector. That R function's scalar logical mask used
+only the first row. The test reference was corrected by explicitly repeating
+the trial total, matching both the existing helper and the intended row
+semantics. The initial test log and corrected passing log are retained. No
+production calculation was changed in response to that reference error.
+
+Validation and interpretation
+-----------------------------
+The fixed confirmation protocol is in protocol.txt. run.R records complete
+fitting and derivative requests across small, ordinary, wide, large, and grouped
+inputs, two links and two solvers, plus an ordinary logit control. It preserves
+all comparison cases, iteration counts, solutions, and numerical differences.
+The existing 146-case independent adjusted-score panel is rerun by run-stress.R
+with its output redirected to this study; prior results are not overwritten.
+
+This is established algebra and removal of repeated work, with empirical speed
+evidence. No inferential theorem, finite-sample calibration improvement, or
+uniform speed claim follows from it. The remaining native solver arithmetic
+still has the cost of accurate tails; further speed work would need its own
+mechanism and validation. Failed fits are not omitted or replaced in comparisons.
+
+Reproduction
+------------
+From the repository root, install the baseline and patched candidate in separate
+libraries. Regenerate exports using Rcpp::compileAttributes('.') in the candidate
+source before R CMD INSTALL. Pass library and result-directory paths explicitly
+as described in protocol.txt. Benchmark scripts refuse to replace raw timing
+records. summarize.R rebuilds numerical agreement and timing tables from those
+records. Reports and manifests record the completed artifacts separately from
+the candidate/protocol hashes frozen before confirmation.
+
+Final confirmation results
+--------------------------
+Across the ordinary n=12,000 probit/cloglog fits, complete fitting speed ratios
+were 1.17–1.24 relative to c3b3eeb, corresponding to about 15–19% lower elapsed
+time. The n=120,000 fits had ratios 1.14–1.24. Across all affected complete-fit
+cases, ratios ranged from 0.945 to 1.240: wide probit QR measured about 6% slower,
+and small probit QR was essentially unchanged. The unaffected logit control
+also varied by solver, from about 4% slower to 9% faster. The measurements do
+not establish uniform speed improvement or isolate all machine/order effects.
+
+Derivative requests improved 1.10–5.93 times; at n>=12,000 the range was
+2.32–5.93 times. All 22 paired fits had identical iteration counts, coefficients,
+covariance matrices, adjusted scores, weights, and predicted probabilities.
+Maximum relative deviance discrepancy was 5.64e-15, working-residual discrepancy
+4.44e-16, and prediction-standard-error discrepancy 2.09e-17. Likelihood values
+were identical in the stored comparison. The numerical comparison passed.
+
+All 146 fits in the prior independent adjusted-score panel converged, with
+maximum standardized adjusted score 8.02e-9. Focused binomial summary/tail,
+Firth safeguard/cache/stopping, and prepared-fit tests passed. The prepared
+Gamma worker test was skipped under the default CRAN flag in this focused run;
+the package-wide validation records any separately executed worker checks.
+
+Numerical solution objects retain every row used for the comparisons. To avoid
+unnecessary repository size, archive.R losslessly recompresses their RDS byte
+encoding with xz after timings finish and verifies identical R objects before
+and after replacement. archive.csv records both byte hashes and sizes. The
+benchmark runner is unchanged; regeneration can reproduce the original gzip
+encoding, and archive.R performs the documented storage step. This changes no
+timing, solver, numerical comparison, or statistical record.
+
+The two complete solution records were reduced from 19,338,753 and
+19,339,010 bytes to 9,917,688 and 9,908,876 bytes respectively. Both objects
+were verified identical after recompression. validate.R verifies the complete
+timing grid, numerical comparisons, stress results, and archive hashes without
+rerunning models. Regenerate the final stress summary with:
+  Rscript benchmarks/firth-tail-performance/validate.R RESULTS_DIRECTORY

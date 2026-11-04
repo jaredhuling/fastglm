@@ -95,20 +95,20 @@
     res$nobs <- sum(positive)
     res$df.residual <- res$nobs - res$rank
     res$df.null <- res$nobs - as.integer(intercept)
-    derivative <- fam$mu.eta(res$linear.predictors)
-    res$residuals <- (y - res$fitted.values) / derivative
-    res$residuals[!positive] <- 0
-    if (identical(res$inference, "none"))
-        res$weights <- w * derivative^2 / fam$variance(res$fitted.values)
-    res$weights[!positive] <- 0
     binomial.code <- .stable_binomial_code(res)
     if(binomial.code>=0L) {
-        moments <- binomial_firth_moments(res$linear.predictors,as.numeric(y),w,binomial.code)
+        moments <- binomial_firth_summary(res$linear.predictors,as.numeric(y),w,res$n,binomial.code)
         res$weights <- moments$working
-        res$residuals <- .binomial_working_residual(moments,y,res$linear.predictors,binomial.code)
+        res$residuals <- moments$residuals
         names(res$residuals) <- names(y)
+        res$deviance <- moments$deviance
+    } else {
+        derivative <- fam$mu.eta(res$linear.predictors)
+        res$residuals <- (y - res$fitted.values) / derivative
         res$residuals[!positive] <- 0
-        res$deviance <- sum(moments$deviance)
+        if (identical(res$inference, "none"))
+            res$weights <- w * derivative^2 / fam$variance(res$fitted.values)
+        res$weights[!positive] <- 0
     }
     disp <- .fixed_dispersion(fam)
     res$estimated.dispersion <- is.na(disp)
@@ -137,7 +137,7 @@
         }
     }
     if(binomial.code>=0L) {
-        res$aic <- .binomial_tail_aic(moments,y,res$n,w)+2*res$rank
+        res$aic <- moments$aic+2*res$rank
     } else if (all(positive)) {
         res$aic <- .family_aic(fam,y, res$n, res$fitted.values, w, res$deviance) + 2 * res$rank
     } else {

@@ -1,0 +1,19 @@
+Warning message:
+package ‘testthat’ was built under R version 4.5.2 
+[1] TRUE
+[1] TRUE
+            case passed full.loglik.error restricted.loglik.error
+   logit-smaller   TRUE      5.684342e-14            5.684342e-14
+  probit-smaller   TRUE      1.136868e-13            1.136868e-13
+ cloglog-smaller   TRUE     -5.684342e-14           -1.705303e-13
+    logit-larger   TRUE      1.364242e-12            0.000000e+00
+   probit-larger   TRUE     -1.364242e-12           -9.094947e-13
+  cloglog-larger   TRUE      2.273737e-13            2.273737e-13
+ profile.max.error message warnings
+      1.819556e-06                 
+      5.575277e-07                 
+      1.233820e-06                 
+      4.313604e-07                 
+      7.915903e-08                 
+      1.380122e-07                 
+Housing endpoint maximum error: 1.307997e-06 

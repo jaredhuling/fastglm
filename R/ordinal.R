@@ -154,6 +154,8 @@ fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
 #' @param evaluate evaluate the updated call or return it for inspection.
 #' @exportS3Method update fastglm_ordinal
 update.fastglm_ordinal <- function(object,formula.,...,evaluate=TRUE) {
+    if(inherits(object,"fastglm_ordinal_stream") && !missing(formula.))
+        stop("formula changes require rebuilding the ordinal source schema with fastglm_source() and refitting",call.=FALSE)
     if(!is.null(object$batch.response))
         stop("update is unavailable for ordinal batch fits; refit the response with fastglm_ordinal(prepared, y, ...)",call.=FALSE)
     if(isTRUE(object$prepared) && !missing(formula.))
@@ -336,14 +338,33 @@ deviance.fastglm_ordinal <- function(object,...) {
 
 #' @rdname ordinal-methods
 #' @param parm parameters by name or position; defaults to all parameters.
-#' @param level confidence level for asymptotic normal intervals.
+#' @param level confidence level.
+#' @param method \code{"wald"} for the default expected-information normal
+#'   intervals, or \code{"profile"} for maximum-likelihood profile intervals.
+#'   Profiles re-estimate all remaining coefficients at each selected value
+#'   and invert an asymptotic likelihood-ratio test. They require an ML fit,
+#'   retained dense data, and every declared category observed.
+#' @param control numerical controls for profile inference: \code{maxit=300},
+#'   \code{score.tol=1e-7}, \code{step.tol=1e-7}, \code{root.tol=1e-6},
+#'   \code{max.expand=25}, \code{max.root=100}, \code{max.halves=35},
+#'   \code{max.step=4}, and \code{condition.tol=1e-14}. Scores are standardized
+#'   by expected information in the nuisance coordinates; \code{step.tol}
+#'   controls the remaining cumulative-predictor change. Root tolerances use
+#'   units of the coefficient's fitted standard error. Failed endpoints are
+#'   missing with attached \code{diagnostics}; exhausting the search is not
+#'   interpreted as an infinite endpoint. These are first-order model-based
+#'   intervals, not exact small-sample or cluster-robust intervals.
 #' @export
-confint.fastglm_ordinal <- function(object,parm,level=.95,...) {
-    if(length(list(...))) stop("only model-based Wald intervals are available for ordinal fits",call.=FALSE)
+confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profile"),control=list(),...) {
+    if(length(list(...))) stop("unused ordinal confidence-interval arguments",call.=FALSE)
+    method <- match.arg(method)
     if(length(level)!=1L || !is.finite(level) || level<=0 || level>=1)
         stop("'level' must lie between zero and one",call.=FALSE)
-    b <- coef(object); v <- vcov(object)
+    b <- coef(object)
     if(missing(parm)) parm <- seq_along(b)
+    if(method=="profile") return(.ordinal_profile_confint(object,parm,level,control))
+    if(length(control)) stop("'control' is only used for profile intervals",call.=FALSE)
+    v <- vcov(object)
     if(is.character(parm)) parm <- match(parm,names(b))
     if(!is.numeric(parm) || anyNA(parm) || any(parm<1 | parm>length(b) | parm!=floor(parm)))
         stop("invalid ordinal parameter selection",call.=FALSE)
@@ -355,6 +376,8 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,...) {
 }
 
 .ordinal_prediction_design <- function(object,newdata=NULL,offset=NULL) {
+    if(inherits(object,"fastglm_ordinal_stream") && is.null(newdata))
+        stop("supply explicit evaluation data for this ordinal source operation",call.=FALSE)
     if(!is.null(newdata) && isTRUE(object$prediction.offset.required) && is.null(offset))
         stop("supply an explicit prediction offset after changing prepared ordinal offsets",call.=FALSE)
     if(is.null(newdata)) { x <- object$x; off <- object$offset }

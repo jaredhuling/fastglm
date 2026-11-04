@@ -1,0 +1,20 @@
+5000 source ML 0.026 seconds
+5000 source meanBR 0.033 seconds
+        0.68 real         0.61 user         0.05 sys
+           296255488  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               21125  page reclaims
+                  20  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  10  voluntary context switches
+                 260  involuntary context switches
+          7616617889  instructions retired
+          2701547609  cycles elapsed
+           226263856  peak memory footprint

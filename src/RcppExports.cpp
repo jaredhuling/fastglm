@@ -25,6 +25,33 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// binomial_firth_summary
+Rcpp::List binomial_firth_summary(Rcpp::NumericVector eta, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector trials, int code);
+RcppExport SEXP _fastglm_binomial_firth_summary(SEXP etaSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP trialsSEXP, SEXP codeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type trials(trialsSEXP);
+    Rcpp::traits::input_parameter< int >::type code(codeSEXP);
+    rcpp_result_gen = Rcpp::wrap(binomial_firth_summary(eta, y, weights, trials, code));
+    return rcpp_result_gen;
+END_RCPP
+}
+// binomial_firth_derivative
+Rcpp::NumericVector binomial_firth_derivative(Rcpp::NumericVector eta, int code);
+RcppExport SEXP _fastglm_binomial_firth_derivative(SEXP etaSEXP, SEXP codeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< int >::type code(codeSEXP);
+    rcpp_result_gen = Rcpp::wrap(binomial_firth_derivative(eta, code));
+    return rcpp_result_gen;
+END_RCPP
+}
 // colMax_dense
 Eigen::MatrixXd colMax_dense(const Eigen::Map<Eigen::MatrixXd>& A);
 RcppExport SEXP _fastglm_colMax_dense(SEXP ASEXP) {
@@ -438,6 +465,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ordinal_stream_native_fit
+Rcpp::List ordinal_stream_native_fit(Rcpp::Function fetch, int n_chunks, int predictors, int categories, Rcpp::NumericVector start, bool firth, double score_tol, double step_tol, int maxit, int block_size, double max_step, int max_halves, double condition_tol, bool trace, int link);
+RcppExport SEXP _fastglm_ordinal_stream_native_fit(SEXP fetchSEXP, SEXP n_chunksSEXP, SEXP predictorsSEXP, SEXP categoriesSEXP, SEXP startSEXP, SEXP firthSEXP, SEXP score_tolSEXP, SEXP step_tolSEXP, SEXP maxitSEXP, SEXP block_sizeSEXP, SEXP max_stepSEXP, SEXP max_halvesSEXP, SEXP condition_tolSEXP, SEXP traceSEXP, SEXP linkSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::Function >::type fetch(fetchSEXP);
+    Rcpp::traits::input_parameter< int >::type n_chunks(n_chunksSEXP);
+    Rcpp::traits::input_parameter< int >::type predictors(predictorsSEXP);
+    Rcpp::traits::input_parameter< int >::type categories(categoriesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type start(startSEXP);
+    Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
+    Rcpp::traits::input_parameter< double >::type score_tol(score_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type step_tol(step_tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< double >::type max_step(max_stepSEXP);
+    Rcpp::traits::input_parameter< int >::type max_halves(max_halvesSEXP);
+    Rcpp::traits::input_parameter< double >::type condition_tol(condition_tolSEXP);
+    Rcpp::traits::input_parameter< bool >::type trace(traceSEXP);
+    Rcpp::traits::input_parameter< int >::type link(linkSEXP);
+    rcpp_result_gen = Rcpp::wrap(ordinal_stream_native_fit(fetch, n_chunks, predictors, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepare_glm_constant
 SEXP prepare_glm_constant(NumericMatrix x, NumericVector weights, bool leverage, int code);
 RcppExport SEXP _fastglm_prepare_glm_constant(SEXP xSEXP, SEXP weightsSEXP, SEXP leverageSEXP, SEXP codeSEXP) {
@@ -462,6 +514,8 @@ RcppExport SEXP prod_vec_big_right(SEXP, SEXP);
 
 static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_binomial_firth_moments", (DL_FUNC) &_fastglm_binomial_firth_moments, 4},
+    {"_fastglm_binomial_firth_summary", (DL_FUNC) &_fastglm_binomial_firth_summary, 5},
+    {"_fastglm_binomial_firth_derivative", (DL_FUNC) &_fastglm_binomial_firth_derivative, 2},
     {"_fastglm_colMax_dense", (DL_FUNC) &_fastglm_colMax_dense, 1},
     {"_fastglm_colMin_dense", (DL_FUNC) &_fastglm_colMin_dense, 1},
     {"_fastglm_all_finite_dense", (DL_FUNC) &_fastglm_all_finite_dense, 1},
@@ -481,6 +535,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_streaming_qr_update", (DL_FUNC) &_fastglm_streaming_qr_update, 4},
     {"_fastglm_streaming_qr_finish", (DL_FUNC) &_fastglm_streaming_qr_finish, 1},
     {"_fastglm_fit_streaming_glm", (DL_FUNC) &_fastglm_fit_streaming_glm, 17},
+    {"_fastglm_ordinal_stream_native_fit", (DL_FUNC) &_fastglm_ordinal_stream_native_fit, 15},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
     {"colmax_big",         (DL_FUNC) &colmax_big,         1},
     {"colmin_big",         (DL_FUNC) &colmin_big,         1},

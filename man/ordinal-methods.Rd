@@ -24,7 +24,14 @@
 
 \method{summary}{fastglm_ordinal}(object, vcov. = NULL, ...)
 
-\method{confint}{fastglm_ordinal}(object, parm, level = 0.95, ...)
+\method{confint}{fastglm_ordinal}(
+  object,
+  parm,
+  level = 0.95,
+  method = c("wald", "profile"),
+  control = list(),
+  ...
+)
 }
 \arguments{
 \item{object}{a fitted \code{fastglm_ordinal} model.}
@@ -52,7 +59,24 @@ to model-based expected Fisher information.}
 
 \item{parm}{parameters by name or position; defaults to all parameters.}
 
-\item{level}{confidence level for asymptotic normal intervals.}
+\item{level}{confidence level.}
+
+\item{method}{\code{"wald"} for the default expected-information normal
+intervals, or \code{"profile"} for maximum-likelihood profile intervals.
+Profiles re-estimate all remaining coefficients at each selected value
+and invert an asymptotic likelihood-ratio test. They require an ML fit,
+retained dense data, and every declared category observed.}
+
+\item{control}{numerical controls for profile inference: \code{maxit=300},
+\code{score.tol=1e-7}, \code{step.tol=1e-7}, \code{root.tol=1e-6},
+\code{max.expand=25}, \code{max.root=100}, \code{max.halves=35},
+\code{max.step=4}, and \code{condition.tol=1e-14}. Scores are standardized
+by expected information in the nuisance coordinates; \code{step.tol}
+controls the remaining cumulative-predictor change. Root tolerances use
+units of the coefficient's fitted standard error. Failed endpoints are
+missing with attached \code{diagnostics}; exhausting the search is not
+interpreted as an infinite endpoint. These are first-order model-based
+intervals, not exact small-sample or cluster-robust intervals.}
 }
 \value{
 Coefficients, covariance, or model summaries, as appropriate.

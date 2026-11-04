@@ -1,0 +1,172 @@
+Ordinal constrained likelihood and adjusted-score inference
+==========================================================
+
+Role and scope
+--------------
+This is a software-methods development and implementation-validation study.
+Its purpose is to make analytic ordinal inference available while preserving
+fastglm's cumulative-link likelihood, frequency semantics, parameter scale,
+and explicit failure reporting. It is not a coverage calibration exercise or
+a claim of higher-order accuracy. The source baseline is c3b3eeb. The feature
+adds ML profile intervals and tests, plus ordinary and adjusted score tests
+for linear coefficient hypotheses. It does not add score-profile intervals,
+bootstrap inference, or likelihood profiling for the mean-bias-reduced fit.
+
+Model and sample-size convention
+-------------------------------
+The model is G(alpha_j - x_i' beta - offset_i), with strictly ordered finite
+thresholds and link G equal to logistic, normal, or complementary log-log.
+Each individual ordinal response contributes one categorical log likelihood.
+A grouped row contributes sum_k m_ik log(p_ik), where m_ik is its effective
+integer category frequency. These frequencies are not normalized. Grouping
+constants are omitted, consistently with fastglm's ordinary ordinal logLik.
+The sample size for asymptotics is N=sum_i,k m_ik. Parameter and category
+dimensions remain fixed; observations represented by frequencies are assumed
+independent under the specified model.
+
+Let theta=(alpha,beta), ell(theta) be the ordinary log likelihood, U its score,
+I expected information, and U*=U+A the full-model mean-bias-adjusted score.
+The installed native ordinal evaluator supplies these quantities. A is the
+adjustment of the full original model; it is not recalculated after deleting
+columns associated with a hypothesis. The current model's linear centering
+and scaling are reused for numerical work, and all returned coefficients,
+constraints, and inference targets remain on the original parameter scale.
+The R setup retains a standardized dense copy of the design, using O(np)
+additional storage; native evaluation accumulates information by blocks.
+Cached profile points retain coefficients and compact diagnostics, without
+duplicating their full information matrices. This interface does not provide
+source-based inference for data that cannot be retained densely.
+
+ML profile inference
+--------------------
+For r independent constraints L theta=c, fit the unrestricted MLE theta_hat
+and the constrained MLE theta_hat_0. The statistic is
+  LR=2{ell(theta_hat)-ell(theta_hat_0)}.
+The chi-square_r approximation requires a regular interior null with
+nonsingular information. A one-coefficient interval is the set of values at
+which LR is no larger than qchisq(level,1). Endpoints are found by constrained
+refitting and root finding, rather than by a quadratic approximation to ell.
+No finite-sample exactness or universal coverage improvement is claimed.
+
+For the supported logit, probit and cloglog links, the latent densities are
+log-concave. Integrating such a density over an interval with affine endpoints
+gives a log-concave category probability; nonnegative frequency weighting
+therefore preserves concavity of the log likelihood on the convex ordered-
+threshold domain. Maximizing over nuisance parameters preserves concavity
+of the profile log likelihood. Its superlevel set is an interval, which
+justifies bracketing one likelihood-ratio crossing on each side of an interior
+MLE. Concavity alone does not prove that a finite MLE or finite endpoints
+exist; the implementation's numerical failure rules remain necessary.
+
+The constrained optimizer works in the fitted standardized coordinates,
+constructs a basis B for the null space of the transformed L, and updates
+along B (B'I B)^(-1) B'U. Since this is an ascent direction where information
+is positive definite, ordered-threshold and likelihood step reductions are
+used. Convergence requires both a small nuisance score standardized by
+expected information and a small remaining cumulative-predictor change.
+The unrestricted likelihood is independently checked/refined before profiling.
+
+Strictly ordered constraints are checked explicitly for fixed thresholds.
+General contrasts use an affine projection and, when needed, alternating
+projections to find an ordered starting point. This feasibility search is
+only initialization; its temporary separation margin is not imposed on the
+likelihood solution. Failure to find a starting point is reported as a
+numerical failure, not as proof that the mathematical constraint is infeasible.
+
+Endpoint bracketing and optimization have finite budgets. An exhausted budget
+or failed nuisance fit returns a missing endpoint and diagnostics. It is not
+reported as an infinite endpoint, and no Wald substitute is supplied. Empty
+or collapsed categories, a nonconverged original fit, and a source without
+retained dense data are excluded from this initial profile interface.
+
+Mean-bias-adjusted score inference
+---------------------------------
+For the same linear hypothesis, the constrained adjusted estimate solves
+  L theta_tilde_0=c,   B' U*(theta_tilde_0)=0.
+This is not a bias-reduced fit of the smaller model obtained by dropping
+columns: that model generally has a different bias adjustment. The native
+evaluator continues to use full-model information and adjustment. Bounded
+Fisher-scoring steps solve the projected equations, with finite-domain checks
+and explicit convergence failure. The adjusted score is not treated as the
+gradient of a penalized ordinal likelihood.
+
+At a constrained solution the full adjusted score has zero nuisance component.
+For numerical stability the implementation nevertheless forms
+  U_e*=U* - I B (B'I B)^(-1) B'U*,
+and reports Q=U_e*' I^(-1) U_e*. The ML option uses U in the same expression
+and solves B'U=0. The degrees of freedom equal the row rank of L. Dependent
+hypotheses are rejected instead of counting redundant rows as degrees of
+freedom. Output identifies which null equation was fitted.
+
+First-order justification for the implemented convention
+--------------------------------------------------------
+Assume a regular correctly specified cumulative-link model at an interior
+null theta_0, fixed dimension, N^(-1) I(theta_0)->I_0 positive definite, the
+usual score CLT, locally uniform differentiability/information convergence,
+and A(theta)=O_p(1) in an N^(-1/2) neighborhood. Assume the constrained root is
+consistent and remains in that neighborhood. These are asymptotic conditions,
+not consequences of a successful numerical convergence diagnostic.
+
+Write theta_tilde_0=theta_0+B h_N. Taylor expansion of the constrained equation
+and the O_p(1) adjustment yield
+  sqrt(N) h_N = (B'I_0 B)^(-1) B' U(theta_0)/sqrt(N) + o_p(1).
+Consequently, after removing the nuisance component,
+  U_e*(theta_tilde_0)/sqrt(N)
+    = {Id-I_0 B(B'I_0 B)^(-1)B'} U(theta_0)/sqrt(N) + o_p(1).
+The whitened limiting covariance is an idempotent projection with rank r.
+Thus Q converges to chi-square_r. The same argument applies to the ordinary
+score option. This is the justification for the particular full-model
+projected implementation; it does not claim that its finite-sample nuisance
+estimate equals the reduced-model estimate discussed generically in §12 of
+Kosmidis (2014).
+
+Assumption inventory
+--------------------
+Guaranteed or checked by implementation: supplied integer frequency semantics
+(from the fitting interface), fixed declared parameter dimension, independent
+constraint rows, positive observed frequency for every category, strict
+threshold ordering at accepted evaluations, usable full information, numerical
+convergence of the requested nuisance equation, and preservation of the
+original parameter/offset convention.
+
+Taken as modeling/asymptotic assumptions: independence of represented
+individuals, correct cumulative-link specification, interior true parameter,
+positive limiting information, score CLT and local uniform expansions, and
+existence/consistency of the relevant root. Finite fitted parameters and a
+well-conditioned observed sample information matrix do not prove these
+asymptotic conditions. Sparse categories and near-separation may make the
+chi-square approximation inaccurate.
+
+Why score-profile confidence sets remain a separate step
+--------------------------------------------------------
+A first-order pointwise chi-square reference permits test inversion in
+principle. It does not establish that the inverted set is a single interval,
+that the score statistic is monotone on each side, or that a finite search
+has detected every component or an unbounded endpoint. A useful implementation
+needs a defensible search/topology strategy and boundary analysis before it
+can return intervals without silently discarding accepted parameter values.
+The present implementation supplies point/joint score tests and ML profile
+intervals, with no ad hoc finite-sample scale correction.
+
+Primary-source audit
+--------------------
+1. Ioannis Kosmidis (2014), Improved estimation in cumulative link models,
+   JRSS B 76, 169-196, https://doi.org/10.1111/rssb.12025.
+   Read the model/adjustment material and the full §12 discussion of score
+   tests and prospective score-profile intervals at:
+   https://academic.oup.com/jrsssb/article/76/1/169/7075945
+   §12 motivates an adjusted-score quadratic with full-model information and
+   explains its first-order reference through an O(1) adjustment. Its generic
+   restricted-estimate notation does not specify the projected full-model
+   nuisance equation used here; the derivation above supplies that distinction.
+2. Rune Haubo B Christensen, Cumulative Link Models for Ordinal Regression
+   with the R Package ordinal, official package vignette:
+   https://cran.r-project.org/web/packages/ordinal/vignettes/clm_article.pdf
+   Read §§2.1 and 4.6 on profile likelihood, numerical profile construction,
+   and reported intervals, and §3 on concavity of the fixed-link model.
+   These provide an external ML software reference.
+   Other features reviewed in that document are not part of this implementation.
+
+The methods above are established likelihood/score constructions with an
+explicit implementation convention, not a novelty claim. No theorem proof
+or finite-sample guarantee is inferred from the numerical comparisons.

@@ -2,6 +2,24 @@
 
 ## Model interfaces and inference
 
+* Added ML profile-likelihood intervals and joint likelihood-ratio tests for
+  retained dense ordinal fits, and `fastglm_score_test()` for ordinary or
+  full-model mean-bias-adjusted ordinal scores under linear constraints.
+  The procedures use first-order chi-square references, retain constrained-fit
+  diagnostics, and require every category to be observed. Profile intervals
+  have a compact shared display; failed limits remain missing.
+* Added `fastglm_ordinal_streaming()` for repeatable sources, with logit,
+  probit, and complementary log-log links, maximum likelihood and mean bias
+  reduction, frequency counts, and offsets. Category and rank checks combine
+  all blocks. The bias adjustment uses information from the complete source.
+  Predictions, residuals, and weights support block destinations without
+  collecting the complete result. Model-based covariance is retained;
+  robust and constrained inference require separate source implementations.
+* Reduced binomial probit and complementary log-log post-fit overhead by
+  combining accurate likelihood and residual summaries, reusing the solver's
+  current deviance, and calculating prediction derivatives without allocating
+  unused probability summaries. The estimating equations are unchanged.
+
 * Binomial probit and complementary log-log bias reduction now evaluates tail
   probabilities, scores, and information without separately flooring means and
   derivatives. This corrects the estimating equations for nearly deterministic

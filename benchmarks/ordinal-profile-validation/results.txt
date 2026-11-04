@@ -1,0 +1,69 @@
+Ordinal analytic inference: interpretation
+==========================================
+
+Decision
+--------
+The constrained ML/profile implementation and the full-model adjusted-score
+procedure are ready for the supported dense ordinal interface. The independent
+checks support numerical correctness across logit, probit and cloglog links,
+frequency grouping, offsets, and mixed threshold/location constraints. They
+do not establish finite-sample coverage or improved type-I error calibration.
+The scientific scope and assumptions remain those in methods.txt.
+
+External software comparison
+-----------------------------
+reference-correction-v2 contains the usable comparison results. In all six
+prespecified generated cases, the unrestricted and restricted ML log
+likelihoods agreed with ordinal::clm within 1.37e-12 and 9.10e-13, respectively.
+Every profile endpoint was obtained. The largest absolute endpoint difference
+from ordinal's independently constructed profiles was 1.82e-6; the additional
+MASS housing comparison, across all three links and two slopes, differed by
+at most 1.31e-6. These are much smaller than the protocol's 5e-4 endpoint
+tolerance. The comparison uses ordinal 2023.12-4.1 on the recorded R session.
+
+The largest absolute likelihood-ratio target error at a generated-data
+endpoint was 8.93e-7. All reported nuisance scores and remaining predictor
+steps met their 1e-7 convergence criteria. Across the 12 ordinary/adjusted
+joint score checks, constraint residuals were at most 4.45e-16, and invertible
+row transformations changed the statistic by at most 2.85e-13. No method
+failure or fitting warning occurred in the corrected six-case panel.
+
+Harness correction and evidence history
+----------------------------------------
+confirmation-v1 is retained intact as a failed comparison attempt. Its
+likelihood and score records were successful, but its endpoint comparisons
+were invalid: ordinal::confint.clm ignores its parm argument and returned all
+slopes, which the original harness recycled against the selected fastglm
+coefficient. The returned message identified this behavior. The correction
+selects the requested rows from ordinal's result explicitly. No fastglm
+algorithm, tolerance, null hypothesis, dataset, or seed was changed in
+response. reference-correction-v2 reuses the same saved-seed inputs to confirm
+the corrected reference comparison; it is not a new independent sample.
+Both directories preserve their runner and protocol, source hashes, metadata,
+complete numeric records and generated inputs. The top-level run.R contains
+the corrected runner. A subsequent roxygen wording change clarifies the local
+smoothness/consistency assumptions without changing the tested calculation.
+
+Development regression checks
+------------------------------
+tests/testthat/test-ordinal-profile.R additionally checks nested likelihoods,
+an independent direct likelihood optimized by nlminb, exact numerical
+inversion of the scalar binomial likelihood ratio, hand-derived binary score
+quadratics, full-model versus smaller-model nuisance adjustments, grouping
+and affine recoding invariance, a finite score null under a separated
+alternative, and explicit nonconvergence/empty-category/streaming failures.
+These tests are implementation regression checks rather than asymptotic
+theorem verification or a coverage experiment.
+
+Limits and next step
+---------------------
+Profile intervals currently require a converged full ML fit, retained dense
+data, and positive observed frequency for every declared category. Score
+tests require a converged supplied fit and a numerically usable constrained
+null. A finite mean-bias-reduced fit does not establish those conditions.
+Nuisance fitting or endpoint-search failure stays unavailable; an exhausted
+search is never described as an infinite confidence limit. Score-profile
+confidence sets remain deferred until their possibly nonmonotone geometry
+can be handled explicitly. The natural next inference extension is source-
+based constrained evaluation, preserving the same full-model equations and
+failure semantics, rather than a simulation-calibrated adjustment.

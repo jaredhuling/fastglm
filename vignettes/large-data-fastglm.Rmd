@@ -141,6 +141,43 @@ The square roots of the diagonal entries of `V` are the coefficient standard err
 
 These calculations retain one block of design rows, matrices whose size depends on the number of coefficients, and small records of the number of rows in each block. Clustered inference additionally retains a contribution vector for each group, so its memory requirement grows with the number of groups. Returning every prediction or residual in a single vector still requires memory proportional to the number of observations; a supplied `sink` function is useful when that output would be too large.
 
+# Ordered outcomes from repeatable blocks
+
+Ordinal models can also be fitted without retaining the complete design or response. `fastglm_ordinal_streaming()` uses the same cumulative-link likelihood and mean bias-reduction equations as `fastglm_ordinal()`. The source must preserve the category order and predictor definitions across all blocks. A category or factor level may be absent from an individual block; the category totals and predictor rank are assessed across the complete source.
+
+The housing satisfaction data provide a small example with frequency weights. Here the reader selects rows from an in-memory table to make the construction visible. For a dataset larger than memory, the reader would obtain each block from a file or database instead.
+
+```{r}
+housing <- MASS::housing
+housing_source <- fastglm_source(
+    function(k) housing[((k-1L)*18L+1L):(k*18L),,drop=FALSE],
+    n_chunks=4L,formula=Sat~Infl+Type+Cont,
+    prototype=housing,weights="Freq")
+ordinal_stream <- fastglm_ordinal_streaming(housing_source,firth=TRUE)
+summary(ordinal_stream)
+fastglm_diagnostics(ordinal_stream)
+```
+
+Logit, probit, and complementary log-log links are supported with either maximum likelihood or mean bias reduction. For bias reduction, the information matrix is first accumulated over every block. A subsequent pass uses that global information to calculate the adjustment. Fitting separate bias-reduced models to the blocks would not produce the same estimator.
+
+Coefficient estimates, model-based covariance, Wald intervals, and numerical diagnostics use the ordinary ordinal interfaces. Predictions can be calculated at supplied predictor values, or the original source can be read again. When the complete prediction matrix would be too large, the `sink` argument receives one block at a time. As above, this function is the destination for the calculated values; it can write them to a file or retain only a summary. The following example retains the predicted number of residents in each satisfaction category for each block.
+
+```{r}
+category_totals <- matrix(0,4L,nlevels(housing$Sat),
+    dimnames=list(paste0("block",1:4),levels(housing$Sat)))
+predict(ordinal_stream,sink=function(value,k) {
+    i <- ((k-1L)*18L+1L):(k*18L)
+    category_totals[k,] <<- colSums(value*housing$Freq[i])
+})
+category_totals
+```
+
+Residuals and frequency weights can also be processed through a block destination. Returning all predictions, residuals, or weights in one object still requires memory proportional to the number of rows. Fitting storage depends on the largest supplied block, block-size records, and matrices whose dimensions depend on the number of coefficients. The source must itself read blocks without retaining the complete dataset for this memory benefit to apply.
+
+Peak process memory also includes temporary allocations and memory managed by R. Retaining a smaller design therefore does not guarantee a lower peak for every dataset size. Streaming can use more peak memory than dense fitting for moderate datasets and requires additional time to reread the observations. Its practical benefit should be assessed at the intended data size and with the intended reader, especially when the complete design would be too large to retain.
+
+The fitted source retains neither the complete design nor the response. Robust covariance, profile and score inference, refitting bootstraps, and assessment over the original source require additional implementations. Prediction-based summaries can instead use explicitly supplied evaluation data. The source must continue to return the same rows and values whenever it is reread.
+
 # Parquet and database sources
 
 Parquet is a file format that stores data by column and is commonly used for large tables. `fastglm_source_arrow()` reads one Parquet file as one block, so each file must be small enough to load into memory. A larger table can be divided into several files before fitting.

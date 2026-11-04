@@ -52,8 +52,5 @@
 .glm_mu_eta <- function(object,eta) {
     code <- .stable_binomial_code(object)
     if(code<0L) return(object$family$mu.eta(eta))
-    n <- length(eta)
-    out <- binomial_firth_moments(as.numeric(eta),numeric(n),numeric(n),code)$derivative
-    out[is.infinite(eta)] <- 0
-    out
+    binomial_firth_derivative(as.numeric(eta),code)
 }

@@ -36,8 +36,8 @@ a two-component formula, two offset column names supply count/positive
 and binary offsets, respectively.}
 }
 \value{
-A `fastglm_source` object for [fastglm_streaming()] or the count
-  and two-part fitting functions.
+A `fastglm_source` object for [fastglm_streaming()],
+  [fastglm_ordinal_streaming()], or the count and two-part fitting functions.
 }
 \description{
 A source describes how to obtain a block of observations when a fitting
