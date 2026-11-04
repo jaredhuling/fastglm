@@ -102,6 +102,9 @@ test_that("alternative links preserve grouping, prediction derivatives, and refi
 })
 
 test_that("alternative-link tails retain probabilities and finite log losses", {
+    tiny <- .ordinal_link_kernel(5,0,"cloglog")$log.probability[1,1]
+    expect_gt(-tiny,0)
+    expect_equal(tiny/log1p(-exp(-exp(5))),1,tolerance=1e-14)
     for(link in c("probit","cloglog")) {
         kernel <- .ordinal_link_kernel(c(-1,0,1),c(-40,0,40),link)
         expect_equal(rowSums(kernel$probability),rep(1,3),tolerance=1e-14)

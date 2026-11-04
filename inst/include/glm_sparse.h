@@ -52,6 +52,16 @@ protected:
     bool firth_step_failed = false;
     bool firth_step_limited = false;
     int firth_step_reductions = 0;
+    fglm::BinomialFirthWorking binomial_working;
+    bool binomial_current=false;
+    void refresh_binomial_working() {
+        if(!binomial_current) {
+            // A proposed step may be nonfinite before step control. Defer
+            // validation until the accepted state supplies a scoring update.
+            binomial_working.update(fam_code,eta,Y,weights,true,false);
+            binomial_current=true;
+        }
+    }
 
     // Sparse decompositions (analyzePattern done once, factorize per iter)
     SpLLT  Ch;
@@ -71,6 +81,9 @@ protected:
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<Eigen::ArrayXd>       d(mu_eta.data(), mu_eta.size());
             fglm::mu_eta(fam_code, fam_params, e, d);
+            if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+                refresh_binomial_working();binomial_working.validate();
+            }
             return;
         }
         Rcpp::NumericVector v = mu_eta_fun(eta);
@@ -103,17 +116,22 @@ protected:
 
     void update_eta() override
     {
+        binomial_current=false;
         eta.noalias() = X * beta;
         eta += offset;
     }
 
     void update_z() override
     {
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) { z=eta-offset;return; }
         z = (eta - offset).array() + (Y - mu).array() / mu_eta.array();
     }
 
     void update_w() override
     {
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            w=binomial_working.weight.array().sqrt();return;
+        }
         // The sqrt-link derivative is floored near zero. In that exceptional
         // region its implemented working weights are no longer constant.
         if (fam_code == fglm::FAM_POISSON_SQRT &&
@@ -136,7 +154,9 @@ protected:
     {
         devold = dev;
         double std_dev;
-        if (fam_code >= 0) {
+        if (firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            refresh_binomial_working();std_dev=binomial_working.deviance;
+        } else if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
@@ -151,7 +171,9 @@ protected:
     void update_dev_resids_dont_update_old() override
     {
         double std_dev;
-        if (fam_code >= 0) {
+        if (firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            refresh_binomial_working();std_dev=binomial_working.deviance;
+        } else if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
@@ -349,6 +371,7 @@ protected:
 
     double compute_firth_phi_sparse()
     {
+        if(fglm::bounded_firth_predictors(fam_code)) return 1;
         Eigen::Map<const Eigen::ArrayXd> yy(Y.data(), Y.size());
         Eigen::Map<const Eigen::ArrayXd> mm(mu.data(), mu.size());
         Eigen::Map<const Eigen::ArrayXd> ww(weights.data(), weights.size());
@@ -413,6 +436,9 @@ protected:
         const bool needs_adjustment = A_prev_available &&
             fam_code != fglm::FAM_GAUSSIAN_IDENTITY;
         Eigen::VectorXd zstar = z;
+        const bool stable_binomial=fglm::bounded_firth_predictors(fam_code);
+        Eigen::VectorXd numerator;
+        if(stable_binomial) numerator=(w2.array()*z.array()).matrix()+binomial_working.score;
         if (needs_adjustment) {
             Eigen::ArrayXd d2mu(nobs);
             compute_d2mu_sparse(d2mu);
@@ -427,11 +453,12 @@ protected:
             }
             if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == 0)
                 gamma_adjustment.noalias() = 0.5 * X.adjoint() * h_lev;
-            for (int i = 0; i < nobs; ++i)
+            if(stable_binomial) numerator.array()+=.5*h_lev.array()*binomial_working.ratio.array();
+            else for (int i = 0; i < nobs; ++i)
                 if (weights[i] > 0 && w2[i] != 0 && mu_eta[i] != 0)
                     zstar[i] += phi * h_lev[i] * (d2mu[i] / mu_eta[i]) / (2 * w2[i]);
         }
-        Xtwz.noalias() = X.adjoint() * (w2.array() * zstar.array()).matrix();
+        Xtwz.noalias() = X.adjoint() * (stable_binomial ? numerator : Eigen::VectorXd((w2.array()*zstar.array()).matrix()));
         beta = reuse_factor ? solve_factored(Xtwz) : factorize_and_solve(XtWX, Xtwz);
         rank = nvars;
         if (!reuse_factor) {
@@ -544,7 +571,9 @@ public:
         const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
             (conv ? "converged" : "iteration_limit");
         out["convergence.reason"] = reason;
-        if(fglm::bounded_firth_predictors(fam_code)) out["step.reductions"]=firth_step_reductions;
+        if(fglm::bounded_firth_predictors(fam_code)) {
+            out["step.reductions"]=firth_step_reductions;out["stable.binomial"]=true;
+        }
         if (!inference && !constant_weights) return;
         Eigen::VectorXd score;
         if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
@@ -558,7 +587,9 @@ public:
             else { update_A_prev_sparse(); compute_leverages_lagged(h); }
             Eigen::ArrayXd d2mu(nobs); compute_d2mu_sparse(d2mu);
             Eigen::VectorXd contribution = Eigen::VectorXd::Zero(nobs);
-            for (int i=0;i<nobs;++i) if (weights[i] > 0 && mu_eta[i] != 0)
+            if(fglm::bounded_firth_predictors(fam_code))
+                contribution=binomial_working.score+(.5*h.array()*binomial_working.ratio.array()).matrix();
+            else for (int i=0;i<nobs;++i) if (weights[i] > 0 && mu_eta[i] != 0)
                 contribution[i] = weights[i]*mu_eta[i]*(Y[i]-mu[i])/(phi*var_mu[i]) +
                     h[i]*d2mu[i]/(2*mu_eta[i]);
             score = X.adjoint()*contribution;

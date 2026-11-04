@@ -2,6 +2,18 @@
 
 ## Model interfaces and inference
 
+* Binomial probit and complementary log-log bias reduction now evaluates tail
+  probabilities, scores, and information without separately flooring means and
+  derivatives. This corrects the estimating equations for nearly deterministic
+  outcomes. QR and SVD adjustments avoid amplification of roundoff in rows with
+  tiny working weights. Likelihoods, residuals, and diagnostics use the same
+  calculations across dense, sparse, mapped, and streamed fits.
+* Logistic ordinal fitting reuses threshold-gap calculations and algebraic
+  probability identities to reduce exponential and logarithm evaluations without
+  storing observation-level probability arrays. Binary probit and complementary
+  log-log bias reduction uses bounded Fisher scoring, retaining checks of the
+  adjusted score and remaining predictor change.
+
 * Binomial probit and complementary log-log mean bias reduction now limits
   oversized scoring updates on the linear-predictor scale. Sparse, mapped, and
   streamed fits use current information for these adjustments, avoiding delayed

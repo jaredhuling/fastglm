@@ -211,6 +211,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     # and Gamma likelihood normalizers depend on global dispersion, so they
     # are accumulated explicitly rather than summing per-chunk AIC estimates.
     ll <- 0; null.dev <- 0
+    if(.stable_binomial_code(res)>=0L) res$pearson <- 0
     for(k in seq_len(n_chunks)) {
         z <- fetch(k)
         eta <- if(method==0L) streaming_qr_eta(z$X,res$coefficients,z$offset) else
@@ -223,7 +224,11 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         if(ff == "gaussian") ll <- ll+sum(dnorm(y[keep],mu[keep],sqrt(res$deviance/nobs/w[keep]),log=TRUE))
         else if(ff == "Gamma") ll <- ll+sum(w[keep]*dgamma(y[keep],shape=sumw/res$deviance,scale=mu[keep]*res$deviance/sumw,log=TRUE))
         else if(ff == "inverse.gaussian") ll <- ll-.5*sum(w[keep]*(1+log(res$deviance/sumw*2*pi)+3*log(y[keep])))
-        else ll <- ll - .family_aic(family,y,z$trials,mu,w,sum(family$dev.resids(y,mu,w)))/2
+        else if(.stable_binomial_code(res)>=0L) {
+            moments <- binomial_firth_moments(as.numeric(eta),as.numeric(y),w,.stable_binomial_code(res))
+            ll <- ll-.binomial_tail_aic(moments,y,z$trials,w)/2
+            res$pearson <- res$pearson+sum(.binomial_tail_residual(moments,y,w,"pearson")^2)
+        } else ll <- ll - .family_aic(family,y,z$trials,mu,w,sum(family$dev.resids(y,mu,w)))/2
     }
     if(family$family %in% c("gaussian","Gamma","inverse.gaussian")) res$aic <- -2*ll+2*(p+1L)
     else res$aic <- -2*ll+2*p

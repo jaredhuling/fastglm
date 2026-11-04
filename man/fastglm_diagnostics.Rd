@@ -35,6 +35,9 @@ For binomial probit and complementary log-log bias reduction,
 \code{step.reductions} counts scoring updates reduced to limit their largest
 fitted linear-predictor change to one. A reduced step alone cannot establish
 convergence. These safeguards do not guarantee convergence for every design.
+For these bias-reduced binomial fits, scores and information use stable
+probability-tail calculations; rounded fitted probabilities are not used
+to reconstruct the estimating equations.
 Ordinal diagnostics report scores in the effective category model after
 any empty interior categories have been collapsed; their standardized
 score is calculated in the centered/scaled fitting coordinates.

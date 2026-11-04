@@ -116,7 +116,9 @@ inline void accumulate_firth_streamed(
     Eigen::VectorXd& Xtwzstar_out,
     int chunk_rows = -1,
     bool accumulate_information = true,
-    Eigen::VectorXd* constant_adjustment = nullptr)
+    Eigen::VectorXd* constant_adjustment = nullptr,
+    const Eigen::VectorXd* ordinary_score = nullptr,
+    const Eigen::VectorXd* adjustment_ratio = nullptr)
 {
     if (chunk_rows <= 0) chunk_rows = default_chunk_rows();
     const Eigen::Index n = X.rows();
@@ -143,12 +145,15 @@ inline void accumulate_firth_streamed(
 
         wzs_block.head(k).array() =
             w.segment(r, k).array().square() * z.segment(r, k).array();
+        if(ordinary_score) wzs_block.head(k)+=ordinary_score->segment(r,k);
         if (need_leverages) {
             XA.topRows(k).noalias() = X_k * A_prev;
             Eigen::ArrayXd h_k =
                 (XA.topRows(k).array() * X_k.array()).rowwise().sum()
                 * w.segment(r, k).array().square();
-            if (build_adjustment) {
+            if(adjustment_ratio) {
+                wzs_block.head(k).array()+=.5*h_k*adjustment_ratio->segment(r,k).array();
+            } else if (build_adjustment) {
                 (*constant_adjustment).noalias() += X_k.adjoint() * (0.5*h_k).matrix();
             } else {
                 Eigen::ArrayXd xi_k = Eigen::ArrayXd::Zero(k);

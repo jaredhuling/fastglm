@@ -196,7 +196,8 @@ static double stream_pass(Function& callback,
                           MatrixXd* XtWX_out,
                           VectorXd* Xtwz_out,
                           std::vector<bool>* intercept_mask,
-                          int* n_total_out)
+                          int* n_total_out,
+                          bool stable_binomial=false)
 {
     double dev_sum = 0.0;
     int n_total = 0;
@@ -222,7 +223,8 @@ static double stream_pass(Function& callback,
 
         ArrayXd ya = c.y.array();
         ArrayXd wa = c.w.array();
-        dev_sum += fam.dev_resids_sum(ya, mu, wa);
+        dev_sum += stable_binomial ? fglm::binomial_firth_deviance(fam.code,eta.matrix(),c.y,c.w) :
+            fam.dev_resids_sum(ya, mu, wa);
 
         if (accumulate) {
             ArrayXd dmu, va;
@@ -233,6 +235,11 @@ static double stream_pass(Function& callback,
             ArrayXd w2 = wa * dmu.square() / va;
             // z = eta - offset + (y - mu) / dmu
             ArrayXd z = eta - c.off.array() + (ya - mu) / dmu;
+            fglm::BinomialFirthWorking binomial;
+            if(stable_binomial) {
+                binomial.update(fam.code,eta.matrix(),c.y,c.w);
+                w2=binomial.weight.array();z=eta-c.off.array();
+            }
 
             // XtWX += X^T diag(w2) X using Eigen's rank-update.
             // Build sqrt(w2) * X once and rank-update.
@@ -241,6 +248,7 @@ static double stream_pass(Function& callback,
 
             // Xtwz += X^T (w2 * z)
             VectorXd wz = (w2 * z).matrix();
+            if(stable_binomial) wz+=binomial.score;
             (*Xtwz_out).noalias() += c.X.adjoint() * wz;
         }
 
@@ -290,6 +298,7 @@ static double stream_pass_firth(Function& callback,
     fglm::GammaDispersionTerms dispersion_terms;
     const bool reuse_information = (*constant_information || current_information) && A_prev != nullptr;
     const bool gamma_log = fam.code == fglm::FAM_GAMMA_LOG;
+    const bool stable_binomial=fglm::bounded_firth_predictors(fam.code);
     const bool build_gamma_adjustment = gamma_log && A_prev != nullptr &&
         gamma_adjustment->size() == 0;
     if (build_gamma_adjustment) gamma_adjustment->setZero(p);
@@ -320,7 +329,8 @@ static double stream_pass_firth(Function& callback,
             for (const auto& group : groups) n_positive += group.second;
             dispersion_terms.add(groups, phi_prev);
         } else n_positive += (wa > 0).count();
-        dev_sum += fam.dev_resids_sum(ya, mu_arr, wa);
+        dev_sum += stable_binomial ? fglm::binomial_firth_deviance(fam.code,eta.matrix(),c.y,c.w) :
+            fam.dev_resids_sum(ya, mu_arr, wa);
 
         ArrayXd dmu, va;
         fam.mu_eta(eta, dmu);
@@ -344,6 +354,11 @@ static double stream_pass_firth(Function& callback,
             }
         } else w2 = wa * dmu.square() / va;
         ArrayXd z_arr = eta - c.off.array() + (ya - mu_arr) / dmu;
+        fglm::BinomialFirthWorking binomial;
+        if(stable_binomial) {
+            binomial.update(fam.code,eta.matrix(),c.y,c.w);
+            w2=binomial.weight.array();z_arr=eta-c.off.array();
+        }
 
         if (!reuse_information) {
             MatrixXd Xw = c.X.array().colwise() * w2.sqrt();
@@ -351,11 +366,15 @@ static double stream_pass_firth(Function& callback,
         }
 
         ArrayXd zstar = z_arr;
+        VectorXd numerator=(w2*z_arr).matrix();
+        if(stable_binomial) numerator+=binomial.score;
         if (A_prev != nullptr && fam.code != fglm::FAM_GAUSSIAN_IDENTITY &&
             (!gamma_log || build_gamma_adjustment)) {
             MatrixXd XA = c.X * (*A_prev);
             ArrayXd h_k = (XA.array() * c.X.array()).rowwise().sum() * w2;
-            if (gamma_log) {
+            if(stable_binomial) {
+                numerator.array()+=.5*h_k*binomial.ratio.array();
+            } else if (gamma_log) {
                 // For a log link, d2mu/dmu = 1. The complete adjustment is
                 // phi * X'h/2, so only this p-vector needs to survive a pass.
                 (*gamma_adjustment).noalias() += c.X.adjoint() * (0.5*h_k).matrix();
@@ -368,7 +387,7 @@ static double stream_pass_firth(Function& callback,
             }
         }
 
-        VectorXd wz = (w2 * zstar).matrix();
+        VectorXd wz = stable_binomial ? numerator : VectorXd((w2 * zstar).matrix());
         (*Xtwz_out).noalias() += c.X.adjoint() * wz;
     }
 
@@ -442,9 +461,10 @@ static double stream_qr_pass(Function& callback,int n_chunks,int p,
     const VectorXd& beta,const FamilyOps& fam,fglm::StreamingQR& current,
     const fglm::StreamingQR* previous,const VectorXd* previous_beta,
     bool firth,double phi,double* phi_out,VectorXd* gamma_adjustment,
-    std::vector<bool>* intercept_mask=nullptr,int* n_total_out=nullptr)
+    std::vector<bool>* intercept_mask=nullptr,int* n_total_out=nullptr,bool exact_binomial=false)
 {
     const bool gamma=fam.code==fglm::FAM_GAMMA_LOG;
+    const bool stable_binomial=fglm::bounded_firth_predictors(fam.code) && (firth || exact_binomial);
     const bool constant=gamma || fam.code==fglm::FAM_GAUSSIAN_IDENTITY;
     const bool cached=previous!=nullptr && (constant ||
         (firth && fglm::bounded_firth_predictors(fam.code) && previous_beta==nullptr));
@@ -461,13 +481,26 @@ static double stream_qr_pass(Function& callback,int n_chunks,int p,
         fam.linkinv(eta,mu);
         if(!fam.validmu(mu)) throw std::domain_error("invalid mean in streaming QR pass");
         fam.mu_eta(eta,dmu); fam.variance(mu,variance);
-        dev+=fam.dev_resids_sum(c.y.array(),mu,c.w.array());
+        dev+=stable_binomial ? fglm::binomial_firth_deviance(fam.code,eta.matrix(),c.y,c.w) :
+            fam.dev_resids_sum(c.y.array(),mu,c.w.array());
         VectorXd working=constant ? c.w : (c.w.array()*dmu.square()/variance).matrix();
         VectorXd z=(eta-c.off.array()+(c.y.array()-mu)/dmu).matrix();
+        fglm::BinomialFirthWorking binomial;
+        if(stable_binomial) {
+            binomial.update(fam.code,eta.matrix(),c.y,c.w);
+            working=binomial.weight;z=eta.matrix()-c.off;
+        }
         for(int i=0;i<c.y.size();++i) if(c.w[i]==0) { working[i]=0; z[i]=0; }
         if(!working.allFinite() || (working.array()<0).any() || !z.allFinite())
             throw std::domain_error("non-finite working values in streaming QR pass");
-        if(firth && previous && fam.code!=fglm::FAM_GAUSSIAN_IDENTITY && (!gamma || build_gamma)) {
+        if(stable_binomial) {
+            if(firth && cached) {
+                const MatrixXd basis=previous->row_basis(c.X);
+                const VectorXd h=(basis.array().square().rowwise().sum()*working.array()).matrix();
+                const VectorXd numerator=(working.array()*z.array()+.5*h.array()*binomial.ratio.array()).matrix()+binomial.score;
+                current.qty.noalias()+=basis.adjoint()*numerator;
+            } else current.add(c.X,VectorXd::Zero(c.y.size()),working);
+        } else if(firth && previous && fam.code!=fglm::FAM_GAUSSIAN_IDENTITY && (!gamma || build_gamma)) {
             MatrixXd basis=previous->row_basis(c.X);
             VectorXd leverage_weight=working;
             if(!constant && previous_beta) {
@@ -484,7 +517,7 @@ static double stream_qr_pass(Function& callback,int n_chunks,int p,
                     z[i]+=phi*h[i]*second[i]/(2*dmu[i]*working[i]);
             }
         }
-        current.add(c.X,z,working);
+        if(!stable_binomial) current.add(c.X,z,working);
         if(firth && fam.code>=10 && fam.code<=12)
             dispersion.add(fglm::gamma_weight_groups(c.w),phi);
         if(intercept_mask) for(int j=0;j<p;++j)
@@ -543,6 +576,10 @@ static QRStationarity stream_qr_stationarity(Function& callback,int n_chunks,int
             ArrayXd eta=fglm::qr_linear_predictor(c.X,beta,c.off).array(),mu,dmu,variance;
             fam.linkinv(eta,mu); fam.mu_eta(eta,dmu); fam.variance(mu,variance);
             VectorXd working=(c.w.array()*dmu.square()/variance).matrix();
+            if(fglm::bounded_firth_predictors(fam.code)) {
+                fglm::BinomialFirthWorking binomial;binomial.update(fam.code,eta.matrix(),c.y,c.w);
+                working=binomial.weight;
+            }
             if(fam.code==fglm::FAM_GAMMA_LOG || fam.code==fglm::FAM_GAUSSIAN_IDENTITY) working=c.w;
             for(int i=0;i<c.y.size();++i) if(c.w[i]==0) working[i]=0;
             refined.add(qr.accurate_row_basis(c.X),VectorXd::Zero(c.y.size()),working);
@@ -559,7 +596,11 @@ static QRStationarity stream_qr_stationarity(Function& callback,int n_chunks,int
         if(!fam.valideta(eta) || !fam.validmu(mu)) return result;
         MatrixXd basis=result.refined ? refined.row_basis(qr.accurate_row_basis(c.X)) : qr.row_basis(c.X);
         ArrayXd contribution=c.w.array()*dmu*(c.y.array()-mu)/variance;
-        if(fam.code!=fglm::FAM_GAUSSIAN_IDENTITY) {
+        if(fglm::bounded_firth_predictors(fam.code)) {
+            fglm::BinomialFirthWorking binomial;binomial.update(fam.code,eta.matrix(),c.y,c.w);
+            contribution=binomial.score.array()+.5*basis.array().square().rowwise().sum()*
+                binomial.weight.array()*binomial.ratio.array();
+        } else if(fam.code!=fglm::FAM_GAUSSIAN_IDENTITY) {
             fam.d2mu_deta2(eta,mu,dmu,second);
             ArrayXd working=c.w.array()*dmu.square()/variance;
             if(fam.code==fglm::FAM_GAMMA_LOG) working=c.w.array();
@@ -570,7 +611,8 @@ static QRStationarity stream_qr_stationarity(Function& callback,int n_chunks,int
         for(int i=0;i<c.y.size();++i) if(c.w[i]==0) contribution[i]=0;
         q.noalias()+=basis.adjoint()*contribution.matrix();
         n_positive+=(c.w.array()>0).count();
-        dev+=fam.dev_resids_sum(c.y.array(),mu,c.w.array());
+        dev+=fglm::bounded_firth_predictors(fam.code) ? fglm::binomial_firth_deviance(fam.code,eta.matrix(),c.y,c.w) :
+            fam.dev_resids_sum(c.y.array(),mu,c.w.array());
         if(fam.code>=10 && fam.code<=12)
             dispersion.add(fglm::gamma_weight_groups(c.w),phi);
     }
@@ -688,7 +730,7 @@ List fit_streaming_glm(Function chunk_callback,
     VectorXd initial_adjustment;
     int n_total = 0;
     double dev_curr = type==0 ? stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,
-        false,1,nullptr,&initial_adjustment,&intercept_mask,&n_total) : stream_pass(chunk_callback, n_chunks, p, beta, fam,
+        false,1,nullptr,&initial_adjustment,&intercept_mask,&n_total,firth && fglm::bounded_firth_predictors(fam.code)) : stream_pass(chunk_callback, n_chunks, p, beta, fam,
                                   /*accumulate=*/!firth,
                                   /*XtWX_out=*/&XtWX, /*Xtwz_out=*/&Xtwz,
                                   &intercept_mask, &n_total);
@@ -783,7 +825,7 @@ List fit_streaming_glm(Function chunk_callback,
                     // Build current information before evaluating the adjustment.
                     // Reusing this factor for projection avoids a second QR.
                     stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,
-                        false,1,nullptr,&gamma_adjustment);
+                        false,1,nullptr,&gamma_adjustment,nullptr,nullptr,true);
                     previous=qr;
                 }
                 dev_curr=stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,&previous,
@@ -824,7 +866,8 @@ List fit_streaming_glm(Function chunk_callback,
         }
         const bool qr_constant=fam.code==fglm::FAM_GAMMA_LOG || fam.code==fglm::FAM_GAUSSIAN_IDENTITY;
         if(firth && !qr_constant && !qr_stationarity_current)
-            stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,false,1,nullptr,&gamma_adjustment);
+            stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,false,1,nullptr,&gamma_adjustment,
+                nullptr,nullptr,fglm::bounded_firth_predictors(fam.code));
         if(firth && !qr_stationarity_current)
             qr_stationarity=stream_qr_stationarity(chunk_callback,n_chunks,p,beta,fam,qr,phi_prev,tol);
         // The scheduling gate is not part of the convergence definition. A
@@ -896,7 +939,7 @@ List fit_streaming_glm(Function chunk_callback,
         const bool current_information=firth && fglm::bounded_firth_predictors(fam.code);
         if (firth) {
             if(current_information) {
-                stream_pass(chunk_callback,n_chunks,p,beta,fam,true,&XtWX,&Xtwz,nullptr,nullptr);
+                stream_pass(chunk_callback,n_chunks,p,beta,fam,true,&XtWX,&Xtwz,nullptr,nullptr,true);
                 spd_factorize_and_solve(type,XtWX,Xtwz,llt,ldlt);
                 const MatrixXd identity=MatrixXd::Identity(p,p);
                 if(type==2) A_prev=llt.solve(identity); else A_prev=ldlt.solve(identity);
@@ -990,7 +1033,7 @@ List fit_streaming_glm(Function chunk_callback,
     // Changing working weights require information at the reported beta.
     // Constant information is already exact there; reuse it without a pass.
     if (type!=0 && firth && !constant_information) stream_pass(chunk_callback, n_chunks, p, beta, fam,
-                /*accumulate=*/true, &XtWX, &Xtwz, nullptr, nullptr);
+                /*accumulate=*/true, &XtWX, &Xtwz, nullptr, nullptr,fglm::bounded_firth_predictors(fam.code));
 
     // cov.unscaled = (X'WX)^{-1}.
     MatrixXd cov_unscaled = type==0 ? qr.covariance() : spd_inverse(type, XtWX);
@@ -1029,7 +1072,8 @@ List fit_streaming_glm(Function chunk_callback,
             fam.linkinv(eta, mu);
             ArrayXd ya = c.y.array();
             ArrayXd wa = c.w.array();
-            dev_final += fam.dev_resids_sum(ya, mu, wa);
+            dev_final += firth && fglm::bounded_firth_predictors(fam.code) ?
+                fglm::binomial_firth_deviance(fam.code,eta.matrix(),c.y,c.w) : fam.dev_resids_sum(ya, mu, wa);
 
             ArrayXd va;
             fam.variance(mu, va);
@@ -1038,7 +1082,13 @@ List fit_streaming_glm(Function chunk_callback,
                 ArrayXd dmu; fam.mu_eta(eta,dmu);
                 ArrayXd contribution = wa*dmu*(ya-mu)/(phi_prev*va);
                 for (int i=0;i<n_k;++i) if (wa[i] == 0) contribution[i] = 0;
-                if (fam.code != fglm::FAM_GAUSSIAN_IDENTITY &&
+                if(fglm::bounded_firth_predictors(fam.code)) {
+                    fglm::BinomialFirthWorking binomial;binomial.update(fam.code,eta.matrix(),c.y,c.w);
+                    const MatrixXd xa=type==0 ? qr.row_basis(c.X) : MatrixXd(c.X*cov_unscaled);
+                    const ArrayXd leverage=type==0 ? xa.array().square().rowwise().sum().eval() :
+                        (xa.array()*c.X.array()).rowwise().sum().eval();
+                    contribution=binomial.score.array()+.5*leverage*binomial.weight.array()*binomial.ratio.array();
+                } else if (fam.code != fglm::FAM_GAUSSIAN_IDENTITY &&
                     fam.code != fglm::FAM_GAMMA_LOG) {
                     ArrayXd d2mu; fam.d2mu_deta2(eta,mu,dmu,d2mu);
                     MatrixXd xa = type==0 ? qr.row_basis(c.X) : MatrixXd(c.X*cov_unscaled);
@@ -1116,7 +1166,9 @@ List fit_streaming_glm(Function chunk_callback,
         std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
             (converged ? "converged" : "iteration_limit");
         fglm::append_adjusted_diagnostics(out,adjusted_score,information,ds,ds_scaled,reason);
-        if(fglm::bounded_firth_predictors(fam.code)) out["step.reductions"]=firth_step_reductions;
+        if(fglm::bounded_firth_predictors(fam.code)) {
+            out["step.reductions"]=firth_step_reductions;out["stable.binomial"]=true;
+        }
         if(type==0) {
             out["remaining.predictor.step"]=qr_stationarity.predictor_step;
             out["adjusted.score.rms"]=qr_stationarity.score_rms;

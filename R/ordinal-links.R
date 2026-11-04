@@ -17,11 +17,18 @@
     out
 }
 
+.ordinal_log1mexp <- function(x) {
+    out <- log(-expm1(x))
+    tail <- x < -log(2)
+    out[tail] <- log1p(-exp(x[tail]))
+    out
+}
+
 .ordinal_log_difference <- function(large,small) {
     equal <- large==small
     delta <- small-large
     delta[equal] <- 0
-    large+log(-expm1(delta))
+    large+.ordinal_log1mexp(delta)
 }
 
 # Normal and extreme-value cumulative distributions and their derivatives.
@@ -33,7 +40,7 @@
         lg <- dnorm(eta,log=TRUE); h <- -eta
     } else {
         e <- exp(eta); ls <- -e; lc <- eta
-        at <- eta>=-36; lc[at] <- log(-expm1(-e[at]))
+        at <- eta>=-36; lc[at] <- .ordinal_log1mexp(-e[at])
         lg <- eta-e; h <- 1-e
     }
     F <- exp(lc); S <- exp(ls); g <- exp(lg); curvature <- g*h
@@ -46,7 +53,7 @@
             ld <- eta[,j]+log(-expm1(alpha[j-1L]-alpha[j]))
             logden[,j-1L] <- ld
             at <- ld>=-36
-            logden[at,j-1L] <- log(-expm1(-exp(ld[at])))
+            logden[at,j-1L] <- .ordinal_log1mexp(-exp(ld[at]))
             upper.difference <- ls[,j-1L]+logden[,j-1L]
         }
         logp[,j] <- ifelse(eta[,j]<=0,

@@ -27,7 +27,7 @@ predict.fastglm_stream <- function(object,newdata=NULL,type=c("link","response")
         value <- if(type=="response") object$family$linkinv(eta) else eta
         if(se.fit) {
             se <- sqrt(pmax(0,dispersion*.model_quad_rows(z$X,object)))
-            if(type=="response") se <- se*abs(object$family$mu.eta(eta))
+            if(type=="response") se <- se*abs(.glm_mu_eta(object,eta))
             value <- .fastglm_prediction(list(fit=value,se.fit=se,residual.scale=sqrt(dispersion)),type)
         }
         if(is.null(sink)) out[[k]] <- value else sink(value,k)
@@ -48,6 +48,14 @@ residuals.fastglm_stream <- function(object,type=c("deviance","pearson","working
         r <- switch(type,response=r,working=r/object$family$mu.eta(eta),
             pearson=r*sqrt(z$weights/object$family$variance(mu)),
             deviance=sign(r)*sqrt(pmax(0,object$family$dev.resids(z$y,mu,z$weights))))
+        code <- .stable_binomial_code(object)
+        if(code>=0L) {
+            moments <- binomial_firth_moments(as.numeric(eta),as.numeric(z$y),z$weights,code)
+            if(type=="working") {
+                r <- .binomial_working_residual(moments,z$y,eta,code)
+                r[z$weights==0] <- 0
+            } else r <- .binomial_tail_residual(moments,z$y,z$weights,type)
+        }
         if(is.null(sink)) out[[k]] <- r else sink(r,k)
     }
     if(is.null(sink)) unlist(out,use.names=FALSE) else invisible(n)
@@ -65,6 +73,8 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
     for(k in seq_len(model$source$n_chunks)) {
         z <- model$fetch(k); eta <- .model_eta(z$X,model,z$offset); mu <- model$family$linkinv(eta)
         w <- z$weights*model$family$mu.eta(eta)^2/model$family$variance(mu)
+        code <- .stable_binomial_code(model)
+        if(code>=0L) w <- binomial_firth_moments(as.numeric(eta),as.numeric(z$y),z$weights,code)$working
         h <- w*.model_quad_rows(z$X,model)
         if(is.null(sink)) out[[k]] <- h else sink(h,k)
     }
@@ -247,13 +257,13 @@ fastglm_average <- function(object,newdata=NULL,contrast=NULL,weights=NULL,
         if(is.null(w)) w <- rep(1,nrow(x))
         if(length(w)!=nrow(x) || any(!is.finite(w)|w<0)) stop("invalid averaging weights",call.=FALSE)
         eta <- .model_eta(x,object,off); mu <- object$family$linkinv(eta)
-        g <- (if(use.qr) .stream_qr_transform(x,object$qr) else x)*object$family$mu.eta(eta)
+        g <- (if(use.qr) .stream_qr_transform(x,object$qr) else x)*.glm_mu_eta(object,eta)
         if(!is.null(contrast)) {
             xx <- if(is.null(contrast.x)) contrast(x) else contrast.x
             if(!identical(dim(xx),dim(x))) stop("contrast must preserve design dimensions",call.=FALSE)
             ee <- .model_eta(xx,object,off)
             mu <- object$family$linkinv(ee)-mu
-            g <- (if(use.qr) .stream_qr_transform(xx,object$qr) else xx)*object$family$mu.eta(ee)-g
+            g <- (if(use.qr) .stream_qr_transform(xx,object$qr) else xx)*.glm_mu_eta(object,ee)-g
         }
         total <<- total+sum(w); estimate <<- estimate+sum(w*mu)
         gradient <<- gradient+colSums(w*g)

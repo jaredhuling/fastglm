@@ -303,6 +303,12 @@ bread.fastglmFit <- bread.fastglm
     # internal dispersion estimate, but sandwich::bread.glm multiplies by the
     # SAME dispersion, so the two cancel in the final sandwich formula.
     s <- w2 * r
+    code <- .stable_binomial_code(object)
+    if(code>=0L) {
+        moments <- binomial_firth_moments(as.numeric(eta),as.numeric(y),pw,code)
+        w2 <- moments$working;s <- moments$score
+        r <- .binomial_working_residual(moments,y,eta,code);r[pw==0] <- 0
+    }
 
     list(x = x, r = r, s = s, w2 = w2, bread = bread,
          p = length(object$coefficients), n = length(y))
@@ -358,6 +364,22 @@ residuals.fastglm <- function(object,
                               type = c("deviance", "pearson", "working", "response", "partial"), 
                               ...)
 {
+    type <- match.arg(type)
+    code <- .stable_binomial_code(object)
+    if(code>=0L && type %in% c("deviance","pearson","response")) {
+        y <- object$y
+        if(is.null(y)) {
+            eta <- object$linear.predictors
+            moments <- binomial_firth_moments(eta,numeric(length(eta)),object$prior.weights,code)
+            y <- moments$mean+object$residuals*moments$derivative
+            if(any(!is.finite(y))) stop("response data are required for these residuals; refit with retain.data=TRUE",call.=FALSE)
+        }
+        moments <- binomial_firth_moments(object$linear.predictors,as.numeric(y),object$prior.weights,code)
+        result <- .binomial_tail_residual(moments,y,object$prior.weights,type)
+        names(result) <- names(object$residuals)
+        if(!is.null(object$na.action)) result <- naresid(object$na.action,result)
+        return(result)
+    }
     class(object) <- "glm"
     
     residuals(object, type = type, ...)
@@ -451,7 +473,7 @@ predict.fastglm <- function(object, newdata = NULL,
             if (se.fit) se <- sqrt(pmax(0, dispersion * .model_quad_rows(x, object)))
             if (se.fit) se[nonestimable] <- NA_real_
             if (type == "response") {
-                if (se.fit) se <- se * abs(object$family$mu.eta(eta))
+                if (se.fit) se <- se * abs(.glm_mu_eta(object,eta))
                 out <- object$family$linkinv(eta)
             }
         }

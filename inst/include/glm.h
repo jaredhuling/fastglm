@@ -81,6 +81,16 @@ protected:
     bool firth_step_failed = false;
     bool firth_step_limited = false;
     int firth_step_reductions = 0;
+    fglm::BinomialFirthWorking binomial_working;
+    bool binomial_current=false;
+    void refresh_binomial_working() {
+        if(!binomial_current) {
+            // A proposed step may be nonfinite before step control. Defer
+            // validation until the accepted state supplies a scoring update.
+            binomial_working.update(fam_code,eta,Y,weights,true,false);
+            binomial_current=true;
+        }
+    }
     
     
     FullPivHouseholderQR<MatrixXd> FPQR;
@@ -144,6 +154,9 @@ protected:
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<Eigen::ArrayXd>       d(mu_eta.data(), mu_eta.size());
             fglm::mu_eta(fam_code, fam_params, e, d);
+            if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+                refresh_binomial_working();binomial_working.validate();
+            }
             return;
         }
         NumericVector mu_eta_nv = mu_eta_fun(eta);
@@ -177,6 +190,7 @@ protected:
     
     virtual void update_eta() override
     {
+        binomial_current=false;
         // eta <- drop(x %*% beta) + offset
         if (use_streaming) {
             fglm::apply_X_streamed(X, beta, offset, eta);
@@ -188,12 +202,18 @@ protected:
     
     virtual void update_z() override
     {
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            z=eta-offset;return; // Add scores directly, without dividing by tiny weights.
+        }
         // z <- (eta - offset)[good] + (y - mu)[good]/mu.eta.val[good]
         z = (eta - offset).array() + (Y - mu).array() / mu_eta.array();
     }
     
     virtual void update_w() override
     {
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            w=binomial_working.weight.array().sqrt();return;
+        }
         // The sqrt-link derivative is floored near zero. In that exceptional
         // region Poisson working weights cease to be constant.
         if (fam_code == 9 && constant_weights &&
@@ -222,7 +242,9 @@ protected:
     {
         devold = dev;
         double std_dev;
-        if (fam_code >= 0) {
+        if (firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            refresh_binomial_working();std_dev=binomial_working.deviance;
+        } else if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> w(weights.data(), weights.size());
@@ -239,7 +261,9 @@ protected:
     virtual void update_dev_resids_dont_update_old() override
     {
         double std_dev;
-        if (fam_code >= 0) {
+        if (firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            refresh_binomial_working();std_dev=binomial_working.deviance;
+        } else if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> w(weights.data(), weights.size());
@@ -506,6 +530,7 @@ protected:
     // Estimate the dispersion φ (1 for binomial/Poisson).
     double compute_firth_phi()
     {
+        if(fglm::bounded_firth_predictors(fam_code)) return 1;
         Eigen::Map<const Eigen::ArrayXd> yy(Y.data(), Y.size());
         Eigen::Map<const Eigen::ArrayXd> mm(mu.data(), mu.size());
         Eigen::Map<const Eigen::ArrayXd> ww(weights.data(), weights.size());
@@ -533,6 +558,29 @@ protected:
     // Compute leverages from the current decomposition (dense path).
     void compute_leverages_dense(VectorXd &h_out)
     {
+        if(fglm::bounded_firth_predictors(fam_code) &&
+            (type==0 || type==1 || type==4 || type==5)) {
+            // Form row quadratic forms before applying tiny working weights.
+            // Householder Q (or SVD U) has absolute roundoff in saturated rows;
+            // dividing that roundoff by a tiny weight corrupts the adjustment.
+            MatrixXd basis;
+            if(type==5) {
+                VectorXd inverse=bSVD.singularValues();
+                const double cutoff=inverse.maxCoeff()*threshold();
+                for(int j=0;j<inverse.size();++j) inverse[j]=inverse[j]>cutoff ? 1/inverse[j] : 0;
+                basis=X*bSVD.matrixV()*inverse.asDiagonal();
+            } else {
+                MatrixXd R;
+                if(type==0) R=PQR.matrixQR().topLeftCorner(rank,rank);
+                else if(type==1) R=QR.matrixQR().topLeftCorner(rank,rank);
+                else R=FPQR.matrixQR().topLeftCorner(rank,rank);
+                MatrixXd design=type==1 ? MatrixXd(X) : MatrixXd(X*Pmat);
+                MatrixXd rhs=design.leftCols(rank).transpose();
+                basis=R.transpose().triangularView<Lower>().solve(rhs).transpose();
+            }
+            h_out=(basis.rowwise().squaredNorm().array()*w.array().square()).matrix();
+            return;
+        }
         if (type == 2) {
             // LLT: h_i = ||L^{-1} (WX_i)'||^2
             MatrixXd V = WX.transpose();
@@ -681,7 +729,9 @@ protected:
                     X, w, z, Eigen::Map<const Eigen::VectorXd>(d2mu.data(), nobs),
                     var_mu, mu_eta, weights, phi, A_prev, XtWX_buf, Xtwz_buf,
                     -1, !reuse_factor,
-                    fam_code == fglm::FAM_GAMMA_LOG ? &streaming_gamma_adjustment : nullptr);
+                    fam_code == fglm::FAM_GAMMA_LOG ? &streaming_gamma_adjustment : nullptr,
+                    current_information ? &binomial_working.score : nullptr,
+                    current_information ? &binomial_working.ratio : nullptr);
             }
             if (type == 2) {
                 if (!reuse_factor) {
@@ -761,10 +811,22 @@ protected:
         if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == 0)
             gamma_adjustment.noalias() = 0.5 * X.adjoint() * h_lev;
         VectorXd zstar;
-        apply_firth_xi(h_lev, d2mu, phi, zstar);
-
-        // Solve with modified response
-        wz.noalias() = w.cwiseProduct(zstar);
+        if(fglm::bounded_firth_predictors(fam_code)) {
+            // Form the weighted response directly. In an underflowed tail,
+            // zero information contributes exactly zero, not QR roundoff * exp(eta).
+            for(int i=0;i<nobs;++i) {
+                if(w[i]>0) wz[i]=w[i]*z[i]+(binomial_working.score[i]+
+                    .5*h_lev[i]*binomial_working.ratio[i])/w[i];
+                else {
+                    if(binomial_working.score[i]!=0)
+                        Rcpp::stop("binomial working information underflow; use less extreme starting coefficients");
+                    wz[i]=0;
+                }
+            }
+        } else {
+            apply_firth_xi(h_lev, d2mu, phi, zstar);
+            wz.noalias() = w.cwiseProduct(zstar);
+        }
         if (type == 0) {
             if (rank == nvars) {
                 beta = PQR.solve(wz);
@@ -1180,6 +1242,7 @@ public:
     {
         beta = start_;
         eta = eta_;
+        binomial_current=false;
         mu = mu_;
         if (firth_ && fam_code == fglm::FAM_GAMMA_LOG) {
             const Eigen::VectorXd mapped = X*beta + offset;
@@ -1230,7 +1293,9 @@ public:
         const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
             (conv ? "converged" : "iteration_limit");
         out["convergence.reason"] = reason;
-        if(fglm::bounded_firth_predictors(fam_code)) out["step.reductions"]=firth_step_reductions;
+        if(fglm::bounded_firth_predictors(fam_code)) {
+            out["step.reductions"]=firth_step_reductions;out["stable.binomial"]=true;
+        }
         if (!inference && !constant_weights) return;
         VectorXd score;
         if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
@@ -1255,7 +1320,11 @@ public:
             } else compute_leverages_dense(h);
             ArrayXd d2mu(nobs); compute_d2mu(d2mu);
             VectorXd contribution = VectorXd::Zero(nobs);
-            for (int i=0;i<nobs;++i) if (weights[i] > 0 && mu_eta[i] != 0)
+            if(fglm::bounded_firth_predictors(fam_code)) {
+                contribution=binomial_working.score;
+                for(int i=0;i<nobs;++i) if(binomial_working.weight[i]>0)
+                    contribution[i]+=.5*h[i]*binomial_working.ratio[i];
+            } else for (int i=0;i<nobs;++i) if (weights[i] > 0 && mu_eta[i] != 0)
                 contribution[i] = weights[i]*mu_eta[i]*(Y[i]-mu[i])/(phi*var_mu[i]) +
                     h[i]*d2mu[i]/(2*mu_eta[i]);
             score = X.adjoint()*contribution;

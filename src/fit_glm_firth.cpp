@@ -99,6 +99,8 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
     Eigen::Map<const Eigen::ArrayXd> w_arr(W.data(), W.size());
     double std_dev = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fp, y_arr, mu_arr, w_arr)
             : Rcpp::sum(Rcpp::as<NumericVector>(dev_resids(Rcpp::wrap(y_arr), Rcpp::wrap(mu_arr), Rcpp::wrap(w_arr))));
+    if(fglm::bounded_firth_predictors(fam_code))
+        std_dev=fglm::binomial_firth_deviance(fam_code,e,Y,W);
 
     List out = List::create(
         _["coefficients"]      = b,

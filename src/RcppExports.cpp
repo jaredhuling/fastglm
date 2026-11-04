@@ -11,6 +11,20 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// binomial_firth_moments
+Rcpp::List binomial_firth_moments(Rcpp::NumericVector eta, Rcpp::NumericVector y, Rcpp::NumericVector weights, int code);
+RcppExport SEXP _fastglm_binomial_firth_moments(SEXP etaSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP codeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< int >::type code(codeSEXP);
+    rcpp_result_gen = Rcpp::wrap(binomial_firth_moments(eta, y, weights, code));
+    return rcpp_result_gen;
+END_RCPP
+}
 // colMax_dense
 Eigen::MatrixXd colMax_dense(const Eigen::Map<Eigen::MatrixXd>& A);
 RcppExport SEXP _fastglm_colMax_dense(SEXP ASEXP) {
@@ -447,6 +461,7 @@ RcppExport SEXP prod_vec_big(SEXP, SEXP);
 RcppExport SEXP prod_vec_big_right(SEXP, SEXP);
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_fastglm_binomial_firth_moments", (DL_FUNC) &_fastglm_binomial_firth_moments, 4},
     {"_fastglm_colMax_dense", (DL_FUNC) &_fastglm_colMax_dense, 1},
     {"_fastglm_colMin_dense", (DL_FUNC) &_fastglm_colMin_dense, 1},
     {"_fastglm_all_finite_dense", (DL_FUNC) &_fastglm_all_finite_dense, 1},
