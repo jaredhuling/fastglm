@@ -155,8 +155,9 @@
 #'   and a full-rank design. Ordinal models require every category to be observed.
 #' @param parm coefficient names or indices. The test treats all selected
 #'   coefficients jointly; confidence intervals profile each separately.
+#'   Omit `parm` when supplying an ordinal `contrast` matrix.
 #' @param null hypothesized coefficient values, in the order specified by
-#'   `parm`. A scalar is repeated for every selected coefficient.
+#'   `parm`, or one value per row of `contrast`. A scalar is repeated.
 #' @param control named list of numerical controls: `maxit = 300` limits each
 #'   nuisance optimization; `reltol = 1e-12` is its objective tolerance;
 #'   `score.tol = 1e-5` bounds the adjusted score after scaling by coefficient
@@ -164,6 +165,11 @@
 #'   standardized units; `max.expand = 25` limits bracket expansions; and
 #'   `max.root = 100` limits root iterations.
 #'   Ordinal controls are described in [fastglm_score_test()].
+#' @param contrast optional numeric vector or full-row-rank numeric matrix
+#'   for ordinal tests. Columns correspond to the full coefficient vector;
+#'   names may select a subset. Each matrix row specifies a linear hypothesis. For example,
+#'   differences between a predictor's threshold-specific slopes test whether
+#'   that predictor has a common effect while other effects remain unrestricted.
 #' @details For binomial-logit Firth models the objective is the binomial log likelihood plus one half of
 #'   the log determinant of the full Fisher information matrix. Tested columns
 #'   remain in that determinant when their coefficients are constrained.
@@ -173,7 +179,8 @@
 #'   weights are unsupported. Zero-weight observations make no contribution.
 #'
 #'   For ordinal maximum-likelihood fits, the objective is the joint
-#'   cumulative-link log likelihood. Thresholds and untested slopes are
+#'   cumulative-link log likelihood, including partial proportional-odds
+#'   and other nonparallel cumulative-link models. Thresholds and untested slopes are
 #'   re-estimated subject to the selected coefficient constraints. Logit,
 #'   probit, and complementary log-log links, grouped category counts,
 #'   frequency weights, and offsets retain their fitted meanings. Ordinal
@@ -222,11 +229,14 @@
 #' fit <- fastglm(y ~ x, d, family = binomial(), firth = TRUE)
 #' confint(fit, parm = "x", method = "profile")
 #' fastglm_profile_test(fit, parm = "x")
+#' @md
 #' @export
-fastglm_profile_test <- function(object,parm,null=0,control=list()) {
+fastglm_profile_test <- function(object,parm,null=0,control=list(),contrast=NULL) {
     data.name<-deparse(substitute(object))
     if(inherits(object,"fastglm_ordinal"))
-        return(.ordinal_profile_test(object,parm,null,control,data.name))
+        return(.ordinal_profile_test(object,if(missing(parm)) NULL else parm,null,control,data.name,contrast=contrast))
+    if(!is.null(contrast))
+        stop("linear profile contrasts are currently available only for ordinal fits",call.=FALSE)
     setup<-.firth_profile_setup(object,control);parm<-.firth_profile_parameters(parm,setup$coefficients)
     if(length(null)==1L) null<-rep(null,length(parm))
     if(!is.numeric(null) || length(null)!=length(parm) || any(!is.finite(null)))

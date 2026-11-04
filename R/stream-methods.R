@@ -110,7 +110,8 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #'   and identifiable interior parameters. For GLM, count, and two-part models,
 #'   sandwich covariance for bias-adjusted scores is not implemented.
 #'
-#'   Ordinal robust covariance currently requires a retained common-slope fit.
+#'   Ordinal robust covariance requires a retained dense design and supports
+#'   common and threshold-specific slopes jointly.
 #'   For ordinal fits, the covariance uses the inverse observed negative
 #'   Jacobian of the ordinary likelihood score, rather than inverse expected
 #'   Fisher information. Independent-observation meat sums individual score
@@ -135,10 +136,10 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #'   promise finite-sample calibration or bias reduction under misspecification.
 #'   See [fastglm_bootstrap()] for refit-based uncertainty.
 #' @returns A coefficient covariance matrix.
+#' @md
 #' @export
 fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
                           cadjust=TRUE,block.size=8192L,full=FALSE) {
-    .ordinal_partial_require_common(object,"Robust covariance")
     if(inherits(object,"fastglm_ordinal_stream"))
         stop("robust covariance is not yet available for ordinal source fits; vcov() returns model-based covariance",call.=FALSE)
     if(inherits(object,"fastglm_ordinal")) {

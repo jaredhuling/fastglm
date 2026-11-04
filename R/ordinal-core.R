@@ -123,8 +123,8 @@
          tol=tol,maxit=as.integer(maxit),block.size=as.integer(block.size))
 }
 
-.ordinal_design_setup <- function(x,totals,standardize,cache=NULL) {
-    key<-list(x=x,totals=totals,standardize=standardize)
+.ordinal_design_setup <- function(x,totals,standardize,cache=NULL,nonparallel=NULL) {
+    key<-list(x=x,totals=totals,standardize=standardize,nonparallel=nonparallel)
     entry<-if(is.environment(cache)) cache$entry
     if(!is.null(entry) && identical(entry$key,key)) {
         # Refresh references after deserialization or an equal replacement, so

@@ -127,7 +127,9 @@
     if(isTRUE(object$boundary) || any(category$original.category.totals==0))
         stop("ordinal sandwich covariance requires every declared category to have positive frequency; empty-category inference is not implemented",call.=FALSE)
     cluster<-.ordinal_cluster_vector(cluster,object)
-    N<-sum(category$totals);q<-length(object$working$alpha);p<-length(object$beta);d<-q+p
+    partial<-inherits(object,"fastglm_ordinal_partial")
+    N<-sum(category$totals);q<-length(object$working$alpha);p<-length(object$beta)
+    d<-length(object$working$coefficients)
     if(!is.finite(N) || N<=0) stop("ordinal total frequency must be finite and positive",call.=FALSE)
     if(type=="HC1" && N<=d) stop("ordinal HC1 covariance requires total frequency greater than the number of parameters",call.=FALSE)
     information<-meat<-matrix(0,d,d)
@@ -136,9 +138,12 @@
         positive<-category$totals[i]>0
         if(!any(positive)) return(invisible(NULL))
         i<-i[positive];x<-x[positive,,drop=FALSE]
-        if(p) x<-sweep(sweep(x,2,object$working$center,"-"),2,object$working$scale,"/")
+        if(!partial && p) x<-sweep(sweep(x,2,object$working$center,"-"),2,object$working$scale,"/")
         counts<-if(category$grouped) category$counts[i,,drop=FALSE] else matrix(numeric(),0,0)
-        z<-.ordinal_sandwich_block(x,object$working$alpha,object$working$beta,object$offset[i],
+        z<-if(partial) .ordinal_partial_sandwich_block(object,x,object$offset[i],
+            if(category$grouped) integer() else category$codes[i],counts,category$weights[i],
+            frequency=N,independent=is.null(cluster),rows=i) else
+            .ordinal_sandwich_block(x,object$working$alpha,object$working$beta,object$offset[i],
             if(category$grouped) integer() else category$codes[i],counts,category$weights[i],
             frequency=N,independent=is.null(cluster),link=.ordinal_link(object))
         information<<-information+z$information
@@ -165,8 +170,8 @@
     v<-inverse%*%meat%*%inverse
     if(is.null(cluster)) v<-v/N
     v<-v*hc1.factor*cluster.factor
-    transform<-diag(d)
-    if(p) {
+    transform<-if(partial) object$working$T else diag(d)
+    if(!partial && p) {
         transform[seq_len(q),q+seq_len(p)]<-matrix(object$working$center/object$working$scale,q,p,byrow=TRUE)
         transform[q+seq_len(p),q+seq_len(p)]<-diag(1/object$working$scale,nrow=p)
     }

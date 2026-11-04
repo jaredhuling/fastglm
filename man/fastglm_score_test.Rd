@@ -14,7 +14,8 @@ fastglm_score_test(
 )
 }
 \arguments{
-\item{object}{a converged common-slope ordinal model with retained dense data and every
+\item{object}{a converged ordinal model, including a nonparallel model,
+with retained dense data and every
 declared category observed.}
 
 \item{terms}{formula terms, or location coefficient names for a matrix fit.
@@ -74,7 +75,12 @@ calibration result or exact small-sample inference. No resampling is used.
 Infeasible starts, failed nuisance fits, singular information, or exhausted
 iterations return an unavailable test with an explanation. A finite
 bias-reduced estimate does not guarantee a successful constrained fit.
-Nonparallel and streaming fits, and collapsed or empty categories, are currently unsupported.
+For nonparallel models, constraints and all nuisance updates retain ordered
+cumulative predictors at each positive-frequency training row. Equality
+contrasts between a predictor's threshold-specific slopes test its common
+slope restriction while allowing other predictors to remain nonparallel.
+Tests of a term's zero effects are different from tests of equal slopes.
+Streaming fits and collapsed or empty categories are currently unsupported.
 }
 \examples{
 fit <- fastglm_ordinal(Sat ~ Infl + Type + Cont, MASS::housing, weights=Freq)

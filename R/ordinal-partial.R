@@ -32,7 +32,7 @@
 }
 
 .ordinal_partial_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,
-                                         block.size,control,link,nonparallel) {
+                                         block.size,control,link,nonparallel,cache=NULL) {
     if(!is.logical(firth) || length(firth)!=1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE",call.=FALSE)
     link.code <- .ordinal_link_code(link);link <- c("logit","probit","cloglog")[link.code+1L]
@@ -65,7 +65,7 @@
     for(nm in c("standardize","trace"))
         if(!is.logical(ctl[[nm]]) || length(ctl[[nm]])!=1L || is.na(ctl[[nm]]))
             stop("invalid ordinal optimizer flag: ",nm,call.=FALSE)
-    setup <- .ordinal_design_setup(x,response$totals,ctl$standardize)
+    setup <- .ordinal_design_setup(x,response$totals,ctl$standardize,cache,nonparallel)
     center <- setup$center;scale <- setup$scale;xx <- setup$x;good <- setup$positive
     common <- setdiff(seq_len(p),nonparallel);pc <- length(common);pn <- length(nonparallel)
     K <- length(response$levels);q <- K-1L;d <- q+pc+q*pn
@@ -78,6 +78,18 @@
         response$codes,response$counts,response$weights,working.offset,K,c(alpha,numeric(d-q)),
         firth,ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),
         ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
+    object <- .ordinal_partial_result(fit,center,scale,response,setup$frequency,sum(good),
+        firth,link,ctl,tol,maxit,block.size,colnames(x),nonparallel)
+    object$x <- x;object$y <- y;object$weights <- response$weights;object$offset <- offset
+    object$preparation.reused <- setup$reused
+    object
+}
+
+.ordinal_partial_result <- function(fit,center,scale,response,frequency,positive.rows,
+                                    firth,link,ctl,tol,maxit,block.size,columns,nonparallel) {
+    p <- length(columns);common <- setdiff(seq_len(p),nonparallel)
+    pc <- length(common);pn <- length(nonparallel)
+    K <- length(response$levels);q <- K-1L;d <- q+pc+q*pn
     T <- Ti <- diag(d)
     if(pc) {
         at <- q+seq_len(pc)
@@ -95,8 +107,8 @@
     }
     threshold.names <- paste(response$levels[-K],response$levels[-1L],sep="|")
     gamma.names <- unlist(lapply(threshold.names,function(label)
-        paste0("nonparallel:",colnames(x)[nonparallel],":",label)),use.names=FALSE)
-    nms <- c(paste0("threshold:",threshold.names),colnames(x)[common],gamma.names)
+        paste0("nonparallel:",columns[nonparallel],":",label)),use.names=FALSE)
+    nms <- c(paste0("threshold:",threshold.names),columns[common],gamma.names)
     if(anyDuplicated(nms)) stop("predictor names conflict with generated ordinal parameter names",call.=FALSE)
     effective <- list(coefficients=drop(T%*%fit$coefficients),covariance=T%*%fit$cov.unscaled%*%t(T),
         information=crossprod(Ti,fit$information%*%Ti),score=drop(crossprod(Ti,fit$score)),
@@ -105,8 +117,8 @@
     for(nm in c("coefficients","score","ordinary.score","adjustment","step")) names(effective[[nm]]) <- nms
     for(nm in c("covariance","information")) dimnames(effective[[nm]]) <- list(nms,nms)
     parts <- function(b) list(alpha=setNames(b[seq_len(q)],threshold.names),
-        beta=setNames(b[q+seq_len(pc)],colnames(x)[common]),
-        gamma=matrix(b[q+pc+seq_len(q*pn)],pn,q,dimnames=list(colnames(x)[nonparallel],threshold.names)))
+        beta=setNames(b[q+seq_len(pc)],columns[common]),
+        gamma=matrix(b[q+pc+seq_len(q*pn)],pn,q,dimnames=list(columns[nonparallel],threshold.names)))
     effective <- c(effective,parts(effective$coefficients))
     working <- c(list(coefficients=setNames(as.numeric(fit$coefficients),nms),
         center=center,scale=scale,T=T,Ti=Ti,covariance=fit$cov.unscaled,information=fit$information,
@@ -128,9 +140,9 @@
         minimum.log.probability=fit$minimum.log.probability,converged=fit$converged,
         convergence.reason=fit$convergence.reason,iterations=fit$iterations,evaluations=fit$evaluations,
         fallbacks=fit$fallbacks,last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,
-        loglik=fit$loglik,rank=d,df.residual=setup$frequency-d,nobs=setup$frequency,
-        nobs.rows=sum(good),frequency=setup$frequency,weights=response$weights,offset=offset,
-        response=response,category=response,x=x,y=y,design.columns=colnames(x),preparation.reused=FALSE,
+        loglik=fit$loglik,rank=d,df.residual=frequency-d,nobs=frequency,
+        nobs.rows=positive.rows,frequency=frequency,
+        response=response,category=response,design.columns=columns,preparation.reused=FALSE,
         firth=firth,link=link,method=if(firth) "meanBR" else "ML",control=ctl,tol=tol,
         maxit=as.integer(maxit),block.size=as.integer(block.size))
     class(object) <- c("fastglm_ordinal_partial","fastglm_ordinal")
@@ -207,7 +219,7 @@
             .ordinal_log_difference(ls[,j-1L],ls[,j]))
     }
     list(x=xx,probability=exp(logp),log.probability=logp,cumulative=F,survival=S,
-        derivative=g,curvature=curvature,eta=eta,location=location,
+        derivative=g,curvature=curvature,eta=eta,location=location,gap=gaps,
         partial=list(common=object$common,nonparallel=object$nonparallel,d=length(object$coefficients)))
 }
 

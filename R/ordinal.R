@@ -64,7 +64,7 @@
 #'   estimate. It gives a first-order model-based approximation; this interface
 #'   does not provide ordinal penalized-profile inference. Robust covariance
 #'   is available through `fastglm_vcov()` or `vcov(type="HC0")` for converged
-#'   common-slope fits with every declared category observed. Mean bias
+#'   retained dense fits with every declared category observed. Mean bias
 #'   reduction solves the adjusted equations for the original thresholds and slopes.
 #'   It does not maximize a log-determinant penalized ordinal likelihood.
 #'
@@ -124,7 +124,7 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
     selected <- .ordinal_nonparallel_columns(nonparallel,colnames(x))
     if(length(selected))
         return(.ordinal_partial_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,
-            block.size,control,link,selected))
+            block.size,control,link,selected,cache))
     fit <- .ordinal_fit_core(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache,link)
     q <- length(fit$alpha)
     names(fit$coefficients) <- c(paste0("threshold:",names(fit$alpha)),names(fit$beta))

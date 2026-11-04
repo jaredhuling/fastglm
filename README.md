@@ -34,9 +34,9 @@ hurdle, and zero-inflated count fitting currently uses ML.
 - **Uncertainty and testing.** Model-based intervals, joint Wald tests,
   robust and clustered covariance, and refitting bootstraps are
   available for supported classes. Profile inference covers dense
-  binomial-logit Firth fits, common-slope ordinal ML fits, and
-  negative-binomial size. Ordinal score tests address coefficient
-  hypotheses or the common-slope assumption.
+  binomial-logit Firth fits, ordinal ML fits with common or
+  threshold-specific slopes, and negative-binomial size. Ordinal score
+  tests address coefficient hypotheses or the common-slope assumption.
 - **Prediction and interpretation.** Response means or category
   probabilities, prediction standard errors, averages and contrasts,
   residuals, and ordinal calibration summaries connect fitted
@@ -44,14 +44,13 @@ hurdle, and zero-inflated count fitting currently uses ML.
   methods support reporting.
 - **Large datasets.** Dense, sparse, mapped, and repeatable-source
   inputs serve different model classes. Streaming supports GLMs,
-  negative-binomial, hurdle, two-part, and common-slope ordinal models.
-  Partial ordinal models currently require dense data and use
-  model-based covariance and Wald inference.
-- **Repeated fitting and numerical control.** Prepared GLM and
-  common-slope ordinal designs reuse predictor setup across responses.
-  GLMs offer six decompositions and an automatic choice, with
-  diagnostics for convergence and numerical conditioning. The timing
-  sections pair performance comparisons with agreement checks.
+  negative-binomial, hurdle, two-part, and ordinal models with common or
+  threshold-specific slopes.
+- **Repeated fitting and numerical control.** Prepared GLM and ordinal
+  designs reuse predictor setup across responses. GLMs offer six
+  decompositions and an automatic choice, with diagnostics for
+  convergence and numerical conditioning. The timing sections pair
+  performance comparisons with agreement checks.
 
 The [package overview](vignettes/fastglm-overview.Rmd) maps these
 methods to their supported models. Dedicated guides cover [bias
@@ -287,16 +286,18 @@ slopes and partial proportional odds when selected effects vary through
 | Task | Ordinal interface and scope |
 |:---|:---|
 | Specify the model | Dense formula or matrix; individual outcomes, grouped category frequencies, and offsets; selected nonparallel effects require every category to be observed |
-| Interpret predictions | Category and cumulative probabilities, prediction standard errors, average probabilities and contrasts; automatic marginal effects for common-slope models |
-| Test coefficients | Joint Wald tests and named contrasts; ML profile and ordinary or adjusted-score inference for retained dense common-slope models with all categories observed |
+| Interpret predictions | Category and cumulative probabilities, prediction standard errors, average probabilities and contrasts; automatic marginal effects for continuous predictors |
+| Test coefficients | Joint Wald tests and named contrasts; ML profile and ordinary or adjusted-score inference for retained dense models with all categories observed |
 | Assess common slopes | `fastglm_po_test()` tests the restriction jointly or by term from a retained dense common-slope fit |
-| Assess fit and uncertainty | Residuals, prediction scores, and calibration; robust covariance and refitting bootstraps for eligible dense common-slope fits |
-| Repeat fits or read large datasets | `fastglm_ordinal_prepare()` / `fastglm_ordinal_batch()` reuse dense designs; `fastglm_ordinal_streaming()` fits common-slope models from repeatable blocks, including mean bias reduction |
+| Assess fit and uncertainty | Residuals, prediction scores, and calibration; robust covariance for eligible dense fits; refitting bootstraps for common-slope fits |
+| Repeat fits or read large datasets | `fastglm_ordinal_prepare()` / `fastglm_ordinal_batch()` reuse dense designs; `fastglm_ordinal_streaming()` fits common-slope or partial models from repeatable blocks, including mean bias reduction |
 
-Partial and streamed ordinal fits currently use model-based covariance
-and Wald inference. Their robust covariance, profiles, and constrained
-score procedures require further implementations. Empty-category
-behavior also depends on the model and estimation method. The [ordinal
+Dense partial fits support robust covariance, marginal effects, ML
+profiles, and constrained score tests, including equality of selected
+slopes across thresholds. Streamed fits retain model-based covariance
+and Wald inference; their robust covariance and constrained inference
+require separate implementations. Empty-category behavior also depends
+on the model and estimation method. The [ordinal
 vignette](vignettes/ordinal-fastglm.Rmd) begins with the full support
 guide and develops examples for each workflow.
 

@@ -11,7 +11,8 @@ fastglm_ordinal_prepare(
   offset = NULL,
   levels = NULL,
   firth = FALSE,
-  link = "logit"
+  link = "logit",
+  nonparallel = NULL
 )
 }
 \arguments{
@@ -20,36 +21,43 @@ fastglm_ordinal_prepare(
 \item{data}{data for a formula.}
 
 \item{weights, offset}{default fitting frequencies and location offsets.
-Formula offsets and an additional `offset` argument are combined during
+Formula offsets and an additional \code{offset} argument are combined during
 preparation. Predictors must be complete; missing rows are not removed.}
 
 \item{levels}{optional default outcome labels in increasing order.}
 
 \item{firth}{default for mean bias reduction in subsequent fits.}
 
-\item{link}{default cumulative link, as in [fastglm_ordinal()].}
+\item{link}{default cumulative link, as in \code{\link[=fastglm_ordinal]{fastglm_ordinal()}}.}
+
+\item{nonparallel}{default predictors whose slopes may differ across
+thresholds. Select complete terms with a one-sided formula for a prepared
+formula, or columns by name or index for a matrix. Omitting this argument
+in subsequent fits uses the prepared selection; explicitly supplying
+\code{NULL} fits common slopes for all predictors.}
 }
 \value{
-A `fastglm_ordinal_design` object. Its `cache` environment is shared
-  by repeated fits; each fitted model retains its own response and the common
-  original design, without copying the cached transformed design into the fit.
+A \code{fastglm_ordinal_design} object. Its \code{cache} environment is shared
+by repeated fits; each fitted model retains its own response and the common
+original design, without copying the cached transformed design into the fit.
 }
 \description{
 Retains a dense location design and its prediction coding for use with
-[fastglm_ordinal()] or [fastglm_ordinal_batch()]. Repeated fits reuse weighted
+\code{\link[=fastglm_ordinal]{fastglm_ordinal()}} or \code{\link[=fastglm_ordinal_batch]{fastglm_ordinal_batch()}}. Repeated fits reuse weighted
 centering, scaling, rank checks, and the transformed design when the
 predictors and effective row frequencies agree. Model scores, information,
 category mappings, and starting thresholds are recalculated for each fit.
 }
 \details{
 The cache contains ordinary R objects and can be saved with
-  `saveRDS()`. Changing the design, effective row totals, or the
-  `standardize` optimizer control rebuilds the relevant setup. For grouped
-  counts, effective totals are counts times their fitting weights. Changing
-  category allocations while retaining those totals permits reuse.
+\code{saveRDS()}. Changing the design, effective row totals, selected
+nonparallel terms, or the \code{standardize} optimizer control rebuilds the
+relevant setup. For grouped
+counts, effective totals are counts times their fitting weights. Changing
+category allocations while retaining those totals permits reuse.
 
-  Fitting with a prepared design preserves the formula's factor coding and
-  transformations for prediction. A replacement fitting offset is a total
-  location offset. After changing prepared formula offsets, predictions on
-  new data require an explicit replacement `offset`.
+Fitting with a prepared design preserves the formula's factor coding and
+transformations for prediction. A replacement fitting offset is a total
+location offset. After changing prepared formula offsets, predictions on
+new data require an explicit replacement \code{offset}.
 }

@@ -19,6 +19,7 @@
   block.size = 2048L,
   control = list(),
   link = NULL,
+  nonparallel = NULL,
   ...
 )
 
@@ -98,14 +99,14 @@ kernel. The input design is retained in memory.}
 or \code{"cloglog"} (complementary log-log). Prepared fits use their saved
 link when \code{NULL} is supplied.}
 
-\item{...}{additional arguments to the default or formula method.}
-
 \item{nonparallel}{terms whose slopes may differ across cumulative
 thresholds. For a formula fit, supply a one-sided formula selecting
 complete terms from the fitted formula, such as \code{~ exposure} or
 \code{~ exposure:group}. \code{~ .} selects every predictor term. For a matrix,
 supply distinct column names or indices. \code{NULL} or an empty selection
 retains the common-slope model and its existing fitting path.}
+
+\item{...}{additional arguments to the default or formula method.}
 
 \item{data, subset, na.action, contrasts}{formula and model-frame arguments.}
 
@@ -154,7 +155,7 @@ The covariance uses inverse expected Fisher information at the fitted
 estimate. It gives a first-order model-based approximation; this interface
 does not provide ordinal penalized-profile inference. Robust covariance
 is available through \code{fastglm_vcov()} or \code{vcov(type="HC0")} for converged
-common-slope fits with every declared category observed. Mean bias
+retained dense fits with every declared category observed. Mean bias
 reduction solves the adjusted equations for the original thresholds and slopes.
 It does not maximize a log-determinant penalized ordinal likelihood.
 

@@ -15,33 +15,38 @@ fastglm_ordinal_batch(
   maxit = 200L,
   block.size = 2048L,
   control = list(),
-  link = NULL
+  link = NULL,
+  nonparallel = NULL
 )
 }
 \arguments{
-\item{design}{an object from [fastglm_ordinal_prepare()], or a dense numeric
+\item{design}{an object from \code{\link[=fastglm_ordinal_prepare]{fastglm_ordinal_prepare()}}, or a dense numeric
 matrix without a location intercept.}
 
 \item{y}{a list of ordinal responses. Each element may be an ordered factor,
-category codes with declared `levels`, or a matrix of category counts.
+category codes with declared \code{levels}, or a matrix of category counts.
 Use a list even for a single count matrix, so its category columns are not
 mistaken for separate responses.}
 
 \item{weights, offset}{common fitting vectors, or matrices with one column per
-response. `NULL` uses the prepared defaults. Replacement offsets are total
+response. \code{NULL} uses the prepared defaults. Replacement offsets are total
 location offsets.}
 
 \item{levels}{common outcome labels or a list with one category order per
-response. `NULL` uses the prepared default or each response's own labels.}
+response. \code{NULL} uses the prepared default or each response's own labels.}
 
-\item{firth}{default to the prepared design's setting, or `FALSE` for a matrix.}
+\item{firth}{default to the prepared design's setting, or \code{FALSE} for a matrix.}
 
-\item{tol, maxit, block.size, control}{ordinal fitting controls; see [fastglm_ordinal()].}
+\item{tol, maxit, block.size, control}{ordinal fitting controls; see \code{\link[=fastglm_ordinal]{fastglm_ordinal()}}.}
 
-\item{link}{default to the prepared link, or `"logit"` for a matrix.}
+\item{link}{default to the prepared link, or \code{"logit"} for a matrix.}
+
+\item{nonparallel}{selected varying slopes, as in
+\code{\link[=fastglm_ordinal_prepare]{fastglm_ordinal_prepare()}}. Omitting this argument uses the prepared
+default; explicitly supplying \code{NULL} selects common slopes.}
 }
 \value{
-A list of `fastglm_ordinal` fits, with the response list's names.
+A list of \code{fastglm_ordinal} fits, with the response list's names.
 }
 \description{
 Fits responses sequentially using a prepared ordinal design. The design

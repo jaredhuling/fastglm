@@ -35,13 +35,13 @@ Mean bias reduction is requested with `firth=TRUE` in the interfaces that suppor
 | Analysis task | Interface | Scope |
 |:--|:--|:--|
 | Coefficient intervals and joint tests | `confint()` and `fastglm_wald_test()` | Model-based Wald inference for supported fitted classes; formula terms and named contrasts can combine several coefficients |
-| Profile intervals and likelihood-ratio tests | `confint(method="profile")`, `fastglm_profile_test()`, and `fastglm_confint_theta()` | Dense binomial-logit Firth fits, dense common-slope ordinal ML fits, and negative-binomial size profiles, respectively |
-| Score tests of coefficients or the common-slope restriction | `fastglm_score_test()` and `fastglm_po_test()` | Retained dense common-slope ordinal models; the two functions address different hypotheses |
-| Robust or clustered standard errors | `fastglm_vcov()` and supported `vcov(type=...)` methods | GLMs, count and two-part models, and retained dense common-slope ordinal fits, subject to each class's requirements |
-| Response or probability summaries | `predict(se.fit=TRUE)`, `fastglm_average()`, and `fastglm_marginal_effects()` | Predictions and averages for supported classes; automatic marginal effects currently target common-slope ordinal probabilities |
+| Profile intervals and likelihood-ratio tests | `confint(method="profile")`, `fastglm_profile_test()`, and `fastglm_confint_theta()` | Dense binomial-logit Firth fits, dense ordinal ML fits with common or varying slopes, and negative-binomial size profiles, respectively |
+| Score tests of coefficients or the common-slope restriction | `fastglm_score_test()` and `fastglm_po_test()` | Retained dense ordinal models for coefficient constraints; `fastglm_po_test()` starts from a common-slope fit |
+| Robust or clustered standard errors | `fastglm_vcov()` and supported `vcov(type=...)` methods | GLMs, count and two-part models, and retained dense ordinal fits, subject to each class's requirements |
+| Response or probability summaries | `predict(se.fit=TRUE)`, `fastglm_average()`, and `fastglm_marginal_effects()` | Predictions and averages for supported classes; automatic marginal effects target common-slope or partial ordinal probabilities |
 | Refitting uncertainty and model assessment | `fastglm_bootstrap()`, `fastglm_diagnostics()`, residuals, and `fastglm_ordinal_assess()` | Bootstrap support depends on retained data and model class; ordinal assessment includes prediction scores and calibration |
 
-These methods use different assumptions and are not interchangeable across model classes. In particular, partial ordinal fits currently use model-based covariance and Wald inference; streamed ordinal fits also lack robust covariance and constrained inference. The [ordinal support guide](ordinal-fastglm.html#ordinal-scope) states these distinctions explicitly. The sections below explain [coefficient uncertainty and population averages](#inference-and-population-averages), [joint tests](#joint-coefficient-tests), and [readable result displays](#specifying-the-mean-model).
+These methods use different assumptions and are not interchangeable across model classes. Dense partial ordinal fits support robust covariance, ML profiles, and constrained score inference. Streamed ordinal fits retain model-based covariance and Wald inference; robust covariance and constrained inference require retained observations. The [ordinal support guide](ordinal-fastglm.html#ordinal-scope) states these distinctions explicitly. The sections below explain [coefficient uncertainty and population averages](#inference-and-population-averages), [joint tests](#joint-coefficient-tests), and [readable result displays](#specifying-the-mean-model).
 
 ## Data size and repeated fitting
 
@@ -49,8 +49,8 @@ These methods use different assumptions and are not interchangeable across model
 |:--|:--|:--|
 | Ordinary in-memory analysis | Formula and dense-design interfaces | Model-specific fitting with coefficient, prediction, and diagnostic methods |
 | Predictors with many zeros or stored outside ordinary R matrices | Sparse matrices and `bigmemory::big.matrix` inputs | GLMs; selected count interfaces also accept sparse designs. [Large-data guide](large-data-fastglm.html#sparse-and-mapped-matrices) |
-| Data read repeatedly from files or databases | `fastglm_source()`, Arrow and DBI adapters, and streaming fitters | GLMs, negative-binomial, hurdle, two-part, and common-slope ordinal models. [Streaming computation](large-data-fastglm.html) |
-| Several responses with the same predictors | `fastglm_prepare()` / `fastglm_batch()` and their ordinal counterparts | GLMs and common-slope ordinal models; supported calculations are reused across responses. [Repeated outcomes](#repeated-outcomes-on-a-shared-design) |
+| Data read repeatedly from files or databases | `fastglm_source()`, Arrow and DBI adapters, and streaming fitters | GLMs, negative-binomial, hurdle, two-part, and common-slope or partial ordinal models. [Streaming computation](large-data-fastglm.html) |
+| Several responses with the same predictors | `fastglm_prepare()` / `fastglm_batch()` and their ordinal counterparts | GLMs and common-slope or partial ordinal models; supported calculations are reused across responses. [Repeated outcomes](#repeated-outcomes-on-a-shared-design) |
 
 Data representation changes the amount of retained information and the cost of rereading observations. It can therefore affect both fitting time and which later procedures are available. The [large-data vignette](large-data-fastglm.html) explains these requirements. [Benchmark examples](benchmarks-fastglm.html) examine speed together with numerical agreement.
 
