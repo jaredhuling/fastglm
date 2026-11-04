@@ -186,7 +186,41 @@ Residuals and frequency weights can also be processed through a block destinatio
 
 Peak process memory also includes temporary allocations and memory managed by R. Retaining a smaller design therefore does not guarantee a lower peak for every dataset size. Streaming can use more peak memory than dense fitting for moderate datasets and requires additional time to reread the observations. Its practical benefit should be assessed at the intended data size and with the intended reader, especially when the complete design would be too large to retain.
 
-The fitted source retains neither the complete design nor the response. Robust covariance, profile and score inference, refitting bootstraps, and assessment over the original source require additional implementations. Prediction-based summaries can instead use explicitly supplied evaluation data. The source must continue to return the same rows and values whenever it is reread.
+The fitted source retains neither the complete design nor the response. Profile intervals, constrained coefficient-score inference, refitting bootstraps, and assessment over the original source require retained observations. Prediction-based summaries and common-slope tests can instead use explicitly supplied evaluation data. The source must continue to return the same rows and values whenever it is reread.
+
+## Robust covariance for ordered outcomes
+
+`fastglm_vcov()` rereads an ordinal source once to accumulate the observed sensitivity of the ordinary scores and their variability. Its covariance agrees with the retained-data calculation, including for partial models and mean-bias-reduced estimates. The latter use the first-order ordinary-score convention explained in the [ordinal guide](ordinal-fastglm.html#ordinal-robust).
+
+```{r ordinal-source-covariance}
+V_ordinal <- fastglm_vcov(ordinal_partial_stream,type="HC0")
+fastglm_average(ordinal_partial_stream,newdata=housing,
+                weights=housing$Freq,vcov.=V_ordinal)
+```
+
+Cluster identifiers can describe observations distributed across several source blocks. The next example uses the synthetic predictor rows defined earlier, with an ordered outcome and 120 group identifiers. Repeating the identifiers across blocks illustrates how the score contributions are combined for a group.
+
+```{r ordinal-source-clusters}
+set.seed(110305)
+ordered_data <- raw
+ordered_data$rating <- ordered(cut(.5*ordered_data$x+rlogis(n),
+    c(-Inf,-.5,.75,Inf),labels=c("low","middle","high")))
+ordinal_clusters <- rep(seq_len(120),length.out=n)
+ordinal_source <- fastglm_source(
+    function(k) ordered_data[((k-1L)*chunk_rows+1L):(k*chunk_rows),],
+    n_chunks=4L,formula=rating~x+g,prototype=ordered_data)
+ordinal_cluster_fit <- fastglm_ordinal_streaming(
+    ordinal_source,nonparallel=~x,firth=TRUE)
+ordinal_cluster_ids <- function(k)
+    ordinal_clusters[((k-1L)*chunk_rows+1L):(k*chunk_rows)]
+V_ordinal_cluster <- fastglm_vcov(
+    ordinal_cluster_fit,type="HC1",cluster=ordinal_cluster_ids)
+summary(ordinal_cluster_fit,vcov.=V_ordinal_cluster)
+```
+
+The cluster function returns one identifier for each original row in the requested block. A label has the same meaning throughout the source; factor labels are matched by their values rather than their block-specific integer codes. All individuals represented by a frequency row must belong to its stated cluster. The uncertainty calculation requires sufficiently many independent clusters and an identifiable interior model. It does not add cluster-specific model parameters.
+
+Fitting, covariance calculation, and prediction must use unchanged source rows and values. Clustered covariance retains one score vector per distinct group, so its memory requirement grows with the number of groups and coefficients even though the complete design is not retained.
 
 # Parquet and database sources
 

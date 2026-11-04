@@ -64,8 +64,11 @@ test_that("source predictions and residuals agree and support block callbacks", 
     expect_error(model.matrix(fit),"do not retain")
     expect_error(simulate(fit),"not implemented")
     expect_error(predict(fit,sink=1),"function")
-    expect_error(fastglm_vcov(fit),"not yet available")
-    expect_error(vcov(fit,type="HC0"),"not yet available")
+    # This weighting pattern removes one declared category globally; the
+    # empty-category covariance restriction applies to both representations.
+    expect_error(fastglm_vcov(fit),"every declared category")
+    expect_error(fastglm_vcov(ref),"every declared category")
+    expect_error(vcov(fit,type="HC0"),"every declared category")
     expect_error(fastglm_bootstrap(fit,R=2),"not yet available")
     expect_error(fastglm_average(fit),"source")
     expect_error(fastglm_ordinal_assess(fit),"source")

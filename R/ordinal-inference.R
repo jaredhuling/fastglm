@@ -121,54 +121,71 @@
     if(!is.numeric(block.size) || is.complex(block.size) || length(block.size)!=1L ||
        !is.finite(block.size) || block.size<1 || block.size>.Machine$integer.max || block.size!=floor(block.size))
         stop("'block.size' must be a positive integer",call.=FALSE)
+    if(inherits(object,"fastglm_ordinal_stream"))
+        return(.ordinal_stream_robust_vcov(object,type,cluster,cadjust,as.integer(block.size)))
     category<-object$category
     if(is.null(category) || !is.matrix(object$x) || nrow(object$x)!=length(category$totals))
         stop("ordinal sandwich covariance requires the retained design and response",call.=FALSE)
     if(isTRUE(object$boundary) || any(category$original.category.totals==0))
         stop("ordinal sandwich covariance requires every declared category to have positive frequency; empty-category inference is not implemented",call.=FALSE)
     cluster<-.ordinal_cluster_vector(cluster,object)
+    accumulator<-.ordinal_sandwich_accumulator(object,sum(category$totals),type,!is.null(cluster),cadjust)
+    .design_blocks(object$x,function(x,i) {
+        counts<-if(category$grouped) category$counts[i,,drop=FALSE] else matrix(numeric(),0,0)
+        accumulator$add(x,object$offset[i],if(category$grouped) integer() else category$codes[i],
+            counts,category$weights[i],category$totals[i],if(!is.null(cluster)) cluster[i],rows=i)
+    },as.integer(block.size))
+    accumulator$finish()
+}
+
+# Dense and source fits share the same finite-sample aggregation. Information
+# and independent meat are divided by N; cluster scores are divided by N before
+# their outer products. Only the readers and cluster-key construction differ.
+.ordinal_sandwich_accumulator <- function(object,N,type,clustered,cadjust) {
     partial<-inherits(object,"fastglm_ordinal_partial")
-    N<-sum(category$totals);q<-length(object$working$alpha);p<-length(object$beta)
+    q<-length(object$working$alpha);p<-length(object$beta)
     d<-length(object$working$coefficients)
     if(!is.finite(N) || N<=0) stop("ordinal total frequency must be finite and positive",call.=FALSE)
     if(type=="HC1" && N<=d) stop("ordinal HC1 covariance requires total frequency greater than the number of parameters",call.=FALSE)
     information<-meat<-matrix(0,d,d)
-    clusters<-if(is.null(cluster)) NULL else new.env(hash=TRUE,parent=emptyenv())
-    .design_blocks(object$x,function(x,i) {
-        positive<-category$totals[i]>0
+    clusters<-if(clustered) new.env(hash=TRUE,parent=emptyenv()) else NULL
+    add<-function(x,offset,codes,counts,weights,totals,groups=NULL,rows=NULL) {
+        positive<-totals>0
         if(!any(positive)) return(invisible(NULL))
-        i<-i[positive];x<-x[positive,,drop=FALSE]
+        x<-x[positive,,drop=FALSE];offset<-offset[positive];weights<-weights[positive]
+        if(length(counts)) counts<-counts[positive,,drop=FALSE] else codes<-codes[positive]
+        if(!is.null(rows)) rows<-rows[positive]
+        if(clustered) groups<-groups[positive]
         if(!partial && p) x<-sweep(sweep(x,2,object$working$center,"-"),2,object$working$scale,"/")
-        counts<-if(category$grouped) category$counts[i,,drop=FALSE] else matrix(numeric(),0,0)
-        z<-if(partial) .ordinal_partial_sandwich_block(object,x,object$offset[i],
-            if(category$grouped) integer() else category$codes[i],counts,category$weights[i],
-            frequency=N,independent=is.null(cluster),rows=i) else
-            .ordinal_sandwich_block(x,object$working$alpha,object$working$beta,object$offset[i],
-            if(category$grouped) integer() else category$codes[i],counts,category$weights[i],
-            frequency=N,independent=is.null(cluster),link=.ordinal_link(object))
+        z<-if(partial) .ordinal_partial_sandwich_block(object,x,offset,codes,counts,weights,
+            frequency=N,independent=!clustered,rows=rows) else
+            .ordinal_sandwich_block(x,object$working$alpha,object$working$beta,offset,
+                codes,counts,weights,frequency=N,independent=!clustered,link=.ordinal_link(object))
         information<<-information+z$information
-        if(is.null(cluster)) meat<<-meat+z$meat else {
-            summed<-rowsum(z$rows,as.character(cluster[i]),reorder=FALSE)
+        if(!clustered) meat<<-meat+z$meat else {
+            summed<-rowsum(z$rows,as.character(groups),reorder=FALSE)
             for(j in seq_len(nrow(summed))) {
                 key<-paste0("cluster:",rownames(summed)[j]);value<-summed[j,]
                 if(exists(key,clusters,inherits=FALSE)) value<-value+get(key,clusters,inherits=FALSE)
                 assign(key,value,clusters)
             }
         }
-    },as.integer(block.size))
+        invisible(NULL)
+    }
+    finish<-function() {
     G<-NA_integer_;cluster.factor<-1
-    if(!is.null(cluster)) {
+    if(clustered) {
         keys<-ls(clusters,all.names=TRUE);G<-length(keys)
         if(G<2L) stop("ordinal cluster covariance requires at least two positive-frequency clusters",call.=FALSE)
         for(key in keys) meat<-meat+tcrossprod(get(key,clusters,inherits=FALSE))
         if(cadjust) cluster.factor<-G/(G-1)
     }
-    hc1.factor<-if(type=="HC1") (if(is.null(cluster)) N else N-1)/(N-d) else 1
+    hc1.factor<-if(type=="HC1") (if(!clustered) N else N-1)/(N-d) else 1
     inverse<-.ordinal_observed_inverse(information)
     # H and independent meat were divided by N. Cluster rows were divided by N
     # before aggregation, avoiding overflow from squaring large frequencies.
     v<-inverse%*%meat%*%inverse
-    if(is.null(cluster)) v<-v/N
+    if(!clustered) v<-v/N
     v<-v*hc1.factor*cluster.factor
     transform<-if(partial) object$working$T else diag(d)
     if(!partial && p) {
@@ -188,4 +205,6 @@
     attr(v,"hc1.factor")<-hc1.factor
     attr(v,"cluster.factor")<-cluster.factor
     v
+    }
+    list(add=add,finish=finish)
 }

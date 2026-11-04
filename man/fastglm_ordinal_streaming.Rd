@@ -65,12 +65,14 @@ retaining the complete dataset if bounded memory is required. Formula
 sources use their recorded predictor schema and fixed transformation basis.
 
 Coefficients, model-based covariance, summaries, diagnostics, and Wald
-intervals use the usual ordinal methods. Predictions, residuals, and
+intervals use the usual ordinal methods. Robust and clustered covariance
+through \code{\link[=fastglm_vcov]{fastglm_vcov()}} rereads the source and accumulates the same
+ordinary-score contributions as retained dense fits. Predictions, residuals, and
 weights can be returned one block at a time through a callback. Collecting
 their complete output requires memory proportional to the number of rows.
 The fitted design and response are not retained. Procedures requiring
-retained observations, including robust covariance, model assessment on
-the fitted source, profile intervals, and refitting bootstrap calculations,
+retained observations, including model assessment on the fitted source,
+profile intervals, and refitting bootstrap calculations,
 require a separate implementation; prediction-based summaries can instead
 receive explicit evaluation data.
 }

@@ -13,7 +13,8 @@ fastglm_po_test(
   weights = NULL,
   offset = NULL,
   control = list(),
-  by.term = FALSE
+  by.term = FALSE,
+  method = c("score", "lr")
 )
 }
 \arguments{
@@ -22,7 +23,11 @@ Its original coefficient estimates are not used in the test. The requested
 null is refitted and must converge, including if the original fit did not.}
 
 \item{terms}{formula terms, or named matrix columns, to test jointly.
-The default tests all location predictors.}
+For a common-slope fit, the default tests all location predictors. For a
+partial fit, the default selects all currently nonparallel terms. Complete
+factor and interaction blocks are selected together. Terms that already
+have common slopes add no restrictions; they are never tested for zero
+effects by this function.}
 
 \item{null.estimation}{\code{"ML"} (default) or \code{"meanBR"}. The latter evaluates
 the ordinary efficient score at a mean-bias-reduced null fit, with explicit
@@ -31,12 +36,21 @@ under separation, but does not guarantee convergence or small-sample accuracy.}
 
 \item{newdata, y, weights, offset}{assessment data as in \code{\link[=fastglm_ordinal_assess]{fastglm_ordinal_assess()}}.}
 
-\item{control}{named list containing \code{tol} and/or \code{maxit} for the null refit.}
+\item{control}{named list containing \code{tol} and/or \code{maxit} for refitting.
+For a partial likelihood ratio test these controls apply to both models
+and their constrained convergence checks.}
 
 \item{by.term}{also test each selected formula term or matrix column
-separately. All tests share one null refit and one information calculation.
-Each term-specific alternative relaxes only that term's common-slope
-restriction, retaining common slopes for the remaining predictors.}
+separately. For a common-slope model, tests share one null refit; each
+term-specific alternative relaxes only that term. For a partial model,
+each term-specific null restricts only that term, leaving other varying
+effects unrestricted. These tests require separate null fits.}
+
+\item{method}{\code{"score"} (default) for the expected-information ordinary
+efficient score, or \code{"lr"} for a likelihood ratio test of a partial model.
+Likelihood ratio tests require \code{null.estimation="ML"} and refit both
+the full partial model and the constrained null by ML, including when
+the supplied object was fitted with mean bias reduction.}
 }
 \value{
 A \code{fastglm_po_test} object inheriting from \code{fastglm_test} and \code{htest},
@@ -46,12 +60,13 @@ With \code{by.term=TRUE}, a \code{fastglm_test_list} containing the joint and
 term-specific tests in \verb{$tests}, with print and data-frame methods.
 }
 \description{
-Computes the expected-information score test directly, without calculating
+Computes a common-slope test directly, without calculating
 prediction losses or calibration summaries. Print the result for a compact
 test table, or use \code{as.data.frame()} or \code{broom::tidy()} for reporting.
 }
 \details{
-Both choices use expected information and an asymptotic chi-square
+Both null-estimation choices for score tests use expected
+information and an asymptotic chi-square
 reference. Mean bias reduction gives a first-order equivalent score test
 under a regular interior null with fixed predictor and category dimensions.
 The nuisance projection is essential because the ordinary nuisance score
@@ -61,6 +76,24 @@ The method never switches null estimators automatically.
 The fitted link is retained. For logit models the hypothesis is proportional
 odds; for probit and complementary log-log models it is the common-slope
 restriction on that link's scale.
+
+For a partial model, a selected predictor with slopes \code{gamma[,j]} is tested
+through \code{gamma[,j] - gamma[,1] = 0} for every threshold after the first.
+Other varying effects remain unrestricted in both the null and alternative.
+If \code{s} selected design columns have varying slopes across \code{K} categories,
+this imposes \code{s*(K-2)} independent restrictions. Binary outcomes and
+selections containing only already-common terms return an unavailable
+test with zero degrees of freedom and an explanation.
+
+For partial score tests, \code{null.estimation="meanBR"} fits bias reduction
+in the reduced null model, embeds that estimate in the full partial model,
+and projects its ordinary score using full-model expected information.
+This preserves the common-slope test convention. It differs from
+\code{\link[=fastglm_score_test]{fastglm_score_test()}} with \code{null.estimation="meanBR"}, which uses the
+full-model adjustment in constrained fitting and in the score statistic.
+Likelihood ratio tests use ordinary ML likelihoods and first-order
+chi-square references; an unsuccessful full or constrained fit is reported
+as unavailable. No finite-sample or higher-order calibration is claimed.
 
 Empty categories and deficient predictor rank remain unsupported. A
 sufficient separation check identifies two-valued predictors with a level

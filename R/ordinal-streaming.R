@@ -34,12 +34,14 @@
 #'   sources use their recorded predictor schema and fixed transformation basis.
 #'
 #'   Coefficients, model-based covariance, summaries, diagnostics, and Wald
-#'   intervals use the usual ordinal methods. Predictions, residuals, and
+#'   intervals use the usual ordinal methods. Robust and clustered covariance
+#'   through [fastglm_vcov()] rereads the source and accumulates the same
+#'   ordinary-score contributions as retained dense fits. Predictions, residuals, and
 #'   weights can be returned one block at a time through a callback. Collecting
 #'   their complete output requires memory proportional to the number of rows.
 #'   The fitted design and response are not retained. Procedures requiring
-#'   retained observations, including robust covariance, model assessment on
-#'   the fitted source, profile intervals, and refitting bootstrap calculations,
+#'   retained observations, including model assessment on the fitted source,
+#'   profile intervals, and refitting bootstrap calculations,
 #'   require a separate implementation; prediction-based summaries can instead
 #'   receive explicit evaluation data.
 #' @returns A `fastglm_ordinal_stream` object inheriting from
@@ -159,9 +161,20 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
             totals=as.numeric(totals),category.totals=category.totals,saturated=saturated)
     }
     frequency <- positive.rows <- saturated <- 0;center <- NULL;offset.mean <- 0;category.totals <- NULL
+    selected <- boundary.check <- NULL
     for(k in seq_len(source$n_chunks)) {
         z <- read(k,summaries=TRUE);total <- sum(z$totals);good <- z$totals>0
-        if(is.null(center)) {center <- numeric(ncol(z$X));category.totals <- numeric(length(state$levels))}
+        if(is.null(center)) {
+            center <- numeric(ncol(z$X));category.totals <- numeric(length(state$levels))
+            selected <- if(!is.null(source$schema$terms))
+                .ordinal_nonparallel_terms(nonparallel,source$schema$terms,
+                    source$schema$assign[source$schema$assign!=0L]) else
+                list(columns=.ordinal_nonparallel_columns(nonparallel,state$columns),terms=character())
+            boundary.check <- .ordinal_partial_boundary_start(state$p-length(selected$columns),
+                length(selected$columns),length(state$levels),firth,link)
+        }
+        if(!is.null(boundary.check)) .ordinal_partial_boundary_add(boundary.check,
+            z$X[,selected$columns,drop=FALSE],z$codes,z$counts,z$weights,z$offset)
         category.totals <- category.totals+z$category.totals
         if(total>0) {
             next.frequency <- frequency+total
@@ -173,10 +186,6 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         positive.rows <- positive.rows+sum(good);saturated <- saturated+z$saturated
     }
     if(!is.finite(frequency) || frequency<=0) stop("ordinal fitting requires finite positive total frequency",call.=FALSE)
-    selected <- if(!is.null(source$schema$terms))
-        .ordinal_nonparallel_terms(nonparallel,source$schema$terms,
-            source$schema$assign[source$schema$assign!=0L]) else
-        list(columns=.ordinal_nonparallel_columns(nonparallel,state$columns),terms=character())
     partial <- length(selected$columns)>0L
     if(partial && any(category.totals<=0))
         stop("nonparallel ordinal fitting requires every declared category to have positive frequency",call.=FALSE)
@@ -210,6 +219,10 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
             stop("the ordinal source location design must be full rank with a separate threshold intercept",call.=FALSE))
         if(!ctl$standardize) {center <- numeric(p);scale <- rep(1,p)}
     }
+    certificate <- .ordinal_partial_boundary_finish(boundary.check)
+    if(!is.null(certificate)) stop(certificate$message,": ",
+        paste(unique(response$levels[certificate$empty.pattern.categories[,"category"]]),collapse=", "),
+        ".",call.=FALSE)
     fetch <- function(k) {
         z <- read(k);good <- z$totals>0
         if(p) z$X <- sweep(sweep(z$X,2,center,"-"),2,scale,"/")

@@ -142,7 +142,12 @@ additional common slope. Fitting requires every declared category to
 have positive frequency. The cumulative predictors must remain ordered
 at the observed predictor values, and predictions check this condition
 at each supplied row. Ordering at training values does not establish
-validity under extrapolation. See \link{ordinal-partial-methods}.
+validity under extrapolation. A fully varying logit mean-bias-reduced
+model that is saturated across predictor patterns, with constant offsets
+within patterns and an empty intermediate category in a pattern, has no
+interior adjusted-score solution and is rejected before iteration. Other
+boundary failures retain their convergence diagnostics. See
+\link{ordinal-partial-methods}.
 
 In common-slope models, an empty interior category is removed from the numerical fit and then
 restored to the declared scale with zero fitted probability and coincident
@@ -155,7 +160,7 @@ The covariance uses inverse expected Fisher information at the fitted
 estimate. It gives a first-order model-based approximation; this interface
 does not provide ordinal penalized-profile inference. Robust covariance
 is available through \code{fastglm_vcov()} or \code{vcov(type="HC0")} for converged
-retained dense fits with every declared category observed. Mean bias
+retained dense or streamed fits with every declared category observed. Mean bias
 reduction solves the adjusted equations for the original thresholds and slopes.
 It does not maximize a log-determinant penalized ordinal likelihood.
 
