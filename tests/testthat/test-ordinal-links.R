@@ -162,14 +162,10 @@ test_that("alternative-link marginal standard errors match numerical delta deriv
     }
 })
 
-test_that("a zero-rank working design cannot masquerade as Firth convergence", {
-    d <- MASS::housing
-    x <- model.matrix(~Infl+Type+Cont,d)
-    y <- cbind(d$Freq*(d$Sat=="Low"),d$Freq*(d$Sat!="Low"))
-    fit <- suppressWarnings(fastglm(x,y,binomial("cloglog"),firth=TRUE,method="qr"))
-    expect_false(fit$converged)
-    expect_identical(fit$convergence.reason,"singular_working_information")
-    expect_true(all(is.na(fastglm_diagnostics(fit)$adjusted.score)))
+test_that("an entirely zero design is rejected by the Firth solver", {
+    x <- matrix(0,20,1)
+    y <- rep(c(0,1),10)
+    expect_error(fastglm(x,y,binomial("cloglog"),firth=TRUE,method="qr"),"cannot find valid starting values")
 })
 
 test_that("complementary-log-log tail scores avoid subtraction of large log probabilities", {

@@ -93,6 +93,8 @@ fastglm_average(fit, vcov.=robust)
 
 A categorical predictor generally contributes several coefficients. Testing those coefficients together addresses whether that predictor contributes to the specified mean model, conditional on the remaining terms. `fastglm_wald_test()` selects all columns associated with a formula term and combines their estimates and covariance in a joint Wald statistic.
 
+The same interface supports ordinal, truncated-count, hurdle, zero-inflated, and two-part models. For models with two components, `component` selects the regression being tested; its default tests the term in both components where present. The count and semicontinuous-outcome vignettes illustrate these choices and their interpretation.
+
 ```{r}
 fastglm_wald_test(fit,terms="group")
 fastglm_wald_test(fit,terms="group",vcov.=robust)

@@ -398,8 +398,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_streaming_glm
-List fit_streaming_glm(Function chunk_callback, int n_chunks, int p, int type, double tol, int maxit, int fam_code, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, Nullable<NumericVector> start, Nullable<NumericVector> fam_params, bool firth);
-RcppExport SEXP _fastglm_fit_streaming_glm(SEXP chunk_callbackSEXP, SEXP n_chunksSEXP, SEXP pSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP startSEXP, SEXP fam_paramsSEXP, SEXP firthSEXP) {
+List fit_streaming_glm(Function chunk_callback, int n_chunks, int p, int type, double tol, int maxit, int fam_code, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, Nullable<NumericVector> start, Nullable<NumericVector> fam_params, bool firth, Nullable<NumericVector> column_maxabs);
+RcppExport SEXP _fastglm_fit_streaming_glm(SEXP chunk_callbackSEXP, SEXP n_chunksSEXP, SEXP pSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP startSEXP, SEXP fam_paramsSEXP, SEXP firthSEXP, SEXP column_maxabsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -419,7 +419,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type start(startSEXP);
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type fam_params(fam_paramsSEXP);
     Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_streaming_glm(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth));
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type column_maxabs(column_maxabsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_streaming_glm(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -464,7 +465,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_streaming_qr_eta", (DL_FUNC) &_fastglm_streaming_qr_eta, 3},
     {"_fastglm_streaming_qr_update", (DL_FUNC) &_fastglm_streaming_qr_update, 4},
     {"_fastglm_streaming_qr_finish", (DL_FUNC) &_fastglm_streaming_qr_finish, 1},
-    {"_fastglm_fit_streaming_glm", (DL_FUNC) &_fastglm_fit_streaming_glm, 16},
+    {"_fastglm_fit_streaming_glm", (DL_FUNC) &_fastglm_fit_streaming_glm, 17},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
     {"colmax_big",         (DL_FUNC) &colmax_big,         1},
     {"colmin_big",         (DL_FUNC) &colmin_big,         1},

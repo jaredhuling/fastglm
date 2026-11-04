@@ -90,6 +90,7 @@ print.fastglm_diagnostics <- function(x,digits=max(3L,getOption("digits")-3L),..
         empty="no coefficients to estimate",x$solver))
     .fastglm_print_field("Solver fallback",x[["fallback"]])
     if(length(x$fallbacks) && x$fallbacks>0) .fastglm_print_field("Solver fallbacks",x$fallbacks)
+    if(length(x$step.reductions) && x$step.reductions>0) .fastglm_print_field("Reduced scoring steps",x$step.reductions)
     .fastglm_print_field("Estimable coefficients (rank)",x$rank)
     .fastglm_print_field("Aliased coefficients",x$aliased)
     .fastglm_print_field("Boundary flag",if(isTRUE(x$boundary)) "yes" else "no")
@@ -239,6 +240,7 @@ print.fastglm_test <- function(x,digits=max(3L,getOption("digits")-3L),...) {
         ML="maximum likelihood",meanBR="mean bias reduction",x$null.estimation))
     .fastglm_print_field("Estimation",x$estimation)
     .fastglm_print_field("Covariance",x$covariance.type)
+    .fastglm_print_field("Component",x$component)
     if(!is.null(x$frequency)) .fastglm_print_field("Sample",paste0(format(x$frequency,trim=TRUE),
         " observations represented by ",x$observations," rows"))
     tab <- as.data.frame(x,details=TRUE)

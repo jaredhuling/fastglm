@@ -31,6 +31,10 @@ fits and older objects without stored adjusted scores report them as
 unavailable rather than computing an additional covariance matrix.
 QR source fits also report their remaining predictor change, joint
 information-scaled score per positive-weight row, and dispersion checks.
+For binomial probit and complementary log-log bias reduction,
+\code{step.reductions} counts scoring updates reduced to limit their largest
+fitted linear-predictor change to one. A reduced step alone cannot establish
+convergence. These safeguards do not guarantee convergence for every design.
 Ordinal diagnostics report scores in the effective category model after
 any empty interior categories have been collapsed; their standardized
 score is calculated in the centered/scaled fitting coordinates.

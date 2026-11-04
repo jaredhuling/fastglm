@@ -9,25 +9,32 @@ fastglm_wald_test(
   terms = NULL,
   contrast = NULL,
   null = 0,
-  vcov. = NULL
+  vcov. = NULL,
+  component = "all"
 )
 }
 \arguments{
-\item{object}{a fastglm GLM (including negative-binomial and streaming GLMs)
-or \code{fastglm_ordinal} fit. Two-component and truncated models are not yet
-supported by this interface.}
+\item{object}{a fastglm GLM (including negative-binomial and streaming GLMs),
+ordinal, truncated-count, hurdle, zero-inflated, or two-part fit.}
 
 \item{terms}{formula terms, or coefficient names for a matrix fit, to test
 jointly. The default selects all formula terms or all matrix coefficients
 except a coefficient named \code{(Intercept)}. For ordinal models it selects
 location slopes. Formula terms refer to their fitted design columns;
 a main-effect test with interactions depends on their coding and reference
-values and is not a test of every effect involving that variable.}
+values and is not a test of every effect involving that variable.
+For two-component models, names select complete terms in the selected
+component(s), or unprefixed coefficient names for matrix fits. With
+\code{component="all"}, each term is tested wherever it occurs. A term must
+occur in at least one selected component.}
 
 \item{contrast}{numeric vector or matrix specifying linear combinations.
 Named columns may select a subset of coefficients in any order; omitted
 columns have weight zero. Unnamed contrasts must follow \code{coef(object)}.
-Each matrix row specifies one hypothesis. Use either \code{terms} or \code{contrast}.}
+Each matrix row specifies one hypothesis. Use either \code{terms} or \code{contrast}.
+For two-component models, named contrasts use the \code{count_} and \code{zero_}
+prefixes returned by \code{coef(object)}. A contrast spanning components requires
+\code{component="all"}; its interpretation depends on their coefficient scales.}
 
 \item{null}{hypothesized value for each selected coefficient or contrast;
 a scalar is repeated across hypotheses. The default is zero.}
@@ -36,6 +43,13 @@ a scalar is repeated across hypotheses. The default is zero.}
 \code{object} returning one. The default uses \code{vcov(object)}. A named matrix
 must contain all coefficient names; its order may differ. Robust or
 cluster covariance can be supplied from \code{\link[=fastglm_vcov]{fastglm_vcov()}}.}
+
+\item{component}{\code{"all"} (default), \code{"count"}, or \code{"zero"} for two-component
+models. Two-part fits also accept \code{"positive"} for the positive-amount
+component and \code{"binary"} for the positive-outcome probability. The zero
+component describes the probability of a positive outcome for hurdle and
+two-part fits, and structural-zero probability for zero-inflated fits.
+Single-component and ordinal fits use \code{"all"}.}
 }
 \value{
 A \code{fastglm_wald_test} inheriting from \code{fastglm_test} and \code{htest},
@@ -44,8 +58,8 @@ standard errors, null values, and the contrast matrix and its covariance.
 Print the object directly or use \code{as.data.frame()} for numeric extraction.
 }
 \description{
-Tests specified linear combinations of coefficients in a fitted GLM or
-ordinal model. A factor or interaction can be tested as a complete formula
+Tests specified linear combinations of regression coefficients in a fitted
+model. A factor or interaction can be tested as a complete formula
 term, and a named contrast can compare coefficients without refitting.
 }
 \details{
@@ -66,6 +80,17 @@ missing or numerically singular contrast covariance return an unavailable
 result with an explanation. Degrees of freedom are not reduced silently.
 For aliased GLM coefficients, estimability is checked against the retained
 dependence between design columns. No generalized inverse is used.
+Tests concern regression coefficients, excluding dispersion or size
+parameters. An estimated negative-binomial size at its numerical boundary
+returns an unavailable result. Truncated, hurdle, and zero-inflated fits
+use regression covariance accounting for estimated size in regular fits.
+For \code{\link[=fastglm_nb]{fastglm_nb()}}, the default retains its conventional fixed-size GLM
+covariance; to use joint observed information, supply the regression block
+of \code{vcov(object, full=TRUE)}. Supplied covariance must contain all regression coefficients,
+including both components when applicable, even for a selected-component test.
+Cross-component covariance is retained; it is not replaced with independent
+component calculations. The covariance restrictions of \code{\link[=fastglm_vcov]{fastglm_vcov()}}
+continue to apply, including its restriction on adjusted two-part fits.
 }
 \examples{
 fit <- fastglm_ordinal(Sat ~ Infl + Type + Cont, MASS::housing,

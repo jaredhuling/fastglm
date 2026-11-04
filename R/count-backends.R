@@ -416,17 +416,19 @@
 
 .count_backend_schema <- function(reader) {
     schema <- reader$source$schema
-    if(is.null(schema)) return(list(terms=NULL,levels=NULL,contrasts=NULL,formula=NULL))
+    if(is.null(schema)) return(list(terms=NULL,levels=NULL,contrasts=NULL,formula=NULL,assign=NULL))
     if(inherits(schema$terms,"terms")) {
         terms <- list(count=schema$terms,zero=schema$terms)
         contrasts <- list(count=schema$contrasts,zero=schema$contrasts)
         levels <- schema$xlevels
+        assignment <- list(count=schema$assign,zero=schema$assign)
     } else {
         terms <- schema$terms;contrasts <- schema$contrasts
         levels <- c(schema$xlevels$count,schema$xlevels$zero)
         levels <- levels[!duplicated(names(levels))]
+        assignment <- schema$assign
     }
-    list(terms=terms,levels=levels,contrasts=contrasts,formula=schema$formula)
+    list(terms=terms,levels=levels,contrasts=contrasts,formula=schema$formula,assign=assignment)
 }
 
 .count_backend_model <- function(reader,positive,binary,dist,link,controls,continuous=FALSE,firth=FALSE) {
