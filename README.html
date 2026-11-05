@@ -902,13 +902,14 @@ categories observed</td>
 <tr>
 <td align="left">Assess common slopes</td>
 <td align="left"><code>fastglm_po_test()</code> tests the restriction
-jointly or by term in common-slope or partial fits</td>
+jointly or by term in dense or streamed common-slope and partial
+fits</td>
 </tr>
 <tr>
 <td align="left">Assess fit and uncertainty</td>
-<td align="left">Residuals, prediction scores, and calibration; robust
-covariance for eligible dense or streamed fits; refitting bootstraps for
-retained common-slope fits</td>
+<td align="left">Prediction scores and calibration for dense or streamed
+fits; optional row-level boundary diagnostics; robust covariance for
+eligible fits; refitting bootstraps for retained common-slope fits</td>
 </tr>
 <tr>
 <td align="left">Repeat fits or read large datasets</td>
@@ -922,7 +923,10 @@ models from repeatable blocks, including mean bias reduction</td>
 <p>Dense partial fits support robust covariance, marginal effects, ML
 profiles, and constrained score tests, including equality of selected
 slopes across thresholds. Streamed fits provide model-based or robust
-covariance and Wald inference. Profile intervals and constrained
+covariance, Wald inference, common-slope tests, prediction scores, and
+calibration by rereading their source.
+<code>fastglm_diagnostics(fit,boundary=TRUE)</code> locates rows near
+probability boundaries. Profile intervals and general constrained
 coefficient-score tests require retained data. Empty-category behavior
 also depends on the model and estimation method. The <a href="vignettes/ordinal-fastglm.Rmd">ordinal vignette</a> begins with
 the full support guide and develops examples for each workflow.</p>

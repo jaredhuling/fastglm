@@ -609,19 +609,23 @@ predict.fastglm_ordinal <- function(object,newdata=NULL,
 #' @export
 fitted.fastglm_ordinal <- function(object,...) predict(object,...)
 
-.ordinal_diagnostics <- function(object) {
+.ordinal_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
     out <- list(converged=object$converged,convergence.reason=object$convergence.reason,
         iterations=object$iterations,evaluations=object$evaluations,fallbacks=object$fallbacks,
         rank=object$rank,boundary=object$boundary,
         collapsed.categories=object$levels[object$collapsed.categories],
         score=object$effective$score,ordinary.score=object$effective$ordinary.score,
         score.type=if(object$firth) "mean-bias-reduced" else "ordinary",
-        score.coordinates="effective threshold and location parameters",
+        score.coordinates="effective threshold and slope parameters in reported predictor units",
+        raw.score.maximum=if(length(object$effective$score) && all(is.finite(object$effective$score)))
+            max(abs(object$effective$score)) else NA_real_,
+        standardized.score.coordinates="centered/scaled fitting parameters",
         standardized.score=object$scaled.score,remaining.predictor.step=object$predictor.step,
         information.rcond=object$information.rcond,
         minimum.log.probability=object$minimum.log.probability,
         last.rejected.evaluation=object$last.rejected.evaluation)
     if(inherits(object,"fastglm_ordinal_partial")) out$minimum.gap <- object$minimum.gap
+    if(boundary) out$boundary.details <- .ordinal_boundary_diagnostics(object,max.rows)
     out
 }
 

@@ -428,7 +428,8 @@
 #' Computes a common-slope test directly, without calculating
 #' prediction losses or calibration summaries. Print the result for a compact
 #' test table, or use `as.data.frame()` or `broom::tidy()` for reporting.
-#' @param object a `fastglm_ordinal` fit retaining its design and outcomes.
+#' @param object a `fastglm_ordinal` fit retaining its design and outcomes,
+#'   or an ordinal source fit with its original block reader.
 #'   Its original coefficient estimates are not used in the test. The requested
 #'   null is refitted and must converge, including if the original fit did not.
 #' @param terms formula terms, or named matrix columns, to test jointly.
@@ -493,6 +494,17 @@
 #'   conventions, and [fastglm-test-methods] for result extraction.
 #'   With `by.term=TRUE`, term-specific p-values are unadjusted for multiple
 #'   testing. The joint test remains the single test of all selected terms.
+#'
+#'   An ordinal source fit is tested on its original source when `newdata` and
+#'   `y` are omitted. The source is replayed for refitting and information
+#'   accumulation without collecting its design or outcomes. Recorded frequency
+#'   weights and offsets are used; overrides require explicit evaluation data.
+#'   Score tests retain the same null-estimation and term-selection conventions
+#'   as dense fits. Partial-model likelihood ratio tests fit the equivalent
+#'   reduced common-slope model and the full model by streamed ML. Memory is
+#'   bounded by one source block and coefficient-sized matrices, in addition to
+#'   the fitted source's existing block metadata. The reader must reproduce the
+#'   same observations on every pass, as required for source fitting itself.
 #' @references Kosmidis, I. (2014). Improved estimation in cumulative link
 #'   models. Journal of the Royal Statistical Society, Series B, 76, 169--196.
 #'   \doi{10.1111/rssb.12025}. The present meanBR option uses the ordinary
@@ -522,6 +534,15 @@ fastglm_po_test <- function(object,terms=NULL,null.estimation=c("ML","meanBR"),
     if(!is.logical(by.term) || length(by.term)!=1L || is.na(by.term))
         stop("'by.term' must be TRUE or FALSE",call.=FALSE)
     training <- is.null(newdata) && is.null(y)
+    if(training && inherits(object,"fastglm_ordinal_stream")) {
+        if(!is.null(weights) || !is.null(offset))
+            stop("original-source common-slope tests use recorded weights and offsets; supply explicit evaluation data to override them",call.=FALSE)
+        result <- .ordinal_stream_po_test(object,terms,control,null.estimation,by.term,method)
+        data.name <- paste(deparse(substitute(object)),collapse=" ")
+        if(by.term) result$tests <- lapply(result$tests,function(z) {z$data.name <- data.name;z})
+        else result$data.name <- data.name
+        return(result)
+    }
     if(!is.null(newdata) && is.null(y)) stop("supply assessment outcomes 'y' with 'newdata'",call.=FALSE)
     if(is.null(y)) y <- object$y
     if(training && is.null(weights)) weights <- object$weights

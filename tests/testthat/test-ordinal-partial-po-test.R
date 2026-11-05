@@ -184,7 +184,7 @@ test_that("partial common-slope tests retain exclusions and explicit unavailable
     expect_true(fastglm_po_test(separated,null.estimation="meanBR")$available)
 })
 
-test_that("partial source tests require explicit evaluation data and common API stays unchanged", {
+test_that("partial source tests retain explicit evaluation data and common API conventions", {
     d <- partial_po_fixture();X <- as.matrix(d[c("x","z")])
     counts <- as.matrix(d[c("low","middle","high","top")])
     source <- fastglm_source(function(k) {
@@ -193,7 +193,7 @@ test_that("partial source tests require explicit evaluation data and common API 
     },3L)
     stream <- fastglm_ordinal_streaming(source,nonparallel="z")
     dense <- fastglm_ordinal(X,counts,weights=d$w,offset=d$off,nonparallel="z")
-    expect_error(fastglm_po_test(stream),"explicit evaluation data")
+    expect_equal(fastglm_po_test(stream)$statistic,fastglm_po_test(dense)$statistic,tolerance=1e-8)
     explicit <- fastglm_po_test(stream,newdata=X,y=counts,weights=d$w,offset=d$off)
     expect_equal(explicit$statistic,fastglm_po_test(dense)$statistic,tolerance=1e-10)
     retained <- c(2:10,15:24,29:36)
@@ -215,7 +215,7 @@ test_that("partial source tests require explicit evaluation data and common API 
     expect_equal(fastglm_po_test(common),fastglm_po_test(common,method="score"))
     expect_error(fastglm_po_test(common,method="lr"),"requires a partial ordinal")
     common.source <- fastglm_ordinal_streaming(source)
-    expect_error(fastglm_po_test(common.source),"explicit evaluation data")
+    expect_equal(fastglm_po_test(common.source)$statistic,fastglm_po_test(common)$statistic,tolerance=1e-8)
     common.evaluation <- fastglm_ordinal(X[retained,,drop=FALSE],evaluation,
         weights=d$w[retained],offset=new.offset)
     supplied <- fastglm_po_test(common.source,newdata=X[retained,,drop=FALSE],y=evaluation,

@@ -18,7 +18,8 @@ fastglm_po_test(
 )
 }
 \arguments{
-\item{object}{a \code{fastglm_ordinal} fit retaining its design and outcomes.
+\item{object}{a \code{fastglm_ordinal} fit retaining its design and outcomes,
+or an ordinal source fit with its original block reader.
 Its original coefficient estimates are not used in the test. The requested
 null is refitted and must converge, including if the original fit did not.}
 
@@ -103,6 +104,17 @@ See \code{\link[=fastglm_ordinal_assess]{fastglm_ordinal_assess()}} for the hypo
 conventions, and \link{fastglm-test-methods} for result extraction.
 With \code{by.term=TRUE}, term-specific p-values are unadjusted for multiple
 testing. The joint test remains the single test of all selected terms.
+
+An ordinal source fit is tested on its original source when \code{newdata} and
+\code{y} are omitted. The source is replayed for refitting and information
+accumulation without collecting its design or outcomes. Recorded frequency
+weights and offsets are used; overrides require explicit evaluation data.
+Score tests retain the same null-estimation and term-selection conventions
+as dense fits. Partial-model likelihood ratio tests fit the equivalent
+reduced common-slope model and the full model by streamed ML. Memory is
+bounded by one source block and coefficient-sized matrices, in addition to
+the fitted source's existing block metadata. The reader must reproduce the
+same observations on every pass, as required for source fitting itself.
 }
 \examples{
 fit <- fastglm_ordinal(Sat ~ Infl + Type + Cont, MASS::housing,

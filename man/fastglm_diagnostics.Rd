@@ -4,10 +4,18 @@
 \alias{fastglm_diagnostics}
 \title{Numerical diagnostics for a fitted GLM}
 \usage{
-fastglm_diagnostics(object)
+fastglm_diagnostics(object, boundary = FALSE, max.rows = 5L)
 }
 \arguments{
 \item{object}{a fitted fastglm GLM or ordinal model.}
+
+\item{boundary}{for ordinal models, also locate the positive-frequency rows
+with the smallest category probabilities and cumulative-predictor gaps.
+This reads the retained observations or makes one additional source pass.
+The default uses only stored ordinal diagnostics.}
+
+\item{max.rows}{maximum number of row/category combinations to retain in
+each boundary table when \code{boundary=TRUE}.}
 }
 \value{
 A \code{fastglm_diagnostics} list with a compact printed summary.
@@ -41,6 +49,15 @@ to reconstruct the estimating equations.
 Ordinal diagnostics report scores in the effective category model after
 any empty interior categories have been collapsed; their standardized
 score is calculated in the centered/scaled fitting coordinates.
+\code{raw.score.maximum} is the largest absolute score in the effective model's
+reported predictor units. Its magnitude therefore depends on predictor
+scaling. With \code{boundary=TRUE}, \code{boundary.details} identifies the smallest
+fitted probabilities and gaps, their row and category labels, observed
+frequencies, offsets, and original predictor values. A displayed zero
+probability can be numerical underflow; its log probability remains
+informative. These observations help diagnose a fit but do not prove
+that an interior solution is absent. Source rows and values must remain
+unchanged since fitting. Unavailable row diagnostics retain a reason.
 }
 \description{
 Reports whether the iteration converged, which coefficients can be estimated

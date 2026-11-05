@@ -71,8 +71,8 @@ test_that("source predictions and residuals agree and support block callbacks", 
     expect_error(vcov(fit,type="HC0"),"every declared category")
     expect_error(fastglm_bootstrap(fit,R=2),"not yet available")
     expect_error(fastglm_average(fit),"source")
-    expect_error(fastglm_ordinal_assess(fit),"source")
-    expect_error(fastglm_po_test(fit),"source")
+    expect_equal(fastglm_ordinal_assess(fit)$scores,fastglm_ordinal_assess(ref)$scores,tolerance=1e-8)
+    expect_equal(fastglm_po_test(fit)$reason,"empty_categories")
     expect_error(fastglm_marginal_effects(fit,"InflMedium"),"source")
     if(requireNamespace("broom",quietly=TRUE)) {
         expect_error(broom::augment(fit),"do not retain")
