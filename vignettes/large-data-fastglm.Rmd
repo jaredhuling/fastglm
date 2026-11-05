@@ -186,7 +186,7 @@ Residuals and frequency weights can also be processed through a block destinatio
 
 Peak process memory also includes temporary allocations and memory managed by R. Retaining a smaller design therefore does not guarantee a lower peak for every dataset size. Streaming can use more peak memory than dense fitting for moderate datasets and requires additional time to reread the observations. Its practical benefit should be assessed at the intended data size and with the intended reader, especially when the complete design would be too large to retain.
 
-The fitted source retains neither the complete design nor the response. Profile intervals, constrained coefficient-score inference, refitting bootstraps, and assessment over the original source require retained observations. Prediction-based summaries and common-slope tests can instead use explicitly supplied evaluation data. The source must continue to return the same rows and values whenever it is reread.
+The fitted source retains neither the complete design nor the response. Prediction scores, calibration, common-slope tests, and robust covariance can use the original source directly. Profile intervals, general constrained coefficient-score inference, and refitting bootstraps require retained observations. Average prediction contrasts can use explicitly supplied evaluation data. The source must continue to return the same rows and values whenever it is reread.
 
 ## Robust covariance for ordered outcomes
 
@@ -221,6 +221,47 @@ summary(ordinal_cluster_fit,vcov.=V_ordinal_cluster)
 The cluster function returns one identifier for each original row in the requested block. A label has the same meaning throughout the source; factor labels are matched by their values rather than their block-specific integer codes. All individuals represented by a frequency row must belong to its stated cluster. The uncertainty calculation requires sufficiently many independent clusters and an identifiable interior model. It does not add cluster-specific model parameters.
 
 Fitting, covariance calculation, and prediction must use unchanged source rows and values. Clustered covariance retains one score vector per distinct group, so its memory requirement grows with the number of groups and coefficients even though the complete design is not retained.
+
+## Assessment and testing without collecting the observations {#ordinal-source-assessment}
+
+Prediction losses and calibration summarize how the fitted category probabilities relate to observed outcomes. These summaries require only accumulated totals, so `fastglm_ordinal_assess()` can compute them in one source pass. The default result contains the overall scores and calibration tables; it does not retain an entry for every input row.
+
+```{r ordinal-source-assessment}
+ordinal_assessment <- fastglm_ordinal_assess(ordinal_partial_stream,bins=5)
+ordinal_assessment
+```
+
+These calculations use the fitting outcomes and therefore describe apparent performance. Separate evaluation data can still be supplied explicitly. To inspect individual losses, `keep.rows=TRUE` collects the row-score table in memory. Alternatively, a function supplied as `sink` receives each original block's row scores. This function is the output destination: it can write the result and release the block before the next is read.
+
+```{r ordinal-source-assessment-output}
+score_directory <- tempfile("ordinal-scores-")
+dir.create(score_directory)
+save_scores <- function(value,k)
+    saveRDS(value,file.path(score_directory,paste0("block-",k,".rds")))
+fastglm_ordinal_assess(ordinal_partial_stream,sink=save_scores)
+```
+
+The saved tables include global row numbers, represented frequencies, prediction losses, and any exclusion reason. Retaining all row scores requires storage proportional to the number of observations; saving blocks to files moves that storage out of the fitted R object. The compact assessment summaries themselves depend on the number of outcome categories and calibration bins.
+
+```{r ordinal-source-assessment-cleanup, include=FALSE}
+unlink(score_directory,recursive=TRUE)
+```
+
+Common-slope tests also operate on the original source. For the partial housing model, the following test asks whether the threshold-specific contact slopes can be replaced by one common contact effect:
+
+```{r ordinal-source-po-test}
+fastglm_po_test(ordinal_partial_stream,terms="Cont")
+```
+
+The default score test refits the null by maximum likelihood. `null.estimation="meanBR"` requests the established ordinary-score calculation at a bias-reduced null estimate, and `method="lr"` compares full and restricted partial models fitted by maximum likelihood. The [ordinal guide](ordinal-fastglm.html#ordinal-partial-comparisons) explains their hypotheses and first-order interpretation. These tests need additional source passes because they refit models and calculate information across all blocks. No observation-level design or outcome array is collected.
+
+An optional diagnostic pass can locate rows with the smallest fitted probabilities or cumulative-predictor gaps:
+
+```{r ordinal-source-boundary-diagnostics}
+fastglm_diagnostics(ordinal_partial_stream,boundary=TRUE,max.rows=3)
+```
+
+The printed rows include their source block and observed category frequency. Original predictor values remain available in `boundary.details`. Only a bounded number of extreme rows are retained, and small probabilities alone do not establish that a bias-reduced solution is absent.
 
 # Parquet and database sources
 

@@ -1,0 +1,119 @@
+Conditional local boundary analysis for the unchanged mean-bias equations
+2026-11-04
+
+Question and assumptions
+------------------------
+The fixed-gap study asks whether a stalled fit is approaching a genuine root
+or a boundary point with a nonzero normal equation. This note derives a local
+extension of the existing adjusted-score vector. It supplies no global
+root-existence theorem and defines no replacement estimate.
+
+Let theta be the original or affinely equivalent working coefficient vector.
+At one input pattern, suppose a single intermediate category has probability
+p(theta) = G(t + delta) - G(t), where delta = a' theta, t = x' theta - offset,
+and the upper threshold's design vector is x + a. Its positive frequency total
+is m, and its observed category count is zero. At the boundary point theta_0,
+delta = 0 and t is finite. All other category probabilities, including those
+at other positive-frequency input rows, remain positive. Assume G is smooth,
+g = G' is positive, and the expected information J formed by excluding only
+this vanishing category's contribution is positive definite at theta_0.
+Logit and complementary log-log links satisfy the stated smoothness and
+positive-density conditions at finite t.
+
+Smooth inverse and adjusted score
+---------------------------------
+Write v = grad(p), H = J^(-1). At positive delta the full information and its
+inverse satisfy the exact rank-one identities
+
+ I = J + (m/p) v v',
+ V = H - H v v' H / (p/m + v' H v).
+
+At delta = 0, v = g a, so the inverse has the continuous extension
+
+ V_0 = H - H a a' H / (a' H a),      V_0 a = 0.
+
+All positive-category terms in the adjusted score are smooth at theta_0.
+For the vanishing category the ordinary score contribution is zero because
+its observed count is zero. Its adjusted count is
+
+ c_delta = (m/2) [g'(t + delta) (x+a)' V (x+a) - g'(t) x' V x].
+
+Here g' = G'' and g'' = G'''. Since V_0 a = 0, c_delta vanishes on the
+boundary. Thus both p and c_delta have a factor delta locally, and c_delta/p
+has a continuous extension. The apparently singular score contribution
+v c_delta/p therefore also has a continuous extension. This uses a single
+collapsing category; simultaneous distinct boundaries require another analysis.
+
+An explicit limit useful for independent checking
+------------------------------------------------
+Let u = H a/(a' H a), s = x' V_0 x. For any smooth path with delta itself as
+the path coordinate, differentiate V v = H v (p/m)/(p/m + v' H v). At zero,
+v' along the path equals g' x plus a multiple of a. Consequently
+
+ (dV/d delta) a = u/(m g) - (g'/g) V_0 x.
+
+Differentiating c_delta gives
+
+ C = lim c_delta/delta
+   = [g'/(2g)] (2 x' u + 1)
+     + (m/2) [g'' - 2(g')^2/g] s.
+
+The vanishing category's limiting adjusted-score contribution is a C. Add this
+to the ordinary and adjusted contributions of all positive categories, using
+V_0 in their count corrections, to obtain the full continuous boundary score.
+Keeping the rotation of grad(p) is essential: omitting it would lose the
+-2(g')^2/g term and give the wrong limiting equation.
+
+On a branch with exactly zero tangent score, write U* = lambda(delta) a. If
+lambda approaches a nonzero finite value, I has leading term (m g/delta) a a'.
+Every nonzero score component divided by sqrt(I_jj) is then O(sqrt(delta));
+components with a_j = 0 have zero score. Also V U* = O(delta), by the inverse
+expansion above. Thus those two numerical quantities can decrease together
+without U* tending to zero. This statement does not remove the fitter's
+additional conditioning check or establish a false-convergence event in it.
+
+For checking derivatives, logit has
+g' = g(1-2G), g'' = g[(1-2G)^2-2g]. Complementary log-log has
+g' = g(1-exp(t)), g'' = g[1-3exp(t)+exp(2t)].
+
+What this does and does not establish
+------------------------------------
+Under the assumptions above the full adjusted score extends continuously to
+theta_0. If that exact limiting vector is nonzero, a sufficiently small
+neighborhood of theta_0 contains no interior adjusted-score root. In particular,
+a nonzero limiting normal component suffices. This is a local conditional
+conclusion from continuity. It does not exclude another boundary point or any
+root elsewhere in the admissible parameter domain.
+
+The study numerically evaluates this limit at the two projected final points.
+Exact rational checks on their binary64 inputs verify one collapsed gap, all
+other positive gaps, zero observed frequency in the collapsed category, and a
+full-rank set of three other varying-predictor patterns. The latter gives
+positive-definite J: those three noncollapsed patterns alone identify all nine
+fully varying coefficients. The score values still use 80-decimal arithmetic,
+without a certified interval enclosure, and the projected points are numerical
+approximations to the branch limits. Therefore no new root-absence certificate
+is added to production.
+
+The remaining global obligation is a no-zero result for U*(theta) over the
+entire open polyhedron of strictly ordered observed-row cumulative predictors,
+or an independently verified interior root. Neither finite-grid continuation
+nor failed starts establishes it. Concavity of the ordinary log likelihood is
+not a substitute: the full mean-bias adjustment need not be the gradient of a
+scalar penalty, and adjusted counts can be negative.
+
+Source and attribution
+----------------------
+The original global mean-bias equations are established: Kosmidis (2014),
+Improved estimation in cumulative link models, JRSS B 76, 169-196,
+DOI 10.1111/rssb.12025, equations (6)-(9), pp. 174-175. Section 5.1 explains
+the adjusted-count iteration and its limitations. Section 12, pp. 193-194,
+describes finiteness as supported by studied examples; it supplies no universal
+interior-root theorem for this partial model. These portions of the cached
+published full text were read again for this pass.
+
+The rank-one inverse identity and the continuity argument above are direct
+linear algebra and calculus specialized to those established equations. No
+novelty claim or broader literature-priority claim is made. Primary PDF:
+https://wrap.warwick.ac.uk/id/eprint/98828/7/WRAP-improved-estimation-cumulative-link-models-Kosmidis-2014.pdf
+SHA256 dd66691df64cc60ec764460dfff70f426195e69c6a749a6c434a5f206c9776e2

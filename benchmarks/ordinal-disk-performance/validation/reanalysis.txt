@@ -1,0 +1,5 @@
+Portable saved-record reanalysis passed.
+No fitting, profiling, or timing code was executed.
+All six derived tables/objects reproduced byte-for-byte.
+The report reproduced after replacing only its displayed input-directory line.
+Temporary replay: /private/tmp/fastglm-ordinal-disk-replay-1641844cf1ece/ordinal-disk-performance

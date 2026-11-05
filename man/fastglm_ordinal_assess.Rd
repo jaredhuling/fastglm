@@ -18,7 +18,9 @@ fastglm_ordinal_assess(
   po.test = c("none", "score"),
   po.terms = NULL,
   po.test.control = list(),
-  po.estimation = c("ML", "meanBR")
+  po.estimation = c("ML", "meanBR"),
+  keep.rows = NULL,
+  sink = NULL
 )
 
 \method{print}{fastglm_ordinal_assessment}(x, digits = max(3L, getOption("digits") - 3L), ...)
@@ -32,7 +34,8 @@ fastglm_ordinal_assess(
 
 \item{y}{ordered outcomes, category labels, numeric codes in the fitted
 category order, or a matrix of category counts. Required with
-\code{newdata}; otherwise defaults to the retained fitting response.
+\code{newdata}; otherwise defaults to the retained fitting response or
+rereads the original response of an ordinal source fit.
 Named count columns are aligned with the fitted category labels.}
 
 \item{weights}{frequency weights. Defaults to the fitting weights only when
@@ -70,6 +73,16 @@ for the requested null refit; defaults are \code{1e-10} and \code{500}.}
 score-test null fit. See \code{\link{fastglm_po_test}} for the interpretation
 and limitations of the mean-bias-reduced alternative.}
 
+\item{keep.rows}{retain the individual row-score table. The default,
+\code{NULL}, retains it for dense or explicitly supplied evaluation data
+and omits it when rereading a fitted source. Retaining source rows requires
+memory proportional to the number of observations.}
+
+\item{sink}{optional function of \code{(value, chunk_index)} receiving a
+data frame of row scores for each original source block. For example,
+this function can write each block to a file. Its return value is ignored.
+It is used only when assessing the original fitted source.}
+
 \item{x}{an ordinal assessment object.}
 
 \item{digits}{number of significant digits used for printing.}
@@ -86,7 +99,8 @@ are not simultaneous intervals or tests of differences between thresholds.}
 \value{
 An object of class \code{fastglm_ordinal_assessment}, containing
   \code{scores}, the overall frequency-weighted losses; \code{rows}, individual
-  row averages and exclusions; \code{calibration}, predicted and observed
+  row averages and exclusions (\code{NULL} when \code{keep.rows=FALSE});
+  \code{calibration}, predicted and observed
   cumulative probabilities by threshold and bin; and \code{proportional.odds},
   the optional slope comparison table. \code{proportional.odds.test} is
   \code{NULL} unless requested; otherwise it records \code{statistic},
@@ -166,7 +180,7 @@ The ranked probability score (\code{rps}) is
   p-value does not establish proportional odds. The test is not a robust,
   cluster-adjusted, or higher-order bias-corrected test.
 
-  The score test currently requires a dense design, at least three declared
+  The score test uses dense data or a repeatable source, at least three declared
   categories, at least one tested predictor, and positive frequency in every
   category. Empty categories, deficient rank, failed null fits, and
   unavailable information produce missing statistics and p-values with an
@@ -181,6 +195,18 @@ The ranked probability score (\code{rps}) is
   comparison fits one model per threshold without expanding frequency rows.
   The score test also processes frequencies without expanding observations;
   its information matrix grows with the predictor and category dimensions.
+
+  For an ordinal source fit with no supplied evaluation data, scoring and
+  calibration reread the recorded source once. The same frequency, offset,
+  category, and prediction calculations as dense assessment are used.
+  The source must return unchanged rows and values. Weights and offsets
+  cannot be replaced in this mode. Summary storage depends on the number of
+  categories and bins; row calculations use the current source block.
+  \code{keep.rows=TRUE} collects the row table, while \code{sink} can save
+  it block by block. Source assessment describes apparent performance on
+  the fitting outcomes. The optional common-slope score test requires
+  additional source passes for refitting and information accumulation.
+  Descriptive binary-slope comparisons still require explicit evaluation data.
 }
 \references{
 Epstein, E. S. (1969). A scoring system for probability forecasts

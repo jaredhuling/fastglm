@@ -143,7 +143,8 @@
 #' @param newdata prediction data frame or matrix, as in \code{predict}.
 #' @param y ordered outcomes, category labels, numeric codes in the fitted
 #'   category order, or a matrix of category counts. Required with
-#'   \code{newdata}; otherwise defaults to the retained fitting response.
+#'   \code{newdata}; otherwise defaults to the retained fitting response or
+#'   rereads the original response of an ordinal source fit.
 #'   Named count columns are aligned with the fitted category labels.
 #' @param weights frequency weights. Defaults to the fitting weights only when
 #'   both \code{newdata} and \code{y} are omitted; otherwise defaults to one.
@@ -171,6 +172,14 @@
 #' @param po.estimation \code{"ML"} (default) or \code{"meanBR"} for the
 #'   score-test null fit. See \code{\link{fastglm_po_test}} for the interpretation
 #'   and limitations of the mean-bias-reduced alternative.
+#' @param keep.rows retain the individual row-score table. The default,
+#'   \code{NULL}, retains it for dense or explicitly supplied evaluation data
+#'   and omits it when rereading a fitted source. Retaining source rows requires
+#'   memory proportional to the number of observations.
+#' @param sink optional function of \code{(value, chunk_index)} receiving a
+#'   data frame of row scores for each original source block. For example,
+#'   this function can write each block to a file. Its return value is ignored.
+#'   It is used only when assessing the original fitted source.
 #' @details The ranked probability score (\code{rps}) is
 #'   \eqn{\sum_{j=1}^{K-1}\{F_j-I(Y\leq j)\}^2};
 #'   \code{rps_normalized} divides by \eqn{K-1}, and lies between zero and one.
@@ -235,7 +244,7 @@
 #'   p-value does not establish proportional odds. The test is not a robust,
 #'   cluster-adjusted, or higher-order bias-corrected test.
 #'
-#'   The score test currently requires a dense design, at least three declared
+#'   The score test uses dense data or a repeatable source, at least three declared
 #'   categories, at least one tested predictor, and positive frequency in every
 #'   category. Empty categories, deficient rank, failed null fits, and
 #'   unavailable information produce missing statistics and p-values with an
@@ -250,9 +259,22 @@
 #'   comparison fits one model per threshold without expanding frequency rows.
 #'   The score test also processes frequencies without expanding observations;
 #'   its information matrix grows with the predictor and category dimensions.
+#'
+#'   For an ordinal source fit with no supplied evaluation data, scoring and
+#'   calibration reread the recorded source once. The same frequency, offset,
+#'   category, and prediction calculations as dense assessment are used.
+#'   The source must return unchanged rows and values. Weights and offsets
+#'   cannot be replaced in this mode. Summary storage depends on the number of
+#'   categories and bins; row calculations use the current source block.
+#'   \code{keep.rows=TRUE} collects the row table, while \code{sink} can save
+#'   it block by block. Source assessment describes apparent performance on
+#'   the fitting outcomes. The optional common-slope score test requires
+#'   additional source passes for refitting and information accumulation.
+#'   Descriptive binary-slope comparisons still require explicit evaluation data.
 #' @returns An object of class \code{fastglm_ordinal_assessment}, containing
 #'   \code{scores}, the overall frequency-weighted losses; \code{rows}, individual
-#'   row averages and exclusions; \code{calibration}, predicted and observed
+#'   row averages and exclusions (\code{NULL} when \code{keep.rows=FALSE});
+#'   \code{calibration}, predicted and observed
 #'   cumulative probabilities by threshold and bin; and \code{proportional.odds},
 #'   the optional slope comparison table. \code{proportional.odds.test} is
 #'   \code{NULL} unless requested; otherwise it records \code{statistic},
@@ -279,7 +301,7 @@
 fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
         offset=NULL,bins=10L,proportional.odds=FALSE,po.control=list(),
         po.test=c("none","score"),po.terms=NULL,po.test.control=list(),
-        po.estimation=c("ML","meanBR")) {
+        po.estimation=c("ML","meanBR"),keep.rows=NULL,sink=NULL) {
     if(!inherits(object,"fastglm_ordinal") || !isTRUE(object$converged))
         stop("ordinal assessment requires a converged fastglm_ordinal fit",call.=FALSE)
     if(!is.numeric(bins) || is.complex(bins) || length(bins)!=1L || !is.finite(bins) ||
@@ -294,6 +316,20 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
     if(po.test=="none" && (!is.null(po.terms) || length(po.test.control) || po.estimation!="ML"))
         stop("'po.terms', 'po.test.control', and 'po.estimation' require po.test = 'score'",call.=FALSE)
     training <- is.null(newdata) && is.null(y)
+    source <- training && inherits(object,"fastglm_ordinal_stream")
+    if(is.null(keep.rows)) keep.rows <- !source
+    if(!is.logical(keep.rows) || length(keep.rows)!=1L || is.na(keep.rows))
+        stop("'keep.rows' must be TRUE or FALSE",call.=FALSE)
+    if(!is.null(sink) && !is.function(sink)) stop("'sink' must be a function",call.=FALSE)
+    if(source) {
+        if(!is.null(weights) || !is.null(offset))
+            stop("source assessment uses its recorded block weights and offsets",call.=FALSE)
+        if(proportional.odds)
+            stop("the descriptive binary-slope comparison requires explicit evaluation data",call.=FALSE)
+        return(.ordinal_stream_assessment(object,bins,po.test,po.terms,po.test.control,
+            po.estimation,keep.rows,sink,match.call()))
+    }
+    if(!is.null(sink)) stop("'sink' is used when assessing the original fitted source",call.=FALSE)
     if(!is.null(newdata) && is.null(y))
         stop("supply assessment outcomes 'y' with 'newdata'",call.=FALSE)
     if(is.null(y)) y <- object$y
@@ -394,7 +430,7 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
     }
     excluded <- table(rows$exclusion[!rows$included])
     exclusions <- data.frame(reason=as.character(names(excluded)),rows=as.integer(excluded),stringsAsFactors=FALSE)
-    structure(list(scores=scores,rows=rows,calibration=calibration,proportional.odds=po,
+    structure(list(scores=scores,rows=if(keep.rows) rows else NULL,calibration=calibration,proportional.odds=po,
         proportional.odds.test=po.test.result,
         evaluation=if(training) "training" else "supplied outcomes",levels=object$levels,link=.ordinal_link(object),
         exclusions=exclusions,bins=bins,call=match.call()),class="fastglm_ordinal_assessment")
@@ -413,6 +449,13 @@ print.fastglm_ordinal_assessment <- function(x,digits=max(3L,getOption("digits")
     tab <- x$scores
     names(tab) <- c("Frequency","Log loss","Ranked probability score","Normalized RPS")
     cat("\nPrediction scores:\n"); .fastglm_print_table(tab,digits)
+    if(!is.null(x$source)) {
+        .fastglm_print_field("Source blocks",x$source$blocks)
+        .fastglm_print_field("Rows assessed",x$source$rows)
+        .fastglm_print_field("Row scores",if(x$source$rows.retained)
+            if(x$source$rows.delivered) "Retained and supplied to callback" else "Retained" else
+            if(x$source$rows.delivered) "Supplied to callback" else "Not retained; use keep.rows or sink to obtain them")
+    }
     if(nrow(x$exclusions)) {
         cat("\nExcluded rows:\n"); tab <- x$exclusions; tab$reason <- gsub("_"," ",tab$reason,fixed=TRUE)
         names(tab) <- c("Reason","Rows"); .fastglm_print_table(tab,digits)

@@ -1,0 +1,137 @@
+Ordinal row-kernel and disk-source performance
+Development protocol; baseline 2619731
+
+Scientific and computational scope
+----------------------------------
+This bounded development study targets repeated rowwise calculations and real
+source reads. The likelihood, full mean-bias adjustment, compensated cumulative
+predictors and direct gaps, ordering checks, and convergence rules remain fixed.
+No coverage calibration, tolerance relaxation, or matrix factorization change
+is proposed. Existing component evidence found information/adjustment work and
+source reads more consequential than factorization at large row counts.
+
+Candidate mechanism, frozen before timing
+-----------------------------------------
+partial_row previously evaluated each compensated adjacent gap once for
+validity, then again for each neighboring-gap identity. It also populated logit
+gap caches for probit/cloglog, whose probability kernel does not use them.
+The candidate evaluates each direct gap once, retains the previous gap in a
+scalar, and forms the same previous+current sum in the same order for logit.
+Logit caches are populated only for that link. No rows or fitted quantities
+are cached. The common-slope kernel and source scan schedule are unchanged.
+
+Correctness gate
+----------------
+The 66 new gap regressions passed against both baseline and candidate, including
+2^-20 gaps across six categories and exact coefficient-bit cancellation at
+covariates of magnitude 1e17. Combined targeted native, adjustment, and gap tests
+passed 354 expectations. All three links and ML/meanBR are included. Fresh
+component and whole-fit comparisons below check the complete available numeric
+state, convergence diagnostics/history, iterations, and evaluation/read counts.
+Bit-for-bit equality is the target on this platform; any discrepancy is retained
+and investigated before interpreting a gain. Independently compiled component
+wrappers must agree with their installed evaluator within normalized 5e-13.
+
+Component panel
+---------------
+Fresh cases (n,K,varying columns) are (40000,7,5), (120000,4,3), and
+(6000,12,10), with two common predictors, all links, ML/meanBR, and five complete
+repetitions. The wrapper only times installed-header operations: information,
+factorization, adjustment, score update, predictor scan, and feasibility scan.
+It does not redefine an estimator. Compile both wrappers before the timing
+window using components-build.R; components.R loads the saved wrapper without
+compilation. Component seeds differ from the disk data and previous studies.
+
+Disk panel and input contract
+-----------------------------
+generate.R writes uncompressed RDS blocks in a separate process, retaining at
+most one generated block. Fixed cases are:
+
+  regular: n=50000, K=5, varying=4, block=5000, all links and ML/meanBR;
+  large:   n=500000, K=5, varying=4, block=5000, logit ML/meanBR;
+  wide:    n=12000, K=10, varying=12, block=3000, all links and ML/meanBR.
+
+All have two common predictors. Common-slope logit ML/meanBR controls are added
+to the regular case. Each model is fitted from a true disk reader and from
+preallocated dense inputs read from exactly the same files. There are 32 cells,
+two package versions, and three repetitions in separate R processes (192 jobs).
+Version order alternates across cell/repetition pairs. The seed/configuration
+and exact input file hashes are retained. Positive grouped counts examine
+interior throughput; sparse boundary failures remain a separate diagnostic
+study. Counts are 1+floor(20*category probability), fixed before observing any
+performance result. Inputs can be regenerated from the versioned generator.
+
+The source callback closes over paths, file sizes, and scalar read counters,
+not a complete dataset. Dense inputs are preallocated rather than assembled
+from a retained list of all blocks. Resource collection uses isolated worker
+processes under /usr/bin/time (-l on macOS, -v on Linux). Record R elapsed/user/
+system time, process elapsed time, maximum resident set size, page faults and
+block I/O counters where available, callback/deserialization time, logical
+bytes requested, reads, and source passes. Timing includes input assembly and
+fitting, not post-fit assessment, covariance, or other analyses. Peak process
+RSS includes package startup, required input storage, temporary fitting work,
+and the returned fit; it is not a direct native-allocation measurement.
+
+Warm-cache limitation
+--------------------
+Generation and hash verification touch the input files, and repeated reads
+benefit from the operating-system cache. No cache flushing or physical-storage
+throughput claim is made. Logical bytes/read counts are distinct from actual
+device I/O counters, which may be zero with warm cache. Callback times use R's
+elapsed clock and can be noisy for individual short reads. One OpenMP/BLAS
+thread is used; CPU-heavy work elsewhere must pause during measurements.
+
+Evidence and decision
+---------------------
+Failures and negative gains remain in the complete grid. Operational worker
+failures stop the runner with its partial evidence intact; statistical failures
+remain ordinary records. Reports are regenerated from saved records, never from
+selected successful times. Preserve the candidate only if equations and failure
+behavior remain intact and the computational evidence supports its mechanism;
+small timing differences are inconclusive. No requirement that all links or
+dimensions improve is imposed. Input files may remain outside the repository;
+the generator, input manifest/hashes, complete results, resource records,
+configuration, and package/header provenance provide a portable regeneration
+path. Compiled caches are disposable build products, not the sole evidence.
+
+Execution amendment: resource collection
+----------------------------------------
+The first disk-v1 worker produced a converged fit and saved its result, but the
+restricted macOS /usr/bin/time -l process could not query sysctl kern.clockrate
+and returned exit 1 before reporting complete resources. The runner stopped as
+specified above. This partial attempt is retained and excluded from performance
+comparisons. The identical panel was restarted in fresh disk-v2 with permission
+for the resource query. Inputs, worker, native candidate, thread settings,
+configuration, and fitting tolerances were unchanged. The saved-result parser
+was corrected to recognize macOS page-fault/page-reclaim labels and now rejects
+missing resource records. Fitting time includes the default model covariance;
+the excluded post-fit work means additional covariance, assessment, or inference.
+
+Execution amendment: native build provenance
+--------------------------------------------
+All 192 disk-v2 jobs completed, but the recorded worker provenance revealed
+identical baseline/candidate shared-library MD5 hashes:
+1385fd58bb013fd4d6fd890c10d52d9f. Installed partial-header hashes differed:
+707e91ad321124ebe164148538702c09 versus b929eafd30b69560074f13039ef3aef7.
+This panel cannot establish the native candidate's performance effect. It is
+retained with an explicitly invalid report. The separately compiled component
+panels used their respective installed headers and remain applicable. The disk
+runner now rejects identical binaries before timing, saves their hashes in the
+run configuration, and the summarizer rejects identical worker binary hashes.
+A forced native rebuild and fresh panel are required. The statistical design,
+worker, inputs, candidate, thread settings, and fitting tolerances are unchanged.
+
+The forced rebuild compiled fit_ordinal_partial.cpp and
+fit_streaming_ordinal_partial.cpp. Its shared-library MD5 is
+491c3003cdbe1c3f22448b9ba7e994eb. The earlier 354 targeted expectations labelled
+as candidate checks had used the stale binary and therefore establish baseline
+regression behavior only. The rebuilt package requires a fresh correctness gate
+before the disk panel. The runner also verifies that installed candidate headers
+match the source under study, and analysis checks every worker against the
+binary/header hashes frozen in the run configuration.
+
+The rebuilt ordinal/display suite passed 4075 expectations, with no failures,
+errors, or warnings and two expected worker skips. Its log and result object
+are retained under validation/. All 192 disk-v3 workers then completed using
+the distinct rebuilt candidate binary. Only disk-v3 supports the reported
+whole-fit candidate comparison; disk-v1 and disk-v2 remain historical failures.

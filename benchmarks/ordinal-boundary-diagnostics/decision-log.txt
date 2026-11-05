@@ -1,0 +1,19 @@
+2026-11-04, after the fixed 12-attempt gap continuation
+
+At gaps from 1e-3 through 1e-8, the tangent equations are approximately solved,
+while the normal multiplier approaches -0.083395 for logit and -0.563186 for
+complementary log-log. The last attempt for each link stalls at the stricter
+prototype tangent target and is retained with its actual residual. The full
+adjusted-score equations are not solved at any of these constrained points.
+Independent 80-decimal evaluation confirms nonzero normal scores while the
+standardized scores decrease approximately as the square root of the gap.
+
+Next bounded check: derive the smooth boundary extension by separating the
+single diverging category-information term and applying the rank-one inverse
+identity. Evaluate this derived limit at the two projected final boundary
+points and compare with the existing grid. This adds two deterministic limit
+evaluations, no new root searches and no fitting changes. Check the assumptions
+that only one category collapses, its observed frequency is zero, and the
+remaining information is positive definite. A numerical nonzero limit is
+evidence for the local mechanism; a rigorous sign enclosure and a global
+root-exclusion theorem remain separate obligations.

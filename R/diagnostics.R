@@ -9,6 +9,12 @@
 #' need not vanish. The stored adjusted coefficient and dispersion scores instead
 #' assess the equations used to fit the model at the reported estimates.
 #' @param object a fitted fastglm GLM or ordinal model.
+#' @param boundary for ordinal models, also locate the positive-frequency rows
+#'   with the smallest category probabilities and cumulative-predictor gaps.
+#'   This reads the retained observations or makes one additional source pass.
+#'   The default uses only stored ordinal diagnostics.
+#' @param max.rows maximum number of row/category combinations to retain in
+#'   each boundary table when `boundary=TRUE`.
 #' @returns A `fastglm_diagnostics` list with a compact printed summary.
 #'   Existing components remain accessible with `$` or `[[` at full precision.
 #'   `as.data.frame()` returns one row, with list columns for coefficient scores,
@@ -40,11 +46,23 @@
 #'   Ordinal diagnostics report scores in the effective category model after
 #'   any empty interior categories have been collapsed; their standardized
 #'   score is calculated in the centered/scaled fitting coordinates.
+#'   `raw.score.maximum` is the largest absolute score in the effective model's
+#'   reported predictor units. Its magnitude therefore depends on predictor
+#'   scaling. With `boundary=TRUE`, `boundary.details` identifies the smallest
+#'   fitted probabilities and gaps, their row and category labels, observed
+#'   frequencies, offsets, and original predictor values. A displayed zero
+#'   probability can be numerical underflow; its log probability remains
+#'   informative. These observations help diagnose a fit but do not prove
+#'   that an interior solution is absent. Source rows and values must remain
+#'   unchanged since fitting. Unavailable row diagnostics retain a reason.
 #' @md
 #' @export
-fastglm_diagnostics <- function(object) {
+fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
+    if(!is.logical(boundary) || length(boundary)!=1L || is.na(boundary))
+        stop("'boundary' must be TRUE or FALSE",call.=FALSE)
     if(inherits(object,"fastglm_ordinal"))
-        return(structure(.ordinal_diagnostics(object),class="fastglm_diagnostics"))
+        return(structure(.ordinal_diagnostics(object,boundary,max.rows),class="fastglm_diagnostics"))
+    if(boundary) stop("boundary row diagnostics require an ordinal fit",call.=FALSE)
     b <- coef(object); good <- !is.na(b)
     score <- numeric(sum(good)); info <- numeric(sum(good))
     ordinary.available <- FALSE

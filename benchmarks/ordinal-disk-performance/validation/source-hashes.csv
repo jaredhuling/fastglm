@@ -1,0 +1,6 @@
+"file","md5"
+"inst/include/ordinal.h","3673aeb3fb2004eda360fcf8f6e928a9"
+"inst/include/ordinal_partial.h","b929eafd30b69560074f13039ef3aef7"
+"src/fit_ordinal_partial.cpp","0982138c6e7c0606f974c092e15a6079"
+"src/fit_streaming_ordinal_partial.cpp","17d614cb10690b4a950cbcbd64586fee"
+"tests/testthat/test-ordinal-native-gap-reuse.R","9c374cd41d2079cc5d9aae3b051272dd"

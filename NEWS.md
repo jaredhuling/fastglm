@@ -2,6 +2,23 @@
 
 ## Model interfaces and inference
 
+* Ordinal source fits now support prediction scores and cumulative calibration
+  directly through `fastglm_ordinal_assess()`. The default retains compact
+  summaries; `keep.rows` collects row scores and `sink` writes them blockwise.
+  Dense and streamed assessments use the same frequency and loss conventions.
+* Common-slope tests now operate directly on ordinal sources, including
+  complete terms, separate partial-model term nulls, ordinary score tests with
+  ML or reduced-null meanBR estimation, and partial-model ML likelihood ratios.
+  Refits and information calculations retain bounded observation-block storage.
+* Added optional ordinal boundary-row diagnostics through
+  `fastglm_diagnostics(boundary=TRUE)`. Tables identify the smallest category
+  probabilities and predictor gaps, observed frequencies, and source rows.
+  Raw and standardized scores are labeled by their parameter coordinates.
+  These diagnostics do not certify absence of an interior solution.
+* Partial ordinal evaluation computes each compensated adjacent predictor gap
+  once and limits logit-specific gap calculations to the logit link. The
+  probability equations, arithmetic order, and convergence criteria are retained.
+
 * Added a sufficient preflight check for saturated, fully varying logit models
   with mean bias reduction. An absent intermediate category within a predictor
   pattern can force a boundary solution despite all categories being observed

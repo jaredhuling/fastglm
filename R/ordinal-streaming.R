@@ -39,11 +39,13 @@
 #'   ordinary-score contributions as retained dense fits. Predictions, residuals, and
 #'   weights can be returned one block at a time through a callback. Collecting
 #'   their complete output requires memory proportional to the number of rows.
-#'   The fitted design and response are not retained. Procedures requiring
-#'   retained observations, including model assessment on the fitted source,
-#'   profile intervals, and refitting bootstrap calculations,
-#'   require a separate implementation; prediction-based summaries can instead
-#'   receive explicit evaluation data.
+#'   The fitted design and response are not retained. [fastglm_ordinal_assess()]
+#'   accumulates prediction scores and calibration over the original source;
+#'   [fastglm_po_test()] refits common-slope hypotheses through source passes.
+#'   Optional boundary rows from [fastglm_diagnostics()] also use one source pass.
+#'   Profile intervals, general constrained coefficient-score tests, and
+#'   refitting bootstrap calculations require retained observations.
+#'   Average prediction contrasts can receive explicit evaluation data.
 #' @returns A `fastglm_ordinal_stream` object inheriting from
 #'   `fastglm_ordinal`, with source and reader references, source pass counts,
 #'   and the usual ordinal estimates and convergence diagnostics.

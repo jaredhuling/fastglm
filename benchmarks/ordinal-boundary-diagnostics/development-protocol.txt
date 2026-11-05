@@ -1,0 +1,71 @@
+Ordinal boundary diagnostics and local adjusted-score branches
+Development protocol fixed on 2026-11-04 before the numerical continuation
+
+Purpose
+-------
+Make failed ordinal fits actionable without adding an automatic data pass to
+successful source fits. Separately, investigate the retained sparse logit and
+complementary log-log failures from the previous boundary study. The project
+requires useful diagnostics with memory bounded by input block size and the
+requested number of displayed rows. This is supporting numerical diagnosis,
+not a new estimator or an inference-calibration study.
+
+Frozen target and evidence
+-------------------------
+Use baseline 2619731 from the immutable installed library supplied for this
+milestone. Reuse the previous study's frozen 96-row input and final working
+coefficient vectors, explicitly as development evidence. Their original files
+remain unchanged. Preserve the cumulative multinomial likelihood, full-model
+mean-bias adjustment and original coefficient coordinates. Do not alter fitting
+tolerances, clip probabilities, add penalties or infer root absence from failed
+starts. The previous saturated-logit certificate remains separate and does not
+apply to this fixture.
+
+Mechanism-specific continuation
+-------------------------------
+The previously identified boundary is the first adjacent predictor gap at row
+12, where category 2 has zero observed frequency. Let a be that gap's constant
+gradient in working coefficient coordinates, so the gap is a' theta. Choose an
+orthonormal basis N for its null space. At each prescribed positive gap delta,
+solve N' U*(theta) = 0 subject to a' theta = delta. These are projections of the
+original full-model adjusted equations, including the full global information;
+they are not bias reduction for a reduced model or a new penalty objective.
+
+Use delta = 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8 for each of the two links.
+There are exactly 12 bounded Newton/double-dogleg attempts, each with at most
+50 iterations. Start at the previous fit projected to the first gap, then use
+the previous valid answer as the next start. Fix the equation scaling from the
+first gap's projected expected-information diagonal. Record failures, invalid
+evaluations, gap errors, raw normal/tangent scores, conditioning and every final
+coefficient vector. Do not relabel these constrained tangent solutions as full
+adjusted-score roots.
+
+Evaluate all 12 resulting points using the previous independent 80-decimal
+implementation, pinned by a recorded digest. Recheck the same normal and
+tangent projections in high precision. This separates cancellation from a
+persistently nonzero normal equation along the inspected local branch. No
+timing claims or simulation inference are part of this study.
+
+Interpretation and stopping
+---------------------------
+A nonzero normal score on this finite grid is local numerical evidence only.
+It does not exclude another branch, a root between grid points, or a root away
+from the boundary. Derive the limiting score under explicit assumptions of a
+single collapsing category and nonsingular tangent information. A continuous
+nonzero boundary limit would exclude roots in some local neighborhood, but
+applying that statement requires its assumptions and sign to be established;
+numerical continuation alone is not a global theorem or interval certificate.
+Stop after this bounded grid unless a concrete new mechanism justifies a
+separately recorded experiment. No solver modification is planned from failure
+alone.
+
+Diagnostic implementation checks
+--------------------------------
+Confirm probability/gap locations, observed frequencies and original predictor
+values for common/partial models and all three links. Cover grouped and coded
+responses, zero effective frequencies, binary and reduced-category models,
+source row/block identifiers, missing data and source failure. The ordinary
+diagnostic call must make no source reads. An explicit boundary request must
+make at most one source pass and retain at most max.rows in each result table.
+Raw and standardized scores must state their differing coordinate conventions.
+Tests validate diagnostic extraction; no root-existence claim follows from them.

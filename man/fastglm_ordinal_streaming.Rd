@@ -70,11 +70,13 @@ through \code{\link[=fastglm_vcov]{fastglm_vcov()}} rereads the source and accum
 ordinary-score contributions as retained dense fits. Predictions, residuals, and
 weights can be returned one block at a time through a callback. Collecting
 their complete output requires memory proportional to the number of rows.
-The fitted design and response are not retained. Procedures requiring
-retained observations, including model assessment on the fitted source,
-profile intervals, and refitting bootstrap calculations,
-require a separate implementation; prediction-based summaries can instead
-receive explicit evaluation data.
+The fitted design and response are not retained. \code{\link[=fastglm_ordinal_assess]{fastglm_ordinal_assess()}}
+accumulates prediction scores and calibration over the original source;
+\code{\link[=fastglm_po_test]{fastglm_po_test()}} refits common-slope hypotheses through source passes.
+Optional boundary rows from \code{\link[=fastglm_diagnostics]{fastglm_diagnostics()}} also use one source pass.
+Profile intervals, general constrained coefficient-score tests, and
+refitting bootstrap calculations require retained observations.
+Average prediction contrasts can receive explicit evaluation data.
 }
 \examples{
 set.seed(104)

@@ -1,0 +1,117 @@
+Actionable ordinal boundary diagnostics and local root investigation
+2026-11-04; baseline 2619731
+
+What changes for users
+----------------------
+An explicit boundary diagnostic request now locates the input rows and outcome
+categories with the smallest fitted probabilities and cumulative-predictor
+gaps. It reports observed category frequencies, total row frequencies, original
+predictor values and offsets. Source results also identify the block and row
+within the block. Raw scores, standardized scores and information conditioning
+are shown with their coordinate conventions. Raw scores depend on predictor
+units; the standardized values use the centered/scaled fitting coordinates.
+
+Ordinary diagnostics still require no source reads. The explicit request makes
+one source pass and retains only the requested number of rows in each of two
+tables. Its extra memory is bounded by the current block and these compact
+tables. Zero-effective rows are excluded. Globally collapsed categories are
+listed separately, while row tables describe the effective fitted model.
+Unreadable sources or missing retained data produce an explicit unavailable
+result while preserving stored convergence information. A finite log probability
+can distinguish probability underflow from an actual zero-probability boundary.
+
+The targeted diagnostic tests passed 172 assertions. These cover all three
+links, common and partial slopes, grouped and coded responses, source reading,
+row identifiers, category reduction, zero frequencies, unavailable data, and
+finite log probabilities and positive gaps beyond ordinary probability range.
+Public forwarding and display were integrated and tested separately. These are
+diagnostic extraction checks, not evidence about root existence or inference.
+
+Bounded numerical investigation
+------------------------------
+The previous sparse 96-row fixture remains development evidence. No new input
+data or inference simulations were generated. Its logit and complementary
+log-log fits approach a boundary at row 12, where category 2 is unobserved.
+The saturated-pattern no-interior-root certificate from the previous study
+does not apply to this fixture.
+
+At six fixed positive gaps from 1e-3 through 1e-8 for each link, the study solves
+only the tangent projections of the original full-model adjusted equations.
+The full global mean-bias adjustment is retained. Each of the 12 attempts was
+bounded at 50 iterations; ten met the prototype equation target, and the two
+smallest-gap attempts stopped with small residuals. Those failures are retained.
+None of these constrained tangent solutions is presented as a full root.
+
+An independent 80-decimal evaluator confirms the following final-gap values
+in working coordinates. The normal multiplier is the coefficient of the
+boundary-gap gradient in the Euclidean projection of the adjusted score.
+
+ link       gap     normal multiplier   largest tangent score   largest raw score
+ logit     1e-8        -0.08339490             1.33e-9                  0.1320673
+ cloglog   1e-8        -0.56318622             1.57e-9                  0.8918831
+
+Across the gap grid the normal multipliers approach nonzero values while the
+standardized scores decrease approximately with the square root of the gap.
+The expected information grows in the collapsing direction. Thus a shrinking
+information-scaled residual and a small Fisher step can coexist with a nonzero
+raw adjusted score near this boundary. This explains why merely increasing
+precision or the iteration limit is not an adequate remedy for these paths.
+It does not prove that another interior root is absent.
+
+Finite boundary limit and its assumptions
+-----------------------------------------
+The derivation in local-boundary-limit.txt removes the one diverging category
+term from the expected information and applies the exact rank-one inverse
+identity. Under a single collapsing category with zero observed frequency,
+positive remaining category probabilities and nonsingular remaining information,
+the full adjusted score has a continuous finite boundary extension. A nonzero
+exact extension would exclude roots in a sufficiently small neighborhood of
+that boundary point. This is a conditional local conclusion.
+
+The independent limit calculation at the two projected final points gives
+normal multipliers -0.08339486 and -0.56318617. These agree with the local
+continuation: the largest difference between the limiting vector and the
+full 80-decimal vector at gap 1e-8 is below 1.6e-7. The other predictor gaps
+remain above 0.079 for logit and 0.064 for complementary log-log.
+
+Exact rational checks on the stored inputs establish only one collapsed gap,
+strict positivity of every other gap, zero observed count for the collapsed
+category, and three independent remaining predictor patterns. Those patterns
+give positive-definite remaining information. The limiting score itself is
+evaluated with 80-decimal arithmetic without a certified interval enclosure,
+and the projected points approximate rather than exactly solve a limiting
+tangent equation. Therefore this study adds no new production root-absence
+certificate, solver change, or relaxed convergence criterion.
+
+What remains unresolved
+-----------------------
+The existence of any interior adjusted-score root for the original sparse
+logit and complementary log-log fits remains unresolved. A global no-zero
+theorem would need to cover the entire admissible parameter polyhedron, or
+an independent construction would need to supply a valid interior root.
+Local continuation and failed starts do neither. The ordinary likelihood's
+concavity cannot supply the missing theorem for the full mean-bias equations;
+one cannot assume a scalar penalty for them.
+
+The useful product outcome is a transparent, bounded diagnostic of these
+failures. The bounded investigation stops here. Further work would need a
+specific global argument or a new, equation-preserving mechanism, rather than
+additional undirected starts. No claim about finite-sample calibration, universal
+convergence, universal finiteness or performance speedup is made.
+
+Sources and reproducibility
+---------------------------
+The primary mean-bias equations are from Kosmidis (2014), Improved estimation
+in cumulative link models, JRSS B 76, 169-196, DOI 10.1111/rssb.12025,
+equations (6)-(9). Sections 4.2, 5.1 and 12 were read for this pass. Section 12
+describes finiteness supported by studied examples, not a universal theorem for
+the present fully varying model. The local expansion specializes established
+equations using direct calculus and linear algebra; no novelty claim is made.
+
+Run fixed-gap.R, the pinned previous high-precision.py, summarize-fixed-gap.py,
+and boundary-limit.py with the paths shown in their headers. Separate result
+directories retain every attempt, final state, binary64 export, high-precision
+evaluation and limit calculation. The development protocol preceded the fixed
+grid; decision-log.txt records the two subsequent limit evaluations before they
+were run. Source hashes, the immutable native-library digest and session records
+identify the baseline. Earlier study evidence remains unchanged.

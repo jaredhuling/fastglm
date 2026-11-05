@@ -126,7 +126,9 @@ print.fastglm_diagnostics <- function(x,digits=max(3L,getOption("digits")-3L),..
     .fastglm_print_field("Boundary flag",if(isTRUE(x$boundary)) "yes" else "no")
     if(isTRUE(x$theta.boundary)) .fastglm_print_field("Negative-binomial size boundary","yes")
     .fastglm_print_field("Collapsed categories",x$collapsed.categories)
-    labels <- c(standardized.score=if(identical(x$score.type,"mean-bias-reduced"))
+    labels <- c(raw.score.maximum=if(identical(x$score.type,"mean-bias-reduced"))
+            "Largest absolute adjusted score (reported units)" else "Largest absolute ordinary score (reported units)",
+        standardized.score=if(identical(x$score.type,"mean-bias-reduced"))
             "Standardized adjusted score" else "Standardized ordinary score",
         standardized.adjusted.score="Standardized adjusted score",
         standardized.dispersion.score="Standardized dispersion score",
@@ -144,6 +146,29 @@ print.fastglm_diagnostics <- function(x,digits=max(3L,getOption("digits")-3L),..
     },character(1))
     cat("\n")
     .fastglm_print_table(data.frame(Check=unname(labels[fields]),Value=unname(values)),digits)
+    if(!is.null(x$standardized.score.coordinates))
+        .fastglm_print_field("Score scaling","Raw scores use reported predictor units; standardized scores use the centered/scaled fitting coordinates.")
+    detail <- x$boundary.details
+    if(!is.null(detail)) {
+        cat("\nRows near a probability boundary:\n")
+        if(!isTRUE(detail$available)) .fastglm_print_field("Unavailable",detail$reason) else {
+            .fastglm_print_field("Positive-frequency rows examined",detail$rows.examined)
+            if(detail$source.passes>0) .fastglm_print_field("Additional source passes",detail$source.passes)
+            show <- function(z,gaps=FALSE) {
+                fields <- c("row",if(detail$source.passes>0) "block","category",
+                    if(gaps) "gap" else c("probability","log.probability"),"observed.frequency")
+                tab <- z[,fields,drop=FALSE]
+                names(tab) <- c("Row",if(detail$source.passes>0) "Block","Category",
+                    if(gaps) "Predictor gap" else c("Probability","Log probability"),"Observed frequency")
+                .fastglm_print_table(tab,digits)
+            }
+            cat("\nSmallest fitted category probabilities:\n");show(detail$smallest.probabilities)
+            if(nrow(detail$smallest.gaps)) {
+                cat("\nSmallest gaps between adjacent cumulative predictors:\n");show(detail$smallest.gaps,TRUE)
+            }
+            .fastglm_print_field("Interpretation","Small probabilities or gaps do not establish that an interior solution is absent. A displayed zero can be numerical underflow; inspect its log probability.")
+        }
+    }
     if("adjusted.score.available" %in% names(x)) {
         cat("\n")
         .fastglm_print_field("Note","Use the adjusted scores to assess bias-reduced convergence; the ordinary score need not be zero.")
