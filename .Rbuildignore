@@ -24,3 +24,4 @@ docs
 ^.*\.Rcheck$
 ^.*\.tar\.gz$
 ^benchmarks$
+^STORAGE\.md$
