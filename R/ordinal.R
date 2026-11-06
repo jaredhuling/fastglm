@@ -37,7 +37,10 @@
 #' @param block.size maximum observations processed together by the numerical
 #'   kernel. The input design is retained in memory.
 #' @param control named optimizer controls: `score.tol`, `step.tol`,
-#'   `max.step`, `max.halves`, `condition.tol`, `standardize`, and `trace`.
+#'   `max.step`, `max.halves`, `condition.tol`, `standardize`, `trace`, and
+#'   `observed`. For common-slope maximum likelihood, `observed=TRUE` (the default)
+#'   begins with observed-information Newton steps; expected information still
+#'   certifies convergence and gives the reported covariance.
 #' @param model retain the formula model frame.
 #' @param ... additional arguments to the default or formula method.
 #' @details By default, thresholds are estimated in increasing order. The same location

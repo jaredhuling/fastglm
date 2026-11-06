@@ -69,8 +69,20 @@ ordinal_native_evaluate <- function(x, y, counts, weights, offset, categories, c
     .Call(`_fastglm_ordinal_native_evaluate`, x, y, counts, weights, offset, categories, coefficients, firth, block_size, condition_tol, link)
 }
 
-ordinal_native_fit <- function(x, y, counts, weights, offset, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L) {
-    .Call(`_fastglm_ordinal_native_fit`, x, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
+ordinal_native_fit <- function(x, y, counts, weights, offset, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L, observed = TRUE) {
+    .Call(`_fastglm_ordinal_native_fit`, x, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link, observed)
+}
+
+ordinal_category_totals <- function(codes, weights, categories) {
+    .Call(`_fastglm_ordinal_category_totals`, codes, weights, categories)
+}
+
+ordinal_design_native <- function(x, totals, frequency, standardize) {
+    .Call(`_fastglm_ordinal_design_native`, x, totals, frequency, standardize)
+}
+
+ordinal_observed_evaluate <- function(x, y, counts, weights, offset, categories, coefficients, block_size = 2048L, link = 0L) {
+    .Call(`_fastglm_ordinal_observed_evaluate`, x, y, counts, weights, offset, categories, coefficients, block_size, link)
 }
 
 ordinal_partial_native_evaluate <- function(x, z, y, counts, weights, offset, categories, coefficients, firth = FALSE, block_size = 2048L, condition_tol = 1e-14, link = 0L) {
@@ -109,8 +121,8 @@ fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam
     .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs)
 }
 
-ordinal_stream_native_fit <- function(fetch, n_chunks, predictors, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L) {
-    .Call(`_fastglm_ordinal_stream_native_fit`, fetch, n_chunks, predictors, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
+ordinal_stream_native_fit <- function(fetch, n_chunks, predictors, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L, observed = TRUE) {
+    .Call(`_fastglm_ordinal_stream_native_fit`, fetch, n_chunks, predictors, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link, observed)
 }
 
 ordinal_partial_stream_native_evaluate <- function(fetch, n_chunks, common_predictors, nonparallel_predictors, categories, coefficients, firth = FALSE, block_size = 2048L, condition_tol = 1e-14, link = 0L) {

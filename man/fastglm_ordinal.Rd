@@ -94,7 +94,10 @@ predictors and the standardized adjusted score.}
 kernel. The input design is retained in memory.}
 
 \item{control}{named optimizer controls: \code{score.tol}, \code{step.tol},
-\code{max.step}, \code{max.halves}, \code{condition.tol}, \code{standardize}, and \code{trace}.}
+\code{max.step}, \code{max.halves}, \code{condition.tol}, \code{standardize}, \code{trace}, and
+\code{observed}. For common-slope maximum likelihood, \code{observed=TRUE} (the default)
+begins with observed-information Newton steps; expected information still
+certifies convergence and gives the reported covariance.}
 
 \item{link}{cumulative link: \code{"logit"} (proportional odds), \code{"probit"},
 or \code{"cloglog"} (complementary log-log). Prepared fits use their saved

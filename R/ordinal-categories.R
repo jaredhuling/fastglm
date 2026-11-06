@@ -43,11 +43,13 @@
             if(any(!is.finite(y)|y!=floor(y)|y<1|y>K))
                 stop("numeric ordinal responses must be category codes from 1 to length(levels)",call.=FALSE)
             original.codes<-as.integer(y)
+        } else if(is.factor(y) && identical(base::levels(y),levels)) {
+            original.codes<-as.integer(y)
         } else original.codes<-match(as.character(y),levels)
         if(anyNA(original.codes)) stop("unknown or missing ordinal response category",call.=FALSE)
         if(!integer.frequency(weights)) stop("ordinal fitting requires integer frequency weights",call.=FALSE)
         totals<-weights
-        category.totals<-vapply(seq_len(K),function(k)sum(weights[original.codes==k]),numeric(1))
+        category.totals<-ordinal_category_totals(original.codes,weights,K)
     }
     if(any(!is.finite(totals)) || any(!is.finite(category.totals)) || !is.finite(sum(totals)))
         stop("total ordinal frequencies overflow",call.=FALSE)

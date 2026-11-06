@@ -32,10 +32,10 @@ struct OrdinalSource {
 Rcpp::List ordinal_stream_native_fit(Rcpp::Function fetch,int n_chunks,int predictors,
     int categories,Rcpp::NumericVector start,bool firth=false,double score_tol=1e-8,
     double step_tol=1e-8,int maxit=200,int block_size=2048,double max_step=4,
-    int max_halves=35,double condition_tol=1e-14,bool trace=false,int link=0) {
+    int max_halves=35,double condition_tol=1e-14,bool trace=false,int link=0,bool observed=true) {
     if(n_chunks<1 || predictors<0 || categories<2 || block_size<1 || link<0 || link>2)
         Rcpp::stop("invalid ordinal source dimensions");
     OrdinalSource data(fetch,n_chunks,predictors,categories,block_size,link);
     return ordinal_fit(data,Rcpp::as<VectorXd>(start),firth,score_tol,step_tol,maxit,
-        max_step,max_halves,condition_tol,trace);
+        max_step,max_halves,condition_tol,trace,observed);
 }
