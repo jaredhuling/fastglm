@@ -1,456 +1,456 @@
 "study","model","n","p","method","repetition","elapsed_ms"
-"focused","Logistic",10000,100,"glm.fit",1,288.161489
-"focused","Logistic",10000,100,"glm.fit",2,343.743713
-"focused","Logistic",10000,100,"glm.fit",3,286.592501
-"focused","Logistic",10000,100,"glm.fit",4,286.861912
-"focused","Logistic",10000,100,"glm.fit",5,297.309491
-"focused","Logistic",10000,100,"glm.fit",6,288.026148
-"focused","Logistic",10000,100,"glm.fit",7,347.201817
-"focused","Logistic",10000,100,"glm.fit",8,288.32102
-"focused","Logistic",10000,100,"glm.fit",9,291.024068
-"focused","Logistic",10000,100,"glm.fit",10,298.157289
-"focused","Logistic",10000,100,"glm.fit",11,345.734304
-"focused","Logistic",10000,100,"glm.fit",12,287.452107
-"focused","Logistic",10000,100,"glm.fit",13,341.620815
-"focused","Logistic",10000,100,"glm.fit",14,287.143418
-"focused","Logistic",10000,100,"glm.fit",15,288.148369
-"focused","Logistic",10000,100,"glm.fit",16,317.533889
-"focused","Logistic",10000,100,"glm.fit",17,287.203114
-"focused","Logistic",10000,100,"glm.fit",18,288.473499
-"focused","Logistic",10000,100,"glm.fit",19,288.719089
-"focused","Logistic",10000,100,"glm.fit",20,287.063837
-"focused","Logistic",10000,100,"glm.fit",21,345.451773
-"focused","Logistic",10000,100,"glm.fit",22,286.548631
-"focused","Logistic",10000,100,"glm.fit",23,289.075625
-"focused","Logistic",10000,100,"glm.fit",24,286.343016
-"focused","Logistic",10000,100,"glm.fit",25,327.141624
-"focused","Logistic",10000,100,"fastglm QR",1,100.455207
-"focused","Logistic",10000,100,"fastglm QR",2,101.654416
-"focused","Logistic",10000,100,"fastglm QR",3,100.308509
-"focused","Logistic",10000,100,"fastglm QR",4,100.457421
-"focused","Logistic",10000,100,"fastglm QR",5,100.476527
-"focused","Logistic",10000,100,"fastglm QR",6,101.852405
-"focused","Logistic",10000,100,"fastglm QR",7,101.577049
-"focused","Logistic",10000,100,"fastglm QR",8,100.877097
-"focused","Logistic",10000,100,"fastglm QR",9,101.801483
-"focused","Logistic",10000,100,"fastglm QR",10,101.39628
-"focused","Logistic",10000,100,"fastglm QR",11,104.360867
-"focused","Logistic",10000,100,"fastglm QR",12,101.945147
-"focused","Logistic",10000,100,"fastglm QR",13,100.674024
-"focused","Logistic",10000,100,"fastglm QR",14,101.941498
-"focused","Logistic",10000,100,"fastglm QR",15,100.862542
-"focused","Logistic",10000,100,"fastglm QR",16,100.734212
-"focused","Logistic",10000,100,"fastglm QR",17,100.663077
-"focused","Logistic",10000,100,"fastglm QR",18,100.371198
-"focused","Logistic",10000,100,"fastglm QR",19,105.104074
-"focused","Logistic",10000,100,"fastglm QR",20,103.636315
-"focused","Logistic",10000,100,"fastglm QR",21,100.427655
-"focused","Logistic",10000,100,"fastglm QR",22,100.966641
-"focused","Logistic",10000,100,"fastglm QR",23,101.932068
-"focused","Logistic",10000,100,"fastglm QR",24,101.127935
-"focused","Logistic",10000,100,"fastglm QR",25,104.947536
-"focused","Logistic",10000,100,"fastglm LLT",1,24.737145
-"focused","Logistic",10000,100,"fastglm LLT",2,25.219346
-"focused","Logistic",10000,100,"fastglm LLT",3,24.639319
-"focused","Logistic",10000,100,"fastglm LLT",4,25.204135
-"focused","Logistic",10000,100,"fastglm LLT",5,25.604992
-"focused","Logistic",10000,100,"fastglm LLT",6,24.455516
-"focused","Logistic",10000,100,"fastglm LLT",7,25.294212
-"focused","Logistic",10000,100,"fastglm LLT",8,24.48643
-"focused","Logistic",10000,100,"fastglm LLT",9,24.6984
-"focused","Logistic",10000,100,"fastglm LLT",10,25.095772
-"focused","Logistic",10000,100,"fastglm LLT",11,23.748758
-"focused","Logistic",10000,100,"fastglm LLT",12,24.712873
-"focused","Logistic",10000,100,"fastglm LLT",13,23.739615
-"focused","Logistic",10000,100,"fastglm LLT",14,23.938014
-"focused","Logistic",10000,100,"fastglm LLT",15,24.074421
-"focused","Logistic",10000,100,"fastglm LLT",16,23.857039
-"focused","Logistic",10000,100,"fastglm LLT",17,24.425914
-"focused","Logistic",10000,100,"fastglm LLT",18,23.429901
-"focused","Logistic",10000,100,"fastglm LLT",19,23.423259
-"focused","Logistic",10000,100,"fastglm LLT",20,25.622417
-"focused","Logistic",10000,100,"fastglm LLT",21,23.976349
-"focused","Logistic",10000,100,"fastglm LLT",22,24.98991
-"focused","Logistic",10000,100,"fastglm LLT",23,23.868273
-"focused","Logistic",10000,100,"fastglm LLT",24,23.966837
-"focused","Logistic",10000,100,"fastglm LLT",25,37.585192
-"focused","Logistic",10000,100,"fastglm LDLT",1,25.423362
-"focused","Logistic",10000,100,"fastglm LDLT",2,23.911241
-"focused","Logistic",10000,100,"fastglm LDLT",3,24.348752
-"focused","Logistic",10000,100,"fastglm LDLT",4,24.072986
-"focused","Logistic",10000,100,"fastglm LDLT",5,24.011855
-"focused","Logistic",10000,100,"fastglm LDLT",6,24.826894
-"focused","Logistic",10000,100,"fastglm LDLT",7,26.307076
-"focused","Logistic",10000,100,"fastglm LDLT",8,25.205037
-"focused","Logistic",10000,100,"fastglm LDLT",9,24.105171
-"focused","Logistic",10000,100,"fastglm LDLT",10,24.564699
-"focused","Logistic",10000,100,"fastglm LDLT",11,23.870323
-"focused","Logistic",10000,100,"fastglm LDLT",12,23.808413
-"focused","Logistic",10000,100,"fastglm LDLT",13,24.057078
-"focused","Logistic",10000,100,"fastglm LDLT",14,24.097258
-"focused","Logistic",10000,100,"fastglm LDLT",15,25.115903
-"focused","Logistic",10000,100,"fastglm LDLT",16,24.109476
-"focused","Logistic",10000,100,"fastglm LDLT",17,24.668839
-"focused","Logistic",10000,100,"fastglm LDLT",18,25.349111
-"focused","Logistic",10000,100,"fastglm LDLT",19,24.532268
-"focused","Logistic",10000,100,"fastglm LDLT",20,25.334351
-"focused","Logistic",10000,100,"fastglm LDLT",21,25.435088
-"focused","Logistic",10000,100,"fastglm LDLT",22,37.255306
-"focused","Logistic",10000,100,"fastglm LDLT",23,24.29291
-"focused","Logistic",10000,100,"fastglm LDLT",24,24.783065
-"focused","Logistic",10000,100,"fastglm LDLT",25,27.674959
-"focused","Logistic",10000,100,"fastglm auto",1,29.51467
-"focused","Logistic",10000,100,"fastglm auto",2,28.759409
-"focused","Logistic",10000,100,"fastglm auto",3,28.320955
-"focused","Logistic",10000,100,"fastglm auto",4,29.657432
-"focused","Logistic",10000,100,"fastglm auto",5,32.123377
-"focused","Logistic",10000,100,"fastglm auto",6,29.135953
-"focused","Logistic",10000,100,"fastglm auto",7,29.012953
-"focused","Logistic",10000,100,"fastglm auto",8,28.753546
-"focused","Logistic",10000,100,"fastglm auto",9,32.257037
-"focused","Logistic",10000,100,"fastglm auto",10,28.202506
-"focused","Logistic",10000,100,"fastglm auto",11,28.856538
-"focused","Logistic",10000,100,"fastglm auto",12,31.670778
-"focused","Logistic",10000,100,"fastglm auto",13,28.46671
-"focused","Logistic",10000,100,"fastglm auto",14,29.481173
-"focused","Logistic",10000,100,"fastglm auto",15,33.581378
-"focused","Logistic",10000,100,"fastglm auto",16,29.189663
-"focused","Logistic",10000,100,"fastglm auto",17,29.92426
-"focused","Logistic",10000,100,"fastglm auto",18,28.990239
-"focused","Logistic",10000,100,"fastglm auto",19,29.658662
-"focused","Logistic",10000,100,"fastglm auto",20,32.546497
-"focused","Logistic",10000,100,"fastglm auto",21,28.892413
-"focused","Logistic",10000,100,"fastglm auto",22,31.149504
-"focused","Logistic",10000,100,"fastglm auto",23,32.140146
-"focused","Logistic",10000,100,"fastglm auto",24,32.360152
-"focused","Logistic",10000,100,"fastglm auto",25,29.974936
-"scaling","Logistic",1000,30,"glm.fit",1,3.202961
-"scaling","Logistic",1000,30,"glm.fit",2,3.046587
-"scaling","Logistic",1000,30,"glm.fit",3,3.141707
-"scaling","Logistic",1000,30,"glm.fit",4,3.092835
-"scaling","Logistic",1000,30,"glm.fit",5,3.176967
-"scaling","Logistic",1000,30,"glm.fit2",1,3.190825
-"scaling","Logistic",1000,30,"glm.fit2",2,3.122314
-"scaling","Logistic",1000,30,"glm.fit2",3,3.374136
-"scaling","Logistic",1000,30,"glm.fit2",4,3.296482
-"scaling","Logistic",1000,30,"glm.fit2",5,3.425632
-"scaling","Logistic",1000,30,"speedglm.wfit",1,2.489889
-"scaling","Logistic",1000,30,"speedglm.wfit",2,2.234336
-"scaling","Logistic",1000,30,"speedglm.wfit",3,2.166932
-"scaling","Logistic",1000,30,"speedglm.wfit",4,2.350817
-"scaling","Logistic",1000,30,"speedglm.wfit",5,2.298173
-"scaling","Logistic",1000,30,"fastglm auto",1,1.111387
-"scaling","Logistic",1000,30,"fastglm auto",2,0.874079
-"scaling","Logistic",1000,30,"fastglm auto",3,1.046853
-"scaling","Logistic",1000,30,"fastglm auto",4,0.894456
-"scaling","Logistic",1000,30,"fastglm auto",5,1.07748
-"scaling","Poisson",1000,30,"glm.fit",1,3.330635
-"scaling","Poisson",1000,30,"glm.fit",2,4.08032
-"scaling","Poisson",1000,30,"glm.fit",3,3.154622
-"scaling","Poisson",1000,30,"glm.fit",4,3.281025
-"scaling","Poisson",1000,30,"glm.fit",5,3.233301
-"scaling","Poisson",1000,30,"glm.fit2",1,3.332234
-"scaling","Poisson",1000,30,"glm.fit2",2,3.282542
-"scaling","Poisson",1000,30,"glm.fit2",3,3.410093
-"scaling","Poisson",1000,30,"glm.fit2",4,3.38578
-"scaling","Poisson",1000,30,"glm.fit2",5,3.219935
-"scaling","Poisson",1000,30,"speedglm.wfit",1,2.448438
-"scaling","Poisson",1000,30,"speedglm.wfit",2,2.332162
-"scaling","Poisson",1000,30,"speedglm.wfit",3,2.271277
-"scaling","Poisson",1000,30,"speedglm.wfit",4,2.279559
-"scaling","Poisson",1000,30,"speedglm.wfit",5,2.380296
-"scaling","Poisson",1000,30,"fastglm auto",1,1.177397
-"scaling","Poisson",1000,30,"fastglm auto",2,0.851119
-"scaling","Poisson",1000,30,"fastglm auto",3,0.825412
-"scaling","Poisson",1000,30,"fastglm auto",4,1.082564
-"scaling","Poisson",1000,30,"fastglm auto",5,0.957227
-"scaling","Negative binomial",1000,4,"MASS::glm.nb",1,11.18931
-"scaling","Negative binomial",1000,4,"MASS::glm.nb",2,15.794143
-"scaling","Negative binomial",1000,4,"MASS::glm.nb",3,16.12038
-"scaling","Negative binomial",1000,4,"MASS::glm.nb",4,11.342281
-"scaling","Negative binomial",1000,4,"MASS::glm.nb",5,11.053969
-"scaling","Negative binomial",1000,4,"fastglm_nb",1,2.208137
-"scaling","Negative binomial",1000,4,"fastglm_nb",2,1.945491
-"scaling","Negative binomial",1000,4,"fastglm_nb",3,1.827739
-"scaling","Negative binomial",1000,4,"fastglm_nb",4,1.766321
-"scaling","Negative binomial",1000,4,"fastglm_nb",5,2.102808
-"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",1,6.032248
-"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",2,6.212484
-"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",3,7.097018
-"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",4,7.006203
-"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",5,6.578778
-"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",1,0.930044
-"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",2,0.664856
-"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",3,0.619633
-"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",4,0.615041
-"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",5,0.600527
-"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",1,11.674996
-"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",2,12.084873
-"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",3,19.889141
-"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",4,12.172449
-"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",5,12.271013
-"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",1,3.560112
-"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",2,3.263108
-"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",3,3.168234
-"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",4,3.46245
-"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",5,3.509477
-"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",1,2.027573
-"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",2,1.74332
-"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",3,1.846681
-"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",4,1.819006
-"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",5,1.843319
-"scaling","Firth binomial-logit",1000,6,"fastglm auto",1,1.15333
-"scaling","Firth binomial-logit",1000,6,"fastglm auto",2,0.894456
-"scaling","Firth binomial-logit",1000,6,"fastglm auto",3,0.730702
-"scaling","Firth binomial-logit",1000,6,"fastglm auto",4,0.686053
-"scaling","Firth binomial-logit",1000,6,"fastglm auto",5,0.684536
-"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",1,1.957586
-"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",2,1.828272
-"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",3,1.843442
-"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",4,1.775095
-"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",5,1.73553
-"scaling","Firth Poisson-log",1000,6,"fastglm auto",1,0.974775
-"scaling","Firth Poisson-log",1000,6,"fastglm auto",2,0.726561
-"scaling","Firth Poisson-log",1000,6,"fastglm auto",3,0.692941
-"scaling","Firth Poisson-log",1000,6,"fastglm auto",4,0.838327
-"scaling","Firth Poisson-log",1000,6,"fastglm auto",5,0.812374
-"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",1,14.085468
-"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",2,13.370797
-"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",3,13.911259
-"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",4,13.371166
-"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",5,16.806802
-"scaling","Firth Gamma-log",1000,6,"fastglm auto",1,1.005648
-"scaling","Firth Gamma-log",1000,6,"fastglm auto",2,0.789127
-"scaling","Firth Gamma-log",1000,6,"fastglm auto",3,0.7544
-"scaling","Firth Gamma-log",1000,6,"fastglm auto",4,0.728119
-"scaling","Firth Gamma-log",1000,6,"fastglm auto",5,0.847634
-"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",1,3.440679
-"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",2,3.228094
-"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",3,3.226987
-"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",4,3.685859
-"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",5,3.628582
-"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",1,0.68019
-"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",2,0.470434
-"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",3,0.438413
-"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",4,0.428942
-"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",5,0.423202
-"scaling","Logistic",10000,30,"glm.fit",1,24.222021
-"scaling","Logistic",10000,30,"glm.fit",2,24.250557
-"scaling","Logistic",10000,30,"glm.fit",3,24.201726
-"scaling","Logistic",10000,30,"glm.fit",4,27.045609
-"scaling","Logistic",10000,30,"glm.fit",5,23.827232
-"scaling","Logistic",10000,30,"glm.fit2",1,24.287949
-"scaling","Logistic",10000,30,"glm.fit2",2,24.424151
-"scaling","Logistic",10000,30,"glm.fit2",3,26.644055
-"scaling","Logistic",10000,30,"glm.fit2",4,24.615867
-"scaling","Logistic",10000,30,"glm.fit2",5,24.585568
-"scaling","Logistic",10000,30,"speedglm.wfit",1,16.837634
-"scaling","Logistic",10000,30,"speedglm.wfit",2,16.597046
-"scaling","Logistic",10000,30,"speedglm.wfit",3,16.820906
-"scaling","Logistic",10000,30,"speedglm.wfit",4,16.667894
-"scaling","Logistic",10000,30,"speedglm.wfit",5,16.916559
-"scaling","Logistic",10000,30,"fastglm auto",1,5.925361
-"scaling","Logistic",10000,30,"fastglm auto",2,5.837293
-"scaling","Logistic",10000,30,"fastglm auto",3,5.918637
-"scaling","Logistic",10000,30,"fastglm auto",4,5.981777
-"scaling","Logistic",10000,30,"fastglm auto",5,5.564356
-"scaling","Poisson",10000,30,"glm.fit",1,32.256217
-"scaling","Poisson",10000,30,"glm.fit",2,31.837074
-"scaling","Poisson",10000,30,"glm.fit",3,34.421263
-"scaling","Poisson",10000,30,"glm.fit",4,32.113291
-"scaling","Poisson",10000,30,"glm.fit",5,35.230931
-"scaling","Poisson",10000,30,"glm.fit2",1,31.902756
-"scaling","Poisson",10000,30,"glm.fit2",2,32.379955
-"scaling","Poisson",10000,30,"glm.fit2",3,35.232571
-"scaling","Poisson",10000,30,"glm.fit2",4,32.433665
-"scaling","Poisson",10000,30,"glm.fit2",5,35.441466
-"scaling","Poisson",10000,30,"speedglm.wfit",1,22.102772
-"scaling","Poisson",10000,30,"speedglm.wfit",2,22.276161
-"scaling","Poisson",10000,30,"speedglm.wfit",3,22.184526
-"scaling","Poisson",10000,30,"speedglm.wfit",4,24.10841
-"scaling","Poisson",10000,30,"speedglm.wfit",5,22.789522
-"scaling","Poisson",10000,30,"fastglm auto",1,5.923885
-"scaling","Poisson",10000,30,"fastglm auto",2,6.086983
-"scaling","Poisson",10000,30,"fastglm auto",3,6.019948
-"scaling","Poisson",10000,30,"fastglm auto",4,5.926017
-"scaling","Poisson",10000,30,"fastglm auto",5,5.631678
-"scaling","Negative binomial",10000,4,"MASS::glm.nb",1,86.046167
-"scaling","Negative binomial",10000,4,"MASS::glm.nb",2,142.407022
-"scaling","Negative binomial",10000,4,"MASS::glm.nb",3,83.228237
-"scaling","Negative binomial",10000,4,"MASS::glm.nb",4,84.582016
-"scaling","Negative binomial",10000,4,"MASS::glm.nb",5,86.887528
-"scaling","Negative binomial",10000,4,"fastglm_nb",1,15.623009
-"scaling","Negative binomial",10000,4,"fastglm_nb",2,17.512084
-"scaling","Negative binomial",10000,4,"fastglm_nb",3,15.921858
-"scaling","Negative binomial",10000,4,"fastglm_nb",4,15.53736
-"scaling","Negative binomial",10000,4,"fastglm_nb",5,16.332678
-"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",1,57.132434
-"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",2,55.465907
-"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",3,59.182598
-"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",4,57.58532
-"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",5,55.311501
-"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",1,4.186428
-"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",2,4.794212
-"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",3,4.039976
-"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",4,3.577168
-"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",5,4.05654
-"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",1,102.85342
-"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",2,115.796464
-"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",3,170.599442
-"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",4,104.969676
-"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",5,101.55905
-"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",1,29.969196
-"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",2,28.691554
-"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",3,28.197627
-"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",4,30.994155
-"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",5,30.106177
-"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",1,10.272878
-"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",2,10.702927
-"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",3,14.008962
-"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",4,10.700959
-"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",5,15.875692
-"scaling","Firth binomial-logit",10000,6,"fastglm auto",1,4.554485
-"scaling","Firth binomial-logit",10000,6,"fastglm auto",2,4.104018
-"scaling","Firth binomial-logit",10000,6,"fastglm auto",3,3.81792
-"scaling","Firth binomial-logit",10000,6,"fastglm auto",4,3.455562
-"scaling","Firth binomial-logit",10000,6,"fastglm auto",5,4.011727
-"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",1,10.552334
-"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",2,10.503339
-"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",3,73.886428
-"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",4,10.510145
-"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",5,13.01299
-"scaling","Firth Poisson-log",10000,6,"fastglm auto",1,3.945553
-"scaling","Firth Poisson-log",10000,6,"fastglm auto",2,4.034113
-"scaling","Firth Poisson-log",10000,6,"fastglm auto",3,5.996209
-"scaling","Firth Poisson-log",10000,6,"fastglm auto",4,3.788851
-"scaling","Firth Poisson-log",10000,6,"fastglm auto",5,4.378882
-"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",1,104.808382
-"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",2,106.60328
-"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",3,108.9001
-"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",4,105.780041
-"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",5,108.104864
-"scaling","Firth Gamma-log",10000,6,"fastglm auto",1,3.479137
-"scaling","Firth Gamma-log",10000,6,"fastglm auto",2,3.48418
-"scaling","Firth Gamma-log",10000,6,"fastglm auto",3,3.703653
-"scaling","Firth Gamma-log",10000,6,"fastglm auto",4,2.970204
-"scaling","Firth Gamma-log",10000,6,"fastglm auto",5,3.007186
-"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",1,24.656621
-"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",2,21.642588
-"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",3,22.915433
-"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",4,22.913301
-"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",5,21.673994
-"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",1,1.665502
-"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",2,1.932002
-"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",3,2.300305
-"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",4,3.279467
-"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",5,2.09305
-"scaling","Logistic",100000,30,"glm.fit",1,239.497769
-"scaling","Logistic",100000,30,"glm.fit",2,247.181661
-"scaling","Logistic",100000,30,"glm.fit",3,245.480571
-"scaling","Logistic",100000,30,"glm.fit",4,320.325538
-"scaling","Logistic",100000,30,"glm.fit",5,305.013022
-"scaling","Logistic",100000,30,"glm.fit2",1,249.301853
-"scaling","Logistic",100000,30,"glm.fit2",2,244.640276
-"scaling","Logistic",100000,30,"glm.fit2",3,251.915398
-"scaling","Logistic",100000,30,"glm.fit2",4,245.048062
-"scaling","Logistic",100000,30,"glm.fit2",5,245.316653
-"scaling","Logistic",100000,30,"speedglm.wfit",1,164.842591
-"scaling","Logistic",100000,30,"speedglm.wfit",2,176.144323
-"scaling","Logistic",100000,30,"speedglm.wfit",3,171.570322
-"scaling","Logistic",100000,30,"speedglm.wfit",4,172.42263
-"scaling","Logistic",100000,30,"speedglm.wfit",5,170.433392
-"scaling","Logistic",100000,30,"fastglm auto",1,65.794504
-"scaling","Logistic",100000,30,"fastglm auto",2,63.074523
-"scaling","Logistic",100000,30,"fastglm auto",3,69.207549
-"scaling","Logistic",100000,30,"fastglm auto",4,69.670808
-"scaling","Logistic",100000,30,"fastglm auto",5,62.696462
-"scaling","Poisson",100000,30,"glm.fit",1,389.033912
-"scaling","Poisson",100000,30,"glm.fit",2,321.974558
-"scaling","Poisson",100000,30,"glm.fit",3,330.717439
-"scaling","Poisson",100000,30,"glm.fit",4,324.30221
-"scaling","Poisson",100000,30,"glm.fit",5,334.31933
-"scaling","Poisson",100000,30,"glm.fit2",1,331.432684
-"scaling","Poisson",100000,30,"glm.fit2",2,328.956202
-"scaling","Poisson",100000,30,"glm.fit2",3,334.171238
-"scaling","Poisson",100000,30,"glm.fit2",4,330.381362
-"scaling","Poisson",100000,30,"glm.fit2",5,330.613873
-"scaling","Poisson",100000,30,"speedglm.wfit",1,227.485302
-"scaling","Poisson",100000,30,"speedglm.wfit",2,233.921359
-"scaling","Poisson",100000,30,"speedglm.wfit",3,227.856352
-"scaling","Poisson",100000,30,"speedglm.wfit",4,227.114826
-"scaling","Poisson",100000,30,"speedglm.wfit",5,230.502738
-"scaling","Poisson",100000,30,"fastglm auto",1,62.778749
-"scaling","Poisson",100000,30,"fastglm auto",2,62.543327
-"scaling","Poisson",100000,30,"fastglm auto",3,63.524785
-"scaling","Poisson",100000,30,"fastglm auto",4,69.578763
-"scaling","Poisson",100000,30,"fastglm auto",5,69.268434
-"scaling","Negative binomial",100000,4,"MASS::glm.nb",1,575.591046
-"scaling","Negative binomial",100000,4,"MASS::glm.nb",2,570.33583
-"scaling","Negative binomial",100000,4,"MASS::glm.nb",3,586.558505
-"scaling","Negative binomial",100000,4,"MASS::glm.nb",4,562.05547
-"scaling","Negative binomial",100000,4,"MASS::glm.nb",5,584.25779
-"scaling","Negative binomial",100000,4,"fastglm_nb",1,149.956311
-"scaling","Negative binomial",100000,4,"fastglm_nb",2,164.790029
-"scaling","Negative binomial",100000,4,"fastglm_nb",3,149.427165
-"scaling","Negative binomial",100000,4,"fastglm_nb",4,153.846842
-"scaling","Negative binomial",100000,4,"fastglm_nb",5,150.273569
-"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",1,614.995531
-"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",2,675.307023
-"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",3,607.018817
-"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",4,599.279985
-"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",5,669.890226
-"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",1,46.476534
-"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",2,44.467329
-"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",3,45.129069
-"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",4,43.805958
-"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",5,44.052901
-"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",1,1244.459183
-"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",2,1239.727865
-"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",3,1283.80553
-"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",4,1217.560395
-"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",5,1282.520221
-"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",1,335.67028
-"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",2,340.478063
-"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",3,342.121425
-"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",4,334.150123
-"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",5,337.600642
-"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",1,94.033541
-"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",2,100.522242
-"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",3,95.974481
-"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",4,159.931447
-"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",5,152.251081
-"scaling","Firth binomial-logit",100000,6,"fastglm auto",1,42.469563
-"scaling","Firth binomial-logit",100000,6,"fastglm auto",2,42.442134
-"scaling","Firth binomial-logit",100000,6,"fastglm auto",3,44.130678
-"scaling","Firth binomial-logit",100000,6,"fastglm auto",4,45.721191
-"scaling","Firth binomial-logit",100000,6,"fastglm auto",5,48.097469
-"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",1,113.283328
-"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",2,116.497195
-"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",3,171.375531
-"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",4,229.329359
-"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",5,181.690885
-"scaling","Firth Poisson-log",100000,6,"fastglm auto",1,38.166818
-"scaling","Firth Poisson-log",100000,6,"fastglm auto",2,43.221872
-"scaling","Firth Poisson-log",100000,6,"fastglm auto",3,41.543004
-"scaling","Firth Poisson-log",100000,6,"fastglm auto",4,42.46247
-"scaling","Firth Poisson-log",100000,6,"fastglm auto",5,37.777482
-"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",1,987.347199
-"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",2,1054.115576
-"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",3,1045.053264
-"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",4,1105.549625
-"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",5,981.340207
-"scaling","Firth Gamma-log",100000,6,"fastglm auto",1,41.094259
-"scaling","Firth Gamma-log",100000,6,"fastglm auto",2,46.125369
-"scaling","Firth Gamma-log",100000,6,"fastglm auto",3,33.205572
-"scaling","Firth Gamma-log",100000,6,"fastglm auto",4,32.202466
-"scaling","Firth Gamma-log",100000,6,"fastglm auto",5,30.902274
-"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",1,265.661755
-"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",2,272.870662
-"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",3,208.314071
-"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",4,272.066898
-"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",5,217.861741
-"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",1,12.25203
-"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",2,13.57428
-"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",3,12.861003
-"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",4,11.873641
-"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",5,11.851255
+"focused","Logistic",10000,100,"glm.fit",1,284.06522
+"focused","Logistic",10000,100,"glm.fit",2,341.36559
+"focused","Logistic",10000,100,"glm.fit",3,284.54943
+"focused","Logistic",10000,100,"glm.fit",4,282.374421
+"focused","Logistic",10000,100,"glm.fit",5,284.88563
+"focused","Logistic",10000,100,"glm.fit",6,282.782658
+"focused","Logistic",10000,100,"glm.fit",7,336.820289
+"focused","Logistic",10000,100,"glm.fit",8,281.242698
+"focused","Logistic",10000,100,"glm.fit",9,281.726211
+"focused","Logistic",10000,100,"glm.fit",10,282.439365
+"focused","Logistic",10000,100,"glm.fit",11,345.969193
+"focused","Logistic",10000,100,"glm.fit",12,280.481328
+"focused","Logistic",10000,100,"glm.fit",13,338.191083
+"focused","Logistic",10000,100,"glm.fit",14,282.55724
+"focused","Logistic",10000,100,"glm.fit",15,282.734647
+"focused","Logistic",10000,100,"glm.fit",16,283.710201
+"focused","Logistic",10000,100,"glm.fit",17,282.573148
+"focused","Logistic",10000,100,"glm.fit",18,285.494398
+"focused","Logistic",10000,100,"glm.fit",19,337.236357
+"focused","Logistic",10000,100,"glm.fit",20,341.87932
+"focused","Logistic",10000,100,"glm.fit",21,284.035741
+"focused","Logistic",10000,100,"glm.fit",22,282.556584
+"focused","Logistic",10000,100,"glm.fit",23,281.900133
+"focused","Logistic",10000,100,"glm.fit",24,335.136214
+"focused","Logistic",10000,100,"glm.fit",25,281.384845
+"focused","Logistic",10000,100,"fastglm QR",1,100.052792
+"focused","Logistic",10000,100,"fastglm QR",2,99.474282
+"focused","Logistic",10000,100,"fastglm QR",3,99.53857
+"focused","Logistic",10000,100,"fastglm QR",4,98.360886
+"focused","Logistic",10000,100,"fastglm QR",5,99.564728
+"focused","Logistic",10000,100,"fastglm QR",6,98.842472
+"focused","Logistic",10000,100,"fastglm QR",7,100.916457
+"focused","Logistic",10000,100,"fastglm QR",8,102.653135
+"focused","Logistic",10000,100,"fastglm QR",9,100.131635
+"focused","Logistic",10000,100,"fastglm QR",10,99.258909
+"focused","Logistic",10000,100,"fastglm QR",11,100.92396
+"focused","Logistic",10000,100,"fastglm QR",12,98.804752
+"focused","Logistic",10000,100,"fastglm QR",13,98.161954
+"focused","Logistic",10000,100,"fastglm QR",14,99.363418
+"focused","Logistic",10000,100,"fastglm QR",15,98.68782
+"focused","Logistic",10000,100,"fastglm QR",16,99.338326
+"focused","Logistic",10000,100,"fastglm QR",17,99.016435
+"focused","Logistic",10000,100,"fastglm QR",18,98.293441
+"focused","Logistic",10000,100,"fastglm QR",19,97.949861
+"focused","Logistic",10000,100,"fastglm QR",20,98.362157
+"focused","Logistic",10000,100,"fastglm QR",21,100.925149
+"focused","Logistic",10000,100,"fastglm QR",22,100.406581
+"focused","Logistic",10000,100,"fastglm QR",23,99.019797
+"focused","Logistic",10000,100,"fastglm QR",24,100.819984
+"focused","Logistic",10000,100,"fastglm QR",25,104.511829
+"focused","Logistic",10000,100,"fastglm LLT",1,24.81607
+"focused","Logistic",10000,100,"fastglm LLT",2,24.119644
+"focused","Logistic",10000,100,"fastglm LLT",3,23.171068
+"focused","Logistic",10000,100,"fastglm LLT",4,24.200373
+"focused","Logistic",10000,100,"fastglm LLT",5,23.099974
+"focused","Logistic",10000,100,"fastglm LLT",6,23.496116
+"focused","Logistic",10000,100,"fastglm LLT",7,22.951718
+"focused","Logistic",10000,100,"fastglm LLT",8,23.185951
+"focused","Logistic",10000,100,"fastglm LLT",9,25.442427
+"focused","Logistic",10000,100,"fastglm LLT",10,24.032724
+"focused","Logistic",10000,100,"fastglm LLT",11,23.944779
+"focused","Logistic",10000,100,"fastglm LLT",12,23.250731
+"focused","Logistic",10000,100,"fastglm LLT",13,23.769832
+"focused","Logistic",10000,100,"fastglm LLT",14,22.953358
+"focused","Logistic",10000,100,"fastglm LLT",15,23.440397
+"focused","Logistic",10000,100,"fastglm LLT",16,24.233952
+"focused","Logistic",10000,100,"fastglm LLT",17,24.0096
+"focused","Logistic",10000,100,"fastglm LLT",18,23.745888
+"focused","Logistic",10000,100,"fastglm LLT",19,24.434073
+"focused","Logistic",10000,100,"fastglm LLT",20,23.062295
+"focused","Logistic",10000,100,"fastglm LLT",21,24.78081
+"focused","Logistic",10000,100,"fastglm LLT",22,24.125015
+"focused","Logistic",10000,100,"fastglm LLT",23,23.009036
+"focused","Logistic",10000,100,"fastglm LLT",24,23.487301
+"focused","Logistic",10000,100,"fastglm LLT",25,28.10837
+"focused","Logistic",10000,100,"fastglm LDLT",1,25.049647
+"focused","Logistic",10000,100,"fastglm LDLT",2,23.300095
+"focused","Logistic",10000,100,"fastglm LDLT",3,24.088361
+"focused","Logistic",10000,100,"fastglm LDLT",4,23.109855
+"focused","Logistic",10000,100,"fastglm LDLT",5,24.019645
+"focused","Logistic",10000,100,"fastglm LDLT",6,23.73449
+"focused","Logistic",10000,100,"fastglm LDLT",7,24.014889
+"focused","Logistic",10000,100,"fastglm LDLT",8,23.603864
+"focused","Logistic",10000,100,"fastglm LDLT",9,23.086813
+"focused","Logistic",10000,100,"fastglm LDLT",10,23.546095
+"focused","Logistic",10000,100,"fastglm LDLT",11,22.8698
+"focused","Logistic",10000,100,"fastglm LDLT",12,23.230231
+"focused","Logistic",10000,100,"fastglm LDLT",13,23.5791
+"focused","Logistic",10000,100,"fastglm LDLT",14,23.682994
+"focused","Logistic",10000,100,"fastglm LDLT",15,24.127229
+"focused","Logistic",10000,100,"fastglm LDLT",16,23.188862
+"focused","Logistic",10000,100,"fastglm LDLT",17,24.097217
+"focused","Logistic",10000,100,"fastglm LDLT",18,23.88906
+"focused","Logistic",10000,100,"fastglm LDLT",19,23.4438
+"focused","Logistic",10000,100,"fastglm LDLT",20,22.792925
+"focused","Logistic",10000,100,"fastglm LDLT",21,23.180785
+"focused","Logistic",10000,100,"fastglm LDLT",22,23.496813
+"focused","Logistic",10000,100,"fastglm LDLT",23,23.233962
+"focused","Logistic",10000,100,"fastglm LDLT",24,22.688047
+"focused","Logistic",10000,100,"fastglm LDLT",25,28.245556
+"focused","Logistic",10000,100,"fastglm auto",1,30.343854
+"focused","Logistic",10000,100,"fastglm auto",2,29.337632
+"focused","Logistic",10000,100,"fastglm auto",3,28.210993
+"focused","Logistic",10000,100,"fastglm auto",4,28.128583
+"focused","Logistic",10000,100,"fastglm auto",5,32.956087
+"focused","Logistic",10000,100,"fastglm auto",6,31.124125
+"focused","Logistic",10000,100,"fastglm auto",7,28.942884
+"focused","Logistic",10000,100,"fastglm auto",8,28.0522
+"focused","Logistic",10000,100,"fastglm auto",9,31.209323
+"focused","Logistic",10000,100,"fastglm auto",10,27.511246
+"focused","Logistic",10000,100,"fastglm auto",11,30.40437
+"focused","Logistic",10000,100,"fastglm auto",12,31.044257
+"focused","Logistic",10000,100,"fastglm auto",13,28.268926
+"focused","Logistic",10000,100,"fastglm auto",14,27.539905
+"focused","Logistic",10000,100,"fastglm auto",15,30.33795
+"focused","Logistic",10000,100,"fastglm auto",16,28.45523
+"focused","Logistic",10000,100,"fastglm auto",17,27.599027
+"focused","Logistic",10000,100,"fastglm auto",18,30.466444
+"focused","Logistic",10000,100,"fastglm auto",19,28.2367
+"focused","Logistic",10000,100,"fastglm auto",20,27.874629
+"focused","Logistic",10000,100,"fastglm auto",21,31.046963
+"focused","Logistic",10000,100,"fastglm auto",22,27.895375
+"focused","Logistic",10000,100,"fastglm auto",23,28.029281
+"focused","Logistic",10000,100,"fastglm auto",24,30.246848
+"focused","Logistic",10000,100,"fastglm auto",25,28.804345
+"scaling","Logistic",1000,30,"glm.fit",1,3.140231
+"scaling","Logistic",1000,30,"glm.fit",2,2.990909
+"scaling","Logistic",1000,30,"glm.fit",3,3.03851
+"scaling","Logistic",1000,30,"glm.fit",4,3.038633
+"scaling","Logistic",1000,30,"glm.fit",5,3.072048
+"scaling","Logistic",1000,30,"glm.fit2",1,3.292833
+"scaling","Logistic",1000,30,"glm.fit2",2,3.154458
+"scaling","Logistic",1000,30,"glm.fit2",3,3.125266
+"scaling","Logistic",1000,30,"glm.fit2",4,3.12707
+"scaling","Logistic",1000,30,"glm.fit2",5,3.119731
+"scaling","Logistic",1000,30,"speedglm.wfit",1,2.354671
+"scaling","Logistic",1000,30,"speedglm.wfit",2,2.178084
+"scaling","Logistic",1000,30,"speedglm.wfit",3,2.146022
+"scaling","Logistic",1000,30,"speedglm.wfit",4,2.145981
+"scaling","Logistic",1000,30,"speedglm.wfit",5,2.184726
+"scaling","Logistic",1000,30,"fastglm auto",1,1.084532
+"scaling","Logistic",1000,30,"fastglm auto",2,0.827585
+"scaling","Logistic",1000,30,"fastglm auto",3,0.792571
+"scaling","Logistic",1000,30,"fastglm auto",4,0.785191
+"scaling","Logistic",1000,30,"fastglm auto",5,0.776868
+"scaling","Poisson",1000,30,"glm.fit",1,3.261222
+"scaling","Poisson",1000,30,"glm.fit",2,3.080207
+"scaling","Poisson",1000,30,"glm.fit",3,3.152777
+"scaling","Poisson",1000,30,"glm.fit",4,3.08279
+"scaling","Poisson",1000,30,"glm.fit",5,3.083036
+"scaling","Poisson",1000,30,"glm.fit2",1,3.247651
+"scaling","Poisson",1000,30,"glm.fit2",2,3.196524
+"scaling","Poisson",1000,30,"glm.fit2",3,3.158435
+"scaling","Poisson",1000,30,"glm.fit2",4,3.266142
+"scaling","Poisson",1000,30,"glm.fit2",5,3.166061
+"scaling","Poisson",1000,30,"speedglm.wfit",1,2.465043
+"scaling","Poisson",1000,30,"speedglm.wfit",2,2.257829
+"scaling","Poisson",1000,30,"speedglm.wfit",3,2.234623
+"scaling","Poisson",1000,30,"speedglm.wfit",4,2.267546
+"scaling","Poisson",1000,30,"speedglm.wfit",5,2.281281
+"scaling","Poisson",1000,30,"fastglm auto",1,1.041359
+"scaling","Poisson",1000,30,"fastglm auto",2,0.836974
+"scaling","Poisson",1000,30,"fastglm auto",3,0.786257
+"scaling","Poisson",1000,30,"fastglm auto",4,0.773096
+"scaling","Poisson",1000,30,"fastglm auto",5,0.772481
+"scaling","Negative binomial",1000,4,"MASS::glm.nb",1,10.576155
+"scaling","Negative binomial",1000,4,"MASS::glm.nb",2,10.250164
+"scaling","Negative binomial",1000,4,"MASS::glm.nb",3,10.233518
+"scaling","Negative binomial",1000,4,"MASS::glm.nb",4,10.392598
+"scaling","Negative binomial",1000,4,"MASS::glm.nb",5,10.474311
+"scaling","Negative binomial",1000,4,"fastglm_nb",1,2.010271
+"scaling","Negative binomial",1000,4,"fastglm_nb",2,1.657384
+"scaling","Negative binomial",1000,4,"fastglm_nb",3,1.609496
+"scaling","Negative binomial",1000,4,"fastglm_nb",4,1.578049
+"scaling","Negative binomial",1000,4,"fastglm_nb",5,1.60146
+"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",1,6.272549
+"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",2,5.875218
+"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",3,5.80437
+"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",4,5.816875
+"scaling","Hurdle Poisson",1000,3,"pscl::hurdle",5,5.872102
+"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",1,0.903435
+"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",2,0.662642
+"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",3,0.617009
+"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",4,0.61254
+"scaling","Hurdle Poisson",1000,3,"fastglm_hurdle",5,0.595771
+"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",1,12.524065
+"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",2,12.172777
+"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",3,18.629785
+"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",4,12.063758
+"scaling","Zero-inflated Poisson",1000,3,"pscl::zeroinfl",5,12.289955
+"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",1,3.343427
+"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",2,3.159911
+"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",3,3.150399
+"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",4,3.206446
+"scaling","Zero-inflated Poisson",1000,3,"fastglm_zi",5,3.162863
+"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",1,1.863532
+"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",2,1.655826
+"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",3,1.657958
+"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",4,1.641558
+"scaling","Firth binomial-logit",1000,6,"brglm2::brglmFit",5,1.658286
+"scaling","Firth binomial-logit",1000,6,"fastglm auto",1,1.045336
+"scaling","Firth binomial-logit",1000,6,"fastglm auto",2,1.504167
+"scaling","Firth binomial-logit",1000,6,"fastglm auto",3,0.783797
+"scaling","Firth binomial-logit",1000,6,"fastglm auto",4,1.007616
+"scaling","Firth binomial-logit",1000,6,"fastglm auto",5,0.765716
+"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",1,1.893749
+"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",2,1.7138
+"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",3,1.707117
+"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",4,1.725403
+"scaling","Firth Poisson-log",1000,6,"brglm2::brglmFit",5,1.698999
+"scaling","Firth Poisson-log",1000,6,"fastglm auto",1,0.963828
+"scaling","Firth Poisson-log",1000,6,"fastglm auto",2,0.762846
+"scaling","Firth Poisson-log",1000,6,"fastglm auto",3,0.737467
+"scaling","Firth Poisson-log",1000,6,"fastglm auto",4,0.730989
+"scaling","Firth Poisson-log",1000,6,"fastglm auto",5,0.728406
+"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",1,13.575305
+"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",2,13.363827
+"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",3,13.447631
+"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",4,13.316636
+"scaling","Firth Gamma-log",1000,6,"brglm2::brglmFit",5,18.103837
+"scaling","Firth Gamma-log",1000,6,"fastglm auto",1,1.152141
+"scaling","Firth Gamma-log",1000,6,"fastglm auto",2,0.817499
+"scaling","Firth Gamma-log",1000,6,"fastglm auto",3,0.815039
+"scaling","Firth Gamma-log",1000,6,"fastglm auto",4,0.777565
+"scaling","Firth Gamma-log",1000,6,"fastglm auto",5,0.782198
+"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",1,3.52436
+"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",2,3.293284
+"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",3,3.180739
+"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",4,3.258967
+"scaling","Firth Gaussian-identity",1000,6,"brglm2::brglmFit",5,3.370897
+"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",1,0.759279
+"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",2,1.30462
+"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",3,0.519757
+"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",4,0.731563
+"scaling","Firth Gaussian-identity",1000,6,"fastglm auto",5,0.511721
+"scaling","Logistic",10000,30,"glm.fit",1,22.842822
+"scaling","Logistic",10000,30,"glm.fit",2,23.694433
+"scaling","Logistic",10000,30,"glm.fit",3,23.382628
+"scaling","Logistic",10000,30,"glm.fit",4,25.556899
+"scaling","Logistic",10000,30,"glm.fit",5,23.273855
+"scaling","Logistic",10000,30,"glm.fit2",1,23.957161
+"scaling","Logistic",10000,30,"glm.fit2",2,23.920384
+"scaling","Logistic",10000,30,"glm.fit2",3,27.706406
+"scaling","Logistic",10000,30,"glm.fit2",4,24.135757
+"scaling","Logistic",10000,30,"glm.fit2",5,24.278765
+"scaling","Logistic",10000,30,"speedglm.wfit",1,16.570396
+"scaling","Logistic",10000,30,"speedglm.wfit",2,16.763834
+"scaling","Logistic",10000,30,"speedglm.wfit",3,16.48938
+"scaling","Logistic",10000,30,"speedglm.wfit",4,16.35449
+"scaling","Logistic",10000,30,"speedglm.wfit",5,16.284257
+"scaling","Logistic",10000,30,"fastglm auto",1,5.460134
+"scaling","Logistic",10000,30,"fastglm auto",2,5.304457
+"scaling","Logistic",10000,30,"fastglm auto",3,5.144598
+"scaling","Logistic",10000,30,"fastglm auto",4,5.094947
+"scaling","Logistic",10000,30,"fastglm auto",5,5.10983
+"scaling","Poisson",10000,30,"glm.fit",1,31.024331
+"scaling","Poisson",10000,30,"glm.fit",2,31.252045
+"scaling","Poisson",10000,30,"glm.fit",3,34.61917
+"scaling","Poisson",10000,30,"glm.fit",4,30.974147
+"scaling","Poisson",10000,30,"glm.fit",5,33.932297
+"scaling","Poisson",10000,30,"glm.fit2",1,31.659667
+"scaling","Poisson",10000,30,"glm.fit2",2,31.816328
+"scaling","Poisson",10000,30,"glm.fit2",3,36.520094
+"scaling","Poisson",10000,30,"glm.fit2",4,31.213259
+"scaling","Poisson",10000,30,"glm.fit2",5,33.135831
+"scaling","Poisson",10000,30,"speedglm.wfit",1,21.359852
+"scaling","Poisson",10000,30,"speedglm.wfit",2,21.382156
+"scaling","Poisson",10000,30,"speedglm.wfit",3,21.664687
+"scaling","Poisson",10000,30,"speedglm.wfit",4,24.977405
+"scaling","Poisson",10000,30,"speedglm.wfit",5,21.432094
+"scaling","Poisson",10000,30,"fastglm auto",1,5.946394
+"scaling","Poisson",10000,30,"fastglm auto",2,5.617205
+"scaling","Poisson",10000,30,"fastglm auto",3,5.614171
+"scaling","Poisson",10000,30,"fastglm auto",4,5.527251
+"scaling","Poisson",10000,30,"fastglm auto",5,5.532171
+"scaling","Negative binomial",10000,4,"MASS::glm.nb",1,83.557139
+"scaling","Negative binomial",10000,4,"MASS::glm.nb",2,84.193582
+"scaling","Negative binomial",10000,4,"MASS::glm.nb",3,78.856735
+"scaling","Negative binomial",10000,4,"MASS::glm.nb",4,83.822081
+"scaling","Negative binomial",10000,4,"MASS::glm.nb",5,79.678293
+"scaling","Negative binomial",10000,4,"fastglm_nb",1,13.318604
+"scaling","Negative binomial",10000,4,"fastglm_nb",2,13.742626
+"scaling","Negative binomial",10000,4,"fastglm_nb",3,14.199694
+"scaling","Negative binomial",10000,4,"fastglm_nb",4,13.878295
+"scaling","Negative binomial",10000,4,"fastglm_nb",5,17.024225
+"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",1,59.823592
+"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",2,52.38816
+"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",3,56.94572
+"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",4,53.325584
+"scaling","Hurdle Poisson",10000,3,"pscl::hurdle",5,49.649114
+"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",1,3.964003
+"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",2,4.254529
+"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",3,3.73059
+"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",4,3.535963
+"scaling","Hurdle Poisson",10000,3,"fastglm_hurdle",5,4.195981
+"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",1,103.504869
+"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",2,122.854532
+"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",3,101.235191
+"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",4,100.210396
+"scaling","Zero-inflated Poisson",10000,3,"pscl::zeroinfl",5,94.811393
+"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",1,27.496322
+"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",2,30.858896
+"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",3,29.826352
+"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",4,32.071717
+"scaling","Zero-inflated Poisson",10000,3,"fastglm_zi",5,32.687496
+"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",1,9.879278
+"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",2,10.519247
+"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",3,14.398667
+"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",4,9.747873
+"scaling","Firth binomial-logit",10000,6,"brglm2::brglmFit",5,70.271171
+"scaling","Firth binomial-logit",10000,6,"fastglm auto",1,5.804862
+"scaling","Firth binomial-logit",10000,6,"fastglm auto",2,4.614632
+"scaling","Firth binomial-logit",10000,6,"fastglm auto",3,4.345836
+"scaling","Firth binomial-logit",10000,6,"fastglm auto",4,4.513608
+"scaling","Firth binomial-logit",10000,6,"fastglm auto",5,4.543251
+"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",1,9.854432
+"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",2,10.455287
+"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",3,14.859056
+"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",4,10.121752
+"scaling","Firth Poisson-log",10000,6,"brglm2::brglmFit",5,12.956738
+"scaling","Firth Poisson-log",10000,6,"fastglm auto",1,5.283547
+"scaling","Firth Poisson-log",10000,6,"fastglm auto",2,4.215251
+"scaling","Firth Poisson-log",10000,6,"fastglm auto",3,4.070849
+"scaling","Firth Poisson-log",10000,6,"fastglm auto",4,4.017467
+"scaling","Firth Poisson-log",10000,6,"fastglm auto",5,3.962732
+"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",1,160.391877
+"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",2,103.105324
+"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",3,100.402235
+"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",4,100.037663
+"scaling","Firth Gamma-log",10000,6,"brglm2::brglmFit",5,100.733023
+"scaling","Firth Gamma-log",10000,6,"fastglm auto",1,3.785571
+"scaling","Firth Gamma-log",10000,6,"fastglm auto",2,3.2964
+"scaling","Firth Gamma-log",10000,6,"fastglm auto",3,3.231579
+"scaling","Firth Gamma-log",10000,6,"fastglm auto",4,3.422516
+"scaling","Firth Gamma-log",10000,6,"fastglm auto",5,3.095213
+"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",1,21.211063
+"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",2,19.705789
+"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",3,19.13142
+"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",4,19.076316
+"scaling","Firth Gaussian-identity",10000,6,"brglm2::brglmFit",5,18.100024
+"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",1,1.744099
+"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",2,1.55349
+"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",3,1.417985
+"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",4,1.406833
+"scaling","Firth Gaussian-identity",10000,6,"fastglm auto",5,1.388096
+"scaling","Logistic",100000,30,"glm.fit",1,235.326839
+"scaling","Logistic",100000,30,"glm.fit",2,240.965692
+"scaling","Logistic",100000,30,"glm.fit",3,244.560572
+"scaling","Logistic",100000,30,"glm.fit",4,246.157317
+"scaling","Logistic",100000,30,"glm.fit",5,299.741816
+"scaling","Logistic",100000,30,"glm.fit2",1,239.436146
+"scaling","Logistic",100000,30,"glm.fit2",2,299.800036
+"scaling","Logistic",100000,30,"glm.fit2",3,299.11058
+"scaling","Logistic",100000,30,"glm.fit2",4,238.585806
+"scaling","Logistic",100000,30,"glm.fit2",5,304.208766
+"scaling","Logistic",100000,30,"speedglm.wfit",1,163.561341
+"scaling","Logistic",100000,30,"speedglm.wfit",2,167.303534
+"scaling","Logistic",100000,30,"speedglm.wfit",3,166.2837
+"scaling","Logistic",100000,30,"speedglm.wfit",4,164.301801
+"scaling","Logistic",100000,30,"speedglm.wfit",5,165.133527
+"scaling","Logistic",100000,30,"fastglm auto",1,58.763127
+"scaling","Logistic",100000,30,"fastglm auto",2,59.166485
+"scaling","Logistic",100000,30,"fastglm auto",3,62.804825
+"scaling","Logistic",100000,30,"fastglm auto",4,58.273751
+"scaling","Logistic",100000,30,"fastglm auto",5,61.364905
+"scaling","Poisson",100000,30,"glm.fit",1,306.880244
+"scaling","Poisson",100000,30,"glm.fit",2,321.58719
+"scaling","Poisson",100000,30,"glm.fit",3,320.311434
+"scaling","Poisson",100000,30,"glm.fit",4,320.847837
+"scaling","Poisson",100000,30,"glm.fit",5,312.348332
+"scaling","Poisson",100000,30,"glm.fit2",1,318.18993
+"scaling","Poisson",100000,30,"glm.fit2",2,322.474348
+"scaling","Poisson",100000,30,"glm.fit2",3,325.009665
+"scaling","Poisson",100000,30,"glm.fit2",4,323.760518
+"scaling","Poisson",100000,30,"glm.fit2",5,324.861286
+"scaling","Poisson",100000,30,"speedglm.wfit",1,219.428843
+"scaling","Poisson",100000,30,"speedglm.wfit",2,222.446443
+"scaling","Poisson",100000,30,"speedglm.wfit",3,218.937745
+"scaling","Poisson",100000,30,"speedglm.wfit",4,223.780337
+"scaling","Poisson",100000,30,"speedglm.wfit",5,222.903388
+"scaling","Poisson",100000,30,"fastglm auto",1,64.305589
+"scaling","Poisson",100000,30,"fastglm auto",2,63.649917
+"scaling","Poisson",100000,30,"fastglm auto",3,64.762534
+"scaling","Poisson",100000,30,"fastglm auto",4,62.287487
+"scaling","Poisson",100000,30,"fastglm auto",5,68.680412
+"scaling","Negative binomial",100000,4,"MASS::glm.nb",1,567.513636
+"scaling","Negative binomial",100000,4,"MASS::glm.nb",2,564.945724
+"scaling","Negative binomial",100000,4,"MASS::glm.nb",3,558.445584
+"scaling","Negative binomial",100000,4,"MASS::glm.nb",4,581.437318
+"scaling","Negative binomial",100000,4,"MASS::glm.nb",5,564.732114
+"scaling","Negative binomial",100000,4,"fastglm_nb",1,123.709833
+"scaling","Negative binomial",100000,4,"fastglm_nb",2,140.193514
+"scaling","Negative binomial",100000,4,"fastglm_nb",3,124.90158
+"scaling","Negative binomial",100000,4,"fastglm_nb",4,126.427518
+"scaling","Negative binomial",100000,4,"fastglm_nb",5,122.946659
+"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",1,565.015137
+"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",2,661.086214
+"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",3,600.806005
+"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",4,658.246185
+"scaling","Hurdle Poisson",100000,3,"pscl::hurdle",5,583.19179
+"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",1,43.885908
+"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",2,43.791321
+"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",3,41.752432
+"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",4,41.83886
+"scaling","Hurdle Poisson",100000,3,"fastglm_hurdle",5,42.516549
+"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",1,1231.19064
+"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",2,1255.688345
+"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",3,1217.806354
+"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",4,1287.907703
+"scaling","Zero-inflated Poisson",100000,3,"pscl::zeroinfl",5,1268.208966
+"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",1,319.627718
+"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",2,314.011661
+"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",3,326.685048
+"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",4,314.474551
+"scaling","Zero-inflated Poisson",100000,3,"fastglm_zi",5,307.316074
+"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",1,80.975574
+"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",2,143.615661
+"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",3,80.393046
+"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",4,150.154423
+"scaling","Firth binomial-logit",100000,6,"brglm2::brglmFit",5,83.29437
+"scaling","Firth binomial-logit",100000,6,"fastglm auto",1,44.302591
+"scaling","Firth binomial-logit",100000,6,"fastglm auto",2,38.93852
+"scaling","Firth binomial-logit",100000,6,"fastglm auto",3,34.862792
+"scaling","Firth binomial-logit",100000,6,"fastglm auto",4,47.213509
+"scaling","Firth binomial-logit",100000,6,"fastglm auto",5,39.366109
+"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",1,94.812172
+"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",2,165.468948
+"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",3,103.770221
+"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",4,94.833533
+"scaling","Firth Poisson-log",100000,6,"brglm2::brglmFit",5,170.393622
+"scaling","Firth Poisson-log",100000,6,"fastglm auto",1,35.981272
+"scaling","Firth Poisson-log",100000,6,"fastglm auto",2,36.66753
+"scaling","Firth Poisson-log",100000,6,"fastglm auto",3,38.884933
+"scaling","Firth Poisson-log",100000,6,"fastglm auto",4,37.620821
+"scaling","Firth Poisson-log",100000,6,"fastglm auto",5,36.125387
+"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",1,1014.49293
+"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",2,1027.998658
+"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",3,959.719308
+"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",4,1043.880295
+"scaling","Firth Gamma-log",100000,6,"brglm2::brglmFit",5,1086.923981
+"scaling","Firth Gamma-log",100000,6,"fastglm auto",1,38.215936
+"scaling","Firth Gamma-log",100000,6,"fastglm auto",2,35.999558
+"scaling","Firth Gamma-log",100000,6,"fastglm auto",3,33.47076
+"scaling","Firth Gamma-log",100000,6,"fastglm auto",4,33.096307
+"scaling","Firth Gamma-log",100000,6,"fastglm auto",5,48.712961
+"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",1,210.39765
+"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",2,209.490443
+"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",3,298.730961
+"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",4,181.358129
+"scaling","Firth Gaussian-identity",100000,6,"brglm2::brglmFit",5,256.068493
+"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",1,11.501074
+"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",2,11.590864
+"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",3,10.810019
+"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",4,13.160877
+"scaling","Firth Gaussian-identity",100000,6,"fastglm auto",5,11.895986

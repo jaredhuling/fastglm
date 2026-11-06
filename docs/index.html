@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous">
 <!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- pkgdown --><link href="pkgdown.css" rel="stylesheet">
 <script src="pkgdown.js"></script><meta property="og:title" content="Fast and Stable Fitting of Generalized Linear Models using RcppEigen">
-<meta property="og:description" content="Fits generalized linear models efficiently using RcppEigen. The iteratively reweighted least squares implementation utilizes the step-halving approach of Marschner (2011) &lt;doi:10.32614/RJ-2011-012&gt; to help safeguard against convergence issues.">
+<meta property="og:description" content="Fits generalized linear models efficiently using RcppEigen. The iteratively reweighted least squares implementation utilizes the step-halving approach of Marschner (2011) &lt;doi:10.32614/RJ-2011-012&gt; to help safeguard against convergence issues. Provides formula and matrix interfaces for count and cumulative-link ordinal models, mean bias reduction, and blockwise fitting for supported model classes.">
 <!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js" integrity="sha256-nvJJv9wWKEm88qvoQl9ekL2J+k/RWIsaSScxxlsrv8k=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/config/TeX-AMS-MML_HTMLorMML.js" integrity="sha256-84DKXVJXs0/F8OTMzX4UR909+jtl4G7SPypPavF+GfA=" crossorigin="anonymous"></script><!--[if lt IE 9]>
 <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
 <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
@@ -33,7 +33,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -56,22 +56,28 @@
       <a href="articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul>
 </li>
@@ -103,226 +109,137 @@
 <div class="section level1">
 <div class="page-header"><h1 id="fastglm">fastglm<a class="anchor" aria-label="anchor" href="#fastglm"></a>
 </h1></div>
-<p>The <em>fastglm</em> package is a <strong>fast</strong> and <strong>stable</strong> alternative to <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">stats::glm()</a></code> for fitting generalized linear models. It is built on <em>RcppEigen</em> and is fully compatible with R’s <code>family</code> objects: the downstream methods you expect (<code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>, <code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>) all work exactly as they do for a <code>glm</code>.</p>
-<p>Beyond standard GLMs, <em>fastglm</em> provides dedicated fitting functions for negative-binomial regression, hurdle and zero-inflated count models, and Firth bias-reduced GLMs, all of which reuse the same C++ IRLS solver.</p>
-<div class="section level3">
-<h3 id="features">Features<a class="anchor" aria-label="anchor" href="#features"></a>
-</h3>
+<p>The <em>fastglm</em> package provides fast regression modeling, mean bias reduction, and inference for continuous, binary, count, and ordered outcomes. C++ fitting routines and numerical checks support familiar R workflows, including <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>, and <code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>.</p>
+<div class="section level2">
+<h2 id="models-and-estimation">Models and estimation<a class="anchor" aria-label="anchor" href="#models-and-estimation"></a>
+</h2>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr>
+<th align="left">Model</th>
+<th align="left">Main interface</th>
+<th align="left">Estimation and examples</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left">Generalized linear models (GLMs)</td>
+<td align="left"><code><a href="reference/fastglm.html">fastglm()</a></code></td>
+<td align="left">Ordinary fitting and mean bias reduction for supported family/link combinations; <a href="#fitting-a-glm">GLM example</a>
+</td>
+</tr>
+<tr>
+<td align="left">Negative-binomial counts</td>
+<td align="left"><code><a href="reference/fastglm_nb.html">fastglm_nb()</a></code></td>
+<td align="left">Maximum likelihood (ML) with estimated size; <a href="#negative-binomial-regression">negative-binomial regression</a>
+</td>
+</tr>
+<tr>
+<td align="left">Positive counts and hurdle models</td>
+<td align="left">
+<code><a href="reference/fastglm_truncated.html">fastglm_truncated()</a></code>, <code><a href="reference/fastglm_hurdle.html">fastglm_hurdle()</a></code>
+</td>
+<td align="left">Zero-truncated Poisson or negative-binomial regression, alone or with a binary occurrence model; <a href="#hurdle-models">hurdle examples</a>
+</td>
+</tr>
+<tr>
+<td align="left">Zero-inflated counts</td>
+<td align="left"><code><a href="reference/fastglm_zi.html">fastglm_zi()</a></code></td>
+<td align="left">Poisson or negative-binomial counts with an additional zero component; <a href="#zero-inflated-models">zero-inflated models</a>
+</td>
+</tr>
+<tr>
+<td align="left">Zero and positive continuous outcomes</td>
+<td align="left"><code><a href="reference/fastglm_twopart.html">fastglm_twopart()</a></code></td>
+<td align="left">Binary and Gamma components, with ML or mean bias reduction; <a href="#two-part-models-for-continuous-outcomes">two-part models</a>
+</td>
+</tr>
+<tr>
+<td align="left">Ordered outcomes</td>
+<td align="left"><code><a href="reference/fastglm_ordinal.html">fastglm_ordinal()</a></code></td>
+<td align="left">Proportional odds and selected nonparallel effects; logit, probit, and complementary log-log links; ML or mean bias reduction; <a href="#ordered-outcomes">ordinal functionality</a>
+</td>
+</tr>
+</tbody>
+</table>
+<p>Mean bias reduction uses <code>firth=TRUE</code> where supported. Its scope depends on the model and family/link combination; the <a href="#firth-bias-reduced-glms">bias-reduction section</a> describes the GLM choices. Truncated, hurdle, and zero-inflated count fitting currently uses ML.</p>
+</div>
+<div class="section level2">
+<h2 id="inference-and-computation">Inference and computation<a class="anchor" aria-label="anchor" href="#inference-and-computation"></a>
+</h2>
 <ul>
-<li>Six decomposition methods for the IRLS weighted least-squares step: column-pivoted QR (default, rank-revealing), unpivoted QR, LLT Cholesky, LDLT Cholesky, full-pivoted QR, and bidiagonal divide-and-conquer SVD.</li>
-<li>Robust convergence via step-halving safeguard following Marschner (2011), with better-initialized starting values than <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> or <code>glm2()</code>.</li>
-<li>Large scale data features: Sparse design matrices (<code>Matrix::dgCMatrix</code>), on-disc <code>big.matrix</code> objects (<code>bigmemory</code>), and a streaming callback interface (<code><a href="reference/fastglm_streaming.html">fastglm_streaming()</a></code>) for fitting on data that does not fit in memory.</li>
-<li>Firth bias-reduced GLMs (<code>firth = TRUE</code>) implementing the AS_mean adjustment of Kosmidis and Firth (2009, 2021) for all standard families, all six decomposition methods, and all three large-data paths.</li>
-<li>Negative-binomial regression (<code><a href="reference/fastglm_nb.html">fastglm_nb()</a></code>) with joint <code>(beta, theta)</code> MLE entirely in C++.</li>
-<li>Hurdle count models (<code><a href="reference/fastglm_hurdle.html">fastglm_hurdle()</a></code>) with Poisson or NB count components and a binary zero/non-zero component.</li>
-<li>Zero-inflated count models (<code><a href="reference/fastglm_zi.html">fastglm_zi()</a></code>) with Poisson or NB count distributions, fit by an EM algorithm in C++.</li>
-<li>Inference: <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code>predict(se.fit = TRUE)</code>, and compatibility with <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">sandwich::vcovHC()</a></code> and <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">sandwich::vcovCL()</a></code> for robust standard errors.</li>
+<li>Uncertainty and testing. Model-based intervals, joint Wald tests, robust and clustered covariance, and refitting bootstraps are available for supported classes. Profile inference covers dense binomial-logit Firth fits, ordinal ML fits with common or threshold-specific slopes, and negative-binomial size. Ordinal score tests address coefficient hypotheses or the common-slope assumption.</li>
+<li>Prediction and interpretation. Response means or category probabilities, prediction standard errors, averages and contrasts, residuals, and ordinal calibration summaries connect fitted coefficients to outcomes. Shared printed tables and optional broom methods support reporting.</li>
+<li>Large datasets. Dense, sparse, mapped, and repeatable-source inputs serve different model classes. Streaming supports GLMs, negative-binomial, hurdle, two-part, and ordinal models with common or threshold-specific slopes.</li>
+<li>Repeated fitting and numerical control. Prepared GLM and ordinal designs reuse predictor setup across responses. GLMs offer six decompositions and an automatic choice, with diagnostics for convergence and numerical conditioning. The timing sections pair performance comparisons with agreement checks.</li>
 </ul>
+<p>The <a href="vignettes/fastglm-overview.Rmd">package overview</a> maps these methods to their supported models. Dedicated guides cover <a href="vignettes/firth-fastglm.Rmd">bias reduction</a>, <a href="vignettes/count-firth-fastglm.Rmd">counts</a>, <a href="vignettes/ordinal-fastglm.Rmd">ordered outcomes</a>, <a href="vignettes/semicontinuous-fastglm.Rmd">two-part outcomes</a>, and <a href="vignettes/large-data-fastglm.Rmd">large-data computation</a>. See <a href="NEWS.html">NEWS</a> for the version history.</p>
+<p><a href="#installation">Installation</a> · <a href="#fitting-a-glm">GLM example</a> · <a href="#extended-models">Model extensions</a> · <a href="#firth-bias-reduced-glms">Bias reduction</a> · <a href="#inference-and-repeated-fits">Inference and repeated fits</a> · <a href="#sparse-bigmatrix-and-streaming-designs">Large data</a> · <a href="#speed">Speed</a> · <a href="#stability">Stability</a> · <a href="#benchmarks">Benchmarks</a></p>
 </div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>Install from CRAN:</p>
+<p>Install the released version from CRAN or the development version from GitHub:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"fastglm"</span><span class="op">)</span></span></code></pre></div>
-<p>or the development version from GitHub:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"jaredhuling/fastglm"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"fastglm"</span><span class="op">)</span></span>
+<span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"jaredhuling/fastglm"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="fitting-a-glm">Fitting a GLM<a class="anchor" aria-label="anchor" href="#fitting-a-glm"></a>
 </h2>
-<p>The main function is <code><a href="reference/fastglm.html">fastglm()</a></code>. It takes a numeric design matrix <code>x</code>, a response <code>y</code>, and an R <code>family</code> object:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<p><code><a href="reference/fastglm.html">fastglm()</a></code> accepts a numeric design matrix, a response, and an R <code>family</code> object. In the <code>esoph</code> example, the two response columns contain the numbers of cases and controls within each covariate group:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/jaredhuling/fastglm" class="external-link">fastglm</a></span><span class="op">)</span></span>
-<span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">esoph</span><span class="op">)</span></span>
-<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>, data <span class="op">=</span> <span class="va">esoph</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">esoph</span><span class="op">$</span><span class="va">ncases</span>, <span class="va">esoph</span><span class="op">$</span><span class="va">ncontrols</span><span class="op">)</span></span>
+<span><span class="va">X_esoph</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>, data<span class="op">=</span><span class="va">esoph</span><span class="op">)</span></span>
+<span><span class="va">y_esoph</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">esoph</span><span class="op">$</span><span class="va">ncases</span>, <span class="va">esoph</span><span class="op">$</span><span class="va">ncontrols</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"cloglog"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X_esoph</span>, <span class="va">y_esoph</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="st">"cloglog"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Generalized linear model</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Call:</span></span>
-<span><span class="co">#&gt; fastglm.default(x = x, y = y, family = binomial(link = "cloglog"))</span></span>
+<span><span class="co">#&gt; fastglm.default(x = X_esoph, y = y_esoph, family = binomial("cloglog"))</span></span>
+<span><span class="co">#&gt; Family: binomial (cloglog link)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Coefficients:</span></span>
 <span><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
-<span><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414  &lt; 2e-16 ***</span></span>
-<span><span class="co">#&gt; agegp.L         3.30677    0.63454   5.211 1.88e-07 ***</span></span>
-<span><span class="co">#&gt; agegp.Q        -1.35525    0.57310  -2.365    0.018 *  </span></span>
-<span><span class="co">#&gt; agegp.C         0.20296    0.43333   0.468    0.640    </span></span>
+<span><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; agegp.L         3.30677    0.63456   5.211   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; agegp.Q        -1.35525    0.57311  -2.365    0.018 *  </span></span>
+<span><span class="co">#&gt; agegp.C         0.20296    0.43334   0.468    0.640    </span></span>
 <span><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
 <span><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
-<span><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568 4.93e-06 ***</span></span>
-<span><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664  &lt; 2e-16 ***</span></span>
+<span><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664   &lt;1e-04 ***</span></span>
 <span><span class="co">#&gt; ---</span></span>
 <span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; (Dispersion parameter for binomial family taken to be 1)</span></span>
+<span><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df AIC</span></span>
+<span><span class="co">#&gt;           1           368      87    96.95          80 228</span></span>
+<span><span class="co">#&gt; Convergence: converged (6 iterations)</span></span></code></pre></div>
+<p>A formula and data frame can also be supplied directly. Formula fits retain factor coding, contrasts, and offsets for subsequent prediction:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit_formula</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">ncases</span>, <span class="va">ncontrols</span><span class="op">)</span> <span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>,</span>
+<span>    data<span class="op">=</span><span class="va">esoph</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="st">"cloglog"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">fit_formula</span>, newdata<span class="op">=</span><span class="va">esoph</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>,<span class="op">]</span>, type<span class="op">=</span><span class="st">"response"</span>, se.fit<span class="op">=</span><span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Predictions with standard errors</span></span>
+<span><span class="co">#&gt; Scale: response mean</span></span>
+<span><span class="co">#&gt; Residual scale: 1</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     Null deviance: 61.609  on 87  degrees of freedom</span></span>
-<span><span class="co">#&gt; Residual deviance: 96.950  on 80  degrees of freedom</span></span>
-<span><span class="co">#&gt; AIC: 228</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Number of Fisher Scoring iterations: 6</span></span></code></pre></div>
-<p><code><a href="reference/fastglm.html">fastglm()</a></code> operates on a pre-built design matrix. To use a formula and a data frame, pass <code>fastglm_fit</code> as the fitting function to base <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>:</p>
+<span><span class="co">#&gt;  Row Estimate Std. Error</span></span>
+<span><span class="co">#&gt;    1 0.002727   0.002746</span></span>
+<span><span class="co">#&gt;    2 0.003801   0.003806</span></span>
+<span><span class="co">#&gt;    3 0.005298   0.005300</span></span></code></pre></div>
+<p>The fitting function can still be supplied to base R’s <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">ncases</span>, <span class="va">ncontrols</span><span class="op">)</span> <span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>,</span>
-<span>            data <span class="op">=</span> <span class="va">esoph</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"cloglog"</span><span class="op">)</span>,</span>
-<span>            method <span class="op">=</span> <span class="va">fastglm_fit</span><span class="op">)</span></span></code></pre></div>
-<p>A third, minimal-use function, <code><a href="reference/fastglmPure.html">fastglmPure()</a></code>, returns only the coefficient vector and working quantities, skipping dispersion, AIC, and null-deviance computation. Use this when calling <em>fastglm</em> from another package and you only need the coefficients.</p>
-</div>
-<div class="section level2">
-<h2 id="decomposition-methods">Decomposition methods<a class="anchor" aria-label="anchor" href="#decomposition-methods"></a>
-</h2>
-<p>The IRLS algorithm reduces every iteration to a weighted least-squares problem. <em>fastglm</em> supports six different matrix decompositions for solving that WLS step, all from <em>RcppEigen</em> (Bates and Eddelbuettel, 2013); the choice trades off speed against numerical stability and rank-revealing behavior:</p>
-<table class="table">
-<thead><tr>
-<th><code>method</code></th>
-<th>decomposition</th>
-</tr></thead>
-<tbody>
-<tr>
-<td><code>0</code></td>
-<td>column-pivoted Householder QR (default; rank-revealing)</td>
-</tr>
-<tr>
-<td><code>1</code></td>
-<td>unpivoted Householder QR</td>
-</tr>
-<tr>
-<td><code>2</code></td>
-<td>LLT Cholesky</td>
-</tr>
-<tr>
-<td><code>3</code></td>
-<td>LDLT Cholesky</td>
-</tr>
-<tr>
-<td><code>4</code></td>
-<td>full-pivoted Householder QR</td>
-</tr>
-<tr>
-<td><code>5</code></td>
-<td>bidiagonal divide-and-conquer SVD</td>
-</tr>
-</tbody>
-</table>
-<p>The default (<code>method = 0</code>) is the safe choice: it is rank-revealing, so it handles aliased or collinear columns gracefully. The Cholesky methods (<code>2</code> and <code>3</code>) are roughly 3–4x faster but assume full column rank.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">5000</span>; <span class="va">p</span> <span class="op">&lt;-</span> <span class="fl">30</span></span>
-<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">p</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">p</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="va">x</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.05</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">f0</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>                 <span class="co"># default QR</span></span>
-<span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   0.004   0.000   0.005</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">f2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span>     <span class="co"># LLT</span></span>
-<span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   0.002   0.000   0.002</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="speed">Speed<a class="anchor" aria-label="anchor" href="#speed"></a>
-</h2>
-<p><em>fastglm</em> runs the same IRLS algorithm as <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> but executes the per-iteration WLS solve in C++ via <em>RcppEigen</em>, which is often substantially faster than the compiled-R + LAPACK path that <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> uses. The gap widens with sample size because the R-side overhead in <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> is fixed per iteration:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/joshuaulrich/microbenchmark/" class="external-link">microbenchmark</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span><span class="va">n.obs</span>  <span class="op">&lt;-</span> <span class="fl">10000</span></span>
-<span><span class="va">n.vars</span> <span class="op">&lt;-</span> <span class="fl">100</span></span>
-<span></span>
-<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n.obs</span> <span class="op">*</span> <span class="va">n.vars</span>, sd <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>, <span class="va">n.obs</span>, <span class="va">n.vars</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fl">1</span> <span class="op">*</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/drop.html" class="external-link">drop</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">25</span><span class="op">]</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">25</span>, <span class="op">-</span><span class="fl">0.1</span>, <span class="fl">0.1</span><span class="op">)</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n.obs</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">ct</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/microbenchmark/man/microbenchmark.html" class="external-link">microbenchmark</a></span><span class="op">(</span></span>
-<span>    glm.fit          <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    fastglm_QR       <span class="op">=</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
-<span>    fastglm_LLT      <span class="op">=</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span><span class="op">)</span>,</span>
-<span>    fastglm_LDLT     <span class="op">=</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    times <span class="op">=</span> <span class="fl">25L</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/autoplot.html" class="external-link">autoplot</a></span><span class="op">(</span><span class="va">ct</span>, log <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span> <span class="op">+</span></span>
-<span>    <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/stat_summary.html" class="external-link">stat_summary</a></span><span class="op">(</span>fun <span class="op">=</span> <span class="va">median</span>, geom <span class="op">=</span> <span class="st">'point'</span>, size <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">+</span></span>
-<span>    <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_bw</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="reference/figures/README-glm_bench-1.png" alt="" width="100%" style="display: block; margin: auto;"></p>
-<p>Coefficient estimates agree with <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> to floating-point precision:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">gl</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fastglm_QR   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  fastglm_LLT  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  fastglm_LDLT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">gl</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   fastglm_QR  fastglm_LLT fastglm_LDLT </span></span>
-<span><span class="co">#&gt; 1.360023e-15 1.249001e-15 1.165734e-15</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="stability">Stability<a class="anchor" aria-label="anchor" href="#stability"></a>
-</h2>
-<p><em>fastglm</em> does not compromise computational stability for speed. It uses a step-halving safeguard following Marschner (2011) and starts from better-initialized values than <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> or <code><a href="https://rdrr.io/pkg/glm2/man/glm2.html" class="external-link">glm2::glm2()</a></code>, so it tends to converge in cases where the standard IRLS algorithm fails. As an example, consider a Gamma model with a <code>sqrt</code> link — a mild response misspecification combined with a badly misspecified link. In such scenarios the standard IRLS algorithm tends to have convergence issues:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
-<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10000</span> <span class="op">*</span> <span class="fl">100</span><span class="op">)</span>, ncol <span class="op">=</span> <span class="fl">100</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fl">0.25</span> <span class="op">*</span> <span class="va">x</span><span class="op">[</span>,<span class="fl">1</span><span class="op">]</span> <span class="op">-</span> <span class="fl">0.25</span> <span class="op">*</span> <span class="va">x</span><span class="op">[</span>,<span class="fl">3</span><span class="op">]</span> <span class="op">+</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="va">x</span><span class="op">[</span>,<span class="fl">4</span><span class="op">]</span> <span class="op">-</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="va">x</span><span class="op">[</span>,<span class="fl">5</span><span class="op">]</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10000</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fl">0.1</span></span>
-<span></span>
-<span><span class="va">gfit1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span>, method <span class="op">=</span> <span class="va">fastglm_fit</span><span class="op">)</span></span>
-<span><span class="va">gfit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co">## fastglm converges with a higher likelihood</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fastglm_converged <span class="op">=</span> <span class="va">gfit1</span><span class="op">$</span><span class="va">converged</span>, glm_converged <span class="op">=</span> <span class="va">gfit2</span><span class="op">$</span><span class="va">converged</span><span class="op">)</span></span>
-<span><span class="co">#&gt; fastglm_converged     glm_converged </span></span>
-<span><span class="co">#&gt;              TRUE             FALSE</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fastglm_logLik <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit1</span><span class="op">)</span>, glm_logLik <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; fastglm_logLik     glm_logLik </span></span>
-<span><span class="co">#&gt;      -16046.66      -16704.05</span></span></code></pre></div>
-<p>See <code><a href="articles/fastglm.html">vignette("fastglm", package = "fastglm")</a></code> for the full comparison, including <code><a href="https://rdrr.io/pkg/glm2/man/glm2.html" class="external-link">glm2::glm2()</a></code> and <code>speedglm</code>.</p>
-</div>
-<div class="section level2">
-<h2 id="native-c-families">Native C++ families<a class="anchor" aria-label="anchor" href="#native-c-families"></a>
-</h2>
-<p>For the most commonly used <code>family</code>/<code>link</code> combinations, <em>fastglm</em> dispatches <code>variance()</code>, <code>mu.eta()</code>, <code>linkinv()</code>, and <code>dev.resids()</code> to inline C++ implementations rather than calling back into R once per IRLS iteration. The covered combinations are:</p>
-<ul>
-<li>gaussian (identity, log, inverse)</li>
-<li>binomial (logit, probit, cloglog, log)</li>
-<li>poisson (log, identity, sqrt)</li>
-<li>Gamma (log, inverse, identity)</li>
-<li>inverse.gaussian (1/mu^2, log, identity, inverse)</li>
-</ul>
-<p>Detection is automatic: if the <code>family</code> object matches one of the above, the native path is used; otherwise <em>fastglm</em> falls back to the R-callback path. The C++ native approach is meaningfully faster on large <code>n</code> because it eliminates the per-iteration calls to R for each of the four family functions.</p>
-</div>
-<div class="section level2">
-<h2 id="sparse-bigmatrix-and-streaming-designs">Sparse, big.matrix, and streaming designs<a class="anchor" aria-label="anchor" href="#sparse-bigmatrix-and-streaming-designs"></a>
-</h2>
-<p>For designs that are sparse, that live on disc, or that have to be built from a parquet / <em>arrow</em> / <em>DuckDB</em> source, <em>fastglm</em> provides three large-data paths that share a common streaming kernel and produce identical results:</p>
-<ul>
-<li>
-<strong><code>Matrix::dgCMatrix</code></strong>: pass directly to <code><a href="reference/fastglm.html">fastglm()</a></code>. Useful for one-hot encoded categoricals and high-dimensional sparse designs.</li>
-<li>
-<strong><code><a href="https://rdrr.io/pkg/bigmemory/man/big.matrix.html" class="external-link">bigmemory::big.matrix</a></code></strong>: pass directly to <code><a href="reference/fastglm.html">fastglm()</a></code>. The matrix is read in row-blocks and never fully materialized in memory.</li>
-<li>
-<strong><code>fastglm_streaming(chunk_callback, n_chunks, family)</code></strong>: a user-supplied closure yields one row-block per call. The right path for fitting on a parquet dataset, <em>DuckDB</em> query, or any external columnar store.</li>
-</ul>
-<p>A short example of the streaming computation approach:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">4000</span></span>
-<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="fl">3</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.2</span>, <span class="fl">0.4</span>, <span class="op">-</span><span class="fl">0.2</span>, <span class="fl">0.3</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">chunk_size</span> <span class="op">&lt;-</span> <span class="fl">1000</span></span>
-<span><span class="va">chunks</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">k</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">idx</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="op">(</span><span class="va">k</span> <span class="op">-</span> <span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="va">chunk_size</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span><span class="op">:</span><span class="op">(</span><span class="va">k</span> <span class="op">*</span> <span class="va">chunk_size</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>X <span class="op">=</span> <span class="va">X</span><span class="op">[</span><span class="va">idx</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>, y <span class="op">=</span> <span class="va">y</span><span class="op">[</span><span class="va">idx</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">fit_stream</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_streaming.html">fastglm_streaming</a></span><span class="op">(</span><span class="va">chunks</span>, n_chunks <span class="op">=</span> <span class="fl">4</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">fit_full</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit_stream</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit_full</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 1.042751e-07</span></span></code></pre></div>
-<p>See <code><a href="articles/large-data-fastglm.html">vignette("large-data-fastglm", package = "fastglm")</a></code> for a detailed walk-through of all three paths.</p>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">ncases</span>, <span class="va">ncontrols</span><span class="op">)</span> <span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>,</span>
+<span>    data<span class="op">=</span><span class="va">esoph</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="st">"cloglog"</span><span class="op">)</span>, method<span class="op">=</span><span class="va">fastglm_fit</span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="reference/fastglmPure.html">fastglmPure()</a></code> exposes the lower-level fit without the final dispersion, AIC, and null-deviance calculations performed by <code><a href="reference/fastglm.html">fastglm()</a></code>. For workflows that only need coefficient estimates, <code>fastglm(..., inference="none")</code> skips the final covariance calculation. Prepared designs, described below, are useful when several outcomes share the same predictors.</p>
 </div>
 <div class="section level2">
 <h2 id="extended-models">Extended models<a class="anchor" aria-label="anchor" href="#extended-models"></a>
@@ -330,112 +247,861 @@
 <div class="section level3">
 <h3 id="negative-binomial-regression">Negative-binomial regression<a class="anchor" aria-label="anchor" href="#negative-binomial-regression"></a>
 </h3>
-<p><code><a href="reference/fastglm_nb.html">fastglm_nb()</a></code> fits negative-binomial regression with the dispersion <code>theta</code> estimated jointly with the regression coefficients, in the spirit of <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code>. The joint <code>(beta, theta)</code> MLE runs entirely in C++; IRLS for <code>beta</code>, Brent’s method for <code>theta</code>:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<p><code><a href="reference/fastglm_nb.html">fastglm_nb()</a></code> estimates negative-binomial regression coefficients together with the size parameter theta, which determines variation beyond the Poisson variance. Dense fits alternate coefficient and theta updates in C++, in the spirit of <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code>:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
 <span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">5000</span></span>
-<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="fl">3</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">mu</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">0.4</span>, <span class="op">-</span><span class="fl">0.2</span>, <span class="fl">0.3</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu">MASS</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/MASS/man/rnegbin.html" class="external-link">rnegbin</a></span><span class="op">(</span><span class="va">n</span>, mu <span class="op">=</span> <span class="va">mu</span>, theta <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">f_nb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_nb.html">fastglm_nb</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>coef <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f_nb</span><span class="op">)</span>, theta <span class="op">=</span> <span class="va">f_nb</span><span class="op">$</span><span class="va">theta</span><span class="op">)</span></span>
-<span><span class="co">#&gt;    coef.x1    coef.x2    coef.x3    coef.x4      theta </span></span>
+<span><span class="va">X_nb</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">*</span><span class="fl">3</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">mu_nb</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">X_nb</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">.5</span>, <span class="fl">.4</span>, <span class="op">-</span><span class="fl">.2</span>, <span class="fl">.3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">y_nb</span> <span class="op">&lt;-</span> <span class="fu">MASS</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/MASS/man/rnegbin.html" class="external-link">rnegbin</a></span><span class="op">(</span><span class="va">n</span>, mu<span class="op">=</span><span class="va">mu_nb</span>, theta<span class="op">=</span><span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">f_nb</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_nb.html">fastglm_nb</a></span><span class="op">(</span><span class="va">X_nb</span>, <span class="va">y_nb</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f_nb</span><span class="op">)</span>, theta<span class="op">=</span><span class="va">f_nb</span><span class="op">$</span><span class="va">theta</span><span class="op">)</span></span>
+<span><span class="co">#&gt;         x1         x2         x3         x4      theta </span></span>
 <span><span class="co">#&gt;  0.4926199  0.3862258 -0.2200450  0.2991296  1.9923309</span></span></code></pre></div>
+<p>Sparse designs and repeatable sources are also supported. <code>vcov(f_nb, full=TRUE)</code> includes theta jointly with the coefficients, and <code><a href="reference/fastglm_confint_theta.html">fastglm_confint_theta()</a></code> obtains a profile-likelihood interval by varying theta and refitting the coefficients. The <a href="vignettes/nb-stability-fastglm.Rmd">negative-binomial stability vignette</a> examines challenging cases and the limit as the model approaches a Poisson distribution.</p>
 </div>
 <div class="section level3">
 <h3 id="hurdle-models">Hurdle models<a class="anchor" aria-label="anchor" href="#hurdle-models"></a>
 </h3>
-<p><code><a href="reference/fastglm_hurdle.html">fastglm_hurdle()</a></code> fits a two-part count model: a binary regression for whether <code>y &gt; 0</code>, plus a zero-truncated Poisson or NB regression on the positive subset. The two parts factorize and both are fit by the same C++ IRLS solver. This is the same model as <code><a href="https://rdrr.io/pkg/pscl/man/hurdle.html" class="external-link">pscl::hurdle()</a></code> (Zeileis, Kleiber, and Jackman, 2008). Different designs for the count and zero parts are specified via the <code>Formula</code> package’s two-RHS syntax:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<p>A hurdle model combines a binary regression for whether an outcome is positive with a zero-truncated regression for its positive count. It is useful when the occurrence of an event and its positive frequency need separate explanations. <code><a href="reference/fastglm_hurdle.html">fastglm_hurdle()</a></code> supports Poisson and negative-binomial count components, corresponding to the models in <code><a href="https://rdrr.io/pkg/pscl/man/hurdle.html" class="external-link">pscl::hurdle()</a></code> (Zeileis, Kleiber, and Jackman, 2008).</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
 <span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">5000</span></span>
-<span><span class="va">x1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span>;  <span class="va">x2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
-<span><span class="va">lam</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fl">0.7</span> <span class="op">+</span> <span class="fl">0.4</span> <span class="op">*</span> <span class="va">x1</span> <span class="op">-</span> <span class="fl">0.3</span> <span class="op">*</span> <span class="va">x2</span><span class="op">)</span></span>
-<span><span class="va">is_pos</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="op">-</span><span class="fl">0.4</span> <span class="op">+</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="va">x1</span> <span class="op">+</span> <span class="fl">0.2</span> <span class="op">*</span> <span class="va">x2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">yt</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
+<span><span class="va">x1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
+<span><span class="va">x2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
+<span><span class="va">lambda</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fl">.7</span> <span class="op">+</span> <span class="fl">.4</span><span class="op">*</span><span class="va">x1</span> <span class="op">-</span> <span class="fl">.3</span><span class="op">*</span><span class="va">x2</span><span class="op">)</span></span>
+<span><span class="va">is_positive</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="op">-</span><span class="fl">.4</span> <span class="op">+</span> <span class="fl">.5</span><span class="op">*</span><span class="va">x1</span> <span class="op">+</span> <span class="fl">.2</span><span class="op">*</span><span class="va">x2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">positive_counts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="kw">repeat</span> <span class="op">{</span> <span class="va">v</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Poisson.html" class="external-link">rpois</a></span><span class="op">(</span><span class="fl">1</span>, <span class="va">lam</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">)</span>; <span class="kw">if</span> <span class="op">(</span><span class="va">v</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span> <span class="va">yt</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">v</span>; <span class="kw">break</span> <span class="op">}</span> <span class="op">}</span></span>
+<span>    <span class="kw">repeat</span> <span class="op">{</span></span>
+<span>        <span class="va">value</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Poisson.html" class="external-link">rpois</a></span><span class="op">(</span><span class="fl">1</span>, <span class="va">lambda</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">)</span></span>
+<span>        <span class="kw">if</span> <span class="op">(</span><span class="va">value</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span> <span class="va">positive_counts</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">value</span>; <span class="kw">break</span> <span class="op">}</span></span>
+<span>    <span class="op">}</span></span>
 <span><span class="op">}</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">is_pos</span> <span class="op">==</span> <span class="fl">1</span>, <span class="va">yt</span>, <span class="fl">0L</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">f_h</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_hurdle.html">fastglm_hurdle</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span><span class="va">y</span>, <span class="va">x1</span>, <span class="va">x2</span><span class="op">)</span>, dist <span class="op">=</span> <span class="st">"poisson"</span><span class="op">)</span></span>
+<span><span class="va">hurdle_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y<span class="op">=</span><span class="va">is_positive</span><span class="op">*</span><span class="va">positive_counts</span>, x1<span class="op">=</span><span class="va">x1</span>, x2<span class="op">=</span><span class="va">x2</span><span class="op">)</span></span>
+<span><span class="va">f_h</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_hurdle.html">fastglm_hurdle</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span><span class="op">+</span><span class="va">x2</span> <span class="op">|</span> <span class="va">x1</span><span class="op">+</span><span class="va">x2</span>, data<span class="op">=</span><span class="va">hurdle_data</span>, dist<span class="op">=</span><span class="st">"poisson"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f_h</span><span class="op">)</span></span>
 <span><span class="co">#&gt; count_(Intercept)          count_x1          count_x2  zero_(Intercept) </span></span>
 <span><span class="co">#&gt;         0.6793788         0.4162547        -0.3137229        -0.3767285 </span></span>
 <span><span class="co">#&gt;           zero_x1           zero_x2 </span></span>
 <span><span class="co">#&gt;         0.4447325         0.1999711</span></span></code></pre></div>
+<p>The formula before <code>|</code> specifies the count predictors; the formula after it specifies the predictors of a positive outcome. These can differ. <code><a href="reference/fastglm_truncated.html">fastglm_truncated()</a></code> fits the positive-count regression on its own when observations are sampled conditional on being above zero.</p>
 </div>
 <div class="section level3">
 <h3 id="zero-inflated-models">Zero-inflated models<a class="anchor" aria-label="anchor" href="#zero-inflated-models"></a>
 </h3>
-<p><code><a href="reference/fastglm_zi.html">fastglm_zi()</a></code> fits a zero-inflated Poisson or NB regression, a binary inflation component overlaid on the original count distribution, fit by an EM algorithm in C++ with closed-form posterior responsibilities and an analytical observed-information <code>vcov</code>. This is the same model as <code><a href="https://rdrr.io/pkg/pscl/man/zeroinfl.html" class="external-link">pscl::zeroinfl()</a></code>:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<p>A zero-inflated model allows zeros to arise from both an additional zero component and the count distribution. This distinction changes the meaning of the binary component relative to a hurdle model. <code><a href="reference/fastglm_zi.html">fastglm_zi()</a></code> fits Poisson or negative-binomial versions using an expectation-maximization algorithm: it alternates estimating each observation’s component membership with updating the component regressions.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
 <span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">5000</span></span>
-<span><span class="va">x1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span>;  <span class="va">x2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
-<span><span class="va">eta_c</span> <span class="op">&lt;-</span> <span class="fl">0.7</span> <span class="op">+</span> <span class="fl">0.4</span> <span class="op">*</span> <span class="va">x1</span> <span class="op">-</span> <span class="fl">0.3</span> <span class="op">*</span> <span class="va">x2</span></span>
-<span><span class="va">eta_z</span> <span class="op">&lt;-</span> <span class="op">-</span><span class="fl">0.4</span> <span class="op">+</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="va">x1</span> <span class="op">+</span> <span class="fl">0.2</span> <span class="op">*</span> <span class="va">x2</span></span>
-<span><span class="va">z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="va">eta_z</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">z</span> <span class="op">==</span> <span class="fl">1</span>, <span class="fl">0L</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Poisson.html" class="external-link">rpois</a></span><span class="op">(</span><span class="va">n</span>, <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">eta_c</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">f_zi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_zi.html">fastglm_zi</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span><span class="va">y</span>, <span class="va">x1</span>, <span class="va">x2</span><span class="op">)</span>, dist <span class="op">=</span> <span class="st">"poisson"</span><span class="op">)</span></span>
+<span><span class="va">x1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
+<span><span class="va">x2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
+<span><span class="va">lambda</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fl">.7</span> <span class="op">+</span> <span class="fl">.4</span><span class="op">*</span><span class="va">x1</span> <span class="op">-</span> <span class="fl">.3</span><span class="op">*</span><span class="va">x2</span><span class="op">)</span></span>
+<span><span class="va">extra_zero</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="op">-</span><span class="fl">.4</span> <span class="op">+</span> <span class="fl">.5</span><span class="op">*</span><span class="va">x1</span> <span class="op">+</span> <span class="fl">.2</span><span class="op">*</span><span class="va">x2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">zi_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">extra_zero</span><span class="op">==</span><span class="fl">1</span>, <span class="fl">0L</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Poisson.html" class="external-link">rpois</a></span><span class="op">(</span><span class="va">n</span>, <span class="va">lambda</span><span class="op">)</span><span class="op">)</span>, x1<span class="op">=</span><span class="va">x1</span>, x2<span class="op">=</span><span class="va">x2</span><span class="op">)</span></span>
+<span><span class="va">f_zi</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_zi.html">fastglm_zi</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span><span class="op">+</span><span class="va">x2</span>, data<span class="op">=</span><span class="va">zi_data</span>, dist<span class="op">=</span><span class="st">"poisson"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f_zi</span><span class="op">)</span></span>
 <span><span class="co">#&gt; count_(Intercept)          count_x1          count_x2  zero_(Intercept) </span></span>
 <span><span class="co">#&gt;         0.6647396         0.3965153        -0.3407168        -0.3750258 </span></span>
 <span><span class="co">#&gt;           zero_x1           zero_x2 </span></span>
 <span><span class="co">#&gt;         0.4512788         0.1819040</span></span></code></pre></div>
+<p>Count-model predictions distinguish the overall response mean, the probability of zero, and the means of the fitted components. Prediction standard errors combine uncertainty from the relevant parameters. The <a href="vignettes/count-firth-fastglm.Rmd">count-model vignette</a> develops the interpretation and inference examples.</p>
 </div>
 <div class="section level3">
-<h3 id="firth-bias-reduced-glms">Firth bias-reduced GLMs<a class="anchor" aria-label="anchor" href="#firth-bias-reduced-glms"></a>
+<h3 id="two-part-models-for-continuous-outcomes">Two-part models for continuous outcomes<a class="anchor" aria-label="anchor" href="#two-part-models-for-continuous-outcomes"></a>
 </h3>
-<p>Setting <code>firth = TRUE</code> activates the general mean-bias reduction of Kosmidis and Firth (2009, 2021). This extends Firth’s (1993) original logistic penalty to arbitrary GLM families, producing finite estimates even under separation and removing the leading <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mi>/</mi><mi>n</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(1/n)</annotation></semantics></math> bias from maximum likelihood estimates:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">sex2</span>, package <span class="op">=</span> <span class="st">"logistf"</span><span class="op">)</span></span>
-<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="op">~</span> <span class="va">age</span> <span class="op">+</span> <span class="va">oc</span> <span class="op">+</span> <span class="va">vic</span> <span class="op">+</span> <span class="va">vicl</span> <span class="op">+</span> <span class="va">vis</span> <span class="op">+</span> <span class="va">dia</span>, data <span class="op">=</span> <span class="va">sex2</span><span class="op">)</span></span>
-<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="va">sex2</span><span class="op">$</span><span class="va">case</span></span>
-<span></span>
-<span><span class="va">f_firth</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<p><code><a href="reference/fastglm_twopart.html">fastglm_twopart()</a></code> combines a binary model for a positive outcome with a Gamma model for its positive amount. This is useful for outcomes such as expenditure that are exactly zero for some observations and positive and skewed for others:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">124</span><span class="op">)</span></span>
+<span><span class="va">amounts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>x<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">1000</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">is_positive</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="fl">1000</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="op">-</span><span class="fl">.3</span> <span class="op">+</span> <span class="fl">.4</span><span class="op">*</span><span class="va">amounts</span><span class="op">$</span><span class="va">x</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">amounts</span><span class="op">$</span><span class="va">y</span> <span class="op">&lt;-</span> <span class="va">is_positive</span><span class="op">*</span><span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">rgamma</a></span><span class="op">(</span><span class="fl">1000</span>, shape<span class="op">=</span><span class="fl">2</span>, scale<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fl">.5</span> <span class="op">+</span> <span class="fl">.3</span><span class="op">*</span><span class="va">amounts</span><span class="op">$</span><span class="va">x</span><span class="op">)</span><span class="op">/</span><span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">f_two</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_twopart.html">fastglm_twopart</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, data<span class="op">=</span><span class="va">amounts</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">f_two</span>, newdata<span class="op">=</span><span class="va">amounts</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>,<span class="op">]</span>, type<span class="op">=</span><span class="st">"response"</span>, se.fit<span class="op">=</span><span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Predictions with standard errors</span></span>
+<span><span class="co">#&gt; Scale: response mean</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;  Row Estimate Std. Error</span></span>
+<span><span class="co">#&gt;    1   0.3117    0.03290</span></span>
+<span><span class="co">#&gt;    2   0.7218    0.03732</span></span>
+<span><span class="co">#&gt;    3   0.4540    0.03324</span></span></code></pre></div>
+<p>The overall mean combines the probability of a positive outcome with its conditional mean amount. The <a href="vignettes/semicontinuous-fastglm.Rmd">semicontinuous-outcome vignette</a> explains this interpretation and illustrates average contrasts, clustered inference, and bootstrap uncertainty.</p>
+</div>
+<div class="section level3">
+<h3 id="ordered-outcomes">Ordered outcomes<a class="anchor" aria-label="anchor" href="#ordered-outcomes"></a>
+</h3>
+<p><code><a href="reference/fastglm_ordinal.html">fastglm_ordinal()</a></code> supports logit, probit, and complementary log-log cumulative links, with maximum likelihood or mean bias reduction (<code>firth=TRUE</code>). The logit model gives proportional odds with common slopes and partial proportional odds when selected effects vary through <code>nonparallel=~term</code>.</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr>
+<th align="left">Task</th>
+<th align="left">Ordinal interface and scope</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left">Specify the model</td>
+<td align="left">Dense formula or matrix; individual outcomes, grouped category frequencies, and offsets; selected nonparallel effects require every category to be observed</td>
+</tr>
+<tr>
+<td align="left">Interpret predictions</td>
+<td align="left">Category and cumulative probabilities, prediction standard errors, average probabilities and contrasts; automatic marginal effects for continuous predictors</td>
+</tr>
+<tr>
+<td align="left">Test coefficients</td>
+<td align="left">Joint Wald tests and named contrasts; ML profile and ordinary or adjusted-score inference for retained dense models with all categories observed</td>
+</tr>
+<tr>
+<td align="left">Assess common slopes</td>
+<td align="left">
+<code><a href="reference/fastglm_po_test.html">fastglm_po_test()</a></code> tests the restriction jointly or by term in dense or streamed common-slope and partial fits</td>
+</tr>
+<tr>
+<td align="left">Assess fit and uncertainty</td>
+<td align="left">Prediction scores and calibration for dense or streamed fits; optional row-level boundary diagnostics; robust covariance for eligible fits; refitting bootstraps for retained common-slope fits</td>
+</tr>
+<tr>
+<td align="left">Repeat fits or read large datasets</td>
+<td align="left">
+<code><a href="reference/fastglm_ordinal_prepare.html">fastglm_ordinal_prepare()</a></code> / <code><a href="reference/fastglm_ordinal_batch.html">fastglm_ordinal_batch()</a></code> reuse dense designs; <code><a href="reference/fastglm_ordinal_streaming.html">fastglm_ordinal_streaming()</a></code> fits common-slope or partial models from repeatable blocks, including mean bias reduction</td>
+</tr>
+</tbody>
+</table>
+<p>Dense partial fits support robust covariance, marginal effects, ML profiles, and constrained score tests, including equality of selected slopes across thresholds. Streamed fits provide model-based or robust covariance, Wald inference, common-slope tests, prediction scores, and calibration by rereading their source. <code>fastglm_diagnostics(fit,boundary=TRUE)</code> locates rows near probability boundaries. Profile intervals and general constrained coefficient-score tests require retained data. Empty-category behavior also depends on the model and estimation method. The <a href="vignettes/ordinal-fastglm.Rmd">ordinal vignette</a> begins with the full support guide and develops examples for each workflow.</p>
+</div>
+</div>
+<div class="section level2">
+<h2 id="firth-bias-reduced-glms">Firth bias-reduced GLMs<a class="anchor" aria-label="anchor" href="#firth-bias-reduced-glms"></a>
+</h2>
+<p><code>firth=TRUE</code> adjusts the estimating equations to reduce leading small-sample mean bias (Firth, 1993; Kosmidis and Firth, 2009). For logistic regression with a logit link and a full-rank design, the adjustment also yields finite coefficient estimates under separation, where predictors perfectly distinguish successes from failures (Kosmidis and Firth, 2021).</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">sex2</span>, package<span class="op">=</span><span class="st">"logistf"</span><span class="op">)</span></span>
+<span><span class="va">X_firth</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="op">~</span> <span class="va">age</span><span class="op">+</span><span class="va">oc</span><span class="op">+</span><span class="va">vic</span><span class="op">+</span><span class="va">vicl</span><span class="op">+</span><span class="va">vis</span><span class="op">+</span><span class="va">dia</span>, data<span class="op">=</span><span class="va">sex2</span><span class="op">)</span></span>
+<span><span class="va">f_firth</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X_firth</span>, <span class="va">sex2</span><span class="op">$</span><span class="va">case</span>, <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth<span class="op">=</span><span class="cn">TRUE</span>,</span>
+<span>                   tol<span class="op">=</span><span class="fl">1e-10</span>, maxit<span class="op">=</span><span class="fl">200</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f_firth</span><span class="op">)</span></span>
 <span><span class="co">#&gt; (Intercept)         age          oc         vic        vicl         vis </span></span>
 <span><span class="co">#&gt;  0.12025405 -1.10598133 -0.06881673  2.26887465 -2.11140819 -0.78831695 </span></span>
 <span><span class="co">#&gt;         dia </span></span>
 <span><span class="co">#&gt;  3.09601183</span></span></code></pre></div>
-<p>Firth bias reduction works with all six decomposition methods, all standard R families and link functions, and all three large-data paths (sparse, big.matrix, streaming). See <code><a href="articles/firth-fastglm.html">vignette("firth-fastglm", package = "fastglm")</a></code> for verification against <code><a href="https://rdrr.io/pkg/logistf/man/logistf.html" class="external-link">logistf::logistf()</a></code> and <code><a href="https://rdrr.io/pkg/brglm2/man/brglmFit.html" class="external-link">brglm2::brglmFit()</a></code>.</p>
+<p>Mean bias reduction supports the implemented binomial, Poisson, Gaussian, Gamma, inverse-Gaussian, and fixed-theta negative-binomial family/link combinations. It is available for dense, sparse, mapped, and streaming fits using the solvers supported by each format. Gamma fitting also adjusts dispersion. Quasi-likelihood and Tweedie families are outside the current bias-reduction interface.</p>
+<p>For retained dense binomial-logit Firth fits, profile inference re-estimates the other coefficients as the coefficient of interest varies, retaining the full original bias-reduction penalty. This allows confidence intervals to reflect an asymmetric penalized likelihood:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">profile_ci</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">f_firth</span>, parm<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"age"</span>, <span class="st">"dia"</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"profile"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>estimate<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f_firth</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">profile_ci</span><span class="op">)</span><span class="op">]</span>, <span class="va">profile_ci</span><span class="op">)</span></span>
+<span><span class="co">#&gt;      estimate      2.5 %     97.5 %</span></span>
+<span><span class="co">#&gt; age -1.105981 -1.9737884 -0.3074251</span></span>
+<span><span class="co">#&gt; dia  3.096012  0.7745682  8.0302935</span></span>
+<span><span class="fu"><a href="reference/fastglm_profile_test.html">fastglm_profile_test</a></span><span class="op">(</span><span class="va">f_firth</span>, parm<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"oc"</span>, <span class="st">"vic"</span><span class="op">)</span>, null<span class="op">=</span><span class="fl">0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Firth penalized likelihood ratio test (asymptotic chi-square reference)</span></span>
+<span><span class="co">#&gt; Null fit: Firth penalized likelihood</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;  Statistic df p-value</span></span>
+<span><span class="co">#&gt;      28.46  2 &lt; 1e-04</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Tested coefficients:</span></span>
+<span><span class="co">#&gt;     Estimate     Null</span></span>
+<span><span class="co">#&gt; oc  -0.06882  0.00000</span></span>
+<span><span class="co">#&gt; vic  2.26887  0.00000</span></span></code></pre></div>
+<p>The profile procedures support independent binomial counts and frequency weights. Their chi-square reference is an approximation, and failed optimizations return diagnostics. The <a href="vignettes/firth-fastglm.Rmd">bias-reduction vignette</a> explains the assumptions and compares the results with <code>logistf</code> and <code>brglm2</code>.</p>
+</div>
+<div class="section level2">
+<h2 id="inference-and-repeated-fits">Inference and repeated fits<a class="anchor" aria-label="anchor" href="#inference-and-repeated-fits"></a>
+</h2>
+<p><code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, and <code>predict(..., se.fit=TRUE)</code> provide model-based uncertainty. Robust covariance allows variation beyond the fitted variance model; clustered covariance additionally allows dependence within specified independent groups:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">fit_formula</span>, type<span class="op">=</span><span class="st">"HC1"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">fit_formula</span>, cluster<span class="op">=</span><span class="va">group_id</span>, type<span class="op">=</span><span class="st">"HC1"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># The sandwich interfaces are also available for ordinary GLMs.</span></span>
+<span><span class="fu">sandwich</span><span class="fu">::</span><span class="fu"><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">vcovHC</a></span><span class="op">(</span><span class="va">fit_formula</span>, type<span class="op">=</span><span class="st">"HC0"</span><span class="op">)</span></span>
+<span><span class="fu">sandwich</span><span class="fu">::</span><span class="fu"><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">vcovCL</a></span><span class="op">(</span><span class="va">fit_formula</span>, cluster<span class="op">=</span><span class="va">group_id</span>, type<span class="op">=</span><span class="st">"HC1"</span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="reference/fastglm_average.html">fastglm_average()</a></code> reports average predictions or specified contrasts with uncertainty. <code><a href="reference/fastglm_bootstrap.html">fastglm_bootstrap()</a></code> provides uncertainty by resampling and refitting, with failed fits recorded in its output. The supported covariance calculations depend on the model and estimation method; the <a href="vignettes/fastglm-overview.Rmd">overview</a> and model-specific vignettes describe those choices.</p>
+<div class="section level3">
+<h3 id="repeated-outcomes-with-a-common-design">Repeated outcomes with a common design<a class="anchor" aria-label="anchor" href="#repeated-outcomes-with-a-common-design"></a>
+</h3>
+<p><code><a href="reference/fastglm_prepare.html">fastglm_prepare()</a></code> records predictors and common weights or offsets. <code><a href="reference/fastglm_batch.html">fastglm_batch()</a></code> then fits several responses using that design:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">125</span><span class="op">)</span></span>
+<span><span class="va">X_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">1000</span><span class="op">*</span><span class="fl">3</span><span class="op">)</span>, <span class="fl">1000</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">mu_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">X_batch</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">.2</span>, <span class="fl">.3</span>, <span class="op">-</span><span class="fl">.2</span>, <span class="fl">.1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">Y_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>first<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">rgamma</a></span><span class="op">(</span><span class="fl">1000</span>, shape<span class="op">=</span><span class="fl">2</span>, scale<span class="op">=</span><span class="va">mu_batch</span><span class="op">/</span><span class="fl">2</span><span class="op">)</span>,</span>
+<span>                 second<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">rgamma</a></span><span class="op">(</span><span class="fl">1000</span>, shape<span class="op">=</span><span class="fl">4</span>, scale<span class="op">=</span><span class="va">mu_batch</span><span class="op">/</span><span class="fl">4</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">design</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_prepare.html">fastglm_prepare</a></span><span class="op">(</span><span class="va">X_batch</span>, firth<span class="op">=</span><span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_batch.html">fastglm_batch</a></span><span class="op">(</span><span class="va">design</span>, <span class="va">Y_batch</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span><span class="st">"log"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="va">batch</span>, <span class="va">coef</span><span class="op">)</span></span>
+<span><span class="co">#&gt;                  first     second</span></span>
+<span><span class="co">#&gt; (Intercept)  0.1528201  0.2011954</span></span>
+<span><span class="co">#&gt; X2           0.2764287  0.2982692</span></span>
+<span><span class="co">#&gt; X3          -0.2119394 -0.1813117</span></span>
+<span><span class="co">#&gt; X4           0.1212752  0.1062714</span></span></code></pre></div>
+<p>Gaussian-identity fits can reuse their matrix decomposition because it depends only on predictors and weights. Dense Firth batches with Gaussian-identity, Gamma-log, or Poisson-square-root links can also reuse their decomposition and bias-adjustment setup with the default automatic solver or explicit <code>"llt"</code>. Dispersion and response-dependent adjustments remain specific to each outcome. Changes to the predictors or weights invalidate the saved calculations.</p>
+<p><code>workers</code> runs independent fits in separate R processes. This can reduce elapsed time when the fitting work is large enough to offset process startup and data-transfer costs. <code>inference="none"</code> skips covariance calculation, and <code>retain.data=FALSE</code> omits the design and response from the returned models; methods requiring those data then need new data or a refit.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="inference">Inference<a class="anchor" aria-label="anchor" href="#inference"></a>
+<h2 id="sparse-bigmatrix-and-streaming-designs">Sparse, big.matrix, and streaming designs<a class="anchor" aria-label="anchor" href="#sparse-bigmatrix-and-streaming-designs"></a>
 </h2>
-<p>The fitted object stores the unscaled covariance directly, so <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> and <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> work as expected. Heteroskedasticity-consistent and cluster-robust covariance matrices are available via <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">sandwich::vcovHC()</a></code> and <code><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">sandwich::vcovCL()</a></code>, <em>fastglm</em> registers methods on those generics, so loading <em>sandwich</em> is all that is required:</p>
+<p>Different storage formats suit different datasets:</p>
+<ul>
+<li>
+<code>Matrix::dgCMatrix</code> stores only nonzero predictor entries. It can be passed directly to <code><a href="reference/fastglm.html">fastglm()</a></code>, for example when indicator variables produce a mostly zero design.</li>
+<li>
+<code><a href="https://rdrr.io/pkg/bigmemory/man/big.matrix.html" class="external-link">bigmemory::big.matrix</a></code> provides a mapped view of predictors, which may be backed by a file. Fitting reads row blocks without making a complete ordinary R-matrix copy.</li>
+<li>
+<code><a href="reference/fastglm_streaming.html">fastglm_streaming()</a></code> repeatedly requests manageable blocks from a supplied function, called a callback. This supports data that need to be read from an external source or constructed as fitting proceeds.</li>
+</ul>
+<p>The following example divides one dataset into four blocks and compares the fitted coefficients with an in-memory fit:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">321</span><span class="op">)</span></span>
+<span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">4000</span></span>
+<span><span class="va">X_stream</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">*</span><span class="fl">3</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">y_stream</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="va">X_stream</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">.2</span>, <span class="fl">.4</span>, <span class="op">-</span><span class="fl">.2</span>, <span class="fl">.3</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">chunks</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">k</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">rows</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="op">(</span><span class="va">k</span><span class="op">-</span><span class="fl">1</span><span class="op">)</span><span class="op">*</span><span class="fl">1000</span><span class="op">+</span><span class="fl">1</span><span class="op">)</span><span class="op">:</span><span class="op">(</span><span class="va">k</span><span class="op">*</span><span class="fl">1000</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>X<span class="op">=</span><span class="va">X_stream</span><span class="op">[</span><span class="va">rows</span>,,drop<span class="op">=</span><span class="cn">FALSE</span><span class="op">]</span>, y<span class="op">=</span><span class="va">y_stream</span><span class="op">[</span><span class="va">rows</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">fit_stream</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm_streaming.html">fastglm_streaming</a></span><span class="op">(</span><span class="va">chunks</span>, n_chunks<span class="op">=</span><span class="fl">4</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span></span>
+<span><span class="va">fit_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X_stream</span>, <span class="va">y_stream</span>, <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"llt"</span>, tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit_stream</span><span class="op">)</span><span class="op">-</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit_full</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 2.775558e-16</span></span></code></pre></div>
+<p><code><a href="reference/fastglm_source.html">fastglm_source()</a></code> combines a repeatable reader with formula information, keeping factor coding and transformations consistent across blocks. Optional <code><a href="reference/fastglm_source_arrow.html">fastglm_source_arrow()</a></code> and <code><a href="reference/fastglm_source_dbi.html">fastglm_source_dbi()</a></code> adapters read Parquet files and database queries. Each read must reproduce the same observations in the same order throughout fitting and inference.</p>
+<p>Predictions normally accumulate in a vector. When that output is too large, <code>sink</code> accepts a function that receives one block of results at a time and saves or summarizes it. Here only the mean prediction in each block is retained:</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sandwich.R-Forge.R-project.org/" class="external-link">sandwich</a></span><span class="op">)</span></span>
-<span><span class="va">V_hc</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://sandwich.R-Forge.R-project.org/reference/vcovHC.html" class="external-link">vcovHC</a></span><span class="op">(</span><span class="va">fit</span>, type <span class="op">=</span> <span class="st">"HC0"</span><span class="op">)</span></span>
-<span><span class="va">V_cl</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://sandwich.R-Forge.R-project.org/reference/vcovCL.html" class="external-link">vcovCL</a></span><span class="op">(</span><span class="va">fit</span>, cluster <span class="op">=</span> <span class="va">cluster</span>, type <span class="op">=</span> <span class="st">"HC1"</span><span class="op">)</span></span></code></pre></div>
-<p>Results are numerically identical to <code>sandwich</code> applied to a <code>glm</code> fit to floating-point precision. <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> supports <code>se.fit = TRUE</code>:</p>
+<code class="sourceCode R"><span><span class="va">block_means</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="fl">4</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">fit_stream</span>, type<span class="op">=</span><span class="st">"response"</span>,</span>
+<span>        sink<span class="op">=</span><span class="kw">function</span><span class="op">(</span><span class="va">value</span>, <span class="va">k</span><span class="op">)</span> <span class="va">block_means</span><span class="op">[</span><span class="va">k</span><span class="op">]</span> <span class="op">&lt;&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">value</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">block_means</span></span>
+<span><span class="co">#&gt; [1] 0.5530598 0.5507933 0.5519271 0.5422198</span></span></code></pre></div>
+<p>Robust covariance and average predictions can also read the source in blocks. Clustered inference additionally stores a contribution vector for each group, and collecting all predictions still requires storage proportional to the number of observations. The <a href="vignettes/large-data-fastglm.Rmd">large-data vignette</a> explains these memory and repeated-read costs, including the Firth calculations reused across passes.</p>
+</div>
+<div class="section level2">
+<h2 id="decomposition-methods">Decomposition methods<a class="anchor" aria-label="anchor" href="#decomposition-methods"></a>
+</h2>
+<p>Iteratively reweighted least squares (IRLS) fits a GLM through a sequence of weighted linear regressions. A matrix decomposition arranges each regression calculation so that its coefficients can be solved numerically. <em>fastglm</em> provides six explicit methods through <em>RcppEigen</em> (Bates and Eddelbuettel, 2013), together with an automatic choice:</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr>
+<th align="left">Name</th>
+<th align="center">Integer</th>
+<th align="left">Decomposition or selection rule</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left"><code>"qr"</code></td>
+<td align="center"><code>0</code></td>
+<td align="left">Column-pivoted Householder QR; the default for dense <code><a href="reference/fastglm.html">fastglm()</a></code> fits</td>
+</tr>
+<tr>
+<td align="left"><code>"qr_unpivoted"</code></td>
+<td align="center"><code>1</code></td>
+<td align="left">Householder QR without column pivoting</td>
+</tr>
+<tr>
+<td align="left"><code>"llt"</code></td>
+<td align="center"><code>2</code></td>
+<td align="left">LLT Cholesky</td>
+</tr>
+<tr>
+<td align="left"><code>"ldlt"</code></td>
+<td align="center"><code>3</code></td>
+<td align="left">LDLT Cholesky</td>
+</tr>
+<tr>
+<td align="left"><code>"qr_full"</code></td>
+<td align="center"><code>4</code></td>
+<td align="left">Full-pivoted Householder QR</td>
+</tr>
+<tr>
+<td align="left"><code>"svd"</code></td>
+<td align="center"><code>5</code></td>
+<td align="left">Bidiagonal divide-and-conquer singular value decomposition</td>
+</tr>
+<tr>
+<td align="left"><code>"auto"</code></td>
+<td align="center"></td>
+<td align="left">Scale columns, attempt LLT, and fall back to pivoted QR for a problematic dense system</td>
+</tr>
+</tbody>
+</table>
+<p>For dense fits, pivoted QR can identify redundant columns, allowing aliased coefficients to be reported as <code>NA</code>. Cholesky works with the smaller predictor crossproduct and can be faster when the design is well conditioned, meaning that small numerical errors are not strongly amplified. Explicit Cholesky fits require full column rank and report an error when the information matrix is singular or ill conditioned. Sparse and mapped fits use Cholesky methods. Streaming GLMs also support <code>method="qr"</code>, which updates a triangular factor across blocks for greater stability with nearly redundant predictors. Streaming fits require full column rank with either method.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">fit</span>, newdata <span class="op">=</span> <span class="va">xnew</span>, type <span class="op">=</span> <span class="st">"response"</span>, se.fit <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"qr"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"llt"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"auto"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="native-c-families">Native C++ families<a class="anchor" aria-label="anchor" href="#native-c-families"></a>
+</h2>
+<p>For recognized family/link combinations, variance, mean derivatives, inverse links, and deviance contributions are evaluated directly in C++. This reduces repeated calls from the fitting loop back into R. The current native combinations are:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr>
+<th align="left">Family</th>
+<th align="left">Links</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left">Gaussian</td>
+<td align="left">identity, log, inverse</td>
+</tr>
+<tr>
+<td align="left">Binomial</td>
+<td align="left">logit, probit, complementary log-log, log</td>
+</tr>
+<tr>
+<td align="left">Poisson</td>
+<td align="left">log, identity, square root</td>
+</tr>
+<tr>
+<td align="left">Gamma</td>
+<td align="left">log, inverse, identity</td>
+</tr>
+<tr>
+<td align="left">Inverse Gaussian</td>
+<td align="left">inverse squared (<code>1/mu^2</code>), log, identity, inverse</td>
+</tr>
+<tr>
+<td align="left">Negative binomial with fixed theta</td>
+<td align="left">log, identity, square root</td>
+</tr>
+<tr>
+<td align="left">Tweedie with specified variance power</td>
+<td align="left">log, identity, inverse, square root</td>
+</tr>
+</tbody>
+</table>
+<p>Quasibinomial and quasipoisson fits share the corresponding mean and variance calculations, with dispersion handled separately. Family detection checks the supplied functions as well as the family name, so a modified family retains its R behavior. Other valid R family/link combinations use the supplied R functions. Firth bias reduction has a narrower supported scope, described in the <a href="#firth-bias-reduced-glms">bias-reduction section</a> and its vignette.</p>
+</div>
+<div class="section level2">
+<h2 id="speed">Speed<a class="anchor" aria-label="anchor" href="#speed"></a>
+</h2>
+<p>The C++ implementation reduces repeated work in fitting and offers several ways to solve the weighted regressions. The resulting speed advantage depends on the family, the number of rows and columns, the solver, and the requested inference. The following comparison uses a logistic-regression design with 10,000 observations, 100 predictors, and 25 timing repetitions per method.</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
+<span><span class="va">n.obs</span> <span class="op">&lt;-</span> <span class="fl">10000</span></span>
+<span><span class="va">n.vars</span> <span class="op">&lt;-</span> <span class="fl">100</span></span>
+<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n.obs</span><span class="op">*</span><span class="va">n.vars</span>, sd<span class="op">=</span><span class="fl">3</span><span class="op">)</span>, <span class="va">n.obs</span>, <span class="va">n.vars</span><span class="op">)</span></span>
+<span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/drop.html" class="external-link">drop</a></span><span class="op">(</span><span class="va">X</span><span class="op">[</span>,<span class="fl">1</span><span class="op">:</span><span class="fl">25</span><span class="op">]</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">25</span>, <span class="op">-</span><span class="fl">.1</span>, <span class="fl">.1</span><span class="op">)</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n.obs</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Include coefficient covariance computation in each timed fit.</span></span>
+<span><span class="va">with_covariance</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fit</span>, <span class="va">raw_glm</span><span class="op">=</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="kw">if</span> <span class="op">(</span><span class="va">raw_glm</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"glm"</span>, <span class="st">"lm"</span><span class="op">)</span></span>
+<span>    <span class="va">fit</span><span class="op">$</span><span class="va">benchmark.covariance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
+<span>    <span class="va">fit</span></span>
+<span><span class="op">}</span></span>
+<span><span class="fu">microbenchmark</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/microbenchmark/man/microbenchmark.html" class="external-link">microbenchmark</a></span><span class="op">(</span></span>
+<span>    glm.fit <span class="op">=</span> <span class="fu">with_covariance</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, intercept<span class="op">=</span><span class="cn">FALSE</span>,</span>
+<span>        control<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/glm.control.html" class="external-link">glm.control</a></span><span class="op">(</span>epsilon<span class="op">=</span><span class="fl">1e-10</span>, maxit<span class="op">=</span><span class="fl">100</span><span class="op">)</span><span class="op">)</span>, raw_glm<span class="op">=</span><span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>    fastglm_QR <span class="op">=</span> <span class="fu">with_covariance</span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"qr"</span>, tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    fastglm_LLT <span class="op">=</span> <span class="fu">with_covariance</span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"llt"</span>, tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    fastglm_LDLT <span class="op">=</span> <span class="fu">with_covariance</span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"ldlt"</span>, tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    fastglm_auto <span class="op">=</span> <span class="fu">with_covariance</span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"auto"</span>, tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    times<span class="op">=</span><span class="fl">25L</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>These measurements were recorded on 2026-11-06 (UTC) with <em>fastglm</em> 0.1.3 and R version 4.5.1 (2025-06-13) on Darwin (arm64). The saved environment and individual timings accompany the benchmark script.</p>
+<figure><img src="reference/figures/README-glm_bench-1.png" alt="Current logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians."><figcaption aria-hidden="true">
+Current logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians.
+</figcaption></figure><p>The table reports median elapsed time and the largest absolute differences from <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> in coefficients and fitted probabilities. All methods must converge and pass the numerical comparison before they are timed. Timed fits include their ordinary covariance calculations.</p>
+<table class="table">
+<colgroup>
+<col width="25%">
+<col width="25%">
+<col width="25%">
+<col width="25%">
+</colgroup>
+<thead><tr>
+<th align="left">Method</th>
+<th align="right">Median time (ms)</th>
+<th align="left">Max. coefficient difference</th>
+<th align="left">Max. fitted-probability difference</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left">glm.fit</td>
+<td align="right">283.71</td>
+<td align="left">0.00e+00</td>
+<td align="left">0.00e+00</td>
+</tr>
+<tr>
+<td align="left">fastglm QR</td>
+<td align="right">99.36</td>
+<td align="left">1.30e-15</td>
+<td align="left">6.22e-15</td>
+</tr>
+<tr>
+<td align="left">fastglm LLT</td>
+<td align="right">23.77</td>
+<td align="left">1.22e-15</td>
+<td align="left">6.55e-15</td>
+</tr>
+<tr>
+<td align="left">fastglm LDLT</td>
+<td align="right">23.55</td>
+<td align="left">1.22e-15</td>
+<td align="left">6.44e-15</td>
+</tr>
+<tr>
+<td align="left">fastglm auto</td>
+<td align="right">28.80</td>
+<td align="left">9.44e-16</td>
+<td align="left">5.22e-15</td>
+</tr>
+</tbody>
+</table>
+<p>For this design, the median time for <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> was 283.7 ms, compared with 23.8 ms for LLT. The coefficient and fitted-probability differences are close to floating-point rounding error, so the faster calculation retains the same fitted model to numerical precision in this example.</p>
+<p><code>benchmarks/benchmark-readme.R</code> regenerates these measurements, checks agreement, records the R environment, and builds the figures. The <a href="#benchmarks">broader comparison</a> below evaluates scaling across model classes.</p>
+</div>
+<div class="section level2">
+<h2 id="stability">Stability<a class="anchor" aria-label="anchor" href="#stability"></a>
+</h2>
+<p>Fitting can become difficult when a proposed coefficient update produces invalid fitted means or moves to a poorer likelihood value. For ordinary GLMs, <em>fastglm</em> uses a step-halving safeguard following Marschner (2011): an unsuccessful update is shortened until an acceptable step is found. Its initialization and solver choices also affect the subsequent iterations.</p>
+<p>A Gamma model using a square-root link provides one example. The simulated response is highly skewed, and the fitted mean uses a different functional form from the generating model. The calculation below uses the same iteration limit and nominal tolerance for both fitting methods:</p>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
+<span><span class="va">X_stability</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10000</span><span class="op">*</span><span class="fl">100</span><span class="op">)</span>, ncol<span class="op">=</span><span class="fl">100</span><span class="op">)</span></span>
+<span><span class="va">y_stability</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fl">.25</span><span class="op">*</span><span class="va">X_stability</span><span class="op">[</span>,<span class="fl">1</span><span class="op">]</span> <span class="op">-</span> <span class="fl">.25</span><span class="op">*</span><span class="va">X_stability</span><span class="op">[</span>,<span class="fl">3</span><span class="op">]</span> <span class="op">+</span></span>
+<span>                   <span class="fl">.5</span><span class="op">*</span><span class="va">X_stability</span><span class="op">[</span>,<span class="fl">4</span><span class="op">]</span> <span class="op">-</span> <span class="fl">.5</span><span class="op">*</span><span class="va">X_stability</span><span class="op">[</span>,<span class="fl">5</span><span class="op">]</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10000</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fl">.1</span></span>
+<span><span class="va">gfit_fast</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">y_stability</span> <span class="op">~</span> <span class="va">X_stability</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span><span class="st">"sqrt"</span><span class="op">)</span>,</span>
+<span>                     tol<span class="op">=</span><span class="fl">1e-8</span>, maxit<span class="op">=</span><span class="fl">100</span><span class="op">)</span></span>
+<span><span class="va">gfit_base</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/warning.html" class="external-link">suppressWarnings</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y_stability</span> <span class="op">~</span> <span class="va">X_stability</span>,</span>
+<span>    family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span><span class="st">"sqrt"</span><span class="op">)</span>, control<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/glm.control.html" class="external-link">glm.control</a></span><span class="op">(</span>epsilon<span class="op">=</span><span class="fl">1e-8</span>, maxit<span class="op">=</span><span class="fl">100</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>method<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fastglm"</span>, <span class="st">"glm"</span><span class="op">)</span>,</span>
+<span>           converged<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">gfit_fast</span><span class="op">$</span><span class="va">converged</span>, <span class="va">gfit_base</span><span class="op">$</span><span class="va">converged</span><span class="op">)</span>,</span>
+<span>           iterations<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">gfit_fast</span><span class="op">$</span><span class="va">iter</span>, <span class="va">gfit_base</span><span class="op">$</span><span class="va">iter</span><span class="op">)</span>,</span>
+<span>           log_likelihood<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit_fast</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">gfit_base</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;    method converged iterations log_likelihood</span></span>
+<span><span class="co">#&gt; 1 fastglm      TRUE         19      -16046.66</span></span>
+<span><span class="co">#&gt; 2     glm     FALSE        100      -16068.27</span></span></code></pre></div>
+<p>In this run, <em>fastglm</em> converged in 19 iterations, while glm reached its limit of 100 iterations without convergence.</p>
+<p>Convergence status matters when comparing likelihoods or runtimes: an unfinished fit is not an alternative estimate of the same quality. The <a href="vignettes/fastglm.Rmd">computational stability vignette</a> includes comparisons with <code>glm2</code> and <code>speedglm</code>, and <code><a href="reference/fastglm_diagnostics.html">fastglm_diagnostics()</a></code> reports convergence, the chosen solver, aliased coefficients, and numerical diagnostics for a fitted model.</p>
 </div>
 <div class="section level2">
 <h2 id="benchmarks">Benchmarks<a class="anchor" aria-label="anchor" href="#benchmarks"></a>
 </h2>
-<p>A comprehensive benchmarking study is available in <code><a href="articles/benchmarks-fastglm.html">vignette("benchmarks-fastglm", package = "fastglm")</a></code>, comparing <em>fastglm</em> against the canonical reference implementations across standard GLMs (<code>glm.fit</code>, <code>glm2</code>, <code>speedglm</code>), negative-binomial regression (<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb</a></code>), Firth bias-reduced GLMs (<code>brglm2</code>, <code>logistf</code>), and hurdle / zero-inflated count regressions (<code><a href="https://rdrr.io/pkg/pscl/man/hurdle.html" class="external-link">pscl::hurdle</a></code>, <code><a href="https://rdrr.io/pkg/pscl/man/zeroinfl.html" class="external-link">pscl::zeroinfl</a></code>).</p>
-<p>The following summary plot shows the speedup <em>fastglm</em> delivers over the canonical reference for each model class, as a function of sample size. The reference for the standard GLMs is the fastest among <code>glm.fit</code>, <code>glm2</code>, and <code>speedglm</code>, so the comparison is conservative. Larger is better:</p>
-<figure><img src="articles/benchmarks-figs/unnamed-chunk-18-1.png" alt="Speedup of fastglm vs canonical reference implementations across model classes"><figcaption aria-hidden="true">
-Speedup of fastglm vs canonical reference implementations across model classes
-</figcaption></figure><p>Across all model classes the same picture holds: <em>fastglm</em> matches the canonical reference implementation to floating-point precision, and the runtime gap grows with sample size. By <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><msup><mn>10</mn><mn>5</mn></msup></mrow><annotation encoding="application/x-tex">n = 10^5</annotation></semantics></math> the speedup is generally an order of magnitude or more. For models with an outer iteration (NB joint MLE, hurdle/ZI with NB), the gap is widest, since the entire outer loop is in C++ in <em>fastglm</em> and entirely in R in the reference implementations.</p>
+<p>The following study compares model classes across increasing sample sizes: ordinary logistic and Poisson fits with <code>glm.fit</code>, <code>glm2</code>, and <code>speedglm</code>; negative-binomial regression with <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb</a></code>; hurdle and zero-inflated Poisson models with <code>pscl</code>; and mean bias reduction with <code>brglm2</code> using <code>type="AS_mean"</code>. Ordinary and Firth GLMs use <code>method="auto"</code> in <em>fastglm</em>, while the dedicated count-model functions use their default solvers.</p>
+<p>For ordinary logistic and Poisson regression, the plotted reference is the fastest of the three comparison functions at each sample size. The other models use the named reference implementation. The ratio is reference time divided by <em>fastglm</em> time: a value of two means <em>fastglm</em> took half as long. Firth families are shown separately because their computational requirements differ.</p>
+<figure><img src="reference/figures/README-model-benchmarks.png" alt="Current fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm."><figcaption aria-hidden="true">
+Current fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm.
+</figcaption></figure><p>The following table gives the comparison at 100,000 observations. Each median uses five timing repetitions after checking convergence and numerical agreement:</p>
+<table style="width:100%;" class="table">
+<colgroup>
+<col width="16%">
+<col width="16%">
+<col width="16%">
+<col width="16%">
+<col width="16%">
+<col width="16%">
+</colgroup>
+<thead><tr>
+<th align="left">Model</th>
+<th align="right">Design columns</th>
+<th align="right">fastglm (ms)</th>
+<th align="left">Reference</th>
+<th align="right">Reference (ms)</th>
+<th align="right">Time ratio</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left">Logistic</td>
+<td align="right">30</td>
+<td align="right">59.17</td>
+<td align="left">speedglm.wfit</td>
+<td align="right">165.13</td>
+<td align="right">2.79</td>
+</tr>
+<tr>
+<td align="left">Poisson</td>
+<td align="right">30</td>
+<td align="right">64.31</td>
+<td align="left">speedglm.wfit</td>
+<td align="right">222.45</td>
+<td align="right">3.46</td>
+</tr>
+<tr>
+<td align="left">Negative binomial</td>
+<td align="right">4</td>
+<td align="right">124.90</td>
+<td align="left">MASS::glm.nb</td>
+<td align="right">564.95</td>
+<td align="right">4.52</td>
+</tr>
+<tr>
+<td align="left">Hurdle Poisson</td>
+<td align="right">3</td>
+<td align="right">42.52</td>
+<td align="left">pscl::hurdle</td>
+<td align="right">600.81</td>
+<td align="right">14.13</td>
+</tr>
+<tr>
+<td align="left">Zero-inflated Poisson</td>
+<td align="right">3</td>
+<td align="right">314.47</td>
+<td align="left">pscl::zeroinfl</td>
+<td align="right">1255.69</td>
+<td align="right">3.99</td>
+</tr>
+<tr>
+<td align="left">Firth binomial-logit</td>
+<td align="right">6</td>
+<td align="right">39.37</td>
+<td align="left">brglm2::brglmFit</td>
+<td align="right">83.29</td>
+<td align="right">2.12</td>
+</tr>
+<tr>
+<td align="left">Firth Poisson-log</td>
+<td align="right">6</td>
+<td align="right">36.67</td>
+<td align="left">brglm2::brglmFit</td>
+<td align="right">103.77</td>
+<td align="right">2.83</td>
+</tr>
+<tr>
+<td align="left">Firth Gamma-log</td>
+<td align="right">6</td>
+<td align="right">36.00</td>
+<td align="left">brglm2::brglmFit</td>
+<td align="right">1028.00</td>
+<td align="right">28.56</td>
+</tr>
+<tr>
+<td align="left">Firth Gaussian-identity</td>
+<td align="right">6</td>
+<td align="right">11.59</td>
+<td align="left">brglm2::brglmFit</td>
+<td align="right">210.40</td>
+<td align="right">18.15</td>
+</tr>
+</tbody>
+</table>
+<p>At this sample size, the largest time ratio is 28.6 for Firth Gamma-log. Gamma bias-reduction fits combine identical prior-weight contributions in the dispersion equation and reuse matrix calculations that remain constant during fitting. These reduce repeated distribution and matrix calculations while preserving the adjusted estimating equations.</p>
+<p>These are measurements of the displayed designs and software environment. The benchmark script records the individual timings, agreement checks, package versions, and fitting controls under <code>benchmarks/readme-results</code>. The comparisons include ordinary covariance calculation; profile confidence intervals and bootstrap refits are separate analyses. GLM and Firth comparisons use matrix interfaces, and both hurdle and zero-inflated comparisons use formulas. For negative-binomial regression, <code><a href="reference/fastglm_nb.html">fastglm_nb()</a></code> takes a matrix while <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> also constructs its design from a formula. Different packages use different convergence criteria, so the numerical comparisons accompany the nominal tolerance settings.</p>
+<p>The <a href="vignettes/benchmarks-fastglm.Rmd">benchmark vignette</a> retains the earlier, dated study, including sparse and mapped-matrix comparisons. Current scripts also cover numerical accuracy (<code>benchmarks/benchmark.R</code>), model and weight patterns (<code>benchmarks/benchmark-models.R</code>), large-data Firth fitting (<code>benchmarks/benchmark-firth-backends.R</code>), and prepared Firth batches (<code>benchmarks/benchmark-prepared-firth.R</code>).</p>
+<div class="section level3">
+<h3 id="ordinal-comparison">Ordinal comparison<a class="anchor" aria-label="anchor" href="#ordinal-comparison"></a>
+</h3>
+<p>The ordinal study compares cumulative-link fits with packages that fit the same model: <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code>, <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code>, <code><a href="https://rdrr.io/pkg/MASS/man/polr.html" class="external-link">MASS::polr</a></code>, <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code>, and <code><a href="https://ngreifer.github.io/WeightIt/reference/ordinal_weightit.html" class="external-link">WeightIt::ordinal_weightit</a></code>. Each design has 10 predictors, and every timing includes coefficient covariance. A comparison time is reported only when that fit converges and agrees with <em>fastglm</em> on the log likelihood and on the common slopes. These measurements used <em>fastglm</em> commit 7f2ae40 on 2026-11-06 (UTC), on a machine that was also running other work.</p>
+<figure><img src="reference/figures/README-ordinal-benchmarks.png" alt="Ordinal fitting times across sample sizes for common and threshold-specific slopes. Lower times indicate faster fitting."><figcaption aria-hidden="true">
+Ordinal fitting times across sample sizes for common and threshold-specific slopes. Lower times indicate faster fitting.
+</figcaption></figure><table class="table">
+<thead><tr>
+<th align="left">Link</th>
+<th align="left">Method</th>
+<th align="right">Seconds</th>
+<th align="right">Time ratio</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left">logit</td>
+<td align="left">fastglm</td>
+<td align="right">0.067</td>
+<td align="right">1.0</td>
+</tr>
+<tr>
+<td align="left">logit</td>
+<td align="left">rms::orm</td>
+<td align="right">0.196</td>
+<td align="right">2.9</td>
+</tr>
+<tr>
+<td align="left">logit</td>
+<td align="left">ordinal::clm</td>
+<td align="right">0.695</td>
+<td align="right">10.3</td>
+</tr>
+<tr>
+<td align="left">logit</td>
+<td align="left">MASS::polr</td>
+<td align="right">1.392</td>
+<td align="right">20.7</td>
+</tr>
+<tr>
+<td align="left">logit</td>
+<td align="left">VGAM::vglm</td>
+<td align="right">1.783</td>
+<td align="right">26.5</td>
+</tr>
+<tr>
+<td align="left">logit</td>
+<td align="left">WeightIt::ordinal_weightit</td>
+<td align="right">3.021</td>
+<td align="right">44.9</td>
+</tr>
+<tr>
+<td align="left">probit</td>
+<td align="left">fastglm</td>
+<td align="right">0.100</td>
+<td align="right">1.0</td>
+</tr>
+<tr>
+<td align="left">probit</td>
+<td align="left">rms::orm</td>
+<td align="right">0.219</td>
+<td align="right">2.2</td>
+</tr>
+<tr>
+<td align="left">probit</td>
+<td align="left">ordinal::clm</td>
+<td align="right">0.688</td>
+<td align="right">6.9</td>
+</tr>
+<tr>
+<td align="left">probit</td>
+<td align="left">MASS::polr</td>
+<td align="right">1.794</td>
+<td align="right">17.9</td>
+</tr>
+<tr>
+<td align="left">probit</td>
+<td align="left">VGAM::vglm</td>
+<td align="right">1.920</td>
+<td align="right">19.2</td>
+</tr>
+<tr>
+<td align="left">probit</td>
+<td align="left">WeightIt::ordinal_weightit</td>
+<td align="right">6.300</td>
+<td align="right">62.9</td>
+</tr>
+<tr>
+<td align="left">cloglog</td>
+<td align="left">fastglm</td>
+<td align="right">0.098</td>
+<td align="right">1.0</td>
+</tr>
+<tr>
+<td align="left">cloglog</td>
+<td align="left">ordinal::clm</td>
+<td align="right">0.747</td>
+<td align="right">7.6</td>
+</tr>
+<tr>
+<td align="left">cloglog</td>
+<td align="left">MASS::polr</td>
+<td align="right">1.403</td>
+<td align="right">14.3</td>
+</tr>
+<tr>
+<td align="left">cloglog</td>
+<td align="left">VGAM::vglm</td>
+<td align="right">6.508</td>
+<td align="right">NA</td>
+</tr>
+<tr>
+<td align="left">cloglog</td>
+<td align="left">WeightIt::ordinal_weightit</td>
+<td align="right">5.783</td>
+<td align="right">58.8</td>
+</tr>
+</tbody>
+</table>
+<p>The table shows 100,000 observations and 5 categories, and its ratio is the comparison time divided by the <em>fastglm</em> time. The closest comparison is <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code>, at 2.9 times the <em>fastglm</em> time for logit and 2.2 times for probit. <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> was benchmarked for these two links only. For cloglog, <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code> warned about intersecting predictors and returned a different fit, so it has no ratio.</p>
+<p>The number of categories changes this comparison. <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> is designed for outcomes with very many distinct values, and it overtakes <em>fastglm</em> between 30 and 300 categories:</p>
+<table class="table">
+<thead><tr>
+<th align="right">Categories</th>
+<th align="left">Method</th>
+<th align="right">Seconds</th>
+<th align="right">Time ratio</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="right">30</td>
+<td align="left">fastglm</td>
+<td align="right">0.017</td>
+<td align="right">1.00</td>
+</tr>
+<tr>
+<td align="right">30</td>
+<td align="left">rms::orm</td>
+<td align="right">0.042</td>
+<td align="right">2.51</td>
+</tr>
+<tr>
+<td align="right">30</td>
+<td align="left">ordinal::clm</td>
+<td align="right">0.643</td>
+<td align="right">38.02</td>
+</tr>
+<tr>
+<td align="right">30</td>
+<td align="left">MASS::polr</td>
+<td align="right">0.888</td>
+<td align="right">52.56</td>
+</tr>
+<tr>
+<td align="right">30</td>
+<td align="left">VGAM::vglm</td>
+<td align="right">5.331</td>
+<td align="right">315.44</td>
+</tr>
+<tr>
+<td align="right">30</td>
+<td align="left">WeightIt::ordinal_weightit</td>
+<td align="right">2.352</td>
+<td align="right">139.15</td>
+</tr>
+<tr>
+<td align="right">300</td>
+<td align="left">fastglm</td>
+<td align="right">0.096</td>
+<td align="right">1.00</td>
+</tr>
+<tr>
+<td align="right">300</td>
+<td align="left">rms::orm</td>
+<td align="right">0.047</td>
+<td align="right">0.49</td>
+</tr>
+<tr>
+<td align="right">300</td>
+<td align="left">ordinal::clm</td>
+<td align="right">40.457</td>
+<td align="right">421.96</td>
+</tr>
+<tr>
+<td align="right">300</td>
+<td align="left">MASS::polr</td>
+<td align="right">29.138</td>
+<td align="right">303.90</td>
+</tr>
+<tr>
+<td align="right">300</td>
+<td align="left">WeightIt::ordinal_weightit</td>
+<td align="right">48.617</td>
+<td align="right">507.07</td>
+</tr>
+<tr>
+<td align="right">1000</td>
+<td align="left">fastglm</td>
+<td align="right">0.315</td>
+<td align="right">1.00</td>
+</tr>
+<tr>
+<td align="right">1000</td>
+<td align="left">rms::orm</td>
+<td align="right">0.088</td>
+<td align="right">0.28</td>
+</tr>
+<tr>
+<td align="right">1000</td>
+<td align="left">ordinal::clm</td>
+<td align="right">484.423</td>
+<td align="right">1537.47</td>
+</tr>
+<tr>
+<td align="right">1000</td>
+<td align="left">MASS::polr</td>
+<td align="right">325.835</td>
+<td align="right">1034.14</td>
+</tr>
+<tr>
+<td align="right">1000</td>
+<td align="left">WeightIt::ordinal_weightit</td>
+<td align="right">334.278</td>
+<td align="right">1060.94</td>
+</tr>
+</tbody>
+</table>
+<p>With 20,000 observations, <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> takes 0.5 times the <em>fastglm</em> time at 300 categories and 0.3 times at 1,000, so it is the faster choice in that range. Most of the remaining <em>fastglm</em> time there is the final expected-information calculation, which the reported covariance uses. <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code> was limited to 30 categories because its working design would need about 160 GB of memory at 1,000 categories.</p>
+<p>The threshold-specific panel compares <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> and <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code>. At 1,000 observations, the <em>fastglm</em> fit for this design reported nonconvergence, because the best fit with ordered cumulative probabilities at every row lies on the ordering boundary. <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> reported convergence with a higher log likelihood, but its cumulative predictors cross at 3 of the 1,000 rows, which is not a valid probability model at those rows. This cell therefore has no time comparison. At 100,000 observations, <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> took 79.3 seconds and reported that it had not converged, although its log likelihood agreed with <em>fastglm</em>, so it is also omitted from the panel.</p>
+<p>No package in this comparison fits mean bias-reduced cumulative-link models or reads ordinal data in blocks, so these fits have no external time ratio. The last column compares each streamed fit with the dense fit of the same estimator:</p>
+<table class="table">
+<colgroup>
+<col width="25%">
+<col width="25%">
+<col width="25%">
+<col width="25%">
+</colgroup>
+<thead><tr>
+<th align="left">Observations</th>
+<th align="left">Fit</th>
+<th align="right">Seconds</th>
+<th align="right">Largest coefficient difference from dense fit</th>
+</tr></thead>
+<tbody>
+<tr>
+<td align="left">100,000</td>
+<td align="left">Dense ML</td>
+<td align="right">0.066</td>
+<td align="right">0.0e+00</td>
+</tr>
+<tr>
+<td align="left">100,000</td>
+<td align="left">Dense mean bias reduction</td>
+<td align="right">0.155</td>
+<td align="right">0.0e+00</td>
+</tr>
+<tr>
+<td align="left">100,000</td>
+<td align="left">Streamed ML</td>
+<td align="right">0.154</td>
+<td align="right">2.2e-16</td>
+</tr>
+<tr>
+<td align="left">100,000</td>
+<td align="left">Streamed mean bias reduction</td>
+<td align="right">0.369</td>
+<td align="right">1.1e-16</td>
+</tr>
+<tr>
+<td align="left">1,000,000</td>
+<td align="left">Dense ML</td>
+<td align="right">0.671</td>
+<td align="right">0.0e+00</td>
+</tr>
+<tr>
+<td align="left">1,000,000</td>
+<td align="left">Dense mean bias reduction</td>
+<td align="right">1.533</td>
+<td align="right">0.0e+00</td>
+</tr>
+<tr>
+<td align="left">1,000,000</td>
+<td align="left">Streamed ML</td>
+<td align="right">1.596</td>
+<td align="right">1.1e-16</td>
+</tr>
+<tr>
+<td align="left">1,000,000</td>
+<td align="left">Streamed mean bias reduction</td>
+<td align="right">3.573</td>
+<td align="right">3.0e-17</td>
+</tr>
+</tbody>
+</table>
+<p>Streamed fits use blocks of 10,000 rows. <code>benchmarks/benchmark-ordinal-comparison.R</code> regenerates this section. <code>benchmarks/ordinal-comparison</code> records package versions and agreement checks, and <code>benchmarks/profile-models.R</code> reports where time is spent across model classes.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
 </h2>
 <ul>
-<li><p>Firth, D. (1993). Bias reduction of maximum likelihood estimates. <em>Biometrika</em>, 80(1), 27–38.</p></li>
-<li><p>Kosmidis, I. and Firth, D. (2009). Bias reduction in exponential family nonlinear models. <em>Biometrika</em>, 96(4), 793–804.</p></li>
-<li><p>Kosmidis, I. and Firth, D. (2021). Jeffreys-prior penalty, finiteness and shrinkage in binomial-response generalized linear models. <em>Biometrika</em>, 108(1), 71–82.</p></li>
-<li><p>Marschner, I. C. (2011). glm2: Fitting generalized linear models with convergence problems. <em>The R Journal</em>, 3(2), 12–15.</p></li>
-<li><p>Bates, D. and Eddelbuettel, D. (2013). Fast and elegant numerical linear algebra using the RcppEigen package. <em>Journal of Statistical Software</em>, 52(5), 1–24.</p></li>
-<li><p>Zeileis, A., Kleiber, C., and Jackman, S. (2008). Regression models for count data in R. <em>Journal of Statistical Software</em>, 27(8), 1–25.</p></li>
+<li>Firth, D. (1993). Bias reduction of maximum likelihood estimates. <em>Biometrika</em>, 80(1), 27–38. <a href="https://doi.org/10.1093/biomet/80.1.27" class="external-link">doi:10.1093/biomet/80.1.27</a>
+</li>
+<li>Kosmidis, I. and Firth, D. (2009). Bias reduction in exponential family nonlinear models. <em>Biometrika</em>, 96(4), 793–804. <a href="https://doi.org/10.1093/biomet/asp055" class="external-link">doi:10.1093/biomet/asp055</a>
+</li>
+<li>Kosmidis, I. and Firth, D. (2021). Jeffreys-prior penalty, finiteness and shrinkage in binomial-response generalized linear models. <em>Biometrika</em>, 108(1), 71–82. <a href="https://doi.org/10.1093/biomet/asaa052" class="external-link">doi:10.1093/biomet/asaa052</a>
+</li>
+<li>Marschner, I. C. (2011). glm2: Fitting generalized linear models with convergence problems. <em>The R Journal</em>, 3(2), 12–15. <a href="https://doi.org/10.32614/RJ-2011-012" class="external-link">doi:10.32614/RJ-2011-012</a>
+</li>
+<li>Bates, D. and Eddelbuettel, D. (2013). Fast and elegant numerical linear algebra using the RcppEigen package. <em>Journal of Statistical Software</em>, 52(5), 1–24. <a href="https://doi.org/10.18637/jss.v052.i05" class="external-link">doi:10.18637/jss.v052.i05</a>
+</li>
+<li>Zeileis, A., Kleiber, C., and Jackman, S. (2008). Regression models for count data in R. <em>Journal of Statistical Software</em>, 27(8), 1–25. <a href="https://doi.org/10.18637/jss.v027.i08" class="external-link">doi:10.18637/jss.v027.i08</a>
+</li>
 </ul>
+<p>Use <code>citation("fastglm")</code> for the package citation.</p>
 </div>
 </div>
 
@@ -477,8 +1143,8 @@ Speedup of fastglm vs canonical reference implementations across model classes
 <div class="dev-status">
 <h2 data-toc-skip>Dev status</h2>
 <ul class="list-unstyled">
-<li><a href="https://cran.r-project.org/package=fastglm" class="external-link"><img src="http://www.r-pkg.org/badges/version/fastglm" alt="version"></a></li>
-<li><a href="https://cran.r-project.org/package=fastglm" class="external-link"><img src="http://cranlogs.r-pkg.org/badges/grand-total/fastglm" alt="downloads"></a></li>
+<li><a href="https://cran.r-project.org/package=fastglm" class="external-link"><img src="https://www.r-pkg.org/badges/version/fastglm" alt="CRAN version"></a></li>
+<li><a href="https://cran.r-project.org/package=fastglm" class="external-link"><img src="https://cranlogs.r-pkg.org/badges/grand-total/fastglm" alt="Downloads"></a></li>
 </ul>
 </div>
 

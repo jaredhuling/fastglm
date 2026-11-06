@@ -21,7 +21,7 @@ on the **MASS** package. The variance is `mu + mu^2 / theta`; as
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -42,22 +42,28 @@ on the **MASS** package. The variance is `mu + mu^2 / theta`; as
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul></li>
 <li>
@@ -111,13 +117,12 @@ on the **MASS** package. The variance is `mu + mu^2 / theta`; as
     <h2>Value</h2>
     <p>A `family` object with class `"family"` and
   `family$family == "Negative Binomial(theta)"`. The object also carries
-  the slot `family$theta`, which `family_code()` and the dispatch layer
-  use to detect the native NB fast path.</p>
+  the slot `family$theta`, which retains the supplied size parameter.</p>
     </div>
     <div id="details">
     <h2>Details</h2>
     <p>For joint estimation of `theta` together with `beta`, use the dedicated
-(forthcoming) `fastglm_nb()` entry point. The `negbin()` family here is
+[fastglm_nb()] function. The `negbin()` family here is
 intended for use cases where `theta` has been pre-specified or estimated
 separately.</p>
     </div>
@@ -132,7 +137,7 @@ separately.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu">negbin</span><span class="op">(</span>theta <span class="op">=</span> <span class="fl">2</span>, link <span class="op">=</span> <span class="st">"log"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> (Intercept)          X1          X2 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> (Intercept)          X2          X3 </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   0.2748751   0.4914446  -0.2048106 </span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

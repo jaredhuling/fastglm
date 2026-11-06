@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -38,22 +38,28 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul></li>
 <li>
@@ -135,15 +141,17 @@
 <span class="r-in"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Generalized linear model</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Call:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> fastglm.default(x = x, y = y, family = binomial())</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Family: binomial (logit link)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Coefficients:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      Estimate Std. Error z value Pr(&gt;|z|)    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1   0.430087   0.021778  19.748   &lt;2e-16 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1   0.430087   0.021778  19.748   &lt;1e-04 ***</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> X2  -0.003827   0.021031  -0.182    0.856    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3  -0.453793   0.021656 -20.955   &lt;2e-16 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3  -0.453793   0.021656 -20.955   &lt;1e-04 ***</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> X4  -0.019732   0.020998  -0.940    0.347    </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> X5  -0.008936   0.020556  -0.435    0.664    </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> X6   0.009996   0.020965   0.477    0.634    </span>
@@ -154,14 +162,9 @@
 <span class="r-out co"><span class="r-pr">#&gt;</span> ---</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> (Dispersion parameter for binomial family taken to be 1)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     Null deviance: 13863  on 10000  degrees of freedom</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Residual deviance: 12981  on  9990  degrees of freedom</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> AIC: 13001</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Number of Fisher Scoring iterations: 4</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Dispersion Null deviance Null df Deviance Residual df   AIC</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>           1         13863   10000    12981        9990 13001</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Convergence: converged (4 iterations)</span>
 </code></pre></div>
     </div>
   </div>

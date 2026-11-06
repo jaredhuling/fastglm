@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -55,22 +55,28 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul>
 </li>
@@ -102,7 +108,7 @@
                         <h4 data-toc-skip class="author">Jared
 Huling</h4>
             
-            <h4 data-toc-skip class="date">2026-06-07</h4>
+            <h4 data-toc-skip class="date">2026-11-06</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/jaredhuling/fastglm/blob/HEAD/vignettes/firth-fastglm.Rmd" class="external-link"><code>vignettes/firth-fastglm.Rmd</code></a></small>
       <div class="hidden name"><code>firth-fastglm.Rmd</code></div>
@@ -111,52 +117,80 @@ Huling</h4>
 
     
     
-<p>Firth’s (1993) penalized likelihood removes the leading
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mi>/</mi><mi>n</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(1/n)</annotation></semantics></math>
-bias from maximum likelihood estimates and produces finite estimates
-even under separation. <em>fastglm</em> implements the general mean-bias
-reduction of Kosmidis and Firth (2009, 2021), which extends Firth’s
-original logistic penalty to arbitrary GLM families. The method is
-activated with a single flag:</p>
+<p>Maximum likelihood estimates can have substantial bias in small
+samples. In logistic regression, a predictor or combination of
+predictors may perfectly distinguish successes from failures, a
+condition called separation. The ordinary coefficient estimates can then
+grow without reaching finite values. Mean bias reduction adjusts the
+estimating equations to reduce their leading small-sample bias; for
+logistic regression with a logit link it also provides finite estimates
+under separation when the design has full column rank. The
+<em>fastglm</em> implementation uses the mean-adjusted score method of
+Firth (1993) and Kosmidis and Firth (2009), selected by
+<code>firth=TRUE</code>:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
-<p>The penalty adds
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac><mi>∂</mi><mrow><mi>log</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">|</mo><msup><mi>X</mi><mi>⊤</mi></msup><mi>W</mi><mi>X</mi><mo stretchy="false" form="prefix">|</mo><mi>/</mi><mi>∂</mi><mi>β</mi></mrow><annotation encoding="application/x-tex">\frac{1}{2} \partial \log |X^\top W X| / \partial \beta</annotation></semantics></math>
-to the score, which is equivalent to modifying the IRLS working response
-by</p>
+<p>A score is the derivative of the log likelihood with respect to a
+parameter. Ordinary maximum likelihood sets these derivatives to zero.
+Mean bias reduction instead sets adjusted scores to zero. For logistic
+regression with a logit link, this adjustment can be obtained by adding
+half the log determinant of the information matrix to the log
+likelihood. The general adjustment need not correspond to such a penalty
+for other families or links.</p>
+<p>The coefficients are computed by iteratively reweighted least squares
+(IRLS), a sequence of weighted regression updates. Bias reduction
+changes the temporary response used in each weighted regression by</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>ξ</mi><mi>i</mi></msub><mo>=</mo><mfrac><mrow><mi>ϕ</mi><mspace width="0.167em"></mspace><msub><mi>h</mi><mi>i</mi></msub><mspace width="0.167em"></mspace><msup><mi>μ</mi><mo>″</mo></msup><mo stretchy="false" form="prefix">(</mo><msub><mi>η</mi><mi>i</mi></msub><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>V</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>μ</mi><mi>i</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><mrow><mn>2</mn><mspace width="0.167em"></mspace><msub><mi>w</mi><mi>i</mi></msub><mspace width="0.167em"></mspace><mo stretchy="false" form="prefix">[</mo><msup><mi>μ</mi><mo>′</mo></msup><mo stretchy="false" form="prefix">(</mo><msub><mi>η</mi><mi>i</mi></msub><mo stretchy="false" form="postfix">)</mo><msup><mo stretchy="false" form="postfix">]</mo><mn>3</mn></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">
 \xi_i = \frac{\phi \, h_i \, \mu''(\eta_i) \, V(\mu_i)}{2 \, w_i \, [\mu'(\eta_i)]^3}
 </annotation></semantics></math></p>
-<p>where
+<p>Here
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
+is the predictor matrix,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>η</mi><mi>i</mi></msub><annotation encoding="application/x-tex">\eta_i</annotation></semantics></math>
+is the linear predictor, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>μ</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>η</mi><mi>i</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mu(\eta_i)</annotation></semantics></math>
+is the fitted response mean. The derivatives
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>μ</mi><mo>′</mo></msup><annotation encoding="application/x-tex">\mu'</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>μ</mi><mo>″</mo></msup><annotation encoding="application/x-tex">\mu''</annotation></semantics></math>
+describe how that mean changes with the linear predictor. The variance
+function is
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mo stretchy="false" form="prefix">(</mo><mi>μ</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">V(\mu)</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>w</mi><mi>i</mi></msub><annotation encoding="application/x-tex">w_i</annotation></semantics></math>
+is the supplied prior weight, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>ϕ</mi><annotation encoding="application/x-tex">\phi</annotation></semantics></math>
+is the dispersion controlling response variation. The diagonal
+working-weight matrix has entries
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>W</mi><mrow><mi>i</mi><mi>i</mi></mrow></msub><mo>=</mo><msub><mi>w</mi><mi>i</mi></msub><mo stretchy="false" form="prefix">[</mo><msup><mi>μ</mi><mo>′</mo></msup><mo stretchy="false" form="prefix">(</mo><msub><mi>η</mi><mi>i</mi></msub><mo stretchy="false" form="postfix">)</mo><msup><mo stretchy="false" form="postfix">]</mo><mn>2</mn></msup><mi>/</mi><mi>V</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>μ</mi><mi>i</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">W_{ii}=w_i[\mu'(\eta_i)]^2/V(\mu_i)</annotation></semantics></math>.</p>
+<p>The value
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>h</mi><mi>i</mi></msub><annotation encoding="application/x-tex">h_i</annotation></semantics></math>
 is the
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>-th
-diagonal of the hat matrix
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>H</mi><mo>=</mo><msup><mi>W</mi><mrow><mn>1</mn><mi>/</mi><mn>2</mn></mrow></msup><mi>X</mi><mo stretchy="false" form="prefix">(</mo><msup><mi>X</mi><mi>⊤</mi></msup><mi>W</mi><mi>X</mi><msup><mo stretchy="false" form="postfix">)</mo><mrow><mi>−</mi><mn>1</mn></mrow></msup><msup><mi>X</mi><mi>⊤</mi></msup><msup><mi>W</mi><mrow><mn>1</mn><mi>/</mi><mn>2</mn></mrow></msup></mrow><annotation encoding="application/x-tex">H = W^{1/2} X (X^\top W X)^{-1} X^\top W^{1/2}</annotation></semantics></math>,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>μ</mi><mo>″</mo></msup><mo stretchy="false" form="prefix">(</mo><mi>η</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mu''(\eta)</annotation></semantics></math>
-is the second derivative of the inverse link,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mo stretchy="false" form="prefix">(</mo><mi>μ</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">V(\mu)</annotation></semantics></math>
-is the variance function,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>w</mi><mi>i</mi></msub><annotation encoding="application/x-tex">w_i</annotation></semantics></math>
-is the prior weight, and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>ϕ</mi><annotation encoding="application/x-tex">\phi</annotation></semantics></math>
-is the dispersion (1 for binomial and Poisson families; estimated
-iteratively for Gaussian, Gamma, and inverse Gaussian). This is the
-AS_mean adjustment of Kosmidis and Firth (2009), the same method used by
-<code>brglm2::brglmFit(type = "AS_mean")</code>.</p>
-<p>The adjustment is computed once per IRLS iteration using the
-leverages from the weighted least-squares decomposition that
-<em>fastglm</em> already performs, so the overhead relative to an
-unpenalized fit is modest.</p>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>th
+diagonal of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>H</mi><mo>=</mo><msup><mi>W</mi><mrow><mn>1</mn><mi>/</mi><mn>2</mn></mrow></msup><mi>X</mi><mo stretchy="false" form="prefix">(</mo><msup><mi>X</mi><mi>⊤</mi></msup><mi>W</mi><mi>X</mi><msup><mo stretchy="false" form="postfix">)</mo><mrow><mi>−</mi><mn>1</mn></mrow></msup><msup><mi>X</mi><mi>⊤</mi></msup><msup><mi>W</mi><mrow><mn>1</mn><mi>/</mi><mn>2</mn></mrow></msup></mrow><annotation encoding="application/x-tex">H = W^{1/2} X (X^\top W X)^{-1} X^\top W^{1/2}</annotation></semantics></math>.
+These diagonal values, called leverages, describe the relative influence
+of each predictor row in the weighted-regression step. They determine
+how strongly that row’s temporary response is adjusted. For families
+with unknown dispersion, its estimating equation must also be adjusted.
+The resulting joint calculation corresponds to the <code>AS_mean</code>
+option in <em>brglm2</em>.</p>
+<p>The additional computation depends on the family, predictor
+dimension, and number of iterations. Leverage calculations use the
+matrix decomposition from the weighted regression. Gamma models also
+require solving an adjusted dispersion equation, so avoiding repeated
+distribution calculations is particularly useful for that family.
+Timings later in this vignette compare the complete fits and check
+agreement before reporting speed.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/jaredhuling/fastglm" class="external-link">fastglm</a></span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
 <h2 id="logistic-regression-under-separation">Logistic regression under separation<a class="anchor" aria-label="anchor" href="#logistic-regression-under-separation"></a>
 </h2>
-<p>The canonical application is logistic regression with (quasi-)
-separation, where the standard MLE diverges. The <code>sex2</code>
-dataset from <em>logistf</em> (Heinze and Schemper, 2002)
-demonstrates:</p>
+<p>The <code>sex2</code> dataset from <em>logistf</em> illustrates
+logistic regression with separation (Heinze and Schemper, 2002). We
+compare finite bias-reduced estimates from <em>fastglm</em> with those
+from <em>logistf</em>. The maximum likelihood estimate, abbreviated MLE,
+refers to the ordinary fit without the bias adjustment.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">sex2</span>, package <span class="op">=</span> <span class="st">"logistf"</span><span class="op">)</span></span>
 <span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="op">~</span> <span class="va">age</span> <span class="op">+</span> <span class="va">oc</span> <span class="op">+</span> <span class="va">vic</span> <span class="op">+</span> <span class="va">vicl</span> <span class="op">+</span> <span class="va">vis</span> <span class="op">+</span> <span class="va">dia</span>, data <span class="op">=</span> <span class="va">sex2</span><span class="op">)</span></span>
@@ -180,31 +214,39 @@ demonstrates:</p>
 <span><span class="co">#&gt; [7,]  3.09601183  3.09601183</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit_f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit_l</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1.478671e-09</span></span></code></pre></div>
-<p>Coefficients agree to roughly 1e-7. The runtime advantage is
-substantial because <em>fastglm</em>’s Firth solver reuses the C++ IRLS
-infrastructure:</p>
+<p>The maximum absolute coefficient difference above measures numerical
+agreement on this dataset. The following code compares elapsed time for
+the same bias-reduced regression, excluding profile-likelihood
+confidence intervals from both fits. The size of any runtime advantage
+depends on the problem and computing environment:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">mb</span> <span class="op">&lt;-</span> <span class="fu">microbenchmark</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/microbenchmark/man/microbenchmark.html" class="external-link">microbenchmark</a></span><span class="op">(</span></span>
 <span>    fastglm <span class="op">=</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
 <span>    logistf <span class="op">=</span> <span class="fu">logistf</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/logistf/man/logistf.html" class="external-link">logistf</a></span><span class="op">(</span><span class="va">case</span> <span class="op">~</span> <span class="va">age</span> <span class="op">+</span> <span class="va">oc</span> <span class="op">+</span> <span class="va">vic</span> <span class="op">+</span> <span class="va">vicl</span> <span class="op">+</span> <span class="va">vis</span> <span class="op">+</span> <span class="va">dia</span>,</span>
 <span>                               data <span class="op">=</span> <span class="va">sex2</span>, pl <span class="op">=</span> <span class="cn">FALSE</span>, plconf <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span>,</span>
-<span>    times <span class="op">=</span> <span class="fl">10L</span></span>
+<span>    times <span class="op">=</span> <span class="fl">3L</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">mb</span>, unit <span class="op">=</span> <span class="st">"ms"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Unit: milliseconds</span></span>
-<span><span class="co">#&gt;     expr      min       lq      mean   median       uq      max neval cld</span></span>
-<span><span class="co">#&gt;  fastglm 0.293519 0.355306 0.4032965 0.402579 0.459487 0.529925    10  a </span></span>
-<span><span class="co">#&gt;  logistf 1.353246 1.586741 1.7301385 1.770790 1.870830 2.129991    10   b</span></span></code></pre></div>
+<span><span class="co">#&gt;     expr      min        lq     mean   median       uq      max neval cld</span></span>
+<span><span class="co">#&gt;  fastglm 0.679657 0.7063275 0.762641 0.732998 0.804133 0.875268     3  a </span></span>
+<span><span class="co">#&gt;  logistf 1.325448 1.3534100 1.417889 1.381372 1.464110 1.546848     3   b</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="general-glm-families">General GLM families<a class="anchor" aria-label="anchor" href="#general-glm-families"></a>
 </h2>
-<p><code>firth = TRUE</code> works with all standard R families and link
-functions. For each family below, we verify that <em>fastglm</em>
-reproduces the bias-reduced coefficients from
-<code>brglm2::brglmFit(type = "AS_mean")</code> — both implement the
-same AS_mean adjustment, so the coefficients should agree to near
-machine precision.</p>
+<p>The supported response distributions are binomial, Poisson, Gaussian,
+Gamma, inverse Gaussian, and negative binomial with theta supplied as a
+fixed value. The standard family definitions must be used because the
+bias adjustment depends on distribution derivatives beyond those needed
+for an ordinary GLM. Quasi families, Tweedie families, and user-modified
+family calculations are therefore excluded from this estimator.</p>
+<p>The following examples compare coefficient estimates with the
+<code>AS_mean</code> option in <code><a href="https://rdrr.io/pkg/brglm2/man/brglmFit.html" class="external-link">brglm2::brglmFit()</a></code>.
+Numerical agreement depends on the stopping tolerances and on how well
+the predictors distinguish the separate coefficient effects. The log,
+inverse, and other links specify how the response mean is related to the
+linear predictor.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/ikosmidis/brglm2" class="external-link">brglm2</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
@@ -228,8 +270,8 @@ machine precision.</p>
 <span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span><span class="co">#&gt; binomial logit    max|diff| = 2.29e-12</span></span>
-<span><span class="co">#&gt; binomial probit   max|diff| = 1.10e-11</span></span>
-<span><span class="co">#&gt; binomial cloglog  max|diff| = 3.09e-11</span></span></code></pre></div>
+<span><span class="co">#&gt; binomial probit   max|diff| = 1.20e-11</span></span>
+<span><span class="co">#&gt; binomial cloglog  max|diff| = 3.27e-11</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="poisson-log-sqrt">Poisson (log, sqrt)<a class="anchor" aria-label="anchor" href="#poisson-log-sqrt"></a>
@@ -264,8 +306,8 @@ machine precision.</p>
 <span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"Gamma    %-8s max|diff| = %.2e\n"</span>, <span class="va">lnk</span>,</span>
 <span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
-<span><span class="co">#&gt; Gamma    log      max|diff| = 2.10e-05</span></span>
-<span><span class="co">#&gt; Gamma    inverse  max|diff| = 1.67e-05</span></span></code></pre></div>
+<span><span class="co">#&gt; Gamma    log      max|diff| = 7.36e-07</span></span>
+<span><span class="co">#&gt; Gamma    inverse  max|diff| = 5.66e-07</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="gaussian-identity-log">Gaussian (identity, log)<a class="anchor" aria-label="anchor" href="#gaussian-identity-log"></a>
@@ -306,59 +348,376 @@ machine precision.</p>
 <div class="section level2">
 <h2 id="standard-errors">Standard errors<a class="anchor" aria-label="anchor" href="#standard-errors"></a>
 </h2>
-<p>The standard errors reported by <code>fastglm</code> with
-<code>firth = TRUE</code> come from the unscaled
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><msup><mi>X</mi><mi>⊤</mi></msup><mi>W</mi><mi>X</mi><msup><mo stretchy="false" form="postfix">)</mo><mrow><mi>−</mi><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">(X^\top W X)^{-1}</annotation></semantics></math>
-at convergence, the same quantity that <code>brglm2</code> uses. For
-unit-dispersion families (binomial, Poisson), these are the
-Firth-penalized standard errors directly; for other families, the
-dispersion is estimated as
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>ϕ</mi><mo accent="true">̂</mo></mover><mo>=</mo><mi>D</mi><mi>/</mi><mo stretchy="false" form="prefix">(</mo><mi>n</mi><mo>−</mo><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\hat\phi = D / (n - p)</annotation></semantics></math>
-and applied to the variance-covariance matrix.</p>
+<p>Standard errors describe uncertainty around the fitted coefficients.
+The reported covariance uses the expected information, which measures
+how much information the fitted response distribution supplies about
+those coefficients, evaluated at the bias-reduced estimate. Its diagonal
+entries give squared standard errors. This is a model-based local
+approximation; it does not use the curvature of a penalized log
+likelihood.</p>
+<p>Binomial, Poisson, and fixed-theta negative-binomial models have
+dispersion one. For Gaussian and inverse Gaussian models, the
+mean-adjusted dispersion estimate is
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>D</mi><mi>/</mi><mo stretchy="false" form="prefix">(</mo><mi>n</mi><mo>−</mo><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">D/(n-p)</annotation></semantics></math>,
+where
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>D</mi><annotation encoding="application/x-tex">D</annotation></semantics></math>
+is the deviance,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>
+counts observations with positive weight, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
+is the design rank. The deviance measures discrepancy between fitted and
+observed outcomes. Gamma dispersion requires an additional adjustment to
+its estimating equation. The fitted dispersion is used consistently in
+the coefficient adjustment and the covariance calculation.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_bin</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth <span class="op">=</span> <span class="cn">TRUE</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="va">df</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>,</span>
 <span>         type <span class="op">=</span> <span class="st">"AS_mean"</span>, control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>fastglm_SE <span class="op">=</span> <span class="va">f</span><span class="op">$</span><span class="va">se</span>, brglm2_SE <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">$</span><span class="va">coefficients</span><span class="op">[</span>, <span class="st">"Std. Error"</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt;             fastglm_SE  brglm2_SE</span></span>
-<span><span class="co">#&gt; (Intercept) 0.09423309 0.09423309</span></span>
-<span><span class="co">#&gt; x1          0.09910290 0.09910290</span></span>
-<span><span class="co">#&gt; x2          0.09527990 0.09527990</span></span>
+<span><span class="co">#&gt;    fastglm_SE  brglm2_SE</span></span>
+<span><span class="co">#&gt;    0.09423309 0.09423309</span></span>
+<span><span class="co">#&gt; x1 0.09910290 0.09910290</span></span>
+<span><span class="co">#&gt; x2 0.09527990 0.09527990</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">f</span><span class="op">$</span><span class="va">se</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">$</span><span class="va">coefficients</span><span class="op">[</span>, <span class="st">"Std. Error"</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 8.0283e-14</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 4.145295e-14</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="penalized-deviance">Penalized deviance<a class="anchor" aria-label="anchor" href="#penalized-deviance"></a>
+<h2 id="assessing-convergence">Assessing convergence<a class="anchor" aria-label="anchor" href="#assessing-convergence"></a>
 </h2>
-<p>The Firth-penalized deviance is
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>D</mi><mo>*</mo></msup><mo>=</mo><mi>D</mi><mo>−</mo><mrow><mi>log</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">|</mo><msup><mi>X</mi><mi>⊤</mi></msup><mi>W</mi><mi>X</mi><mo stretchy="false" form="prefix">|</mo></mrow><annotation encoding="application/x-tex">D^* = D - \log |X^\top W X|</annotation></semantics></math>,
-where
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>D</mi><annotation encoding="application/x-tex">D</annotation></semantics></math>
-is the standard deviance and the log-determinant comes from the
-information matrix at the penalized MLE. Both the standard and penalized
-deviances are reported:</p>
+<p>A convergence flag records whether the numerical stopping rule was
+satisfied. For a bias-reduced fit, the adjusted scores provide a more
+direct assessment of the equations being solved. An ordinary likelihood
+score can remain appreciably different from zero at a correctly computed
+bias-reduced estimate, because the adjustment changes the estimating
+equation. <code><a href="../reference/fastglm_diagnostics.html">fastglm_diagnostics()</a></code> therefore reports the
+ordinary and adjusted scores separately.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_bin</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>deviance <span class="op">=</span> <span class="va">f</span><span class="op">$</span><span class="va">deviance</span>,</span>
-<span>  log.det.XtWX <span class="op">=</span> <span class="va">f</span><span class="op">$</span><span class="va">log.det.XtWX</span>,</span>
-<span>  penalized.deviance <span class="op">=</span> <span class="va">f</span><span class="op">$</span><span class="va">penalized.deviance</span><span class="op">)</span></span>
-<span><span class="co">#&gt;           deviance       log.det.XtWX penalized.deviance </span></span>
-<span><span class="co">#&gt;          644.08511           14.05578          630.02933</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">fit_gamma</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_gam</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span><span class="st">"log"</span><span class="op">)</span>, firth<span class="op">=</span><span class="cn">TRUE</span>,</span>
+<span>                    tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/fastglm_diagnostics.html">fastglm_diagnostics</a></span><span class="op">(</span><span class="va">fit_gamma</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Numerical diagnostics</span></span>
+<span><span class="co">#&gt; Convergence: converged (7 iterations)</span></span>
+<span><span class="co">#&gt; Solver: column-pivoted QR</span></span>
+<span><span class="co">#&gt; Estimable coefficients (rank): 3</span></span>
+<span><span class="co">#&gt; Boundary flag: no</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;                          Check     Value</span></span>
+<span><span class="co">#&gt;    Standardized ordinary score   0.01401</span></span>
+<span><span class="co">#&gt;    Standardized adjusted score 1.941e-11</span></span>
+<span><span class="co">#&gt;  Standardized dispersion score 3.965e-14</span></span>
+<span><span class="co">#&gt;    Covariance condition number     1.157</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Note: Use the adjusted scores to assess bias-reduced convergence; the ordinary</span></span>
+<span><span class="co">#&gt;   score need not be zero.</span></span></code></pre></div>
+<p>The standardized coefficient diagnostic divides each adjusted score
+by the square root of its expected information and reports the largest
+absolute value. This accounts for the units of the predictors when
+assessing how far the equations remain from zero. The dispersion
+diagnostic applies the same scaling to the dispersion equation. Both
+quantities should be close to zero at a numerical solution; they are
+numerical diagnostics rather than hypothesis-test statistics. Families
+with fixed dispersion, including binomial and Poisson models, have no
+dispersion equation to check.</p>
+<p>Highly skewed Gamma responses can produce an initial coefficient step
+that overshoots the solution. For the Gamma log link, the fitting
+procedure holds the current dispersion fixed and reduces such a step
+until the coefficient objective decreases sufficiently. The final
+adjusted scores are then checked, so a small step caused by repeated
+halving does not by itself establish convergence.
+<code>convergence.reason</code> distinguishes a successful fit from an
+exhausted iteration limit or an unsuccessful step search. An
+unsuccessful fit requires examination before its coefficients or
+uncertainty summaries are used.</p>
+<p>Binomial probit and complementary log-log regressions can also
+produce excessively large coefficient updates. These links transform a
+linear predictor into a probability, and a large update can move
+probabilities so close to zero or one that subsequent calculations
+become unstable. For these two links, an update is reduced when it would
+change any fitted linear predictor with positive weight by more than one
+unit. This changes the numerical path while preserving the adjusted
+equations. A reduced update alone cannot establish convergence.</p>
+<p>The housing data provide an example with grouped binary outcomes.
+Each row represents a number of respondents in one satisfaction
+category. The first response column counts respondents reporting low
+satisfaction, and the second counts all other respondents in that row.
+Combining rows with the same predictors gives the same grouped-binomial
+model.</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">housing</span> <span class="op">&lt;-</span> <span class="fu">MASS</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/MASS/man/housing.html" class="external-link">housing</a></span></span>
+<span><span class="va">housing_design</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="op">~</span><span class="va">Infl</span><span class="op">+</span><span class="va">Type</span><span class="op">+</span><span class="va">Cont</span>,<span class="va">housing</span><span class="op">)</span></span>
+<span><span class="va">housing_response</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/with.html" class="external-link">with</a></span><span class="op">(</span><span class="va">housing</span>,<span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">Freq</span><span class="op">*</span><span class="op">(</span><span class="va">Sat</span><span class="op">==</span><span class="st">"Low"</span><span class="op">)</span>,<span class="va">Freq</span><span class="op">*</span><span class="op">(</span><span class="va">Sat</span><span class="op">!=</span><span class="st">"Low"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">fit_housing</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">housing_design</span>,<span class="va">housing_response</span>,</span>
+<span>    family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="st">"cloglog"</span><span class="op">)</span>,firth<span class="op">=</span><span class="cn">TRUE</span>,tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/fastglm_diagnostics.html">fastglm_diagnostics</a></span><span class="op">(</span><span class="va">fit_housing</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Numerical diagnostics</span></span>
+<span><span class="co">#&gt; Convergence: converged (11 iterations)</span></span>
+<span><span class="co">#&gt; Solver: column-pivoted QR</span></span>
+<span><span class="co">#&gt; Reduced scoring steps: 3</span></span>
+<span><span class="co">#&gt; Estimable coefficients (rank): 7</span></span>
+<span><span class="co">#&gt; Boundary flag: no</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;                          Check       Value</span></span>
+<span><span class="co">#&gt;    Standardized ordinary score     0.07924</span></span>
+<span><span class="co">#&gt;    Standardized adjusted score   2.182e-11</span></span>
+<span><span class="co">#&gt;  Standardized dispersion score Unavailable</span></span>
+<span><span class="co">#&gt;    Covariance condition number       50.37</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Note: Use the adjusted scores to assess bias-reduced convergence; the ordinary</span></span>
+<span><span class="co">#&gt;   score need not be zero.</span></span></code></pre></div>
+<p>The display reports how many scoring steps were reduced and the
+adjusted score at the returned estimates. Sparse, memory-mapped, and
+streamed fits use the current information matrix for the bias adjustment
+with these links; using information from an earlier iteration can cause
+oscillation in difficult cases. Streamed fits consequently require
+additional reads of the source. These numerical safeguards improve
+stability but do not guarantee convergence for every dataset or starting
+value.</p>
+<p>Accurate probability calculations are also necessary when outcomes
+are almost determined by the predictors. A probability can be so close
+to one that ordinary floating-point subtraction loses the complementary
+probability, even though that small quantity still affects the bias
+adjustment. Replacing small probabilities and derivatives separately by
+numerical lower bounds can therefore change the equations being solved.
+Probit and complementary log-log bias reduction evaluates these
+quantities using logarithms of probabilities and stable tail formulas.
+The likelihood, residuals, covariance, and score diagnostics follow the
+same calculations. Displayed probabilities can still round to zero or
+one.</p>
+<p>These probability calculations also enter post-fit likelihood and
+residual summaries and prediction standard errors. The required
+summaries are computed together, and prediction derivatives are
+evaluated separately when only those derivatives are needed. This avoids
+repeated probability calculations and temporary vectors while preserving
+the adjusted equations and reported quantities. The computational
+benefit depends on the design and the requested calculations.</p>
+<p>The following example separates the binary outcomes at zero exposure.
+The nuisance predictor, frequency weights, and offsets remain part of
+the model. The adjusted-score diagnostic assesses the numerical solution
+directly; agreement between two coefficient vectors would not establish
+accuracy if both calculations used the same probability
+approximation.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">112101</span><span class="op">)</span></span>
+<span><span class="va">separation_design</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="st">"(Intercept)"</span><span class="op">=</span><span class="fl">1</span>,</span>
+<span>    exposure<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="op">-</span><span class="fl">2</span>,<span class="fl">2</span>,length.out<span class="op">=</span><span class="fl">240</span><span class="op">)</span>,nuisance<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">240</span>,sd<span class="op">=</span><span class="fl">.25</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">separated_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">separation_design</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">separation_design</span><span class="op">[</span>,<span class="st">"exposure"</span><span class="op">]</span><span class="op">&gt;</span><span class="fl">0</span><span class="op">)</span>,</span>
+<span>    family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="st">"cloglog"</span><span class="op">)</span>,firth<span class="op">=</span><span class="cn">TRUE</span>,</span>
+<span>    weights<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>,<span class="fl">1</span>,<span class="fl">2</span>,<span class="fl">1</span><span class="op">)</span>,<span class="fl">60</span><span class="op">)</span>,offset<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">cos</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fl">240</span><span class="op">)</span><span class="op">)</span><span class="op">/</span><span class="fl">8</span>,</span>
+<span>    tol<span class="op">=</span><span class="fl">1e-10</span>,maxit<span class="op">=</span><span class="fl">500</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">separated_fit</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Generalized linear model</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Call:</span></span>
+<span><span class="co">#&gt; fastglm.default(x = separation_design, y = as.numeric(separation_design[, </span></span>
+<span><span class="co">#&gt;     "exposure"] &gt; 0), family = binomial("cloglog"), weights = rep(c(0, </span></span>
+<span><span class="co">#&gt;     1, 2, 1), 60), offset = cos(seq_len(240))/8, tol = 1e-10, </span></span>
+<span><span class="co">#&gt;     maxit = 500, firth = TRUE)</span></span>
+<span><span class="co">#&gt; Family: binomial (cloglog link)</span></span>
+<span><span class="co">#&gt; Estimation: mean bias reduction</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Coefficients:</span></span>
+<span><span class="co">#&gt;             Estimate Std. Error z value Pr(&gt;|z|)   </span></span>
+<span><span class="co">#&gt; (Intercept)  -0.7601     0.5135  -1.480  0.13877   </span></span>
+<span><span class="co">#&gt; exposure     18.3399     5.8189   3.152  0.00162 **</span></span>
+<span><span class="co">#&gt; nuisance     -2.7106     1.7560  -1.544  0.12268   </span></span>
+<span><span class="co">#&gt; ---</span></span>
+<span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df  AIC</span></span>
+<span><span class="co">#&gt;           1         333.7     179    6.298         177 12.3</span></span>
+<span><span class="co">#&gt; Convergence: converged (65 iterations)</span></span>
+<span><span class="fu"><a href="../reference/fastglm_diagnostics.html">fastglm_diagnostics</a></span><span class="op">(</span><span class="va">separated_fit</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Numerical diagnostics</span></span>
+<span><span class="co">#&gt; Convergence: converged (65 iterations)</span></span>
+<span><span class="co">#&gt; Solver: column-pivoted QR</span></span>
+<span><span class="co">#&gt; Reduced scoring steps: 36</span></span>
+<span><span class="co">#&gt; Estimable coefficients (rank): 3</span></span>
+<span><span class="co">#&gt; Boundary flag: yes</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;                          Check       Value</span></span>
+<span><span class="co">#&gt;    Standardized ordinary score       1.149</span></span>
+<span><span class="co">#&gt;    Standardized adjusted score   5.174e-12</span></span>
+<span><span class="co">#&gt;  Standardized dispersion score Unavailable</span></span>
+<span><span class="co">#&gt;    Covariance condition number       200.4</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Note: Use the adjusted scores to assess bias-reduced convergence; the ordinary</span></span>
+<span><span class="co">#&gt;   score need not be zero.</span></span></code></pre></div>
+<p>Solving the adjusted equations is a numerical requirement. It does
+not make Wald intervals or hypothesis tests exact in small samples, and
+this example does not assess their coverage or rejection rates.</p>
+<p>The adjusted diagnostics are retained with supported fits, including
+prepared Gamma-log fits that omit their data or covariance. Ordinary
+scores require the original observations and predictors, and older
+fitted objects may not contain the stored adjusted diagnostics. An
+unavailable diagnostic is reported as missing rather than as a zero
+score.</p>
+<p>For streaming fits using <code>method="qr"</code>, convergence also
+depends on the change in fitted linear predictors implied by the
+remaining adjusted equations. This check is useful when nearly redundant
+predictors have large, opposite coefficients: their individual updates
+may remain appreciable while their combined effect changes very little.
+A joint score diagnostic accounts for combinations of coefficients that
+separate marginal score checks can miss. The following reader supplies
+the same Gamma observations in blocks.</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">gamma_blocks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/split.html" class="external-link">split</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span><span class="op">)</span>,<span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">ceiling</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span><span class="op">)</span><span class="op">/</span><span class="fl">250L</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">gamma_reader</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="va">design</span> <span class="op">&lt;-</span> <span class="va">X</span></span>
+<span>    <span class="va">response</span> <span class="op">&lt;-</span> <span class="va">y_gam</span></span>
+<span>    <span class="va">blocks</span> <span class="op">&lt;-</span> <span class="va">gamma_blocks</span></span>
+<span>    <span class="kw">function</span><span class="op">(</span><span class="va">k</span><span class="op">)</span> <span class="op">{</span></span>
+<span>        <span class="va">i</span> <span class="op">&lt;-</span> <span class="va">blocks</span><span class="op">[[</span><span class="va">k</span><span class="op">]</span><span class="op">]</span></span>
+<span>        <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>X<span class="op">=</span><span class="va">design</span><span class="op">[</span><span class="va">i</span>,,drop<span class="op">=</span><span class="cn">FALSE</span><span class="op">]</span>,y<span class="op">=</span><span class="va">response</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">)</span></span>
+<span>    <span class="op">}</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="va">qr_gamma</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm_streaming.html">fastglm_streaming</a></span><span class="op">(</span><span class="va">gamma_reader</span>,<span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">gamma_blocks</span><span class="op">)</span>,<span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span><span class="st">"log"</span><span class="op">)</span>,</span>
+<span>                              method<span class="op">=</span><span class="st">"qr"</span>,firth<span class="op">=</span><span class="cn">TRUE</span>,tol<span class="op">=</span><span class="fl">1e-8</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/fastglm_diagnostics.html">fastglm_diagnostics</a></span><span class="op">(</span><span class="va">qr_gamma</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Numerical diagnostics</span></span>
+<span><span class="co">#&gt; Convergence: converged (8 iterations)</span></span>
+<span><span class="co">#&gt; Solver: column-pivoted QR</span></span>
+<span><span class="co">#&gt; Estimable coefficients (rank): 3</span></span>
+<span><span class="co">#&gt; Boundary flag: no</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;                                 Check      Value</span></span>
+<span><span class="co">#&gt;           Standardized ordinary score    0.01401</span></span>
+<span><span class="co">#&gt;           Standardized adjusted score  2.632e-09</span></span>
+<span><span class="co">#&gt;         Standardized dispersion score -7.194e-09</span></span>
+<span><span class="co">#&gt;  Remaining change in linear predictor   2.22e-10</span></span>
+<span><span class="co">#&gt;          Joint adjusted score per row  1.589e-10</span></span>
+<span><span class="co">#&gt;  Remaining relative dispersion change    4.4e-10</span></span>
+<span><span class="co">#&gt;        Joint dispersion score per row  3.217e-10</span></span>
+<span><span class="co">#&gt;           Covariance condition number      1.157</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Note: Use the adjusted scores to assess bias-reduced convergence; the ordinary</span></span>
+<span><span class="co">#&gt;   score need not be zero.</span></span></code></pre></div>
+<p><code>remaining.predictor.step</code> is the largest proposed change
+in a fitted linear predictor among observations with positive weight.
+The joint score is scaled by expected information and the number of
+positive-weight rows; the dispersion diagnostics measure the remaining
+relative dispersion update and its scaled score. All checks use the
+reported coefficients and current information. Verification requires
+additional block reads, and difficult designs can require a further
+factorization to assess the equations accurately. These costs can matter
+when reading the source is slow. A failed step search or insufficient
+numerical precision still produces an unsuccessful fit.</p>
+</div>
+<div class="section level2">
+<h2 id="adjusted-scores-and-penalized-likelihood">Adjusted scores and penalized likelihood<a class="anchor" aria-label="anchor" href="#adjusted-scores-and-penalized-likelihood"></a>
+</h2>
+<p>Mean bias reduction modifies the score equations. For logistic
+regression, this corresponds to adding half the log determinant of the
+expected information to the log likelihood. This equivalence does not
+extend to every family and link. <code>penalized.deviance</code> is
+therefore reported only for the supported canonical cases; ordinary
+deviance remains available for all supported families.</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_bin</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth<span class="op">=</span><span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>deviance<span class="op">=</span><span class="va">f</span><span class="op">$</span><span class="va">deviance</span>, penalized.deviance<span class="op">=</span><span class="va">f</span><span class="op">$</span><span class="va">penalized.deviance</span><span class="op">)</span></span>
+<span><span class="co">#&gt;           deviance penalized.deviance </span></span>
+<span><span class="co">#&gt;           644.0851           630.0293</span></span></code></pre></div>
+<p>The implemented adjustment targets mean bias, which concerns the
+average estimation error over repeated samples. An adjustment targeting
+median bias and user-selected strengths of the Jeffreys penalty are
+outside the current interface.</p>
+</div>
+<div class="section level2">
+<h2 id="profile-intervals-and-tests-for-logistic-regression">Profile intervals and tests for logistic regression<a class="anchor" aria-label="anchor" href="#profile-intervals-and-tests-for-logistic-regression"></a>
+</h2>
+<p>An interval based on a coefficient estimate plus or minus a multiple
+of its standard error is called a Wald interval. This calculation uses a
+local quadratic approximation to the likelihood, yielding an interval
+that is symmetric around the estimate. A profile interval instead varies
+the coefficient of interest and re-estimates the remaining coefficients
+at each value. The resulting interval can be asymmetric because it
+follows the shape of the fitted likelihood over a wider range.</p>
+<p>For Firth logistic regression with a logit link,
+<code>confint(..., method="profile")</code> uses the penalized log
+likelihood described above. Each constrained fit retains all columns of
+the original information matrix in the penalty. Dropping the tested
+predictor would change the penalty and therefore the comparison. A
+candidate coefficient value is included in the interval when twice the
+decrease in the maximized penalized log likelihood is below the
+appropriate chi-square cutoff with one degree of freedom.</p>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit_profile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">case</span> <span class="op">~</span> <span class="va">age</span> <span class="op">+</span> <span class="va">oc</span> <span class="op">+</span> <span class="va">vic</span> <span class="op">+</span> <span class="va">vicl</span> <span class="op">+</span> <span class="va">vis</span> <span class="op">+</span> <span class="va">dia</span>,</span>
+<span>                       data<span class="op">=</span><span class="va">sex2</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, firth<span class="op">=</span><span class="cn">TRUE</span>,</span>
+<span>                       tol<span class="op">=</span><span class="fl">1e-10</span>, maxit<span class="op">=</span><span class="fl">200</span><span class="op">)</span></span>
+<span><span class="va">profile_ci</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">fit_profile</span>, parm<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"age"</span>,<span class="st">"dia"</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"profile"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>estimate<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit_profile</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">profile_ci</span><span class="op">)</span><span class="op">]</span>, <span class="va">profile_ci</span><span class="op">)</span></span>
+<span><span class="co">#&gt;      estimate      2.5 %     97.5 %</span></span>
+<span><span class="co">#&gt; age -1.105981 -1.9737884 -0.3074251</span></span>
+<span><span class="co">#&gt; dia  3.096012  0.7745682  8.0302935</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">profile_ci</span>,<span class="st">"diagnostics"</span><span class="op">)</span><span class="op">[</span>,<span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"parameter"</span>,<span class="st">"side"</span>,<span class="st">"converged"</span>,<span class="st">"lr.error"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;   parameter  side converged      lr.error</span></span>
+<span><span class="co">#&gt; 1       age lower      TRUE -2.331574e-07</span></span>
+<span><span class="co">#&gt; 2       age upper      TRUE -2.764065e-09</span></span>
+<span><span class="co">#&gt; 3       dia lower      TRUE  3.265113e-10</span></span>
+<span><span class="co">#&gt; 4       dia upper      TRUE -6.932233e-12</span></span></code></pre></div>
+<p>The <code>parm</code> argument selects the coefficients to profile,
+limiting the additional fitting work. The diagnostic column
+<code>lr.error</code> records the difference between the
+likelihood-ratio statistic at an endpoint and the target cutoff. A
+failed endpoint is reported as missing with a warning and a diagnostic
+message. These diagnostics help distinguish an interval obtained
+successfully from a numerical calculation that requires further
+examination.</p>
+<p><code><a href="../reference/fastglm_profile_test.html">fastglm_profile_test()</a></code> applies the same comparison to a
+specified hypothesis. With several coefficients in <code>parm</code>, it
+tests their hypothesized values jointly while re-estimating the
+remaining coefficients. The following example tests whether the
+coefficients for <code>oc</code> and <code>vic</code> are both zero,
+conditional on the other predictors:</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/fastglm_profile_test.html">fastglm_profile_test</a></span><span class="op">(</span><span class="va">fit_profile</span>, parm<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"oc"</span>,<span class="st">"vic"</span><span class="op">)</span>, null<span class="op">=</span><span class="fl">0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Firth penalized likelihood ratio test (asymptotic chi-square reference)</span></span>
+<span><span class="co">#&gt; Null fit: Firth penalized likelihood</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;  Statistic df p-value</span></span>
+<span><span class="co">#&gt;      28.46  2 &lt; 1e-04</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Tested coefficients:</span></span>
+<span><span class="co">#&gt;     Estimate     Null</span></span>
+<span><span class="co">#&gt; oc  -0.06882  0.00000</span></span>
+<span><span class="co">#&gt; vic  2.26887  0.00000</span></span></code></pre></div>
+<p>The reference chi-square distribution has one degree of freedom for
+each constrained coefficient. A small p-value indicates that the
+constrained model fits less well relative to the unconstrained model
+under this reference distribution. Both the tests and profile intervals
+use large-sample approximations under independent binomial sampling;
+profiling does not make their finite-sample calibration exact. Grouped
+binomial counts and frequency weights are supported when the effective
+successes and failures are integer counts. Fractional survey or
+power-likelihood weights require a different inferential justification
+and are excluded from these procedures.</p>
+<p>Profile inference currently requires a retained dense design and
+response from a converged, full-rank binomial-logit Firth fit. Sparse,
+mapped, and streaming designs remain useful for fitting, but the profile
+functions do not convert them to dense form. The default
+<code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> calculation remains the Wald interval, and failed
+profile calculations return their diagnostics without replacing the
+result by another interval.</p>
 </div>
 <div class="section level2">
 <h2 id="speed-comparison-across-families">Speed comparison across families<a class="anchor" aria-label="anchor" href="#speed-comparison-across-families"></a>
 </h2>
-<p>A timing comparison of <code>fastglm(firth = TRUE)</code> against
-<code>brglm2::brglmFit(type = "AS_mean")</code> across families with
-<code>n = 10000</code> observations and <code>p = 5</code>
-covariates:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<p>The following comparison uses 10,000 observations and five predictors
+plus an intercept. Both functions receive the same preconstructed model
+matrix, so formula processing is excluded from both timings. Each fit is
+checked for convergence and coefficient agreement before timing. The
+methods retain their own starting-value procedures, and iteration counts
+are reported because these procedures and stopping rules affect the work
+required. These repeated timings describe this dataset and machine; they
+do not establish a uniform speed advantage across families or
+designs.</p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
 <span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">10000</span>;  <span class="va">p</span> <span class="op">&lt;-</span> <span class="fl">5</span></span>
 <span><span class="va">x1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span>;  <span class="va">x2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span>; <span class="va">x3</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
 <span><span class="va">x4</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span>;  <span class="va">x5</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
-<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="va">x1</span>, <span class="va">x2</span>, <span class="va">x3</span>, <span class="va">x4</span>, <span class="va">x5</span><span class="op">)</span></span>
+<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="st">"(Intercept)"</span><span class="op">=</span><span class="fl">1</span>, <span class="va">x1</span>, <span class="va">x2</span>, <span class="va">x3</span>, <span class="va">x4</span>, <span class="va">x5</span><span class="op">)</span></span>
 <span><span class="va">eta</span> <span class="op">&lt;-</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.3</span> <span class="op">*</span> <span class="va">x1</span> <span class="op">-</span> <span class="fl">0.2</span> <span class="op">*</span> <span class="va">x2</span> <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> <span class="va">x3</span></span>
 <span></span>
 <span><span class="va">families</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
@@ -376,27 +735,118 @@ covariates:</p>
 <span>                              y <span class="op">=</span> <span class="va">eta</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">0</span>, <span class="fl">0.5</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">df</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y <span class="op">=</span> <span class="fl">0</span>, x1 <span class="op">=</span> <span class="va">x1</span>, x2 <span class="op">=</span> <span class="va">x2</span>, x3 <span class="op">=</span> <span class="va">x3</span>, x4 <span class="op">=</span> <span class="va">x4</span>, x5 <span class="op">=</span> <span class="va">x5</span><span class="op">)</span></span>
 <span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">nm</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">families</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">fi</span> <span class="op">&lt;-</span> <span class="va">families</span><span class="op">[[</span><span class="va">nm</span><span class="op">]</span><span class="op">]</span></span>
-<span>    <span class="va">df</span><span class="op">$</span><span class="va">y</span> <span class="op">&lt;-</span> <span class="va">fi</span><span class="op">$</span><span class="va">y</span></span>
+<span>    <span class="va">fit_fast</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>,<span class="va">fi</span><span class="op">$</span><span class="va">y</span>,family<span class="op">=</span><span class="va">fi</span><span class="op">$</span><span class="va">fam</span>,firth<span class="op">=</span><span class="cn">TRUE</span>,</span>
+<span>                                   tol<span class="op">=</span><span class="fl">1e-8</span>,maxit<span class="op">=</span><span class="fl">100</span><span class="op">)</span></span>
+<span>    <span class="va">fit_reference</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="fu">brglm2</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/brglm2/man/brglmFit.html" class="external-link">brglmFit</a></span><span class="op">(</span><span class="va">X</span>,<span class="va">fi</span><span class="op">$</span><span class="va">y</span>,family<span class="op">=</span><span class="va">fi</span><span class="op">$</span><span class="va">fam</span>,</span>
+<span>        control<span class="op">=</span><span class="fu">brglm2</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/brglm2/man/brglmControl.html" class="external-link">brglmControl</a></span><span class="op">(</span>type<span class="op">=</span><span class="st">"AS_mean"</span>,epsilon<span class="op">=</span><span class="fl">1e-8</span>,maxit<span class="op">=</span><span class="fl">100</span><span class="op">)</span><span class="op">)</span></span>
+<span>    <span class="va">f</span> <span class="op">&lt;-</span> <span class="fu">fit_fast</span><span class="op">(</span><span class="op">)</span>; <span class="va">b</span> <span class="op">&lt;-</span> <span class="fu">fit_reference</span><span class="op">(</span><span class="op">)</span></span>
+<span>    <span class="va">error</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span><span class="op">-</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="va">f</span><span class="op">$</span><span class="va">converged</span>,<span class="va">b</span><span class="op">$</span><span class="va">converged</span>,<span class="va">error</span><span class="op">&lt;</span><span class="fl">1e-5</span><span class="op">)</span></span>
 <span>    <span class="va">mb</span> <span class="op">&lt;-</span> <span class="fu">microbenchmark</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/microbenchmark/man/microbenchmark.html" class="external-link">microbenchmark</a></span><span class="op">(</span></span>
-<span>        fastglm <span class="op">=</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">fi</span><span class="op">$</span><span class="va">y</span>, family <span class="op">=</span> <span class="va">fi</span><span class="op">$</span><span class="va">fam</span>, firth <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
-<span>        brglm2  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span> <span class="op">+</span> <span class="va">x3</span> <span class="op">+</span> <span class="va">x4</span> <span class="op">+</span> <span class="va">x5</span>, data <span class="op">=</span> <span class="va">df</span>,</span>
-<span>                      family <span class="op">=</span> <span class="va">fi</span><span class="op">$</span><span class="va">fam</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>, type <span class="op">=</span> <span class="st">"AS_mean"</span><span class="op">)</span>,</span>
-<span>        times <span class="op">=</span> <span class="fl">10L</span></span>
-<span>    <span class="op">)</span></span>
-<span>    <span class="va">s</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">mb</span>, unit <span class="op">=</span> <span class="st">"ms"</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"%-20s fastglm=%7.2f ms  brglm2=%7.2f ms  speedup=%.1fx\n"</span>,</span>
-<span>                <span class="va">nm</span>, <span class="va">s</span><span class="op">$</span><span class="va">median</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>, <span class="va">s</span><span class="op">$</span><span class="va">median</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>, <span class="va">s</span><span class="op">$</span><span class="va">median</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">/</span> <span class="va">s</span><span class="op">$</span><span class="va">median</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span>        fastglm<span class="op">=</span><span class="fu">fit_fast</span><span class="op">(</span><span class="op">)</span>,brglm2<span class="op">=</span><span class="fu">fit_reference</span><span class="op">(</span><span class="op">)</span>,times<span class="op">=</span><span class="fl">5L</span><span class="op">)</span></span>
+<span>    <span class="va">timing</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">mb</span>,unit<span class="op">=</span><span class="st">"ms"</span><span class="op">)</span></span>
+<span>    <span class="va">ms</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="va">timing</span><span class="op">$</span><span class="va">median</span>,<span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">timing</span><span class="op">$</span><span class="va">expr</span><span class="op">)</span><span class="op">)</span></span>
+<span>    <span class="va">results</span><span class="op">[[</span><span class="va">nm</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>family<span class="op">=</span><span class="va">nm</span>,fastglm_ms<span class="op">=</span><span class="va">ms</span><span class="op">[[</span><span class="st">"fastglm"</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>        brglm2_ms<span class="op">=</span><span class="va">ms</span><span class="op">[[</span><span class="st">"brglm2"</span><span class="op">]</span><span class="op">]</span>,ratio<span class="op">=</span><span class="va">ms</span><span class="op">[[</span><span class="st">"brglm2"</span><span class="op">]</span><span class="op">]</span><span class="op">/</span><span class="va">ms</span><span class="op">[[</span><span class="st">"fastglm"</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>        fastglm_iterations<span class="op">=</span><span class="va">f</span><span class="op">$</span><span class="va">iter</span>,brglm2_iterations<span class="op">=</span><span class="va">b</span><span class="op">$</span><span class="va">iter</span>,</span>
+<span>        max_coefficient_difference<span class="op">=</span><span class="va">error</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
-<span><span class="co">#&gt; binomial logit       fastglm=   3.82 ms  brglm2=  21.28 ms  speedup=5.6x</span></span>
-<span><span class="co">#&gt; binomial probit      fastglm=   4.94 ms  brglm2=  22.63 ms  speedup=4.6x</span></span>
-<span><span class="co">#&gt; binomial cloglog     fastglm=   5.98 ms  brglm2=  24.59 ms  speedup=4.1x</span></span>
-<span><span class="co">#&gt; poisson log          fastglm=   4.04 ms  brglm2= 131.30 ms  speedup=32.5x</span></span>
-<span><span class="co">#&gt; Gamma log            fastglm=   4.65 ms  brglm2= 123.49 ms  speedup=26.6x</span></span>
-<span><span class="co">#&gt; gaussian identity    fastglm=   1.36 ms  brglm2=  32.61 ms  speedup=23.9x</span></span></code></pre></div>
+<span><span class="va">timing_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>,<span class="va">results</span><span class="op">)</span></span>
+<span><span class="va">timing_table</span><span class="op">$</span><span class="va">max_coefficient_difference</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span></span>
+<span>    <span class="va">timing_table</span><span class="op">$</span><span class="va">max_coefficient_difference</span>,format<span class="op">=</span><span class="st">"e"</span>,digits<span class="op">=</span><span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">timing_table</span>,row.names<span class="op">=</span><span class="cn">FALSE</span>,digits<span class="op">=</span><span class="fl">3</span>,</span>
+<span>    col.names<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Family and link"</span>,<span class="st">"fastglm (ms)"</span>,<span class="st">"brglm2 (ms)"</span>,</span>
+<span>                <span class="st">"Time ratio"</span>,<span class="st">"fastglm iterations"</span>,<span class="st">"brglm2 iterations"</span>,</span>
+<span>                <span class="st">"Largest coefficient difference"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<colgroup>
+<col width="14%">
+<col width="10%">
+<col width="9%">
+<col width="9%">
+<col width="15%">
+<col width="14%">
+<col width="25%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Family and link</th>
+<th align="right">fastglm (ms)</th>
+<th align="right">brglm2 (ms)</th>
+<th align="right">Time ratio</th>
+<th align="right">fastglm iterations</th>
+<th align="right">brglm2 iterations</th>
+<th align="left">Largest coefficient difference</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">binomial logit</td>
+<td align="right">4.443</td>
+<td align="right">14.455</td>
+<td align="right">3.254</td>
+<td align="right">5</td>
+<td align="right">2</td>
+<td align="left">1.20e-11</td>
+</tr>
+<tr class="even">
+<td align="left">binomial probit</td>
+<td align="right">7.607</td>
+<td align="right">15.385</td>
+<td align="right">2.022</td>
+<td align="right">6</td>
+<td align="right">2</td>
+<td align="left">7.27e-10</td>
+</tr>
+<tr class="odd">
+<td align="left">binomial cloglog</td>
+<td align="right">8.752</td>
+<td align="right">15.696</td>
+<td align="right">1.794</td>
+<td align="right">7</td>
+<td align="right">2</td>
+<td align="left">4.18e-09</td>
+</tr>
+<tr class="even">
+<td align="left">poisson log</td>
+<td align="right">4.663</td>
+<td align="right">113.913</td>
+<td align="right">24.428</td>
+<td align="right">6</td>
+<td align="right">1</td>
+<td align="left">8.35e-09</td>
+</tr>
+<tr class="odd">
+<td align="left">Gamma log</td>
+<td align="right">3.224</td>
+<td align="right">90.406</td>
+<td align="right">28.037</td>
+<td align="right">6</td>
+<td align="right">2</td>
+<td align="left">1.04e-10</td>
+</tr>
+<tr class="even">
+<td align="left">gaussian identity</td>
+<td align="right">1.411</td>
+<td align="right">20.867</td>
+<td align="right">14.787</td>
+<td align="right">2</td>
+<td align="right">2</td>
+<td align="left">1.11e-16</td>
+</tr>
+</tbody>
+</table>
+<p>The time ratio divides the <em>brglm2</em> time by the
+<em>fastglm</em> time, so values above one favor <em>fastglm</em>. Gamma
+bias reduction requires an additional calculation for dispersion at each
+fitting iteration. When observations have equal prior weights, their
+contributions to part of this calculation are identical. Combining those
+contributions avoids repeating the same special-function evaluations for
+every observation. A numerical root search then solves the same
+dispersion equation with fewer evaluations. Gamma models with distinct
+prior weights also benefit from the improved search, but cannot reuse
+identical contributions to the same extent.</p>
 </div>
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>

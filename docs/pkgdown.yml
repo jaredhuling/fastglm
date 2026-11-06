@@ -10,4 +10,6 @@ articles:
   large-data-fastglm: large-data-fastglm.html
   nb-convergence-fastglm: nb-convergence-fastglm.html
   nb-stability-fastglm: nb-stability-fastglm.html
-last_built: 2026-06-07T22:16Z
+  ordinal-fastglm: ordinal-fastglm.html
+  semicontinuous-fastglm: semicontinuous-fastglm.html
+last_built: 2026-11-06T22:05Z
