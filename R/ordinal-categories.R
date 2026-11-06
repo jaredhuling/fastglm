@@ -20,6 +20,8 @@
         if(is.null(levels)) levels<-colnames(y)
         if(is.null(levels)) levels<-as.character(seq_len(ncol(y)))
         if(length(levels)!=ncol(y)) stop("category labels must match the count columns",call.=FALSE)
+        if(!is.null(colnames(y)) && !identical(colnames(y),as.character(levels)))
+            stop("ordinal count column names must match 'levels' in order",call.=FALSE)
     } else {
         if(is.null(levels)) {
             if(!is.factor(y)) stop("supply a factor with ordered levels or explicit 'levels'",call.=FALSE)

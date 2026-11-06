@@ -354,7 +354,7 @@ print.fastglm <- function(x, digits = max(3L, getOption("digits") - 3L), ...)
     if(isTRUE(x$firth)) .fastglm_print_field("Estimation","mean bias reduction")
     .fastglm_print_coefficients(coef(x),digits=digits,...)
     cat("\n")
-    if(!is.null(x$theta)) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    if(isTRUE(is.finite(x$theta))) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
     .fastglm_print_convergence(x$converged,x$iter,x$convergence.reason)
     invisible(x)
 }
