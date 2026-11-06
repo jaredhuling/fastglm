@@ -9,6 +9,21 @@
 # threshold entries, so no observations-by-categories stacked design is needed.
 .ordinal_sandwich_block <- function(x,alpha,beta,offset,codes,counts,weights,
                                     frequency=1,independent=TRUE,link="logit") {
+    if(link=="cloglog") return(.ordinal_sandwich_block_r(x,alpha,beta,offset,codes,counts,weights,frequency,independent,link))
+    gap<-diff(alpha)
+    if(any(!is.finite(alpha)) || any(!is.finite(gap)|gap<=0)) stop("ordinal thresholds must be finite and strictly ordered",call.=FALSE)
+    z<-ordinal_sandwich_native(x,alpha,beta,offset,if(length(counts)) integer() else as.integer(codes),
+        if(length(counts)) counts else matrix(numeric(),0L,0L),weights,frequency,independent,match(link,c("logit","probit"))-1L)
+    z$score<-drop(z$score)
+    if(any(!is.finite(z$information)) || any(!is.finite(z$meat)) || any(!is.finite(z$score)) ||
+       (!is.null(z$rows) && any(!is.finite(z$rows))))
+        stop("ordinal score or observed information is not finite",call.=FALSE)
+    z
+}
+
+# Pure-R reference for the native block, and the path for cloglog tail curvature.
+.ordinal_sandwich_block_r <- function(x,alpha,beta,offset,codes,counts,weights,
+                                      frequency=1,independent=TRUE,link="logit") {
     if(link!="logit") return(.ordinal_link_sandwich(x,alpha,beta,offset,codes,counts,weights,frequency,independent,link))
     n<-nrow(x);p<-ncol(x);q<-length(alpha);d<-q+p
     eta<-outer(-streaming_qr_eta(x,beta,offset),alpha,"+")
@@ -156,7 +171,7 @@
         if(length(counts)) counts<-counts[positive,,drop=FALSE] else codes<-codes[positive]
         if(!is.null(rows)) rows<-rows[positive]
         if(clustered) groups<-groups[positive]
-        if(!partial && p) x<-sweep(sweep(x,2,object$working$center,"-"),2,object$working$scale,"/")
+        if(!partial && p) x<-ordinal_center_scale(x,object$working$center,object$working$scale)
         z<-if(partial) .ordinal_partial_sandwich_block(object,x,offset,codes,counts,weights,
             frequency=N,independent=!clustered,rows=rows) else
             .ordinal_sandwich_block(x,object$working$alpha,object$working$beta,offset,

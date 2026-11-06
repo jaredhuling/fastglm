@@ -8,6 +8,8 @@ On macOS with Box Drive, this folder is at `~/Library/CloudStorage/Box-Box/Resea
 
 The archive is a complete copy of the tracked `benchmarks/` directory at commit `5c2efb9`, with its paths unchanged (3,774 files, 129 MB). Each file was checked against its git object hash when the copy was made. The files also remain available in the history of this repository.
 
+Raw replicates from `benchmarks/ordinal-covariance/run.R` are in `Box-Box/Research/fastglm/ordinal-covariance-raw-v2-20261106/` (30 files).
+
 ## What stays in the repository
 
 `.gitignore` defines the rule. These files remain tracked:

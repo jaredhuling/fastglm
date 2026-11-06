@@ -33,6 +33,20 @@
 }
 
 .ordinal_po_score_moments <- function(x,response,offset,fit,selected,block.size) {
+    q <- length(fit$alpha);gap <- diff(fit$working$alpha)
+    if(any(!is.finite(gap)|gap<=0)) stop("the null fit requires finite, strictly ordered thresholds",call.=FALSE)
+    xx <- .ordinal_prediction_scale(x,fit$working$center,fit$working$scale)
+    z <- ordinal_po_moments_native(xx,if(response$grouped) integer() else as.integer(response$codes),
+        if(response$grouped) response$y else matrix(numeric(),0L,0L),response$weights,offset,
+        fit$working$alpha,fit$working$beta,as.integer(selected),fit$frequency,as.integer(block.size),
+        .ordinal_link_code(.ordinal_link(fit)))
+    U <- drop(z$score);I <- z$information
+    if(any(!is.finite(U)) || any(!is.finite(I))) stop("score or expected information is nonfinite",call.=FALSE)
+    list(score=U,information=I,nuisance=q+ncol(x),frequency=fit$frequency)
+}
+
+# Pure-R reference for the native moments.
+.ordinal_po_score_moments_r <- function(x,response,offset,fit,selected,block.size) {
     n <- nrow(x); p <- ncol(x); q <- length(fit$alpha); s <- length(selected)
     d0 <- q+p; d <- d0+s*(q-1L); frequency <- fit$frequency
     alpha <- fit$working$alpha; beta <- fit$working$beta

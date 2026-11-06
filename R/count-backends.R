@@ -35,11 +35,14 @@
         offset <- .count_backend_offsets(offset,n)
         original <- list(x=list(count=x,zero=z),y=response,weights=weights,offset=offset)
         if(n<1L) stop("a design must contain at least one row",call.=FALSE)
-        source <- fastglm_source(function(k) {
-            i <- seq.int((k-1L)*block.size+1L,min(k*block.size,n))
-            list(X=x[i,,drop=FALSE],Z=z[i,,drop=FALSE],y=response[i],weights=weights[i],
-                 offset=lapply(offset,`[`,i))
-        },ceiling(n/block.size))
+        # A dense design is already in memory, so one block avoids copying its rows.
+        source <- if(is.matrix(x) && is.matrix(z))
+            fastglm_source(function(k) list(X=x,Z=z,y=response,weights=weights,offset=offset),1L) else
+            fastglm_source(function(k) {
+                i <- seq.int((k-1L)*block.size+1L,min(k*block.size,n))
+                list(X=x[i,,drop=FALSE],Z=z[i,,drop=FALSE],y=response[i],weights=weights[i],
+                     offset=lapply(offset,`[`,i))
+            },ceiling(n/block.size))
         if(nrow(z)!=n || length(response)!=n || length(weights)!=n)
             stop("designs, response, and weights must have the same number of rows",call.=FALSE)
     }
@@ -50,6 +53,8 @@
     fetch <- function(k) {
         state$reads <- state$reads+1L
         if(k==1L) state$passes <- state$passes+1L
+        # Data held by the reader cannot change, so one validation is enough.
+        if(!is.null(state$validated)) return(state$validated)
         a <- source$callback(k)
         if(!is.list(a) || is.null(a$X) || is.null(a$y)) stop("each data block must supply X and y",call.=FALSE)
         if(is.null(a$Z)) a$Z <- a$X
@@ -60,13 +65,13 @@
             xx <- a[[nm]]
             if(!(is.matrix(xx) && is.numeric(xx)) && !inherits(xx,"dgCMatrix"))
                 stop("each block design must be a numeric matrix or dgCMatrix",call.=FALSE)
-            values <- if(inherits(xx,"dgCMatrix")) xx@x else xx
-            if(nrow(xx)!=n || ncol(xx)<1L || any(!is.finite(values)))
-                stop("invalid rows, columns, or nonfinite values in a block design",call.=FALSE)
             if(is.matrix(xx) && is.integer(xx)) {
                 storage.mode(xx)<-"double"
                 a[[nm]]<-xx
             }
+            finite <- if(inherits(xx,"dgCMatrix")) all(is.finite(xx@x)) else all_finite_dense(xx)
+            if(nrow(xx)!=n || ncol(xx)<1L || !finite)
+                stop("invalid rows, columns, or nonfinite values in a block design",call.=FALSE)
         }
         if(is.null(a$weights)) a$weights <- rep(1,n)
         if(!is.numeric(a$weights) || length(a$weights)!=n || any(!is.finite(a$weights)) || any(a$weights<0))
@@ -82,7 +87,9 @@
             stop("design columns changed between blocks",call.=FALSE)
         if(state$rows[k]!=0L && state$rows[k]!=n) stop("block size changed between passes",call.=FALSE)
         state$rows[k] <- n
-        list(X=a$X,Z=a$Z,y=as.numeric(a$y),weights=as.numeric(a$weights),offset=a$offset)
+        block <- list(X=a$X,Z=a$Z,y=as.numeric(a$y),weights=as.numeric(a$weights),offset=a$offset)
+        if(!streaming && source$n_chunks==1L) state$validated <- block
+        block
     }
     # The tally has its own frame so the retained reader does not keep a block.
     tally <- function(a,k) {
@@ -165,7 +172,19 @@
     st <- it <- 0
     lnk <- make.link(link)
     for(k in seq_len(reader$source$n_chunks)) {
-        a <- reader$fetch(k);keep <- a$weights>0 & (!truncated | a$y>0)
+        a <- reader$fetch(k)
+        # Dense blocks use the compiled kernel. Sparse blocks use the same formulas
+        # below, which also serve as its reference in the tests.
+        if(is.matrix(a$X)) {
+            v <- count_block_summary(a$X,a$y,a$weights,a$offset$count,as.numeric(beta),
+                if(is.null(theta)) NA_real_ else theta,truncated,match(link,c("log","sqrt","identity"))-1L,
+                system,theta.derivatives)
+            if(!v$valid) return(list(loglik=-Inf))
+            ll <- ll+v$loglik;score <- score+drop(v$score);information <- information+v$information
+            st <- st+v$theta.score;it <- it+v$theta.information
+            next
+        }
+        keep <- a$weights>0 & (!truncated | a$y>0)
         if(!any(keep)) next
         xx <- a$X[keep,,drop=FALSE];y <- a$y[keep];w <- a$weights[keep]
         eta <- as.numeric(xx%*%beta)+a$offset$count[keep];mu <- lnk$linkinv(eta)
@@ -246,7 +265,13 @@
 .count_backend_nb_information <- function(reader,beta,theta,link) {
     p <- length(beta);info <- matrix(0,p+1L,p+1L);lnk <- make.link(link)
     for(k in seq_len(reader$source$n_chunks)) {
-        z <- reader$fetch(k);keep <- z$weights>0
+        z <- reader$fetch(k)
+        if(is.matrix(z$X)) {
+            info <- info+count_block_nb_information(z$X,z$y,z$weights,z$offset$count,as.numeric(beta),theta,
+                match(link,c("log","sqrt","identity"))-1L)
+            next
+        }
+        keep <- z$weights>0
         if(!any(keep)) next
         x <- z$X[keep,,drop=FALSE];y <- z$y[keep];w <- z$weights[keep]
         eta <- as.numeric(x%*%beta)+z$offset$count[keep]

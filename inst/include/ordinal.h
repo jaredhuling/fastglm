@@ -242,22 +242,90 @@ inline void ordinal_add_information(const OrdinalData& data,const VectorXd& para
     }
 }
 
+// Solves a symmetric system whose threshold block is tridiagonal with a unit
+// diagonal. Eliminating thresholds first is the same operation as an unpivoted
+// Cholesky factor of the whole matrix, at far lower cost with many categories.
+struct OrdinalBlockSystem {
+    VectorXd pivot,sub;
+    MatrixXd reduced;
+    Eigen::LLT<MatrixXd> schur;
+    int q=0,p=0;
+    bool ok=false;
+    void tridiagonal_solve(double* x) const {
+        x[0]/=pivot[0];
+        for(int s=1;s<q;++s) x[s]=(x[s]-sub[s-1]*x[s-1])/pivot[s];
+        x[q-1]/=pivot[q-1];
+        for(int s=q-2;s>=0;--s) x[s]=(x[s]-sub[s]*x[s+1])/pivot[s];
+    }
+    OrdinalBlockSystem(const VectorXd& off,const MatrixXd& cross,const MatrixXd& slopes) :
+        pivot(cross.rows()),sub(std::max<Eigen::Index>(cross.rows()-1,0)),reduced(cross),
+        q(cross.rows()),p(cross.cols()) {
+        double previous=0;
+        for(int s=0;s<q;++s) {
+            const double value=1-previous*previous;
+            if(!(value>0) || !std::isfinite(value)) return;
+            pivot[s]=std::sqrt(value);
+            if(s+1<q) { sub[s]=off[s]/pivot[s];previous=sub[s]; }
+        }
+        for(int j=0;j<p;++j) tridiagonal_solve(reduced.col(j).data());
+        if(p) {
+            MatrixXd difference=slopes;
+            difference.noalias()-=cross.transpose()*reduced;
+            schur.compute(difference);
+            if(schur.info()!=Eigen::Success) return;
+        }
+        ok=true;
+    }
+    VectorXd solve(const VectorXd& right,const MatrixXd& cross) const {
+        VectorXd out=right;
+        tridiagonal_solve(out.data());
+        if(p) {
+            const VectorXd slopes=schur.solve(right.tail(p)-cross.transpose()*out.head(q));
+            out.head(q).noalias()-=reduced*slopes;
+            out.tail(p)=slopes;
+        }
+        return out;
+    }
+    MatrixXd inverse() const {
+        MatrixXd out=MatrixXd::Zero(q+p,q+p);
+        for(int s=0;s<q;++s) { out(s,s)=1;tridiagonal_solve(out.col(s).data()); }
+        if(p) {
+            const MatrixXd slopes=schur.solve(MatrixXd::Identity(p,p));
+            const MatrixXd mixed=reduced*slopes;
+            out.topLeftCorner(q,q).noalias()+=mixed*reduced.transpose();
+            out.topRightCorner(q,p)=-mixed;
+            out.bottomLeftCorner(p,q)=-mixed.transpose();
+            out.bottomRightCorner(p,p)=slopes;
+        }
+        return out;
+    }
+};
+
 inline void ordinal_factor_information(OrdinalState& result,int p,int q,double condition_tol) {
-    const int d=p+q;
     for(int s=1;s<q;++s) result.information(s,s-1)=result.information(s-1,s);
     if(p) result.information.bottomLeftCorner(p,q)=result.information.topRightCorner(q,p).transpose();
-    VectorXd diagonal=result.information.diagonal().array().sqrt();
+    const VectorXd diagonal=result.information.diagonal().array().sqrt();
     if(!diagonal.allFinite() || (diagonal.array()<=0).any() || !std::isfinite(result.loglik))
         throw OrdinalEvaluationError("nonpositive or non-finite ordinal information");
     const VectorXd inverse_scale=diagonal.cwiseInverse();
-    MatrixXd correlation=inverse_scale.asDiagonal()*result.information*inverse_scale.asDiagonal();
-    Eigen::LLT<MatrixXd> factor(correlation);
-    if(factor.info()!=Eigen::Success)
-        throw OrdinalEvaluationError("ordinal information is not positive definite");
-    result.rcond=factor.rcond();
+    VectorXd off(std::max(q-1,0));
+    for(int s=1;s<q;++s) off[s-1]=result.information(s,s-1)*inverse_scale[s]*inverse_scale[s-1];
+    const MatrixXd cross=inverse_scale.head(q).asDiagonal()*result.information.topRightCorner(q,p)*
+        inverse_scale.tail(p).asDiagonal();
+    const MatrixXd slopes=inverse_scale.tail(p).asDiagonal()*result.information.bottomRightCorner(p,p)*
+        inverse_scale.tail(p).asDiagonal();
+    const OrdinalBlockSystem factor(off,cross,slopes);
+    if(!factor.ok) throw OrdinalEvaluationError("ordinal information is not positive definite");
+    const MatrixXd correlation_inverse=factor.inverse();
+    // One-norm condition number of the correlation-scaled information.
+    double norm=0;
+    for(int s=0;s<q;++s) norm=std::max(norm,1+(s>0 ? std::abs(off[s-1]) : 0)+(s+1<q ? std::abs(off[s]) : 0)+
+        (p ? cross.row(s).cwiseAbs().sum() : 0));
+    for(int j=0;j<p;++j) norm=std::max(norm,cross.col(j).cwiseAbs().sum()+slopes.col(j).cwiseAbs().sum());
+    result.rcond=1/(norm*correlation_inverse.cwiseAbs().colwise().sum().maxCoeff());
     if(!std::isfinite(result.rcond) || result.rcond<condition_tol)
         throw OrdinalEvaluationError("ordinal information is numerically singular");
-    result.inverse=inverse_scale.asDiagonal()*factor.solve(MatrixXd::Identity(d,d))*inverse_scale.asDiagonal();
+    result.inverse=inverse_scale.asDiagonal()*correlation_inverse*inverse_scale.asDiagonal();
     result.inverse=(result.inverse+result.inverse.transpose()).eval()/2;
 }
 
@@ -416,10 +484,20 @@ struct ObservedThresholds {
 };
 
 struct ObservedState {
-    MatrixXd information;
-    VectorXd score;
+    VectorXd diagonal,off,score;
+    MatrixXd cross,slopes;
     double loglik=0,change=0,row_norm=0;
-    explicit ObservedState(int d=0) : information(MatrixXd::Zero(d,d)),score(VectorXd::Zero(d)) {}
+    ObservedState(int q=0,int p=0) : diagonal(VectorXd::Zero(q)),off(VectorXd::Zero(std::max(q-1,0))),
+        score(VectorXd::Zero(q+p)),cross(MatrixXd::Zero(q,p)),slopes(MatrixXd::Zero(p,p)) {}
+    MatrixXd information() const {
+        const int q=diagonal.size(),p=slopes.rows();
+        MatrixXd out=MatrixXd::Zero(q+p,q+p);
+        out.diagonal().head(q)=diagonal;
+        for(int s=1;s<q;++s) out(s,s-1)=out(s-1,s)=off[s-1];
+        out.topRightCorner(q,p)=cross;out.bottomLeftCorner(p,q)=cross.transpose();
+        out.bottomRightCorner(p,p)=slopes;
+        return out;
+    }
 };
 
 // Adds one data block. `direction` is optional and records the largest change in
@@ -454,15 +532,15 @@ inline void observed_add(const OrdinalData& data,const ObservedThresholds& thres
                     const ObservedTerms t=thresholds.terms(k,linear);
                     out.loglik+=y*t.logp;slope_score[r]-=y*t.location;slope_weight[r]+=y*t.slope;
                     if(k<q) {
-                        out.score[k]+=y*t.left;out.information(k,k)+=y*t.upper;rows(r,k)+=y*t.upper_x;
+                        out.score[k]+=y*t.left;out.diagonal[k]+=y*t.upper;rows(r,k)+=y*t.upper_x;
                     }
                     if(k>0) {
-                        out.score[k-1]-=y*t.right;out.information(k-1,k-1)+=y*t.lower;rows(r,k-1)+=y*t.lower_x;
-                        if(k<q) out.information(k,k-1)+=y*t.cross;
+                        out.score[k-1]-=y*t.right;out.diagonal[k-1]+=y*t.lower;rows(r,k-1)+=y*t.lower_x;
+                        if(k<q) out.off[k-1]+=y*t.cross;
                     }
                 }
             }
-            if(p) out.information.topRightCorner(q,p).noalias()+=rows.transpose()*xx;
+            if(p) out.cross.noalias()+=rows.transpose()*xx;
         } else {
             upper_x.setZero(length);lower_x.setZero(length);category.resize(length);
             for(int r=0;r<length;++r) {
@@ -474,14 +552,14 @@ inline void observed_add(const OrdinalData& data,const ObservedThresholds& thres
                 const ObservedTerms t=thresholds.terms(k,eta[r]+data.offset[i]);
                 out.loglik+=y*t.logp;slope_score[r]=-y*t.location;slope_weight[r]=y*t.slope;
                 upper_x[r]=y*t.upper_x;lower_x[r]=y*t.lower_x;
-                if(k<q) {out.score[k]+=y*t.left;out.information(k,k)+=y*t.upper;}
+                if(k<q) {out.score[k]+=y*t.left;out.diagonal[k]+=y*t.upper;}
                 if(k>0) {
-                    out.score[k-1]-=y*t.right;out.information(k-1,k-1)+=y*t.lower;
-                    if(k<q) out.information(k,k-1)+=y*t.cross;
+                    out.score[k-1]-=y*t.right;out.diagonal[k-1]+=y*t.lower;
+                    if(k<q) out.off[k-1]+=y*t.cross;
                 }
             }
             for(int j=0;j<p;++j) {
-                double* column=out.information.col(q+j).data();
+                double* column=out.cross.col(j).data();
                 for(int r=0;r<length;++r) {
                     const int k=category[r];
                     if(k<0) continue;
@@ -495,7 +573,7 @@ inline void observed_add(const OrdinalData& data,const ObservedThresholds& thres
             out.score.tail(p).noalias()+=xx.transpose()*slope_score;
             if(slope_weight.minCoeff()<0) throw OrdinalEvaluationError("negative observed curvature");
             const MatrixXd root=slope_weight.cwiseSqrt().asDiagonal()*xx;
-            out.information.bottomRightCorner(p,p).selfadjointView<Eigen::Lower>().rankUpdate(root.transpose());
+            out.slopes.selfadjointView<Eigen::Lower>().rankUpdate(root.transpose());
             for(int r=0;r<length;++r) if(data.totals[first+r]>0)
                 out.row_norm=std::max(out.row_norm,xx.row(r).norm());
         }
@@ -510,16 +588,12 @@ ObservedState observed_evaluate(const Data& data,const VectorXd& parameters,cons
         throw OrdinalEvaluationError("ordinal thresholds are not strictly ordered");
     const ObservedThresholds thresholds(parameters.head(q),data.link);
     const VectorXd beta=parameters.tail(p);
-    ObservedState out(data.d);
+    ObservedState out(q,p);
     data.visit([&](const OrdinalData& block) { observed_add(block,thresholds,beta,direction,out); });
-    if(!std::isfinite(out.loglik) || !out.score.allFinite() || !out.information.allFinite())
+    if(!std::isfinite(out.loglik) || !out.score.allFinite() || !out.diagonal.allFinite() ||
+       !out.off.allFinite() || !out.cross.allFinite() || !out.slopes.allFinite())
         throw OrdinalEvaluationError("non-finite observed ordinal terms");
-    for(int s=1;s<q;++s) out.information(s-1,s)=out.information(s,s-1);
-    if(p) {
-        out.information.bottomRightCorner(p,p).template triangularView<Eigen::StrictlyUpper>()=
-            out.information.bottomRightCorner(p,p).transpose();
-        out.information.bottomLeftCorner(p,q)=out.information.topRightCorner(q,p).transpose();
-    }
+    if(p) out.slopes.template triangularView<Eigen::StrictlyUpper>()=out.slopes.transpose();
     return out;
 }
 
@@ -536,13 +610,18 @@ int observed_newton(const Data& data,VectorXd& parameters,double score_tol,doubl
         double row_norm=current.row_norm;
         for(;iterations<maxit;++iterations) {
             Rcpp::checkUserInterrupt();
-            const VectorXd diagonal=current.information.diagonal();
+            VectorXd diagonal(d);
+            diagonal.head(q)=current.diagonal;
+            if(p) diagonal.tail(p)=current.slopes.diagonal();
             if((diagonal.array()<=0).any()) return iterations;
             const VectorXd inverse_scale=diagonal.cwiseSqrt().cwiseInverse();
-            const MatrixXd correlation=inverse_scale.asDiagonal()*current.information*inverse_scale.asDiagonal();
-            const Eigen::LLT<MatrixXd> factor(correlation);
-            if(factor.info()!=Eigen::Success) return iterations;
-            const VectorXd direction=inverse_scale.asDiagonal()*factor.solve(inverse_scale.cwiseProduct(current.score));
+            VectorXd off(std::max(q-1,0));
+            for(int s=1;s<q;++s) off[s-1]=current.off[s-1]*inverse_scale[s]*inverse_scale[s-1];
+            const MatrixXd cross=inverse_scale.head(q).asDiagonal()*current.cross*inverse_scale.tail(p).asDiagonal();
+            const MatrixXd slopes=inverse_scale.tail(p).asDiagonal()*current.slopes*inverse_scale.tail(p).asDiagonal();
+            const OrdinalBlockSystem factor(off,cross,slopes);
+            if(!factor.ok) return iterations;
+            const VectorXd direction=inverse_scale.cwiseProduct(factor.solve(inverse_scale.cwiseProduct(current.score),cross));
             if(!direction.allFinite()) return iterations;
             const double scaled=current.score.cwiseProduct(inverse_scale).cwiseAbs().maxCoeff();
             const double bound=direction.head(q).cwiseAbs().maxCoeff()+row_norm*(p ? direction.tail(p).norm() : 0);
