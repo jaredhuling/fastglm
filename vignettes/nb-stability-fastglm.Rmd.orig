@@ -25,11 +25,9 @@ knitr::opts_chunk$set(
 
 A negative-binomial regression estimates both the response mean and an additional parameter, theta, that determines variation beyond the Poisson model. Fitting alternates between weighted-regression updates of the coefficients with theta fixed and likelihood-based updates of theta with the fitted means fixed. This is called maximum likelihood estimation (MLE). The two updates can converge slowly when fitted means differ by many orders of magnitude or when theta approaches the Poisson limit. Step halving shortens an unsuccessful coefficient update, providing a safeguard against some numerical failures.
 
-This vignette retains a historical simulation run from the displayed date. The recorded results predate later numerical changes and should be interpreted as evidence about that run, not as a validation of version 0.1.3.
-
 The companion vignette `vignette("nb-convergence-fastglm", package = "fastglm")` compares the two solvers on a single difficult data-generating process. This vignette is broader: it is a stability benchmark that sweeps a grid of twelve negative-binomial scenarios, each one chosen to stress the joint MLE in a different way (wide fitted-mean ranges, extreme over- and under-dispersion, small samples, high dimension, collinearity, and contaminating outliers). For each scenario we fit both solvers over many replications and tabulate how often each one converges cleanly, whether they agree when both succeed, and where one rescues the other.
 
-The original comparison used the following iteration settings, whose meanings differ between implementations: `MASS::glm.nb()` runs with `glm.control(maxit = 50)`, and `fastglm_nb()` uses its default `outer.maxit = 50`.
+The iteration settings differ in meaning between implementations: `MASS::glm.nb()` runs with `glm.control(maxit = 50)`, and `fastglm_nb()` uses its default `outer.maxit = 50`.
 
 # Data-generating process
 
@@ -95,7 +93,7 @@ descriptions <- c(
 
 For one simulated data set we fit both solvers and record, for each: whether it errored, whether it converged, whether *MASS* emitted an iteration- or step-limit warning, the maximized log-likelihood, the dispersion estimate, and the maximum relative coefficient discrepancy.
 
-The historical scoring rules differ between the packages: *MASS* is counted as cleanly converged only when it returns a convergence flag without warnings, whereas *fastglm* is counted when it returns a convergence flag and finite coefficients. Consequently, these counts are not a comparison under identical success criteria. A current evaluation should record errors, warnings, convergence flags, finite estimates, and likelihood values separately for both methods. Theta estimates close to the Poisson limit also require separate interpretation because the data may provide little information about theta there.
+The packages are scored differently: *MASS* is counted as cleanly converged only when it returns a convergence flag without warnings, whereas *fastglm* is counted when it returns a convergence flag and finite coefficients. Consequently, these counts are not a comparison under identical success criteria. Theta estimates close to the Poisson limit also require separate interpretation because the data may provide little information about theta there.
 
 ```{r fit-both}
 fit_both <- function(d) {
@@ -229,9 +227,9 @@ n_ge     <- sum(out$fg_ge_ll == out$both)
 n_coef   <- sum(out$coef_agree == out$both)
 ```
 
-Under the recorded rules, *MASS* had 425 clean convergences and *fastglm* had 555 convergences among 600 simulated fits. The table also contains exceptions: in the `tiny_theta` scenario, *MASS* has 47 successful fits and *fastglm* has 46, and in the `high_dim` scenario the likelihood comparison favors *MASS* in four of the 23 fits counted as converged by both. These results therefore do not establish that either method is uniformly more reliable.
+Under these rules, *MASS* had `r sum(out$mass_clean)` clean convergences and *fastglm* had `r sum(out$fg_conv)` convergences among `r total` simulated fits. There are exceptions: in the `tiny_theta` scenario, *MASS* has `r out$mass_clean[out$scenario=="tiny_theta"]` successful fits and *fastglm* has `r out$fg_conv[out$scenario=="tiny_theta"]`, and in the `high_dim` scenario the likelihood comparison favors *MASS* in `r out$both[out$scenario=="high_dim"]-out$fg_ge_ll[out$scenario=="high_dim"]` of the `r out$both[out$scenario=="high_dim"]` fits counted as converged by both. These results do not establish that either method is uniformly more reliable.
 
-The larger differences occur when fitted means vary widely, theta is near an extreme, or many coefficients are estimated from a limited sample. Those settings are useful targets for further numerical checks. Coefficient and likelihood comparisons should be interpreted alongside warnings and the degree to which theta is identified by the data. A convergence flag alone does not establish that the same likelihood maximum has been reached.
+The larger differences occur when fitted means vary widely, theta is near an extreme, or many coefficients are estimated from a limited sample. Coefficient and likelihood comparisons should be interpreted alongside warnings and the degree to which theta is identified by the data. A convergence flag alone does not establish that the same likelihood maximum has been reached.
 
 # References
 

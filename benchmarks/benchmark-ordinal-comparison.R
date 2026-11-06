@@ -332,34 +332,17 @@ merge_results <- function() {
     invisible(summary)
 }
 
-# Time against sample size, with fastglm dominant and comparators recessive. A fit
-# that disagrees with fastglm has no comparable time, so it is omitted.
+source("benchmarks/ordinal-plots.R")
 plot_results <- function() {
     timing <- read.csv(file.path(summary_dir, "summary.csv"))
-    timing <- timing[timing$agrees & timing$K == 5L, ]
-    timing$facet <- ifelse(timing$panel == "Common slopes",
-        paste0("Common slopes, ", timing$link), "Threshold-specific slopes, logit")
-    timing$facet <- factor(timing$facet, levels = c("Common slopes, logit", "Common slopes, probit",
-        "Common slopes, cloglog", "Threshold-specific slopes, logit"))
-    order <- c("fastglm", "rms::orm", "ordinal::clm", "MASS::polr", "VGAM::vglm", "WeightIt::ordinal_weightit")
-    timing$method <- factor(timing$method, levels = order)
-    palette <- c("#0B5CAD", "#D1661F", "#1F9E8F", "#9A62C4", "#9C8200", "#D0628E")
-    plot <- ggplot2::ggplot(timing, ggplot2::aes(n, median_seconds, colour = method, shape = method,
-                                                 linewidth = method, group = method)) +
-        ggplot2::geom_line() + ggplot2::geom_point(size = 2.4) +
-        ggplot2::scale_x_log10(breaks = c(1000, 10000, 100000), labels = c("1,000", "10,000", "100,000")) +
-        ggplot2::scale_y_log10(breaks = 10^(-3:1), labels = c("0.001", "0.01", "0.1", "1", "10")) +
-        ggplot2::scale_colour_manual(values = palette, limits = order, drop = FALSE) +
-        ggplot2::scale_shape_manual(values = c(16, 17, 15, 18, 3, 4), limits = order, drop = FALSE) +
-        ggplot2::scale_linewidth_manual(values = c(1.2, rep(0.5, 5L)), limits = order, drop = FALSE) +
-        ggplot2::facet_wrap(~facet, ncol = 2L) +
-        ggplot2::labs(x = "Number of observations", y = "Median seconds per fit, log scale",
-                      colour = NULL, shape = NULL, linewidth = NULL) +
-        ggplot2::theme_bw(base_size = 12) +
-        ggplot2::theme(panel.grid.minor = ggplot2::element_blank(), legend.position = "bottom",
-                       panel.spacing.x = ggplot2::unit(1.1, "lines"), strip.background = ggplot2::element_blank(),
-                       strip.text = ggplot2::element_text(hjust = 0))
-    ggplot2::ggsave(figure_file, plot, width = 9, height = 6.6, dpi = 160, bg = "white")
+    directory <- dirname(figure_file)
+    ggplot2::ggsave(figure_file, plot_ordinal_times(timing), width = 9, height = 6.6, dpi = 160, bg = "white")
+    ggplot2::ggsave(file.path(directory, "README-ordinal-categories.png"), plot_ordinal_categories(timing),
+                    width = 8, height = 4.6, dpi = 160, bg = "white")
+    internal <- file.path(summary_dir, "internal-summary.csv")
+    if (file.exists(internal))
+        ggplot2::ggsave(file.path(directory, "README-ordinal-streaming.png"), plot_ordinal_internal(read.csv(internal)),
+                        width = 8, height = 4.2, dpi = 160, bg = "white")
     invisible(figure_file)
 }
 

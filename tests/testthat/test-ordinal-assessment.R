@@ -145,6 +145,16 @@ test_that("proportional-odds comparisons use supplied data and retain failures",
     expect_silent(plot(none,type="proportional.odds"))
     expect_silent(plot(a,main="Calibration",xlab="Predicted",ylab="Observed",pch=1))
     expect_silent(plot(a,type="proportional.odds",main="Slopes",xlab="Threshold",ylab="Estimate",pch=1))
+    expect_invisible(plot(a))
+    # Both displays draw without ggplot2, which is only suggested.
+    expect_silent(fastglm:::.ordinal_assessment_base_plot(a,"calibration",seq_len(length(a$levels)-1L),0.95,list()))
+    expect_silent(fastglm:::.ordinal_assessment_base_plot(a,"proportional.odds",unique(a$proportional.odds$term),0.95,list(main="Slopes")))
+    skip_if_not_installed("ggplot2")
+    drawn <- fastglm:::.ordinal_assessment_ggplot(a,"calibration",seq_len(length(a$levels)-1L),0.95,list(main="Calibration",xlab="Predicted"))
+    expect_s3_class(drawn,"ggplot")
+    expect_identical(drawn$labels$title,"Calibration")
+    expect_identical(drawn$labels$x,"Predicted")
+    expect_s3_class(fastglm:::.ordinal_assessment_ggplot(a,"proportional.odds",unique(a$proportional.odds$term),0.95,list()),"ggplot")
     expect_output(print(a),"Ordinal assessment")
 })
 

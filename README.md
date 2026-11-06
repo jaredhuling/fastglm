@@ -27,7 +27,7 @@ workflows, including `summary()`, `coef()`, `vcov()`, `predict()`,
 Mean bias reduction uses `firth=TRUE` where supported. Its scope depends
 on the model and family/link combination; the [bias-reduction
 section](#firth-bias-reduced-glms) describes the GLM choices. Truncated,
-hurdle, and zero-inflated count fitting currently uses ML.
+hurdle, and zero-inflated count fitting uses ML.
 
 ## Inference and computation
 
@@ -49,8 +49,7 @@ hurdle, and zero-inflated count fitting currently uses ML.
 - Repeated fitting and numerical control. Prepared GLM and ordinal
   designs reuse predictor setup across responses. GLMs offer six
   decompositions and an automatic choice, with diagnostics for
-  convergence and numerical conditioning. The timing sections pair
-  performance comparisons with agreement checks.
+  convergence and numerical conditioning.
 
 The [package overview](vignettes/fastglm-overview.Rmd) maps these
 methods to their supported models. Dedicated guides cover [bias
@@ -134,7 +133,7 @@ predict(fit_formula, newdata=esoph[1:3,], type="response", se.fit=TRUE)
 #>    3 0.005298   0.005300
 ```
 
-The fitting function can still be supplied to base R’s `glm()`:
+The fitting function can also be passed to base R’s `glm()`:
 
 ``` r
 glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + unclass(alcgp),
@@ -329,8 +328,8 @@ Mean bias reduction supports the implemented binomial, Poisson,
 Gaussian, Gamma, inverse-Gaussian, and fixed-theta negative-binomial
 family/link combinations. It is available for dense, sparse, mapped, and
 streaming fits using the solvers supported by each format. Gamma fitting
-also adjusts dispersion. Quasi-likelihood and Tweedie families are
-outside the current bias-reduction interface.
+also adjusts dispersion. Quasi-likelihood and Tweedie families are not
+supported for bias reduction.
 
 For retained dense binomial-logit Firth fits, profile inference
 re-estimates the other coefficients as the coefficient of interest
@@ -521,7 +520,7 @@ fastglm(X, y, family=binomial(), method="auto")
 For recognized family/link combinations, variance, mean derivatives,
 inverse links, and deviance contributions are evaluated directly in C++.
 This reduces repeated calls from the fitting loop back into R. The
-current native combinations are:
+native combinations are:
 
 | Family | Links |
 |:---|:---|
@@ -574,22 +573,20 @@ microbenchmark::microbenchmark(
 )
 ```
 
-These measurements were recorded on 2026-11-06 (UTC) with *fastglm*
-0.1.3 and R version 4.5.1 (2025-06-13) on Darwin (arm64). The saved
-environment and individual timings accompany the benchmark script.
+Times are for *fastglm* 0.1.3 and R version 4.5.1 (2025-06-13) on Darwin
+(arm64).
 
 <figure>
 <img src="man/figures/README-glm_bench-1.png"
-alt="Current logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians." />
-<figcaption aria-hidden="true">Current logistic-regression fitting times
-for glm.fit and four fastglm solvers. Lower times indicate faster
-fitting; the points mark medians.</figcaption>
+alt="Logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians." />
+<figcaption aria-hidden="true">Logistic-regression fitting times for
+glm.fit and four fastglm solvers. Lower times indicate faster fitting;
+the points mark medians.</figcaption>
 </figure>
 
 The table reports median elapsed time and the largest absolute
 differences from `glm.fit()` in coefficients and fitted probabilities.
-All methods must converge and pass the numerical comparison before they
-are timed. Timed fits include their ordinary covariance calculations.
+Times include ordinary covariance calculations.
 
 | Method | Median time (ms) | Max. coefficient difference | Max. fitted-probability difference |
 |:---|---:|:---|:---|
@@ -601,13 +598,10 @@ are timed. Timed fits include their ordinary covariance calculations.
 
 For this design, the median time for `glm.fit()` was 283.7 ms, compared
 with 23.8 ms for LLT. The coefficient and fitted-probability differences
-are close to floating-point rounding error, so the faster calculation
-retains the same fitted model to numerical precision in this example.
+are close to floating-point rounding error, so the fits agree to
+numerical precision.
 
-`benchmarks/benchmark-readme.R` regenerates these measurements, checks
-agreement, records the R environment, and builds the figures. The
-[broader comparison](#benchmarks) below evaluates scaling across model
-classes.
+The [benchmarks](#benchmarks) compare scaling across model classes.
 
 ## Stability
 
@@ -642,8 +636,8 @@ data.frame(method=c("fastglm", "glm"),
 #> 2     glm     FALSE        100      -16068.27
 ```
 
-In this run, *fastglm* converged in 19 iterations, while glm reached its
-limit of 100 iterations without convergence.
+*fastglm* converged in 19 iterations, while glm reached its limit of 100
+iterations without convergence.
 
 Convergence status matters when comparing likelihoods or runtimes: an
 unfinished fit is not an alternative estimate of the same quality. The
@@ -654,9 +648,9 @@ numerical diagnostics for a fitted model.
 
 ## Benchmarks
 
-The following study compares model classes across increasing sample
-sizes: ordinary logistic and Poisson fits with `glm.fit`, `glm2`, and
-`speedglm`; negative-binomial regression with `MASS::glm.nb`; hurdle and
+These comparisons span model classes and sample sizes: ordinary logistic
+and Poisson fits with `glm.fit`, `glm2`, and `speedglm`;
+negative-binomial regression with `MASS::glm.nb`; hurdle and
 zero-inflated Poisson models with `pscl`; and mean bias reduction with
 `brglm2` using `type="AS_mean"`. Ordinary and Firth GLMs use
 `method="auto"` in *fastglm*, while the dedicated count-model functions
@@ -671,15 +665,13 @@ computational requirements differ.
 
 <figure>
 <img src="man/figures/README-model-benchmarks.png"
-alt="Current fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm." />
-<figcaption aria-hidden="true">Current fitting-time ratios across sample
-sizes, with separate panels for maximum-likelihood models and Firth mean
-bias reduction. Values above one favor fastglm.</figcaption>
+alt="Fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm." />
+<figcaption aria-hidden="true">Fitting-time ratios across sample sizes,
+with separate panels for maximum-likelihood models and Firth mean bias
+reduction. Values above one favor fastglm.</figcaption>
 </figure>
 
-The following table gives the comparison at 100,000 observations. Each
-median uses five timing repetitions after checking convergence and
-numerical agreement:
+At 100,000 observations, using medians of five repetitions:
 
 | Model | Design columns | fastglm (ms) | Reference | Reference (ms) | Time ratio |
 |:---|---:|---:|:---|---:|---:|
@@ -696,39 +688,29 @@ numerical agreement:
 At this sample size, the largest time ratio is 28.6 for Firth Gamma-log.
 Gamma bias-reduction fits combine identical prior-weight contributions
 in the dispersion equation and reuse matrix calculations that remain
-constant during fitting. These reduce repeated distribution and matrix
-calculations while preserving the adjusted estimating equations.
+constant during fitting.
 
-These are measurements of the displayed designs and software
-environment. The benchmark script records the individual timings,
-agreement checks, package versions, and fitting controls under
-`benchmarks/readme-results`. The comparisons include ordinary covariance
-calculation; profile confidence intervals and bootstrap refits are
-separate analyses. GLM and Firth comparisons use matrix interfaces, and
-both hurdle and zero-inflated comparisons use formulas. For
-negative-binomial regression, `fastglm_nb()` takes a matrix while
-`MASS::glm.nb()` also constructs its design from a formula. Different
-packages use different convergence criteria, so the numerical
-comparisons accompany the nominal tolerance settings.
+Speed depends on the design and computing environment. Times include
+ordinary covariance calculation, but not profile intervals or bootstrap
+refits. GLM and Firth comparisons use matrix interfaces, and both hurdle
+and zero-inflated comparisons use formulas. For negative-binomial
+regression, `fastglm_nb()` takes a matrix while `MASS::glm.nb()` also
+constructs its design from a formula. Packages use different convergence
+criteria, so every comparison also checks numerical agreement.
 
-The [benchmark vignette](vignettes/benchmarks-fastglm.Rmd) retains the
-earlier, dated study, including sparse and mapped-matrix comparisons.
-Current scripts also cover numerical accuracy
-(`benchmarks/benchmark.R`), model and weight patterns
-(`benchmarks/benchmark-models.R`), large-data Firth fitting
-(`benchmarks/benchmark-firth-backends.R`), and prepared Firth batches
-(`benchmarks/benchmark-prepared-firth.R`).
+The [benchmark vignette](vignettes/benchmarks-fastglm.Rmd) adds sparse
+and mapped-matrix comparisons. Code for all comparisons is in the
+`benchmarks` directory of the
+[repository](https://github.com/jaredhuling/fastglm).
 
 ### Ordinal comparison
 
-The ordinal study compares cumulative-link fits with packages that fit
-the same model: `rms::orm`, `ordinal::clm`, `MASS::polr`, `VGAM::vglm`,
-and `WeightIt::ordinal_weightit`. Each design has 10 predictors, and
-every timing includes coefficient covariance. A comparison time is
-reported only when that fit converges and agrees with *fastglm* on the
-log likelihood and on the common slopes. These measurements used
-*fastglm* commit 7f2ae40 on 2026-11-06 (UTC), on a machine that was also
-running other work.
+These comparisons use packages that fit the same cumulative-link models:
+`rms::orm`, `ordinal::clm`, `MASS::polr`, `VGAM::vglm`, and
+`WeightIt::ordinal_weightit`. Each design has 10 predictors, and times
+include coefficient covariance. A time is compared only when that fit
+converges and agrees with *fastglm* on the log likelihood and common
+slopes.
 
 <figure>
 <img src="man/figures/README-ordinal-benchmarks.png"
@@ -758,16 +740,22 @@ fitting.</figcaption>
 | cloglog | VGAM::vglm                 |   6.508 |         NA |
 | cloglog | WeightIt::ordinal_weightit |   5.783 |       58.8 |
 
-The table shows 100,000 observations and 5 categories, and its ratio is
-the comparison time divided by the *fastglm* time. The closest
-comparison is `rms::orm`, at 2.9 times the *fastglm* time for logit and
-2.2 times for probit. `rms::orm` was benchmarked for these two links
-only. For cloglog, `VGAM::vglm` warned about intersecting predictors and
-returned a different fit, so it has no ratio.
+With 100,000 observations and 5 categories, `rms::orm` is the closest
+comparison, at 2.9 times the *fastglm* time for logit and 2.2 times for
+probit. `rms::orm` was timed for these two links only. For cloglog,
+`VGAM::vglm` warned about intersecting predictors and returned a
+different fit, so it has no ratio.
 
-The number of categories changes this comparison. `rms::orm` is designed
-for outcomes with very many distinct values, and it overtakes *fastglm*
-between 30 and 300 categories:
+`rms::orm` is designed for outcomes with very many distinct values, and
+it overtakes *fastglm* between 30 and 300 categories:
+
+<figure>
+<img src="man/figures/README-ordinal-categories.png"
+alt="Ordinal fitting times against the number of outcome categories, with 20,000 observations. Lower times indicate faster fitting." />
+<figcaption aria-hidden="true">Ordinal fitting times against the number
+of outcome categories, with 20,000 observations. Lower times indicate
+faster fitting.</figcaption>
+</figure>
 
 | Categories | Method                     | Seconds | Time ratio |
 |-----------:|:---------------------------|--------:|-----------:|
@@ -790,26 +778,32 @@ between 30 and 300 categories:
 
 With 20,000 observations, `rms::orm` takes 0.5 times the *fastglm* time
 at 300 categories and 0.3 times at 1,000, so it is the faster choice in
-that range. Most of the remaining *fastglm* time there is the final
-expected-information calculation, which the reported covariance uses.
-`VGAM::vglm` was limited to 30 categories because its working design
-would need about 160 GB of memory at 1,000 categories.
+that range. Most of the *fastglm* time in that range is the
+expected-information calculation behind the reported covariance.
+`VGAM::vglm` was not run above 30 categories because it would need about
+160 GB of memory at 1,000.
 
-The threshold-specific panel compares `ordinal::clm` and `VGAM::vglm`.
-At 1,000 observations, the *fastglm* fit for this design reported
-nonconvergence, because the best fit with ordered cumulative
-probabilities at every row lies on the ordering boundary. `ordinal::clm`
-reported convergence with a higher log likelihood, but its cumulative
-predictors cross at 3 of the 1,000 rows, which is not a valid
-probability model at those rows. This cell therefore has no time
-comparison. At 100,000 observations, `ordinal::clm` took 79.3 seconds
-and reported that it had not converged, although its log likelihood
-agreed with *fastglm*, so it is also omitted from the panel.
+For threshold-specific slopes with 1,000 observations, *fastglm*
+reported nonconvergence because the best fit with ordered cumulative
+probabilities at every row lies on the ordering boundary, so there is no
+time comparison at that size. `ordinal::clm` reported convergence with a
+higher log likelihood, but its cumulative predictors cross at 3 of the
+1,000 rows, which is not a valid probability model at those rows. At
+100,000 observations, `ordinal::clm` took 79.3 seconds and reported that
+it had not converged, although its log likelihood agreed with *fastglm*,
+so it is omitted there as well.
 
-No package in this comparison fits mean bias-reduced cumulative-link
-models or reads ordinal data in blocks, so these fits have no external
-time ratio. The last column compares each streamed fit with the dense
-fit of the same estimator:
+None of these packages fits mean bias-reduced cumulative-link models or
+reads ordinal data in blocks. The last column compares each streamed fit
+with the dense fit of the same estimator:
+
+<figure>
+<img src="man/figures/README-ordinal-streaming.png"
+alt="Dense and streamed ordinal fitting times for maximum likelihood and mean bias reduction. Lower times indicate faster fitting." />
+<figcaption aria-hidden="true">Dense and streamed ordinal fitting times
+for maximum likelihood and mean bias reduction. Lower times indicate
+faster fitting.</figcaption>
+</figure>
 
 | Observations | Fit | Seconds | Largest coefficient difference from dense fit |
 |:---|:---|---:|---:|
@@ -823,10 +817,6 @@ fit of the same estimator:
 | 1,000,000 | Streamed mean bias reduction | 3.573 | 3.0e-17 |
 
 Streamed fits use blocks of 10,000 rows.
-`benchmarks/benchmark-ordinal-comparison.R` regenerates this section.
-`benchmarks/ordinal-comparison` records package versions and agreement
-checks, and `benchmarks/profile-models.R` reports where time is spent
-across model classes.
 
 ## References
 

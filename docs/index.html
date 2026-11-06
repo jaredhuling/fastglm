@@ -165,7 +165,7 @@
 </tr>
 </tbody>
 </table>
-<p>Mean bias reduction uses <code>firth=TRUE</code> where supported. Its scope depends on the model and family/link combination; the <a href="#firth-bias-reduced-glms">bias-reduction section</a> describes the GLM choices. Truncated, hurdle, and zero-inflated count fitting currently uses ML.</p>
+<p>Mean bias reduction uses <code>firth=TRUE</code> where supported. Its scope depends on the model and family/link combination; the <a href="#firth-bias-reduced-glms">bias-reduction section</a> describes the GLM choices. Truncated, hurdle, and zero-inflated count fitting uses ML.</p>
 </div>
 <div class="section level2">
 <h2 id="inference-and-computation">Inference and computation<a class="anchor" aria-label="anchor" href="#inference-and-computation"></a>
@@ -174,7 +174,7 @@
 <li>Uncertainty and testing. Model-based intervals, joint Wald tests, robust and clustered covariance, and refitting bootstraps are available for supported classes. Profile inference covers dense binomial-logit Firth fits, ordinal ML fits with common or threshold-specific slopes, and negative-binomial size. Ordinal score tests address coefficient hypotheses or the common-slope assumption.</li>
 <li>Prediction and interpretation. Response means or category probabilities, prediction standard errors, averages and contrasts, residuals, and ordinal calibration summaries connect fitted coefficients to outcomes. Shared printed tables and optional broom methods support reporting.</li>
 <li>Large datasets. Dense, sparse, mapped, and repeatable-source inputs serve different model classes. Streaming supports GLMs, negative-binomial, hurdle, two-part, and ordinal models with common or threshold-specific slopes.</li>
-<li>Repeated fitting and numerical control. Prepared GLM and ordinal designs reuse predictor setup across responses. GLMs offer six decompositions and an automatic choice, with diagnostics for convergence and numerical conditioning. The timing sections pair performance comparisons with agreement checks.</li>
+<li>Repeated fitting and numerical control. Prepared GLM and ordinal designs reuse predictor setup across responses. GLMs offer six decompositions and an automatic choice, with diagnostics for convergence and numerical conditioning.</li>
 </ul>
 <p>The <a href="vignettes/fastglm-overview.Rmd">package overview</a> maps these methods to their supported models. Dedicated guides cover <a href="vignettes/firth-fastglm.Rmd">bias reduction</a>, <a href="vignettes/count-firth-fastglm.Rmd">counts</a>, <a href="vignettes/ordinal-fastglm.Rmd">ordered outcomes</a>, <a href="vignettes/semicontinuous-fastglm.Rmd">two-part outcomes</a>, and <a href="vignettes/large-data-fastglm.Rmd">large-data computation</a>. See <a href="NEWS.html">NEWS</a> for the version history.</p>
 <p><a href="#installation">Installation</a> · <a href="#fitting-a-glm">GLM example</a> · <a href="#extended-models">Model extensions</a> · <a href="#firth-bias-reduced-glms">Bias reduction</a> · <a href="#inference-and-repeated-fits">Inference and repeated fits</a> · <a href="#sparse-bigmatrix-and-streaming-designs">Large data</a> · <a href="#speed">Speed</a> · <a href="#stability">Stability</a> · <a href="#benchmarks">Benchmarks</a></p>
@@ -235,7 +235,7 @@
 <span><span class="co">#&gt;    1 0.002727   0.002746</span></span>
 <span><span class="co">#&gt;    2 0.003801   0.003806</span></span>
 <span><span class="co">#&gt;    3 0.005298   0.005300</span></span></code></pre></div>
-<p>The fitting function can still be supplied to base R’s <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>:</p>
+<p>The fitting function can also be passed to base R’s <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">ncases</span>, <span class="va">ncontrols</span><span class="op">)</span> <span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>,</span>
 <span>    data<span class="op">=</span><span class="va">esoph</span>, family<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="st">"cloglog"</span><span class="op">)</span>, method<span class="op">=</span><span class="va">fastglm_fit</span><span class="op">)</span></span></code></pre></div>
@@ -386,7 +386,7 @@
 <span><span class="co">#&gt;  0.12025405 -1.10598133 -0.06881673  2.26887465 -2.11140819 -0.78831695 </span></span>
 <span><span class="co">#&gt;         dia </span></span>
 <span><span class="co">#&gt;  3.09601183</span></span></code></pre></div>
-<p>Mean bias reduction supports the implemented binomial, Poisson, Gaussian, Gamma, inverse-Gaussian, and fixed-theta negative-binomial family/link combinations. It is available for dense, sparse, mapped, and streaming fits using the solvers supported by each format. Gamma fitting also adjusts dispersion. Quasi-likelihood and Tweedie families are outside the current bias-reduction interface.</p>
+<p>Mean bias reduction supports the implemented binomial, Poisson, Gaussian, Gamma, inverse-Gaussian, and fixed-theta negative-binomial family/link combinations. It is available for dense, sparse, mapped, and streaming fits using the solvers supported by each format. Gamma fitting also adjusts dispersion. Quasi-likelihood and Tweedie families are not supported for bias reduction.</p>
 <p>For retained dense binomial-logit Firth fits, profile inference re-estimates the other coefficients as the coefficient of interest varies, retaining the full original bias-reduction penalty. This allows confidence intervals to reflect an asymmetric penalized likelihood:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">profile_ci</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">f_firth</span>, parm<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"age"</span>, <span class="st">"dia"</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"profile"</span><span class="op">)</span></span>
@@ -539,7 +539,7 @@
 <div class="section level2">
 <h2 id="native-c-families">Native C++ families<a class="anchor" aria-label="anchor" href="#native-c-families"></a>
 </h2>
-<p>For recognized family/link combinations, variance, mean derivatives, inverse links, and deviance contributions are evaluated directly in C++. This reduces repeated calls from the fitting loop back into R. The current native combinations are:</p>
+<p>For recognized family/link combinations, variance, mean derivatives, inverse links, and deviance contributions are evaluated directly in C++. This reduces repeated calls from the fitting loop back into R. The native combinations are:</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -608,10 +608,10 @@
 <span>    fastglm_auto <span class="op">=</span> <span class="fu">with_covariance</span><span class="op">(</span><span class="fu"><a href="reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y</span>, <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>, method<span class="op">=</span><span class="st">"auto"</span>, tol<span class="op">=</span><span class="fl">1e-10</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>    times<span class="op">=</span><span class="fl">25L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>These measurements were recorded on 2026-11-06 (UTC) with <em>fastglm</em> 0.1.3 and R version 4.5.1 (2025-06-13) on Darwin (arm64). The saved environment and individual timings accompany the benchmark script.</p>
-<figure><img src="reference/figures/README-glm_bench-1.png" alt="Current logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians."><figcaption aria-hidden="true">
-Current logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians.
-</figcaption></figure><p>The table reports median elapsed time and the largest absolute differences from <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> in coefficients and fitted probabilities. All methods must converge and pass the numerical comparison before they are timed. Timed fits include their ordinary covariance calculations.</p>
+<p>Times are for <em>fastglm</em> 0.1.3 and R version 4.5.1 (2025-06-13) on Darwin (arm64).</p>
+<figure><img src="reference/figures/README-glm_bench-1.png" alt="Logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians."><figcaption aria-hidden="true">
+Logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians.
+</figcaption></figure><p>The table reports median elapsed time and the largest absolute differences from <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> in coefficients and fitted probabilities. Times include ordinary covariance calculations.</p>
 <table class="table">
 <colgroup>
 <col width="25%">
@@ -658,8 +658,8 @@ Current logistic-regression fitting times for glm.fit and four fastglm solvers. 
 </tr>
 </tbody>
 </table>
-<p>For this design, the median time for <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> was 283.7 ms, compared with 23.8 ms for LLT. The coefficient and fitted-probability differences are close to floating-point rounding error, so the faster calculation retains the same fitted model to numerical precision in this example.</p>
-<p><code>benchmarks/benchmark-readme.R</code> regenerates these measurements, checks agreement, records the R environment, and builds the figures. The <a href="#benchmarks">broader comparison</a> below evaluates scaling across model classes.</p>
+<p>For this design, the median time for <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm.fit()</a></code> was 283.7 ms, compared with 23.8 ms for LLT. The coefficient and fitted-probability differences are close to floating-point rounding error, so the fits agree to numerical precision.</p>
+<p>The <a href="#benchmarks">benchmarks</a> compare scaling across model classes.</p>
 </div>
 <div class="section level2">
 <h2 id="stability">Stability<a class="anchor" aria-label="anchor" href="#stability"></a>
@@ -682,17 +682,17 @@ Current logistic-regression fitting times for glm.fit and four fastglm solvers. 
 <span><span class="co">#&gt;    method converged iterations log_likelihood</span></span>
 <span><span class="co">#&gt; 1 fastglm      TRUE         19      -16046.66</span></span>
 <span><span class="co">#&gt; 2     glm     FALSE        100      -16068.27</span></span></code></pre></div>
-<p>In this run, <em>fastglm</em> converged in 19 iterations, while glm reached its limit of 100 iterations without convergence.</p>
+<p><em>fastglm</em> converged in 19 iterations, while glm reached its limit of 100 iterations without convergence.</p>
 <p>Convergence status matters when comparing likelihoods or runtimes: an unfinished fit is not an alternative estimate of the same quality. The <a href="vignettes/fastglm.Rmd">computational stability vignette</a> includes comparisons with <code>glm2</code> and <code>speedglm</code>, and <code><a href="reference/fastglm_diagnostics.html">fastglm_diagnostics()</a></code> reports convergence, the chosen solver, aliased coefficients, and numerical diagnostics for a fitted model.</p>
 </div>
 <div class="section level2">
 <h2 id="benchmarks">Benchmarks<a class="anchor" aria-label="anchor" href="#benchmarks"></a>
 </h2>
-<p>The following study compares model classes across increasing sample sizes: ordinary logistic and Poisson fits with <code>glm.fit</code>, <code>glm2</code>, and <code>speedglm</code>; negative-binomial regression with <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb</a></code>; hurdle and zero-inflated Poisson models with <code>pscl</code>; and mean bias reduction with <code>brglm2</code> using <code>type="AS_mean"</code>. Ordinary and Firth GLMs use <code>method="auto"</code> in <em>fastglm</em>, while the dedicated count-model functions use their default solvers.</p>
+<p>These comparisons span model classes and sample sizes: ordinary logistic and Poisson fits with <code>glm.fit</code>, <code>glm2</code>, and <code>speedglm</code>; negative-binomial regression with <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb</a></code>; hurdle and zero-inflated Poisson models with <code>pscl</code>; and mean bias reduction with <code>brglm2</code> using <code>type="AS_mean"</code>. Ordinary and Firth GLMs use <code>method="auto"</code> in <em>fastglm</em>, while the dedicated count-model functions use their default solvers.</p>
 <p>For ordinary logistic and Poisson regression, the plotted reference is the fastest of the three comparison functions at each sample size. The other models use the named reference implementation. The ratio is reference time divided by <em>fastglm</em> time: a value of two means <em>fastglm</em> took half as long. Firth families are shown separately because their computational requirements differ.</p>
-<figure><img src="reference/figures/README-model-benchmarks.png" alt="Current fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm."><figcaption aria-hidden="true">
-Current fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm.
-</figcaption></figure><p>The following table gives the comparison at 100,000 observations. Each median uses five timing repetitions after checking convergence and numerical agreement:</p>
+<figure><img src="reference/figures/README-model-benchmarks.png" alt="Fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm."><figcaption aria-hidden="true">
+Fitting-time ratios across sample sizes, with separate panels for maximum-likelihood models and Firth mean bias reduction. Values above one favor fastglm.
+</figcaption></figure><p>At 100,000 observations, using medians of five repetitions:</p>
 <table style="width:100%;" class="table">
 <colgroup>
 <col width="16%">
@@ -785,13 +785,13 @@ Current fitting-time ratios across sample sizes, with separate panels for maximu
 </tr>
 </tbody>
 </table>
-<p>At this sample size, the largest time ratio is 28.6 for Firth Gamma-log. Gamma bias-reduction fits combine identical prior-weight contributions in the dispersion equation and reuse matrix calculations that remain constant during fitting. These reduce repeated distribution and matrix calculations while preserving the adjusted estimating equations.</p>
-<p>These are measurements of the displayed designs and software environment. The benchmark script records the individual timings, agreement checks, package versions, and fitting controls under <code>benchmarks/readme-results</code>. The comparisons include ordinary covariance calculation; profile confidence intervals and bootstrap refits are separate analyses. GLM and Firth comparisons use matrix interfaces, and both hurdle and zero-inflated comparisons use formulas. For negative-binomial regression, <code><a href="reference/fastglm_nb.html">fastglm_nb()</a></code> takes a matrix while <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> also constructs its design from a formula. Different packages use different convergence criteria, so the numerical comparisons accompany the nominal tolerance settings.</p>
-<p>The <a href="vignettes/benchmarks-fastglm.Rmd">benchmark vignette</a> retains the earlier, dated study, including sparse and mapped-matrix comparisons. Current scripts also cover numerical accuracy (<code>benchmarks/benchmark.R</code>), model and weight patterns (<code>benchmarks/benchmark-models.R</code>), large-data Firth fitting (<code>benchmarks/benchmark-firth-backends.R</code>), and prepared Firth batches (<code>benchmarks/benchmark-prepared-firth.R</code>).</p>
+<p>At this sample size, the largest time ratio is 28.6 for Firth Gamma-log. Gamma bias-reduction fits combine identical prior-weight contributions in the dispersion equation and reuse matrix calculations that remain constant during fitting.</p>
+<p>Speed depends on the design and computing environment. Times include ordinary covariance calculation, but not profile intervals or bootstrap refits. GLM and Firth comparisons use matrix interfaces, and both hurdle and zero-inflated comparisons use formulas. For negative-binomial regression, <code><a href="reference/fastglm_nb.html">fastglm_nb()</a></code> takes a matrix while <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> also constructs its design from a formula. Packages use different convergence criteria, so every comparison also checks numerical agreement.</p>
+<p>The <a href="vignettes/benchmarks-fastglm.Rmd">benchmark vignette</a> adds sparse and mapped-matrix comparisons. Code for all comparisons is in the <code>benchmarks</code> directory of the <a href="https://github.com/jaredhuling/fastglm" class="external-link">repository</a>.</p>
 <div class="section level3">
 <h3 id="ordinal-comparison">Ordinal comparison<a class="anchor" aria-label="anchor" href="#ordinal-comparison"></a>
 </h3>
-<p>The ordinal study compares cumulative-link fits with packages that fit the same model: <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code>, <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code>, <code><a href="https://rdrr.io/pkg/MASS/man/polr.html" class="external-link">MASS::polr</a></code>, <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code>, and <code><a href="https://ngreifer.github.io/WeightIt/reference/ordinal_weightit.html" class="external-link">WeightIt::ordinal_weightit</a></code>. Each design has 10 predictors, and every timing includes coefficient covariance. A comparison time is reported only when that fit converges and agrees with <em>fastglm</em> on the log likelihood and on the common slopes. These measurements used <em>fastglm</em> commit 7f2ae40 on 2026-11-06 (UTC), on a machine that was also running other work.</p>
+<p>These comparisons use packages that fit the same cumulative-link models: <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code>, <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code>, <code><a href="https://rdrr.io/pkg/MASS/man/polr.html" class="external-link">MASS::polr</a></code>, <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code>, and <code><a href="https://ngreifer.github.io/WeightIt/reference/ordinal_weightit.html" class="external-link">WeightIt::ordinal_weightit</a></code>. Each design has 10 predictors, and times include coefficient covariance. A time is compared only when that fit converges and agrees with <em>fastglm</em> on the log likelihood and common slopes.</p>
 <figure><img src="reference/figures/README-ordinal-benchmarks.png" alt="Ordinal fitting times across sample sizes for common and threshold-specific slopes. Lower times indicate faster fitting."><figcaption aria-hidden="true">
 Ordinal fitting times across sample sizes for common and threshold-specific slopes. Lower times indicate faster fitting.
 </figcaption></figure><table class="table">
@@ -906,9 +906,11 @@ Ordinal fitting times across sample sizes for common and threshold-specific slop
 </tr>
 </tbody>
 </table>
-<p>The table shows 100,000 observations and 5 categories, and its ratio is the comparison time divided by the <em>fastglm</em> time. The closest comparison is <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code>, at 2.9 times the <em>fastglm</em> time for logit and 2.2 times for probit. <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> was benchmarked for these two links only. For cloglog, <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code> warned about intersecting predictors and returned a different fit, so it has no ratio.</p>
-<p>The number of categories changes this comparison. <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> is designed for outcomes with very many distinct values, and it overtakes <em>fastglm</em> between 30 and 300 categories:</p>
-<table class="table">
+<p>With 100,000 observations and 5 categories, <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> is the closest comparison, at 2.9 times the <em>fastglm</em> time for logit and 2.2 times for probit. <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> was timed for these two links only. For cloglog, <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code> warned about intersecting predictors and returned a different fit, so it has no ratio.</p>
+<p><code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> is designed for outcomes with very many distinct values, and it overtakes <em>fastglm</em> between 30 and 300 categories:</p>
+<figure><img src="reference/figures/README-ordinal-categories.png" alt="Ordinal fitting times against the number of outcome categories, with 20,000 observations. Lower times indicate faster fitting."><figcaption aria-hidden="true">
+Ordinal fitting times against the number of outcome categories, with 20,000 observations. Lower times indicate faster fitting.
+</figcaption></figure><table class="table">
 <thead><tr>
 <th align="right">Categories</th>
 <th align="left">Method</th>
@@ -1014,10 +1016,12 @@ Ordinal fitting times across sample sizes for common and threshold-specific slop
 </tr>
 </tbody>
 </table>
-<p>With 20,000 observations, <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> takes 0.5 times the <em>fastglm</em> time at 300 categories and 0.3 times at 1,000, so it is the faster choice in that range. Most of the remaining <em>fastglm</em> time there is the final expected-information calculation, which the reported covariance uses. <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code> was limited to 30 categories because its working design would need about 160 GB of memory at 1,000 categories.</p>
-<p>The threshold-specific panel compares <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> and <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code>. At 1,000 observations, the <em>fastglm</em> fit for this design reported nonconvergence, because the best fit with ordered cumulative probabilities at every row lies on the ordering boundary. <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> reported convergence with a higher log likelihood, but its cumulative predictors cross at 3 of the 1,000 rows, which is not a valid probability model at those rows. This cell therefore has no time comparison. At 100,000 observations, <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> took 79.3 seconds and reported that it had not converged, although its log likelihood agreed with <em>fastglm</em>, so it is also omitted from the panel.</p>
-<p>No package in this comparison fits mean bias-reduced cumulative-link models or reads ordinal data in blocks, so these fits have no external time ratio. The last column compares each streamed fit with the dense fit of the same estimator:</p>
-<table class="table">
+<p>With 20,000 observations, <code><a href="https://rdrr.io/pkg/rms/man/orm.html" class="external-link">rms::orm</a></code> takes 0.5 times the <em>fastglm</em> time at 300 categories and 0.3 times at 1,000, so it is the faster choice in that range. Most of the <em>fastglm</em> time in that range is the expected-information calculation behind the reported covariance. <code><a href="https://rdrr.io/pkg/VGAM/man/vglm.html" class="external-link">VGAM::vglm</a></code> was not run above 30 categories because it would need about 160 GB of memory at 1,000.</p>
+<p>For threshold-specific slopes with 1,000 observations, <em>fastglm</em> reported nonconvergence because the best fit with ordered cumulative probabilities at every row lies on the ordering boundary, so there is no time comparison at that size. <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> reported convergence with a higher log likelihood, but its cumulative predictors cross at 3 of the 1,000 rows, which is not a valid probability model at those rows. At 100,000 observations, <code><a href="https://rdrr.io/pkg/ordinal/man/clm.html" class="external-link">ordinal::clm</a></code> took 79.3 seconds and reported that it had not converged, although its log likelihood agreed with <em>fastglm</em>, so it is omitted there as well.</p>
+<p>None of these packages fits mean bias-reduced cumulative-link models or reads ordinal data in blocks. The last column compares each streamed fit with the dense fit of the same estimator:</p>
+<figure><img src="reference/figures/README-ordinal-streaming.png" alt="Dense and streamed ordinal fitting times for maximum likelihood and mean bias reduction. Lower times indicate faster fitting."><figcaption aria-hidden="true">
+Dense and streamed ordinal fitting times for maximum likelihood and mean bias reduction. Lower times indicate faster fitting.
+</figcaption></figure><table class="table">
 <colgroup>
 <col width="25%">
 <col width="25%">
@@ -1081,7 +1085,7 @@ Ordinal fitting times across sample sizes for common and threshold-specific slop
 </tr>
 </tbody>
 </table>
-<p>Streamed fits use blocks of 10,000 rows. <code>benchmarks/benchmark-ordinal-comparison.R</code> regenerates this section. <code>benchmarks/ordinal-comparison</code> records package versions and agreement checks, and <code>benchmarks/profile-models.R</code> reports where time is spent across model classes.</p>
+<p>Streamed fits use blocks of 10,000 rows.</p>
 </div>
 </div>
 <div class="section level2">

@@ -207,6 +207,10 @@ The ranked probability score (\code{rps}) is
   the fitting outcomes. The optional common-slope score test requires
   additional source passes for refitting and information accumulation.
   Descriptive binary-slope comparisons still require explicit evaluation data.
+
+The plot method uses \emph{ggplot2} when it is installed and base graphics
+otherwise. With \emph{ggplot2}, \code{main}, \code{xlab}, \code{ylab}, \code{xlim}, \code{ylim}, \code{pch}, \code{col},
+and \code{cex} are honored, and \code{main} titles the whole figure.
 }
 \references{
 Epstein, E. S. (1969). A scoring system for probability forecasts

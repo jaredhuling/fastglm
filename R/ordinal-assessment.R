@@ -472,18 +472,63 @@ print.fastglm_ordinal_assessment <- function(x,digits=max(3L,getOption("digits")
     invisible(x)
 }
 
+utils::globalVariables(".data")
+
+# Common graphical arguments keep their base meaning. `main` titles the whole figure.
+.ordinal_assessment_ggplot <- function(x,type,groups,level,dots) {
+    point <- list(size=if(is.null(dots$cex)) 1.8 else 1.8*dots$cex,colour=if(is.null(dots$col)) "#0B5CAD" else dots$col)
+    point$shape <- if(is.null(dots$pch)) 19 else dots$pch
+    if(type=="calibration") {
+        z <- x$calibration[x$calibration$threshold%in%groups,,drop=FALSE]
+        z$panel <- factor(paste0("Y <= ",x$levels[z$threshold]),levels=paste0("Y <= ",x$levels[groups]))
+        plot <- ggplot2::ggplot(z,ggplot2::aes(.data$predicted,.data$observed))+
+            ggplot2::geom_abline(intercept=0,slope=1,linetype=2,colour="grey50")+
+            do.call(ggplot2::geom_point,c(point,list(na.rm=TRUE)))+
+            ggplot2::coord_cartesian(xlim=if(is.null(dots$xlim)) c(0,1) else dots$xlim,
+                ylim=if(is.null(dots$ylim)) c(0,1) else dots$ylim)+
+            ggplot2::labs(x="Mean predicted cumulative probability",y="Observed cumulative proportion")
+    } else {
+        z <- x$proportional.odds
+        delta <- qnorm((1+level)/2)*z$std.error
+        z$lower <- z$estimate-delta;z$upper <- z$estimate+delta
+        missing <- tapply(!z$converged,z$term,sum)[as.character(z$term)]
+        labels <- paste0(z$term,ifelse(missing>0,paste0(" (",missing," unavailable threshold fits)"),""))
+        z$panel <- factor(labels,levels=unique(labels))
+        reference <- z[!duplicated(z$panel),c("panel","common.estimate"),drop=FALSE]
+        steps <- z[!duplicated(z$threshold),c("threshold","category"),drop=FALSE]
+        plot <- ggplot2::ggplot(z,ggplot2::aes(.data$threshold,.data$estimate))+
+            ggplot2::geom_hline(data=reference,ggplot2::aes(yintercept=.data$common.estimate),linetype=2,colour="grey50")+
+            ggplot2::geom_errorbar(ggplot2::aes(ymin=.data$lower,ymax=.data$upper),width=.08,colour=point$colour,na.rm=TRUE)+
+            do.call(ggplot2::geom_point,c(point,list(na.rm=TRUE)))+
+            ggplot2::scale_x_continuous(breaks=steps$threshold,labels=steps$category)+
+            ggplot2::labs(x="Outcome threshold",y="Slope (positive = higher outcomes)")
+        if(!is.null(dots$xlim) || !is.null(dots$ylim)) plot <- plot+ggplot2::coord_cartesian(xlim=dots$xlim,ylim=dots$ylim)
+    }
+    plot <- plot+ggplot2::facet_wrap(~panel,scales=if(type=="calibration") "fixed" else "free_y")+
+        ggplot2::theme_bw(base_size=11)+
+        ggplot2::theme(panel.grid.minor=ggplot2::element_blank(),strip.background=ggplot2::element_blank(),
+                       strip.text=ggplot2::element_text(hjust=0))
+    if(!is.null(dots$main)) plot <- plot+ggplot2::labs(title=dots$main)
+    if(!is.null(dots$xlab)) plot <- plot+ggplot2::labs(x=dots$xlab)
+    if(!is.null(dots$ylab)) plot <- plot+ggplot2::labs(y=dots$ylab)
+    plot
+}
+
 #' @rdname fastglm_ordinal_assess
 #' @param type cumulative calibration or the descriptive proportional-odds
 #'   slope comparison.
 #' @param level level for separate Wald intervals in the slope display. These
 #'   are not simultaneous intervals or tests of differences between thresholds.
+#' @details The plot method uses *ggplot2* when it is installed and base graphics
+#'   otherwise. With *ggplot2*, `main`, `xlab`, `ylab`, `xlim`, `ylim`, `pch`, `col`,
+#'   and `cex` are honored, and `main` titles the whole figure.
+#' @md
 #' @method plot fastglm_ordinal_assessment
 #' @export
 plot.fastglm_ordinal_assessment <- function(x,type=c("calibration","proportional.odds"),
                                            level=.95,...) {
     type <- match.arg(type)
     dots <- list(...)
-    draw <- function(defaults) do.call(graphics::plot,utils::modifyList(defaults,dots))
     if(type=="calibration") {
         groups <- seq_len(length(x$levels)-1L)
     } else {
@@ -493,6 +538,17 @@ plot.fastglm_ordinal_assessment <- function(x,type=c("calibration","proportional
             stop("'level' must lie strictly between zero and one",call.=FALSE)
         groups <- unique(x$proportional.odds$term)
     }
+    if(requireNamespace("ggplot2",quietly=TRUE)) {
+        print(.ordinal_assessment_ggplot(x,type,groups,level,dots))
+        return(invisible(x))
+    }
+    .ordinal_assessment_base_plot(x,type,groups,level,dots)
+    invisible(x)
+}
+
+# Used when ggplot2, a suggested package, is not installed.
+.ordinal_assessment_base_plot <- function(x,type,groups,level,dots) {
+    draw <- function(defaults) do.call(graphics::plot,utils::modifyList(defaults,dots))
     layout <- if(length(groups)==2L) c(1L,2L) else grDevices::n2mfrow(length(groups))
     old <- graphics::par(mfrow=layout,mar=c(4.1,4.1,2.5,1))
     on.exit(graphics::par(old))
