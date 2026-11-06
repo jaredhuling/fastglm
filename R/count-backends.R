@@ -84,11 +84,13 @@
         state$rows[k] <- n
         list(X=a$X,Z=a$Z,y=as.numeric(a$y),weights=as.numeric(a$weights),offset=a$offset)
     }
-    for(k in seq_len(source$n_chunks)) {
-        a <- fetch(k); positive <- a$weights>0
+    # The tally has its own frame so the retained reader does not keep a block.
+    tally <- function(a,k) {
+        positive <- a$weights>0
         state$nobs <- state$nobs+sum(positive)
         state$positive[k] <- sum(positive & a$y>0)
     }
+    for(k in seq_len(source$n_chunks)) tally(fetch(k),k)
     state$npositive <- sum(state$positive)
     if(state$nobs<=state$p[1L]) stop("more positive-weight observations than count coefficients are required",call.=FALSE)
     cn <- state$columns

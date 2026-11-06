@@ -171,3 +171,20 @@ test_that("ordinal sources preserve recoding and explicit nonconvergence", {
     }
     expect_error(fastglm_ordinal_streaming(changing,2,firth=TRUE),"size changed")
 })
+
+test_that("ordinal source fits retain no block data and bind class predictions", {
+    set.seed(123)
+    x <- cbind(a=rnorm(90),b=rnorm(90))
+    y <- ordered(sample(c("l","m","h"),90,TRUE),levels=c("l","m","h"))
+    for(nonparallel in list(NULL,"b")) {
+        fit <- fastglm_ordinal_streaming(ordinal_test_source(x,y,size=30L),nonparallel=nonparallel)
+        expect_setequal(ls(environment(fit$fetch),all.names=TRUE),c("integer.frequency","read","source","state"))
+        expect_identical(nrow(fit$fetch(1L)$X),30L)
+    }
+    fit <- fastglm_ordinal_streaming(ordinal_test_source(x,y,size=30L))
+    expect_false(any(vapply(as.list(fit$state),function(v)is.matrix(v) && nrow(v)>1L,logical(1))))
+    classes <- predict(fit,type="class")
+    expect_s3_class(classes,"ordered")
+    expect_identical(levels(classes),levels(y))
+    expect_identical(as.character(classes),as.character(predict(fastglm_ordinal(x,y),type="class")))
+})

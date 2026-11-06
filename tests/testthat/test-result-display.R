@@ -114,3 +114,28 @@ test_that("model and bootstrap displays share tables without changing results", 
     boot <- fastglm_bootstrap(models[[1]],R=3,seed=111303)
     expect_output(print(boot,digits=3),"Estimates and confidence intervals")
 })
+
+test_that("tables without p-values keep small estimates and standard errors visible", {
+    show <- function(...) capture.output(fastglm:::.fastglm_print_coefficients(...))
+    expect_true(any(grepl("1.2e-07",show(cbind(Estimate=c(a=1.5,b=1.2e-7))),fixed=TRUE)))
+    expect_true(any(grepl("1.2e-04|0\\.00012",show(cbind(Estimate=c(a=0.5),`Std. Error`=1.2e-4)))))
+    limits <- cbind(Estimate=c(b=1e-7),`Std. Error`=2e-7,`2.5 %`=-4.8e-8,`97.5 %`=3.97e-7)
+    expect_true(any(grepl("3.97",show(limits,P.values=FALSE,has.Pvalue=FALSE),fixed=TRUE)))
+    statistic <- cbind(Estimate=c(a=0.5),`Std. Error`=0.25,`z value`=2.123456)
+    expect_true(any(grepl("2.123",show(statistic,P.values=FALSE,has.Pvalue=FALSE),fixed=TRUE)))
+    tested <- cbind(Estimate=c(a=0.5,b=1.5),`Std. Error`=c(0.25,0.5),`z value`=c(2,3),`Pr(>|z|)`=c(0.05,0.003))
+    expect_identical(show(tested,digits=4L)[-(1:2)],capture.output(printCoefmat(tested,digits=4L,eps.Pvalue=1e-4)))
+    set.seed(123)
+    x <- cbind(big=rnorm(200)*1e7)
+    y <- ordered(sample(1:3,200,TRUE))
+    printed <- capture.output(print(fastglm_ordinal(x,y)))
+    expect_false(any(grepl("^big +0\\.0+ *$",printed)))
+    printed <- capture.output(print(fastglm(cbind(1,x),rbinom(200,1,0.5),family=binomial())))
+    expect_false(any(grepl("^big +0\\.0+ *$",printed)))
+})
+
+test_that("models without a size parameter omit the theta display", {
+    set.seed(123)
+    d <- data.frame(x=rnorm(150));d$y <- pmax(1L,rpois(150,exp(0.5+0.3*d$x)))
+    expect_false(any(grepl("Theta",capture.output(print(fastglm_truncated(y~x,data=d))),fixed=TRUE)))
+})

@@ -7,10 +7,16 @@
   were previously assigned by position, which could silently reverse a fit.
 * Printed coefficient tables without p-values no longer round small estimates,
   standard errors, or bootstrap limits to zero.
-* Ordinal source fits no longer retain the last source block in their reader.
+* Streamed GLM, negative-binomial, hurdle, two-part, and ordinal fits no longer
+  retain the last source block, so saving a fit does not write those rows.
 * `predict(type="class")` for ordinal source fits no longer depends on the
   factor method for `c()`, which requires R 4.1.0.
 * Models without a size parameter no longer print a missing `Theta` row.
+
+## Performance
+
+* Constrained ordinal iterations for profile intervals and likelihood-ratio and
+  score tests now run in C++, with results that match the earlier R loop.
 
 ## Model interfaces and inference
 

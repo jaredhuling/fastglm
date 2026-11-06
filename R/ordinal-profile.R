@@ -55,8 +55,12 @@
             offset,q+1L,as.numeric(gamma),adjusted,object$block.size,ctl$condition.tol,.ordinal_link_code(.ordinal_link(object)))
         value$valid <- TRUE;value$message <- "";value
     },error=function(e) list(valid=FALSE,message=conditionMessage(e)))
+    constrained <- function(gamma,basis,adjusted) ordinal_constrained_native(x,category$codes,
+        category$counts,category$weights,offset,q+1L,gamma,basis,positive,adjusted,object$block.size,
+        ctl$condition.tol,.ordinal_link_code(.ordinal_link(object)),as.integer(ctl$maxit),ctl$score.tol,
+        ctl$step.tol,ctl$max.step,as.integer(ctl$max.halves))
     list(coefficients=b,q=q,p=p,d=d,T=T,Ti=Ti,x=x,positive=positive,
-        evaluate=evaluate,control=ctl,frequency=object$frequency,observations=object$nobs.rows)
+        evaluate=evaluate,constrained=constrained,control=ctl,frequency=object$frequency,observations=object$nobs.rows)
 }
 
 .ordinal_constraint_basis <- function(setup,L) {
@@ -127,20 +131,11 @@
     list(valid=TRUE,coefficients=gamma,message="")
 }
 
-.ordinal_profile_predictor_step <- function(setup,delta) {
-    if(isTRUE(setup$partial)) return(.ordinal_partial_profile_predictor_step(setup,delta))
-    shift <- if(setup$p) drop(setup$x%*%delta[setup$q+seq_len(setup$p)])[setup$positive] else 0
-    alpha <- range(delta[seq_len(setup$q)])
-    max(abs(alpha[1L]-shift),abs(alpha[2L]-shift))
-}
-
 .ordinal_constrained_fit <- function(setup,L=matrix(numeric(),0L,setup$d),null=numeric(),
                                      start=setup$coefficients,adjusted=FALSE) {
     ctl <- setup$control;constraint <- .ordinal_constraint_basis(setup,L);B <- constraint$basis
     initial <- .ordinal_constraint_start(setup,L,null,start,constraint)
-    calls <- 0L
-    evaluate <- function(gamma) {calls <<- calls+1L;setup$evaluate(gamma,adjusted)}
-    finish <- function(gamma,state,code,message,iterations,score=Inf,step=Inf) {
+    finish <- function(gamma,state,code,message,iterations,score=Inf,step=Inf,evaluations=0L) {
         coefficients <- if(length(gamma)) if(isTRUE(setup$partial))
             streaming_qr_eta(setup$T,gamma,numeric(setup$d)) else drop(setup$T%*%gamma) else rep(NA_real_,setup$d)
         if(code==0L && isTRUE(setup$partial) && nrow(L)) {
@@ -153,48 +148,13 @@
         list(coefficients=coefficients,working.coefficients=gamma,
             value=if(isTRUE(state$valid)) state$loglik else NA_real_,converged=code==0L,
             score=score,predictor.step=step,code=code,message=message,iterations=iterations,
-            evaluations=calls,state=state,basis=B,adjusted=adjusted)
+            evaluations=evaluations,state=state,basis=B,adjusted=adjusted)
     }
     if(!initial$valid) return(finish(numeric(),list(valid=FALSE),1L,initial$message,0L))
-    gamma <- initial$coefficients;current <- evaluate(gamma)
-    if(!current$valid) return(finish(gamma,current,2L,current$message,0L))
-    for(iter in 0:ctl$maxit) {
-        if(ncol(B)) {
-            information <- crossprod(B,current$information%*%B)
-            score <- drop(crossprod(B,current$score))
-            direction <- tryCatch(drop(B%*%solve(information,score)),error=function(e) rep(NA_real_,setup$d))
-            scaled <- max(abs(score)/sqrt(diag(information)))
-            step <- if(all(is.finite(direction))) .ordinal_profile_predictor_step(setup,direction) else Inf
-        } else {direction <- numeric(setup$d);scaled <- step <- 0}
-        if(is.finite(scaled) && scaled<=ctl$score.tol && step<=ctl$step.tol)
-            return(finish(gamma,current,0L,"",iter,scaled,step))
-        if(!is.finite(step) || !is.finite(scaled))
-            return(finish(gamma,current,3L,"non-finite constrained score or information",iter,scaled,step))
-        if(iter==ctl$maxit)
-            return(finish(gamma,current,5L,"constrained iteration limit reached",iter,scaled,step))
-        direction <- direction/max(1,step/(if(adjusted) min(1,ctl$max.step) else ctl$max.step))
-        fraction <- 1
-        if(setup$q>1L) {
-            gap <- if(isTRUE(setup$partial)) .ordinal_partial_profile_gaps(setup,gamma) else diff(gamma[seq_len(setup$q)])
-            change <- if(isTRUE(setup$partial)) .ordinal_partial_profile_gaps(setup,direction) else diff(direction[seq_len(setup$q)])
-            decreasing <- change<0
-            if(any(decreasing)) fraction <- min(fraction,.9*min(-gap[decreasing]/change[decreasing]))
-        }
-        ascent <- sum(current$score*direction);accepted <- FALSE;last.message <- ""
-        for(half in 0:ctl$max.halves) {
-            candidate <- gamma+fraction*direction;trial <- evaluate(candidate)
-            if(trial$valid) {
-                rounding <- 64*.Machine$double.eps*(1+abs(current$loglik))
-                if(adjusted || trial$loglik-current$loglik>=.1*fraction*ascent-rounding) {
-                    accepted <- TRUE;break
-                }
-                last.message <- "likelihood step did not increase sufficiently"
-            } else last.message <- trial$message
-            fraction <- fraction/2
-        }
-        if(!accepted) return(finish(gamma,current,4L,paste("constrained step search failed:",last.message),iter+1L,scaled,step))
-        gamma <- candidate;current <- trial
-    }
+    out <- setup$constrained(as.numeric(initial$coefficients),B,adjusted)
+    state <- if(is.null(out$state)) list(valid=FALSE,message=out$message) else
+        c(out$state,list(valid=TRUE,message=""))
+    finish(out$gamma,state,out$code,out$message,out$iterations,out$score,out$step,out$evaluations)
 }
 
 .ordinal_profile_lr <- function(full,restricted,control) {
