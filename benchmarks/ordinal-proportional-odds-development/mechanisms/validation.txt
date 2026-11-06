@@ -1,2 +1,0 @@
-PASS: analytic adjusted-score derivative, Hessian symmetry, original covariance agreement,
-      category-enumerated score variance, and empty-category fixed-dimension fits.

@@ -1,7 +1,0 @@
-"family","link","nanoseconds_before","nanoseconds_after","ratio_after_before"
-"binomial","cloglog",8713320,12509059,1.43562488236401
-"binomial","logit",5372845,5443775,1.01320157197909
-"binomial","probit",7354539,11245849,1.52910318376176
-"Gamma","log",4289789,4306066,1.0037943591165
-"gaussian","identity",1532908,1591784,1.03840804536215
-"poisson","log",5846600,6373163,1.09006311360449

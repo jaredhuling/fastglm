@@ -1,1 +1,0 @@
-Complete paired timing grid, numerical agreement, 146 stress fits, and solution archive verified.

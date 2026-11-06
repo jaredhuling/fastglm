@@ -1,6 +1,0 @@
-Standalone profiles use 20,000 rows with 3 predictors and 4 categories, or 12 predictors and 8 categories. Timings describe this machine and are separate from statistical-panel elapsed times.
-common: ML/meanBR fitting 23.05/43.40 ms; probability prediction 5.15 ms. At the meanBR estimate, ordinary expected-information evaluation takes 3.35 ms and adjusted evaluation takes 5.60 ms.
-many_parameters: ML/meanBR fitting 54.80/98.00 ms; probability prediction 12.60 ms. At the meanBR estimate, ordinary expected-information evaluation takes 7.20 ms and adjusted evaluation takes 13.60 ms.
-The native fitter accounts for 50.0-77.0% of sampled fit-plus-prediction time; probability prediction accounts for 16.1-32.0%.
-R-managed allocation concentrations occur in initialization rank-QR/centering copies and prediction's cumulative-probability outer products and block intermediates. These are concrete candidates for allocation reduction; no package changes were made in this study.
-Rprof samples R call stacks and does not identify individual C++ instructions. Rprofmem includes R-managed allocations above 64 KiB, excluding Eigen/C++ allocations. R vector-heap maxima include retained designs and benchmark fits; they are not incremental fit memory, process RSS or native peak memory.

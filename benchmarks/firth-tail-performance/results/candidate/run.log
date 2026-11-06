@@ -1,8 +1,0 @@
-small complete
-ordinary complete
-wide complete
-large complete
-grouped complete
-Warning message:
-In microbenchmark::microbenchmark(operationfun(), times = 11L) :
-  less accurate nanosecond times to avoid potential integer overflows

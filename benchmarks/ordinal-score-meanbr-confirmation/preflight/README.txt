@@ -1,1 +1,0 @@
-A runner parenthesis error was detected before any pilot or confirmation datasets were generated. The failed preflight identities and source are retained here. The method and design were unchanged; the corrected runner was frozen before the pilot.

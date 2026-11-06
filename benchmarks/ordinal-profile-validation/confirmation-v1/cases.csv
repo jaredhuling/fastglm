@@ -1,7 +1,0 @@
-"link","large","seed","id"
-"logit",FALSE,113601,"logit-smaller"
-"probit",FALSE,113602,"probit-smaller"
-"cloglog",FALSE,113603,"cloglog-smaller"
-"logit",TRUE,113604,"logit-larger"
-"probit",TRUE,113605,"probit-larger"
-"cloglog",TRUE,113606,"cloglog-larger"

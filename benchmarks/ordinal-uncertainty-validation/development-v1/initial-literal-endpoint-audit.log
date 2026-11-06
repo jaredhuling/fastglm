@@ -1,2 +1,0 @@
-Error: isTRUE(all.equal(unname(ci), unname(b$conf.int), tolerance = 1e-14)) is not TRUE
-Execution halted

@@ -1,6 +1,0 @@
-"scenario","n","rho","alpha1","alpha2","alpha3","beta1","beta2","clusters","cluster.size","covariate.icc","latent.normal.icc","purpose"
-"regular",250,0.25,-1,0,1,0.5,-0.35,0,1,0,0,"Regular reference"
-"small",60,0.25,-1,0,1,0.5,-0.35,0,1,0,0,"Small-sample approximation"
-"rare_endpoint",120,0.25,-4,0,1,0.5,-0.35,0,1,0,0,"Sample-empty rare endpoint and uncertainty availability"
-"correlated_predictors",120,0.9,-1,0,1,0.5,-0.35,0,1,0,0,"Weakly identified predictor contrasts"
-"independent_clusters",150,0.25,-1,0,1,0.5,-0.35,30,5,0.5,0.6,"Independent clusters with exact marginal proportional odds"

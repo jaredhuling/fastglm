@@ -1,6 +1,0 @@
-100000 logit ML finished
-100000 logit meanBR finished
-100000 probit ML finished
-100000 probit meanBR finished
-100000 cloglog ML finished
-100000 cloglog meanBR finished

@@ -1,3 +1,0 @@
-PASS: 30 cells, 30000 datasets, 90000 method records
-PASS: unique complete method/replication grid, seed mapping, and availability fields
-PASS: frozen source and environment identity checked by dispatcher

@@ -1,5 +1,0 @@
-Fits: 146
-Converged: 146
-exact_score: 8.01554948080860e-09
-covariance_relative_error: 1.87045493250702e-14
-reported_score_error: 2.34102902362759e-13

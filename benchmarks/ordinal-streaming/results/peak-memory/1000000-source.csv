@@ -1,3 +1,0 @@
-"n","method","estimation","seconds","converged","iterations","evaluations","scaled_score","predictor_step","source_passes","source_reads","maximum_block_rows","retained_design_bytes","reported_object_bytes"
-1000000,"source","ML",4.251,TRUE,6,6,3.29738916714296e-10,4.07801978673001e-12,20,10000,2000,0,749032
-1000000,"source","meanBR",5.607,TRUE,6,6,3.29698494399377e-10,4.06766171651339e-12,26,13000,2000,0,749032

@@ -1,3 +1,0 @@
-"label","original_bytes","compressed_bytes","original_md5","compressed_md5","identical_object"
-"baseline",19338753,9917688,"244463624415f143b1747ef21a346e40","a604993ffdde833c325f3763198cb2bc",TRUE
-"candidate",19339010,9908876,"435c9f9030c2d5549e0b00d05192f16e","1956a4a5e9b58de76a667aef54544adc",TRUE

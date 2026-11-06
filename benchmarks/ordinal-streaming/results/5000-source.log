@@ -1,4 +1,0 @@
-5000 source ML 0.034 seconds
-5000 source meanBR 0.034 seconds
-        0.67 real         0.59 user         0.06 sys
-time: sysctl kern.clockrate: Operation not permitted

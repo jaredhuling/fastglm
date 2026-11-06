@@ -1,8 +1,0 @@
-"path","md5"
-"R/ordinal-profile.R","581fa8f5e6f1f96321074df05e875f14"
-"R/ordinal-partial-inference.R","a5a2be74ad28dd2e72eb7f6e9ee2cb86"
-"R/firth-profile.R","7b1e9baf52d1da6ef8631bfbdf0622f0"
-"R/ordinal-partial-methods.R","5301ca84a720d5bb5995f0a2522e776b"
-"src/fastglm.so","427b33ffe560d4c04e3311a6a0e91cce"
-"benchmarks/ordinal-partial-inference/protocol.txt","c82a6490e8b005670ce34962bcb884ed"
-"benchmarks/ordinal-partial-inference/confirm.R","6f5ed64e8067f3d4a3e3a4916e620046"

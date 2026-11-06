@@ -1,3 +1,0 @@
-Regenerated summaries and report from the copied study under /private/tmp/fastglm-ordinal-uncertainty-relocation-v1.
-All seven derived CSV tables, RESULTS.md, and audit.txt match byte-for-byte.
-PDF byte identity is not required because creation-time metadata can differ.

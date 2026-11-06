@@ -1,7 +1,0 @@
-"case","passed","full.loglik.error","restricted.loglik.error","profile.max.error","message","warnings"
-"logit-smaller",FALSE,5.6843418860808e-14,5.6843418860808e-14,1.73528326882293,"",""
-"probit-smaller",FALSE,1.13686837721616e-13,1.13686837721616e-13,1.05067406810332,"",""
-"cloglog-smaller",FALSE,-5.6843418860808e-14,-1.70530256582424e-13,1.28373253576571,"",""
-"logit-larger",FALSE,1.36424205265939e-12,0,1.01301486348237,"",""
-"probit-larger",FALSE,-1.36424205265939e-12,-9.09494701772928e-13,0.865886214584355,"",""
-"cloglog-larger",FALSE,2.27373675443232e-13,2.27373675443232e-13,0.896735745432912,"",""

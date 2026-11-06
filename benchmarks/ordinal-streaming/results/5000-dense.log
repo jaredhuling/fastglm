@@ -1,4 +1,0 @@
-5000 dense ML 0.005 seconds
-5000 dense meanBR 0.005 seconds
-        0.63 real         0.56 user         0.05 sys
-time: sysctl kern.clockrate: Operation not permitted
