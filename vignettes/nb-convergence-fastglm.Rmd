@@ -1,7 +1,7 @@
 ---
 title: "Negative Binomial Convergence: fastglm vs MASS"
 author: "Jared Huling"
-date: "2026-05-27"
+date: "2026-11-06"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Negative Binomial Convergence: fastglm vs MASS}
@@ -16,8 +16,6 @@ Both `MASS::glm.nb()` and `fastglm_nb()` follow this strategy, but their
 implementations differ in initialization and numerical handling.  This
 vignette compares the two on a deliberately challenging data-generating
 process where MASS frequently fails to converge.
-
-The saved results below come from the historical run dated above. They describe that implementation and dataset generator, rather than all subsequent versions or a general guarantee of convergence.
 
 ## Data-generating process
 
@@ -166,42 +164,44 @@ cat(sprintf("\nAmong agreeing fits:\n"))
 #> 
 #> Among agreeing fits:
 cat(sprintf("  Max |logLik difference|:  %.2e\n", max(abs(ll_good))))
-#>   Max |logLik difference|:  1.74e-06
+#>   Max |logLik difference|:  1.53e-06
 cat(sprintf("  Mean |logLik difference|: %.2e\n", mean(abs(ll_good))))
-#>   Mean |logLik difference|: 2.20e-08
+#>   Mean |logLik difference|: 1.92e-08
 ```
 
 
 ``` r
-plot(results$mass_loglik[agree], results$fg_loglik[agree],
-     xlab = "MASS log-likelihood",
-     ylab = "fastglm log-likelihood",
-     main = "Log-likelihood agreement (both converge, excluding degenerate MASS fits)",
-     pch = 16, cex = 0.6, col = "#2166ac80")
-abline(0, 1, col = "grey40", lty = 2)
+library(ggplot2)
+agreement <- results[agree, ]
+ggplot(agreement, aes(mass_loglik, fg_loglik)) +
+    geom_abline(intercept = 0, slope = 1, colour = "grey40", linetype = 2) +
+    geom_point(colour = "#0B5CAD", alpha = 0.5, size = 1.2) +
+    labs(x = "MASS log-likelihood", y = "fastglm log-likelihood",
+         title = "Log-likelihood agreement") +
+    theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 ```
 
-![plot of chunk loglik-plot](figure/loglik-plot-1.png)
+![plot of chunk loglik-plot](nb-convergence-figs/loglik-plot-1.png)
 
 ### Theta estimates
 
 
 ``` r
-plot(results$mass_theta[agree], results$fg_theta[agree],
-     xlab = expression(hat(theta) ~ "(MASS)"),
-     ylab = expression(hat(theta) ~ "(fastglm)"),
-     main = expression("Dispersion" ~ hat(theta) ~ "agreement"),
-     pch = 16, cex = 0.6, col = "#2166ac80")
-abline(0, 1, col = "grey40", lty = 2)
+ggplot(agreement, aes(mass_theta, fg_theta)) +
+    geom_abline(intercept = 0, slope = 1, colour = "grey40", linetype = 2) +
+    geom_point(colour = "#0B5CAD", alpha = 0.5, size = 1.2) +
+    labs(x = expression(hat(theta) ~ "(MASS)"), y = expression(hat(theta) ~ "(fastglm)"),
+         title = expression("Dispersion" ~ hat(theta) ~ "agreement")) +
+    theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 ```
 
-![plot of chunk theta-plot](figure/theta-plot-1.png)
+![plot of chunk theta-plot](nb-convergence-figs/theta-plot-1.png)
 
 ``` r
 
 cat(sprintf("Max |theta difference|: %.2e\n",
             max(abs(results$fg_theta[agree] - results$mass_theta[agree]))))
-#> Max |theta difference|: 4.27e-07
+#> Max |theta difference|: 4.26e-07
 ```
 
 ### Cases where only fastglm converges

@@ -12,7 +12,10 @@ vignette: >
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment  = "#>"
+  comment  = "#>",
+  warning  = FALSE,
+  message  = FALSE,
+  fig.path = "nb-convergence-figs/"
 )
 ```
 
@@ -21,8 +24,6 @@ Both `MASS::glm.nb()` and `fastglm_nb()` follow this strategy, but their
 implementations differ in initialization and numerical handling.  This
 vignette compares the two on a deliberately challenging data-generating
 process where MASS frequently fails to converge.
-
-The saved results below come from the historical run dated above. They describe that implementation and dataset generator, rather than all subsequent versions or a general guarantee of convergence.
 
 ## Data-generating process
 
@@ -155,23 +156,25 @@ cat(sprintf("  Mean |logLik difference|: %.2e\n", mean(abs(ll_good))))
 ```
 
 ```{r loglik-plot, fig.width = 6, fig.height = 4.5}
-plot(results$mass_loglik[agree], results$fg_loglik[agree],
-     xlab = "MASS log-likelihood",
-     ylab = "fastglm log-likelihood",
-     main = "Log-likelihood agreement (both converge, excluding degenerate MASS fits)",
-     pch = 16, cex = 0.6, col = "#2166ac80")
-abline(0, 1, col = "grey40", lty = 2)
+library(ggplot2)
+agreement <- results[agree, ]
+ggplot(agreement, aes(mass_loglik, fg_loglik)) +
+    geom_abline(intercept = 0, slope = 1, colour = "grey40", linetype = 2) +
+    geom_point(colour = "#0B5CAD", alpha = 0.5, size = 1.2) +
+    labs(x = "MASS log-likelihood", y = "fastglm log-likelihood",
+         title = "Log-likelihood agreement") +
+    theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 ```
 
 ### Theta estimates
 
 ```{r theta-plot, fig.width = 6, fig.height = 4.5}
-plot(results$mass_theta[agree], results$fg_theta[agree],
-     xlab = expression(hat(theta) ~ "(MASS)"),
-     ylab = expression(hat(theta) ~ "(fastglm)"),
-     main = expression("Dispersion" ~ hat(theta) ~ "agreement"),
-     pch = 16, cex = 0.6, col = "#2166ac80")
-abline(0, 1, col = "grey40", lty = 2)
+ggplot(agreement, aes(mass_theta, fg_theta)) +
+    geom_abline(intercept = 0, slope = 1, colour = "grey40", linetype = 2) +
+    geom_point(colour = "#0B5CAD", alpha = 0.5, size = 1.2) +
+    labs(x = expression(hat(theta) ~ "(MASS)"), y = expression(hat(theta) ~ "(fastglm)"),
+         title = expression("Dispersion" ~ hat(theta) ~ "agreement")) +
+    theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 
 cat(sprintf("Max |theta difference|: %.2e\n",
             max(abs(results$fg_theta[agree] - results$mass_theta[agree]))))

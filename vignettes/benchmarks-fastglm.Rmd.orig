@@ -23,15 +23,13 @@ knitr::opts_chunk$set(
 )
 ```
 
-This vignette retains a historical benchmark run from the date shown above. Its saved timings describe the package and dependencies used in that run; they are not measurements of version 0.1.3, which includes subsequent numerical corrections and new fitting methods. The executable examples in the overview and bias-reduction vignettes provide comparisons using the installed version. It compares *fastglm* against the canonical reference implementations across a range of sample sizes and model classes:
+This vignette compares *fastglm* with reference implementations across sample sizes and model classes:
 
 - standard GLMs against `stats::glm()`, `glm2::glm.fit2()`, and `speedglm::speedglm.wfit()`,
 - the sparse and `big.matrix` solver paths against the dense path,
 - negative-binomial regression against `MASS::glm.nb()`,
 - Firth bias-reduced GLMs against `brglm2::brglmFit()` and `logistf::logistf()`, including sparse, streaming, and `big.matrix` Firth paths,
 - hurdle and zero-inflated count regressions against `pscl::hurdle()` and `pscl::zeroinfl()`.
-
-The calculations were run in advance and their output was saved with the text. Building the vignette displays those saved results without repeating the benchmark. This keeps routine package checks short. The script `vignettes/_precompile.R` can regenerate the study when a new complete benchmark run is intended.
 
 ```{r}
 library(fastglm)
@@ -58,25 +56,37 @@ bench_unit <- "milliseconds"
     data.frame(n = n, expr = as.character(s$expr), median = s$median,
                stringsAsFactors = FALSE)
 }
-.plot_scaling <- function(df, title) {
-    methods <- unique(df$expr)
-    cols    <- seq_along(methods)
-    op <- par(mar = c(4.2, 4.2, 3, 1), las = 1)
-    on.exit(par(op), add = TRUE)
-    plot(NA, log = "xy",
-         xlim = range(df$n), ylim = range(df$median),
-         xlab = "n (log scale)",
-         ylab = paste0("median time (", bench_unit, ", log scale)"),
-         main = title)
-    grid(equilogs = FALSE, col = "gray85")
-    for (k in seq_along(methods)) {
-        sub <- df[df$expr == methods[k], ]
-        sub <- sub[order(sub$n), ]
-        lines (sub$n, sub$median, col = cols[k], lwd = 2)
-        points(sub$n, sub$median, col = cols[k], pch = 19)
-    }
-    legend("topleft", legend = methods, col = cols,
-           pch = 19, lty = 1, lwd = 2, bty = "n")
+# One style for every figure: fastglm is dominant, its solver variants share a
+# color and differ by linetype, and comparison methods stay visible but thinner.
+library(ggplot2)
+.method_colors <- c(fastglm = "#0B5CAD", fastglm_qr = "#0B5CAD", fastglm_chol = "#0B5CAD",
+    fastglm_nb = "#0B5CAD", fastglm_hurdle = "#0B5CAD", fastglm_zi = "#0B5CAD",
+    glm.fit = "#D1661F", glm.nb = "#D1661F", brglm2 = "#D1661F", pscl_hurdle = "#D1661F",
+    pscl_zi = "#D1661F", speedglm = "#1F9E8F", glm2_fit2 = "#9A62C4")
+.method_lines <- function(methods) ifelse(methods == "fastglm_qr", "dashed", "solid")
+.method_widths <- function(methods) ifelse(grepl("^fastglm", methods), 1.2, 0.6)
+.benchmark_theme <- function() {
+    theme_bw(base_size = 12) +
+        theme(panel.grid.minor = element_blank(), legend.position = "bottom",
+              strip.background = element_blank(), strip.text = element_text(hjust = 0))
+}
+.size_axis <- function() {
+    scale_x_log10(labels = function(x) format(x, big.mark = ",", scientific = FALSE, trim = TRUE))
+}
+.plot_scaling <- function(df, title, facet = NULL) {
+    methods <- unique(as.character(df$expr))
+    plot <- ggplot(df, aes(n, median, colour = expr, linetype = expr, linewidth = expr, group = expr)) +
+        geom_line() + geom_point(size = 2.2) +
+        .size_axis() + scale_y_log10() +
+        scale_colour_manual(values = .method_colors[methods], breaks = methods) +
+        scale_linetype_manual(values = setNames(.method_lines(methods), methods), breaks = methods) +
+        scale_linewidth_manual(values = setNames(.method_widths(methods), methods), breaks = methods) +
+        labs(x = "Number of observations, log scale",
+             y = paste0("Median time (", bench_unit, "), log scale"),
+             title = title, colour = NULL, linetype = NULL, linewidth = NULL) +
+        .benchmark_theme()
+    if (!is.null(facet)) plot <- plot + facet_wrap(facet, scales = "free_y")
+    plot
 }
 sessionInfo()
 ```
@@ -150,7 +160,7 @@ These timings compare two ways to solve the weighted regression in each fitting 
 
 # Sparse and big.matrix paths
 
-A sparse design matrix from one-hot encoding a 100-level factor against a continuous covariate. The column count is `p = 200`; *fastglm* on the dense matrix has to materialise all 200 columns explicitly, while the sparse path only operates on the non-zero entries:
+A sparse design matrix from one-hot encoding a 100-level factor against a continuous covariate. The column count is `p = 200`; *fastglm* on the dense matrix stores all 200 columns, while the sparse path operates only on the nonzero entries:
 
 ```{r}
 set.seed(2)
@@ -173,7 +183,7 @@ cat("ncol(Xd) =", ncol(Xd), "  fraction nonzero =",
     round(length(Xs@x) / prod(dim(Xs)), 3), "\n")
 ```
 
-A `big.matrix` comparison on a moderately large dense design &mdash; `n = 5e5`, `p = 20`. The on-disc `big.matrix` runs in row-blocks but produces identical estimates:
+A `big.matrix` comparison on a large dense design, with `n = 5e5` and `p = 20`. The file-backed `big.matrix` reads blocks of rows and gives the same estimates:
 
 ```{r}
 set.seed(3)
@@ -226,7 +236,7 @@ nb_tim <- do.call(rbind, nb_tim)
 .plot_scaling(nb_tim, "Negative-binomial joint MLE: median time vs n")
 ```
 
-The following calculation reports coefficient and theta differences for the largest displayed case. Both functions target the same maximum likelihood fit, but numerical agreement also depends on convergence and stopping tolerances. The original dense *fastglm* implementation performs both coefficient and theta updates in C++, which can reduce repeated calls between R and compiled code.
+The following calculation reports coefficient and theta differences for the largest displayed case. Both functions target the same maximum likelihood fit, but numerical agreement also depends on convergence and stopping tolerances. Dense *fastglm* fits perform both coefficient and theta updates in C++, which reduces repeated calls between R and compiled code.
 
 ```{r}
 set.seed(99)
@@ -245,7 +255,7 @@ cat("logLik diff      :",
 
 # Firth bias-reduced GLMs
 
-Firth bias reduction (Firth, 1993; Kosmidis and Firth, 2009) is now supported for all standard GLM families via `firth = TRUE`. We benchmark against `brglm2::brglmFit(type = "AS_mean")`, which implements the same AS_mean adjustment, and against `logistf::logistf()` for the binomial-logit special case.
+Firth bias reduction (Firth, 1993; Kosmidis and Firth, 2009) is supported for all standard GLM families via `firth = TRUE`. We benchmark against `brglm2::brglmFit(type = "AS_mean")`, which implements the same AS_mean adjustment, and against `logistf::logistf()` for the binomial-logit special case.
 
 First, the canonical logistic benchmark on the *sex2* dataset and a larger simulated example:
 
@@ -315,18 +325,17 @@ for (fi in firth_families) {
 firth_all_tim <- do.call(rbind, firth_all_tim)
 ```
 
-A grouped barplot showing the median time for each family:
+The median time for each family, with each pair of methods joined by a line:
 
 ```{r}
-op <- par(mar = c(7, 4.2, 3, 1), las = 2)
-m <- with(firth_all_tim, tapply(median, list(expr, family), identity))
-barplot(m, beside = TRUE, log = "y",
-        col = c("#1f77b4", "#d62728"),
-        ylab = paste0("median time (", bench_unit, ", log scale)"),
-        main = paste0("Firth bias-reduced GLMs: fastglm vs brglm2 (n=", n, ")"),
-        legend.text = rownames(m),
-        args.legend = list(x = "topleft", bty = "n"))
-par(op)
+firth_all_tim$family <- reorder(firth_all_tim$family, firth_all_tim$median, max)
+ggplot(firth_all_tim, aes(median, family, colour = expr, group = family)) +
+    geom_line(colour = "grey70") + geom_point(size = 2.4) +
+    scale_x_log10() +
+    scale_colour_manual(values = .method_colors[c("fastglm", "brglm2")], breaks = c("fastglm", "brglm2")) +
+    labs(x = paste0("Median time (", bench_unit, "), log scale"), y = NULL, colour = NULL,
+         title = paste0("Firth bias-reduced GLMs: fastglm and brglm2 (n = ", n, ")")) +
+    .benchmark_theme()
 ```
 
 Scaling with sample size for a representative subset of families:
@@ -371,18 +380,12 @@ for (n_val in c(1e3, 1e4, 5e4)) {
 }
 firth_scale_tim <- do.call(rbind, firth_scale_tim)
 
-# one panel per family
-op <- par(mfrow = c(2, 2), mar = c(4, 4.2, 2.5, 1), las = 1)
-for (flab in unique(firth_scale_tim$family)) {
-    sub <- firth_scale_tim[firth_scale_tim$family == flab, ]
-    .plot_scaling(sub, paste0("Firth ", flab))
-}
-par(op)
+.plot_scaling(firth_scale_tim, "Firth bias reduction: median time by family", facet = ~family)
 ```
 
 ## Firth across all decomposition methods
 
-Firth bias reduction now works with all six decomposition methods (0&ndash;5), not just the LLT Cholesky. Here we verify that all methods produce identical coefficients and compare their timings:
+Firth bias reduction works with all six decomposition methods. This example checks that they give the same coefficients and compares their timings:
 
 ```{r}
 set.seed(123)
@@ -454,7 +457,7 @@ cat(sprintf("  big.mat vs dense: max |diff| = %.2e\n", max(abs(bm_c - ref_sp))))
 cat(sprintf("  stream  vs dense: max |diff| = %.2e\n", max(abs(st_c - ref_sp))))
 ```
 
-In this saved logistic example, the reported coefficient differences across data representations are below $10^{-7}$. Memory and runtime comparisons remain specific to the displayed design. For other families, the mean-bias adjustment is defined by adjusted estimating equations and need not correspond to a penalized likelihood.
+In this logistic example, the reported coefficient differences across data representations are below $10^{-7}$. Memory and runtime comparisons remain specific to the displayed design. For other families, the mean-bias adjustment is defined by adjusted estimating equations and need not correspond to a penalized likelihood.
 
 # Hurdle models
 
@@ -602,71 +605,78 @@ su_all <- rbind(
     transform(su_zi,     model = "zero-inflated")
 )
 
-op <- par(mar = c(4.2, 4.5, 3, 1), las = 1)
-models <- unique(su_all$model)
-cols   <- seq_along(models)
-plot(NA, log = "xy",
-     xlim = range(su_all$n), ylim = range(su_all$speedup),
-     xlab = "n (log scale)",
-     ylab = "speedup over reference (x, log scale)",
-     main = "fastglm speedup vs canonical reference, by model class")
-abline(h = 1, col = "gray70", lty = 2)
-grid(equilogs = FALSE, col = "gray85")
-for (k in seq_along(models)) {
-    sub <- su_all[su_all$model == models[k], ]
-    sub <- sub[order(sub$n), ]
-    lines (sub$n, sub$speedup, col = cols[k], lwd = 2)
-    points(sub$n, sub$speedup, col = cols[k], pch = 19)
-}
-legend("topleft", legend = models, col = cols, pch = 19, lty = 1, lwd = 2,
-       bty = "n")
-par(op)
+su_all$model <- factor(su_all$model, levels = unique(su_all$model))
+ggplot(su_all, aes(n, speedup, colour = model, shape = model, group = model)) +
+    geom_hline(yintercept = 1, linetype = 2, colour = "grey60") +
+    geom_line(linewidth = 0.8) + geom_point(size = 2.4) +
+    .size_axis() + scale_y_log10() +
+    scale_colour_manual(values = c("#0B5CAD", "#D1661F", "#1F9E8F", "#9A62C4", "#9C8200", "#D0628E")) +
+    labs(x = "Number of observations, log scale",
+         y = "Reference time / fastglm time, log scale",
+         title = "fastglm time ratio against each reference, by model class",
+         colour = NULL, shape = NULL) +
+    .benchmark_theme()
 ```
 
-The saved comparisons indicate where compiled fitting calculations were beneficial in these examples. They do not establish a uniform speed or convergence advantage. Current comparisons should check coefficients, fitted means, uncertainty calculations, and convergence before interpreting timing differences. The accuracy-checked script in `benchmarks/benchmark.R` records these calculations and the R environment for new measurements.
+Speed advantages depend on the design, so these comparisons do not establish a uniform speed or convergence advantage. Any timing comparison should first check coefficients, fitted means, uncertainty calculations, and convergence.
 
 # Ordinal models
 
-Unlike the historical sections above, these times come from a run on 2026-11-06 (UTC) of *fastglm* commit `7f2ae40`, created by `benchmarks/benchmark-ordinal-comparison.R` in the package repository. Each design has 10 predictors, and each time includes coefficient covariance. The ratio is the comparison time divided by the *fastglm* time, shown only when that fit converged and agreed with *fastglm*.
+These comparisons use packages that fit the same cumulative-link models. Each design has 10 predictors, and each time includes coefficient covariance. A time is compared only when that fit converged and agreed with *fastglm* on the log likelihood and common slopes.
 
-|Link    |Observations | Categories|Method                       |  Seconds| Time ratio|
-|:-------|:------------|----------:|:----------------------------|--------:|----------:|
-|logit   |100,000      |          5|`fastglm`                    |   0.0673|      1.000|
-|logit   |100,000      |          5|`rms::orm`                   |   0.1960|      2.910|
-|logit   |100,000      |          5|`ordinal::clm`               |   0.6950|     10.300|
-|logit   |100,000      |          5|`MASS::polr`                 |   1.3900|     20.700|
-|logit   |100,000      |          5|`VGAM::vglm`                 |   1.7800|     26.500|
-|logit   |100,000      |          5|`WeightIt::ordinal_weightit` |   3.0200|     44.900|
-|probit  |100,000      |          5|`fastglm`                    |   0.1000|      1.000|
-|probit  |100,000      |          5|`rms::orm`                   |   0.2190|      2.180|
-|probit  |100,000      |          5|`ordinal::clm`               |   0.6880|      6.870|
-|probit  |100,000      |          5|`MASS::polr`                 |   1.7900|     17.900|
-|probit  |100,000      |          5|`VGAM::vglm`                 |   1.9200|     19.200|
-|probit  |100,000      |          5|`WeightIt::ordinal_weightit` |   6.3000|     62.900|
-|cloglog |100,000      |          5|`fastglm`                    |   0.0984|      1.000|
-|cloglog |100,000      |          5|`ordinal::clm`               |   0.7470|      7.590|
-|cloglog |100,000      |          5|`MASS::polr`                 |   1.4000|     14.300|
-|cloglog |100,000      |          5|`VGAM::vglm`                 |   6.5100|         NA|
-|cloglog |100,000      |          5|`WeightIt::ordinal_weightit` |   5.7800|     58.800|
-|logit   |20,000       |         30|`fastglm`                    |   0.0169|      1.000|
-|logit   |20,000       |         30|`rms::orm`                   |   0.0423|      2.510|
-|logit   |20,000       |         30|`ordinal::clm`               |   0.6430|     38.000|
-|logit   |20,000       |         30|`MASS::polr`                 |   0.8880|     52.600|
-|logit   |20,000       |         30|`VGAM::vglm`                 |   5.3300|    315.000|
-|logit   |20,000       |         30|`WeightIt::ordinal_weightit` |   2.3500|    139.000|
-|logit   |20,000       |        300|`fastglm`                    |   0.0959|      1.000|
-|logit   |20,000       |        300|`rms::orm`                   |   0.0472|      0.492|
-|logit   |20,000       |        300|`ordinal::clm`               |  40.5000|    422.000|
-|logit   |20,000       |        300|`MASS::polr`                 |  29.1000|    304.000|
-|logit   |20,000       |        300|`WeightIt::ordinal_weightit` |  48.6000|    507.000|
-|logit   |20,000       |       1000|`fastglm`                    |   0.3150|      1.000|
-|logit   |20,000       |       1000|`rms::orm`                   |   0.0878|      0.279|
-|logit   |20,000       |       1000|`ordinal::clm`               | 484.0000|   1540.000|
-|logit   |20,000       |       1000|`MASS::polr`                 | 326.0000|   1030.000|
-|logit   |20,000       |       1000|`WeightIt::ordinal_weightit` | 334.0000|   1060.000|
+```{r ordinal-setup, echo = FALSE}
+source("../benchmarks/ordinal-plots.R")
+ordinal_summary <- read.csv("../benchmarks/ordinal-comparison/summary.csv")
+ordinal_internal <- read.csv("../benchmarks/ordinal-comparison/internal-summary.csv")
+```
 
-`rms::orm` is designed for outcomes with very many distinct values and is the faster choice at 300 or more categories. `VGAM::vglm` was limited to 30 categories by memory. For cloglog, `VGAM::vglm` warned about intersecting predictors and returned a different fit, so it has no ratio.
+```{r ordinal-times, echo = FALSE, fig.width = 8, fig.height = 6.2}
+plot_ordinal_times(ordinal_summary)
+```
 
+```{r ordinal-times-table, echo = FALSE, results = "asis"}
+largest <- ordinal_summary[ordinal_summary$panel == "Common slopes" & ordinal_summary$n == 100000L, ]
+largest <- largest[order(match(largest$link, c("logit", "probit", "cloglog")),
+                         match(largest$method, ordinal_method_order)), ]
+knitr::kable(data.frame(Link = largest$link, Method = paste0("`", largest$method, "`"),
+    Seconds = largest$median_seconds, Ratio = ifelse(largest$agrees, largest$speedup, NA)),
+    col.names = c("Link", "Method", "Seconds", "Time ratio"), digits = c(0, 0, 3, 1), row.names = FALSE)
+```
+
+The table shows 100,000 observations and 5 categories. The ratio is the comparison time divided by the *fastglm* time. `rms::orm` was timed for logit and probit only. For cloglog, `VGAM::vglm` warned about intersecting predictors and returned a different fit, so it has no ratio.
+
+The threshold-specific panel has no comparison at 1,000 observations, because the *fastglm* fit reported nonconvergence for that design: the best fit with ordered cumulative probabilities at every row lies on the ordering boundary. `ordinal::clm` reported convergence with a higher log likelihood, but its cumulative predictors cross at 3 of the 1,000 rows. At 100,000 observations, `ordinal::clm` reported that it had not converged, so it is omitted there as well.
+
+With 20,000 observations, `rms::orm` overtakes *fastglm* between 30 and 300 categories:
+
+```{r ordinal-categories, echo = FALSE, fig.width = 8, fig.height = 4.6}
+plot_ordinal_categories(ordinal_summary)
+```
+
+```{r ordinal-categories-table, echo = FALSE, results = "asis"}
+many <- ordinal_summary[ordinal_summary$panel == "Many categories", ]
+many <- many[order(many$K, match(many$method, ordinal_method_order)), ]
+knitr::kable(data.frame(Categories = many$K, Method = paste0("`", many$method, "`"),
+    Seconds = many$median_seconds, Ratio = many$speedup),
+    col.names = c("Categories", "Method", "Seconds", "Time ratio"), digits = c(0, 0, 3, 2), row.names = FALSE)
+```
+
+`rms::orm` is designed for outcomes with very many distinct values and is the faster choice in that range. `VGAM::vglm` was not run above 30 categories because it would need about 160 GB of memory at 1,000.
+
+None of these packages fits mean bias-reduced cumulative-link models or reads ordinal data in blocks:
+
+```{r ordinal-streaming, echo = FALSE, fig.width = 8, fig.height = 4.2}
+plot_ordinal_internal(ordinal_internal)
+```
+
+```{r ordinal-streaming-table, echo = FALSE, results = "asis"}
+ordinal_internal$n <- format(ordinal_internal$n, big.mark = ",", trim = TRUE, scientific = FALSE)
+knitr::kable(ordinal_internal[, c("n", "way", "median_seconds", "coefficient_difference")],
+    col.names = c("Observations", "Fit", "Seconds", "Largest coefficient difference from dense fit"),
+    digits = c(0, 0, 3, 17), row.names = FALSE)
+```
+
+Streamed fits use blocks of 10,000 rows. The last column compares each streamed fit with the dense fit of the same estimator.
 
 # References
 

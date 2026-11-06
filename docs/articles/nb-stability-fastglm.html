@@ -109,7 +109,7 @@ vs MASS</h1>
                         <h4 data-toc-skip class="author">Jared
 Huling</h4>
             
-            <h4 data-toc-skip class="date">2026-06-01</h4>
+            <h4 data-toc-skip class="date">2026-11-06</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/jaredhuling/fastglm/blob/HEAD/vignettes/nb-stability-fastglm.Rmd" class="external-link"><code>vignettes/nb-stability-fastglm.Rmd</code></a></small>
       <div class="hidden name"><code>nb-stability-fastglm.Rmd</code></div>
@@ -127,10 +127,6 @@ estimation (MLE). The two updates can converge slowly when fitted means
 differ by many orders of magnitude or when theta approaches the Poisson
 limit. Step halving shortens an unsuccessful coefficient update,
 providing a safeguard against some numerical failures.</p>
-<p>This vignette retains a historical simulation run from the displayed
-date. The recorded results predate later numerical changes and should be
-interpreted as evidence about that run, not as a validation of version
-0.1.3.</p>
 <p>The companion vignette
 <code><a href="../articles/nb-convergence-fastglm.html">vignette("nb-convergence-fastglm", package = "fastglm")</a></code>
 compares the two solvers on a single difficult data-generating process.
@@ -141,11 +137,10 @@ under-dispersion, small samples, high dimension, collinearity, and
 contaminating outliers). For each scenario we fit both solvers over many
 replications and tabulate how often each one converges cleanly, whether
 they agree when both succeed, and where one rescues the other.</p>
-<p>The original comparison used the following iteration settings, whose
-meanings differ between implementations: <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code>
-runs with <code>glm.control(maxit = 50)</code>, and
-<code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> uses its default
-<code>outer.maxit = 50</code>.</p>
+<p>The iteration settings differ in meaning between implementations:
+<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> runs with
+<code>glm.control(maxit = 50)</code>, and <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> uses
+its default <code>outer.maxit = 50</code>.</p>
 <div class="section level2">
 <h2 id="data-generating-process">Data-generating process<a class="anchor" aria-label="anchor" href="#data-generating-process"></a>
 </h2>
@@ -217,16 +212,13 @@ whether it errored, whether it converged, whether <em>MASS</em> emitted
 an iteration- or step-limit warning, the maximized log-likelihood, the
 dispersion estimate, and the maximum relative coefficient
 discrepancy.</p>
-<p>The historical scoring rules differ between the packages:
-<em>MASS</em> is counted as cleanly converged only when it returns a
-convergence flag without warnings, whereas <em>fastglm</em> is counted
-when it returns a convergence flag and finite coefficients.
-Consequently, these counts are not a comparison under identical success
-criteria. A current evaluation should record errors, warnings,
-convergence flags, finite estimates, and likelihood values separately
-for both methods. Theta estimates close to the Poisson limit also
-require separate interpretation because the data may provide little
-information about theta there.</p>
+<p>The packages are scored differently: <em>MASS</em> is counted as
+cleanly converged only when it returns a convergence flag without
+warnings, whereas <em>fastglm</em> is counted when it returns a
+convergence flag and finite coefficients. Consequently, these counts are
+not a comparison under identical success criteria. Theta estimates close
+to the Poisson limit also require separate interpretation because the
+data may provide little information about theta there.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_both</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">d</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">X</span> <span class="op">&lt;-</span> <span class="va">d</span><span class="op">$</span><span class="va">X</span>; <span class="va">y</span> <span class="op">&lt;-</span> <span class="va">d</span><span class="op">$</span><span class="va">y</span></span>
@@ -408,11 +400,11 @@ conv’) where fastglm’s log-likelihood is at least MASS’s.</caption>
 <td align="left">near_poisson</td>
 <td align="left">nearly Poisson (theta = 5000)</td>
 <td align="right">17</td>
-<td align="right">35</td>
-<td align="right">18</td>
+<td align="right">50</td>
+<td align="right">33</td>
 <td align="right">0</td>
-<td align="right">28</td>
-<td align="right">28</td>
+<td align="right">33</td>
+<td align="right">32</td>
 </tr>
 <tr class="odd">
 <td align="left">small_n</td>
@@ -503,21 +495,20 @@ conv’) where fastglm’s log-likelihood is at least MASS’s.</caption>
 <div class="float">
 <img src="nb-stability-figs/convergence-plot-1.png" alt="plot of chunk convergence-plot"><div class="figcaption">plot of chunk convergence-plot</div>
 </div>
-<p>Under the recorded rules, <em>MASS</em> had 425 clean convergences
-and <em>fastglm</em> had 555 convergences among 600 simulated fits. The
-table also contains exceptions: in the <code>tiny_theta</code> scenario,
-<em>MASS</em> has 47 successful fits and <em>fastglm</em> has 46, and in
-the <code>high_dim</code> scenario the likelihood comparison favors
-<em>MASS</em> in four of the 23 fits counted as converged by both. These
-results therefore do not establish that either method is uniformly more
+<p>Under these rules, <em>MASS</em> had 425 clean convergences and
+<em>fastglm</em> had 570 convergences among 600 simulated fits. There
+are exceptions: in the <code>tiny_theta</code> scenario, <em>MASS</em>
+has 47 successful fits and <em>fastglm</em> has 46, and in the
+<code>high_dim</code> scenario the likelihood comparison favors
+<em>MASS</em> in 4 of the 23 fits counted as converged by both. These
+results do not establish that either method is uniformly more
 reliable.</p>
 <p>The larger differences occur when fitted means vary widely, theta is
 near an extreme, or many coefficients are estimated from a limited
-sample. Those settings are useful targets for further numerical checks.
-Coefficient and likelihood comparisons should be interpreted alongside
-warnings and the degree to which theta is identified by the data. A
-convergence flag alone does not establish that the same likelihood
-maximum has been reached.</p>
+sample. Coefficient and likelihood comparisons should be interpreted
+alongside warnings and the degree to which theta is identified by the
+data. A convergence flag alone does not establish that the same
+likelihood maximum has been reached.</p>
 </div>
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>

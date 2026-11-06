@@ -525,12 +525,12 @@ coefficient summary requires no further reads.</p>
 <span><span class="co">#&gt; Log-likelihood: -782.1</span></span>
 <span><span class="co">#&gt; Observations: 500</span></span>
 <span><span class="co">#&gt; Convergence: converged</span></span></code></pre></div>
-<p>These fits retain one block of predictor rows and coefficient-sized
-matrices, together with small records of the block sizes. The source
-must return the same observations throughout fitting and later
-inference. The large-data vignette explains how to use file or database
-readers and how to save predictions block by block when the full
-prediction vector would be too large for memory.</p>
+<p>While fitting, these models hold one block of predictor rows and
+coefficient-sized matrices in memory, and fitted objects keep small
+records of the block sizes. The source must return the same observations
+throughout fitting and later inference. The large-data vignette explains
+how to use file or database readers and how to save predictions block by
+block when the full prediction vector would be too large for memory.</p>
 </div>
 <div class="section level2">
 <h2 id="uncertainty-for-average-counts">Uncertainty for average counts<a class="anchor" aria-label="anchor" href="#uncertainty-for-average-counts"></a>
