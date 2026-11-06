@@ -91,77 +91,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
     state$p <- NULL;state$columns <- NULL;state$levels <- levels
     state$grouped <- NULL;state$factor.levels <- NULL;state$count.columns <- NULL
     state$maximum.block.rows <- 0L
-    integer.frequency <- function(x) all(abs(x-round(x))<=pmin(1e-7,16*.Machine$double.eps*pmax(1,abs(x))))
-    read <- function(k,summaries=FALSE) {
-        if(k==1L) state$passes <- state$passes+1L
-        state$reads <- state$reads+1L
-        z <- source$callback(k)
-        if(!is.list(z)) stop("an ordinal source block must be a list",call.=FALSE)
-        x <- z$X;y <- z$y;grouped <- is.matrix(y)
-        if(!is.matrix(x) || !is.numeric(x) || is.complex(x) || any(!is.finite(x)))
-            stop("each ordinal block$X must be a finite dense numeric matrix",call.=FALSE)
-        if(!is.null(source$schema$assign)) x <- x[,source$schema$assign!=0L,drop=FALSE]
-        n <- nrow(x)
-        if(n<1L || NROW(y)!=n) stop("ordinal source blocks require matching, nonempty design and response rows",call.=FALSE)
-        if(ncol(x)>0L && is.null(colnames(x))) colnames(x) <- paste0("x",seq_len(ncol(x)))
-        if(anyNA(colnames(x)) || any(!nzchar(colnames(x))) || anyDuplicated(colnames(x)))
-            stop("ordinal predictor column names must be distinct and nonmissing",call.=FALSE)
-        if(is.null(state$p)) {state$p <- ncol(x);state$columns <- colnames(x);state$grouped <- grouped}
-        if(ncol(x)!=state$p || !identical(colnames(x),state$columns))
-            stop("ordinal source predictor columns changed from the schema",call.=FALSE)
-        if(!identical(grouped,state$grouped)) stop("ordinal source response representation changed",call.=FALSE)
-        if(state$rows[k]!=0L && state$rows[k]!=n) stop("ordinal source block size changed between passes",call.=FALSE)
-        state$rows[k] <- n;state$maximum.block.rows <- max(state$maximum.block.rows,n)
-        if(is.null(state$levels)) {
-            state$levels <- if(grouped) colnames(y) else if(is.ordered(y)) base::levels(y)
-            if(is.null(state$levels)) stop("supply 'levels' or retain ordered-factor levels or count column names in every block",call.=FALSE)
-        }
-        labels <- as.character(state$levels);K <- length(labels)
-        if(K<2L || anyNA(labels) || any(!nzchar(labels)) || anyDuplicated(labels))
-            stop("at least two distinct, nonmissing ordinal category labels are required",call.=FALSE)
-        state$levels <- labels
-        w <- if(is.null(z$weights)) rep(1,n) else z$weights
-        off <- if(is.null(z$offset)) numeric(n) else z$offset
-        if(!is.numeric(w) || is.complex(w) || !is.null(dim(w)) || length(w)!=n || any(!is.finite(w)|w<0))
-            stop("ordinal frequency weights must be finite and nonnegative",call.=FALSE)
-        if(!is.numeric(off) || is.complex(off) || !is.null(dim(off)) || length(off)!=n || any(!is.finite(off)))
-            stop("ordinal source offsets must be finite and match block rows",call.=FALSE)
-        counts <- matrix(numeric(),0L,0L);codes <- integer()
-        if(grouped) {
-            if(!is.numeric(y) || is.complex(y) || ncol(y)!=K || any(!is.finite(y)|y<0))
-                stop("ordinal count blocks require finite nonnegative counts in the declared columns",call.=FALSE)
-            if(is.null(state$count.columns)) state$count.columns <- list(colnames(y))
-            if(!identical(colnames(y),state$count.columns[[1L]])) stop("ordinal count columns changed from the category schema",call.=FALSE)
-            if(!is.null(colnames(y)) && !identical(colnames(y),labels))
-                stop("ordinal count column names must match 'levels' in order",call.=FALSE)
-            effective <- y*w
-            if(any(!is.finite(effective)) || !integer.frequency(effective))
-                stop("ordinal fitting requires finite integer effective category counts",call.=FALSE)
-            counts <- y;storage.mode(counts) <- "double"
-            totals <- rowSums(effective);category.totals <- if(summaries) colSums(effective)
-            saturated <- 0
-            if(summaries) {
-                take <- effective>0
-                saturated <- sum(effective[take]*log((effective/totals)[take]))
-            }
-        } else {
-            if(!is.null(dim(y))) stop("invalid ordinal source response dimensions",call.=FALSE)
-            if(is.factor(y)) {
-                if(is.null(state$factor.levels)) state$factor.levels <- base::levels(y)
-                if(!identical(base::levels(y),state$factor.levels)) stop("ordinal factor levels changed from the category schema",call.=FALSE)
-            }
-            if(is.numeric(y)) {
-                if(any(!is.finite(y)|y!=floor(y)|y<1|y>K)) stop("numeric ordinal responses must be category codes",call.=FALSE)
-                codes <- as.integer(y)
-            } else codes <- match(as.character(y),labels)
-            if(anyNA(codes) || !integer.frequency(w)) stop("ordinal source responses and integer frequency weights must match the category schema",call.=FALSE)
-            totals <- w;category.totals <- if(summaries) vapply(seq_len(K),function(j)sum(w[codes==j]),numeric(1));saturated <- 0
-        }
-        if(any(!is.finite(totals)) || any(!is.finite(category.totals))) stop("ordinal source frequencies overflow",call.=FALSE)
-        storage.mode(x) <- "double"
-        list(X=x,codes=as.integer(codes),counts=counts,weights=as.numeric(w),offset=as.numeric(off),
-            totals=as.numeric(totals),category.totals=category.totals,saturated=saturated)
-    }
+    read <- .ordinal_stream_reader(source,state)
     frequency <- positive.rows <- saturated <- 0;center <- NULL;offset.mean <- 0;category.totals <- NULL
     selected <- boundary.check <- NULL
     for(k in seq_len(source$n_chunks)) {
@@ -270,6 +200,84 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
     object
 }
 
+# The fit keeps this reader. A separate frame keeps fitting variables, including
+# the last source block, out of the fitted object.
+.ordinal_stream_reader <- function(source,state) {
+    force(source);force(state)
+    integer.frequency <- function(x) all(abs(x-round(x))<=pmin(1e-7,16*.Machine$double.eps*pmax(1,abs(x))))
+    read <- function(k,summaries=FALSE) {
+        if(k==1L) state$passes <- state$passes+1L
+        state$reads <- state$reads+1L
+        z <- source$callback(k)
+        if(!is.list(z)) stop("an ordinal source block must be a list",call.=FALSE)
+        x <- z$X;y <- z$y;grouped <- is.matrix(y)
+        if(!is.matrix(x) || !is.numeric(x) || is.complex(x) || any(!is.finite(x)))
+            stop("each ordinal block$X must be a finite dense numeric matrix",call.=FALSE)
+        if(!is.null(source$schema$assign)) x <- x[,source$schema$assign!=0L,drop=FALSE]
+        n <- nrow(x)
+        if(n<1L || NROW(y)!=n) stop("ordinal source blocks require matching, nonempty design and response rows",call.=FALSE)
+        if(ncol(x)>0L && is.null(colnames(x))) colnames(x) <- paste0("x",seq_len(ncol(x)))
+        if(anyNA(colnames(x)) || any(!nzchar(colnames(x))) || anyDuplicated(colnames(x)))
+            stop("ordinal predictor column names must be distinct and nonmissing",call.=FALSE)
+        if(is.null(state$p)) {state$p <- ncol(x);state$columns <- colnames(x);state$grouped <- grouped}
+        if(ncol(x)!=state$p || !identical(colnames(x),state$columns))
+            stop("ordinal source predictor columns changed from the schema",call.=FALSE)
+        if(!identical(grouped,state$grouped)) stop("ordinal source response representation changed",call.=FALSE)
+        if(state$rows[k]!=0L && state$rows[k]!=n) stop("ordinal source block size changed between passes",call.=FALSE)
+        state$rows[k] <- n;state$maximum.block.rows <- max(state$maximum.block.rows,n)
+        if(is.null(state$levels)) {
+            state$levels <- if(grouped) colnames(y) else if(is.ordered(y)) base::levels(y)
+            if(is.null(state$levels)) stop("supply 'levels' or retain ordered-factor levels or count column names in every block",call.=FALSE)
+        }
+        labels <- as.character(state$levels);K <- length(labels)
+        if(K<2L || anyNA(labels) || any(!nzchar(labels)) || anyDuplicated(labels))
+            stop("at least two distinct, nonmissing ordinal category labels are required",call.=FALSE)
+        state$levels <- labels
+        w <- if(is.null(z$weights)) rep(1,n) else z$weights
+        off <- if(is.null(z$offset)) numeric(n) else z$offset
+        if(!is.numeric(w) || is.complex(w) || !is.null(dim(w)) || length(w)!=n || any(!is.finite(w)|w<0))
+            stop("ordinal frequency weights must be finite and nonnegative",call.=FALSE)
+        if(!is.numeric(off) || is.complex(off) || !is.null(dim(off)) || length(off)!=n || any(!is.finite(off)))
+            stop("ordinal source offsets must be finite and match block rows",call.=FALSE)
+        counts <- matrix(numeric(),0L,0L);codes <- integer()
+        if(grouped) {
+            if(!is.numeric(y) || is.complex(y) || ncol(y)!=K || any(!is.finite(y)|y<0))
+                stop("ordinal count blocks require finite nonnegative counts in the declared columns",call.=FALSE)
+            if(is.null(state$count.columns)) state$count.columns <- list(colnames(y))
+            if(!identical(colnames(y),state$count.columns[[1L]])) stop("ordinal count columns changed from the category schema",call.=FALSE)
+            if(!is.null(colnames(y)) && !identical(colnames(y),labels))
+                stop("ordinal count column names must match 'levels' in order",call.=FALSE)
+            effective <- y*w
+            if(any(!is.finite(effective)) || !integer.frequency(effective))
+                stop("ordinal fitting requires finite integer effective category counts",call.=FALSE)
+            counts <- y;storage.mode(counts) <- "double"
+            totals <- rowSums(effective);category.totals <- if(summaries) colSums(effective)
+            saturated <- 0
+            if(summaries) {
+                take <- effective>0
+                saturated <- sum(effective[take]*log((effective/totals)[take]))
+            }
+        } else {
+            if(!is.null(dim(y))) stop("invalid ordinal source response dimensions",call.=FALSE)
+            if(is.factor(y)) {
+                if(is.null(state$factor.levels)) state$factor.levels <- base::levels(y)
+                if(!identical(base::levels(y),state$factor.levels)) stop("ordinal factor levels changed from the category schema",call.=FALSE)
+            }
+            if(is.numeric(y)) {
+                if(any(!is.finite(y)|y!=floor(y)|y<1|y>K)) stop("numeric ordinal responses must be category codes",call.=FALSE)
+                codes <- as.integer(y)
+            } else codes <- match(as.character(y),labels)
+            if(anyNA(codes) || !integer.frequency(w)) stop("ordinal source responses and integer frequency weights must match the category schema",call.=FALSE)
+            totals <- w;category.totals <- if(summaries) vapply(seq_len(K),function(j)sum(w[codes==j]),numeric(1));saturated <- 0
+        }
+        if(any(!is.finite(totals)) || any(!is.finite(category.totals))) stop("ordinal source frequencies overflow",call.=FALSE)
+        storage.mode(x) <- "double"
+        list(X=x,codes=as.integer(codes),counts=counts,weights=as.numeric(w),offset=as.numeric(off),
+            totals=as.numeric(totals),category.totals=category.totals,saturated=saturated)
+    }
+    read
+}
+
 .ordinal_stream_result <- function(fit,center,scale,response,frequency,positive.rows,
     firth,link,ctl,tol,maxit,block.size,columns) {
     q <- length(response$levels)-1L;p <- length(columns);d <- q+p
@@ -330,7 +338,13 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         if(is.null(sink)) out[[k]] <- value else sink(value,k)
     }
     if(!is.null(sink)) return(invisible(object$source$n_chunks))
-    bind <- function(x) if(is.matrix(x[[1L]])) do.call(rbind,x) else do.call(c,x)
+    bind <- function(x) {
+        first <- x[[1L]]
+        if(is.matrix(first)) return(do.call(rbind,x))
+        # c() keeps factor attributes only from R 4.1.0 onward.
+        if(is.factor(first)) return(structure(unlist(lapply(x,unclass)),levels=levels(first),class=class(first)))
+        do.call(c,x)
+    }
     if(inherits(out[[1L]],"fastglm_prediction")) {
         value <- out[[1L]];value$fit <- bind(lapply(out,`[[`,"fit"));value$se.fit <- bind(lapply(out,`[[`,"se.fit"));value
     } else bind(out)

@@ -11,6 +11,7 @@
 #' @param y an ordered factor, a factor or character response with an explicit
 #'   category order in `levels`, integer category codes with `levels`, or a
 #'   matrix whose columns contain category counts in increasing outcome order.
+#'   Named columns must match `levels` in the same order.
 #' @param data,subset,na.action,contrasts formula and model-frame arguments.
 #' @param weights nonnegative integer frequency weights for individual
 #'   responses. For count matrices, counts times weights must be integers.

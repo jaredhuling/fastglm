@@ -32,7 +32,17 @@
     cat("\n",title,":\n",sep="")
     if(is.null(dim(x))) x <- matrix(x,ncol=1L,dimnames=list(names(x),"Estimate"))
     if(!nrow(x)) { cat("  No coefficients\n"); return(invisible(NULL)) }
-    do.call(printCoefmat,utils::modifyList(list(x=x,digits=digits,eps.Pvalue=1e-4),list(...)))
+    args <- utils::modifyList(list(x=x,digits=digits,eps.Pvalue=1e-4),list(...))
+    # By default printCoefmat() treats the last non-p column as a test statistic
+    # and rounds it to a fixed number of decimals, which hides small estimates.
+    columns <- colnames(x)
+    has.p <- if(is.null(args$has.Pvalue)) ncol(x)>=4L && length(columns) &&
+        substr(columns[ncol(x)],1L,3L) %in% c("Pr(","p-v") else isTRUE(args$has.Pvalue)
+    if(!has.p && is.null(args$cs.ind) && is.null(args$tst.ind)) {
+        args$tst.ind <- which(columns %in% c("z value","t value"))
+        args$cs.ind <- setdiff(seq_len(ncol(x)),args$tst.ind)
+    }
+    do.call(printCoefmat,args)
     invisible(NULL)
 }
 
@@ -365,7 +375,7 @@ print.summary.fastglm <- function(x,digits=max(3L,getOption("digits")-3L),
     cat("\n")
     .fastglm_print_table(data.frame(Dispersion=x$dispersion,`Null deviance`=x$null.deviance,
         `Null df`=x$df.null,Deviance=x$deviance,`Residual df`=x$df.residual,AIC=x$aic,check.names=FALSE),digits)
-    if(!is.null(x$theta)) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    if(isTRUE(is.finite(x$theta))) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
     .fastglm_print_convergence(x$converged,x$iter,x$convergence.reason)
     if(!is.null(x$correlation)) {
         cat("\nCoefficient correlations:\n")

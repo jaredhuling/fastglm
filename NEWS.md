@@ -1,5 +1,17 @@
 # fastglm 0.1.3
 
+## Bug fixes
+
+* `fastglm_ordinal()` now stops when named count-matrix columns do not match
+  `levels` in order, as `fastglm_ordinal_streaming()` already did. These columns
+  were previously assigned by position, which could silently reverse a fit.
+* Printed coefficient tables without p-values no longer round small estimates,
+  standard errors, or bootstrap limits to zero.
+* Ordinal source fits no longer retain the last source block in their reader.
+* `predict(type="class")` for ordinal source fits no longer depends on the
+  factor method for `c()`, which requires R 4.1.0.
+* Models without a size parameter no longer print a missing `Theta` row.
+
 ## Model interfaces and inference
 
 * Ordinal source fits now support prediction scores and cumulative calibration

@@ -14,7 +14,7 @@ knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE,
 
 # fastglm
 
-The *fastglm* package provides **fast regression modeling, mean bias reduction, and inference** for continuous, binary, count, and ordered outcomes. C++ fitting routines and numerical checks support familiar R workflows, including `summary()`, `coef()`, `vcov()`, `predict()`, `residuals()`, and `logLik()`.
+The *fastglm* package provides fast regression modeling, mean bias reduction, and inference for continuous, binary, count, and ordered outcomes. C++ fitting routines and numerical checks support familiar R workflows, including `summary()`, `coef()`, `vcov()`, `predict()`, `residuals()`, and `logLik()`.
 
 ## Models and estimation
 
@@ -31,10 +31,10 @@ Mean bias reduction uses `firth=TRUE` where supported. Its scope depends on the 
 
 ## Inference and computation
 
-- **Uncertainty and testing.** Model-based intervals, joint Wald tests, robust and clustered covariance, and refitting bootstraps are available for supported classes. Profile inference covers dense binomial-logit Firth fits, ordinal ML fits with common or threshold-specific slopes, and negative-binomial size. Ordinal score tests address coefficient hypotheses or the common-slope assumption.
-- **Prediction and interpretation.** Response means or category probabilities, prediction standard errors, averages and contrasts, residuals, and ordinal calibration summaries connect fitted coefficients to outcomes. Shared printed tables and optional broom methods support reporting.
-- **Large datasets.** Dense, sparse, mapped, and repeatable-source inputs serve different model classes. Streaming supports GLMs, negative-binomial, hurdle, two-part, and ordinal models with common or threshold-specific slopes.
-- **Repeated fitting and numerical control.** Prepared GLM and ordinal designs reuse predictor setup across responses. GLMs offer six decompositions and an automatic choice, with diagnostics for convergence and numerical conditioning. The timing sections pair performance comparisons with agreement checks.
+- Uncertainty and testing. Model-based intervals, joint Wald tests, robust and clustered covariance, and refitting bootstraps are available for supported classes. Profile inference covers dense binomial-logit Firth fits, ordinal ML fits with common or threshold-specific slopes, and negative-binomial size. Ordinal score tests address coefficient hypotheses or the common-slope assumption.
+- Prediction and interpretation. Response means or category probabilities, prediction standard errors, averages and contrasts, residuals, and ordinal calibration summaries connect fitted coefficients to outcomes. Shared printed tables and optional broom methods support reporting.
+- Large datasets. Dense, sparse, mapped, and repeatable-source inputs serve different model classes. Streaming supports GLMs, negative-binomial, hurdle, two-part, and ordinal models with common or threshold-specific slopes.
+- Repeated fitting and numerical control. Prepared GLM and ordinal designs reuse predictor setup across responses. GLMs offer six decompositions and an automatic choice, with diagnostics for convergence and numerical conditioning. The timing sections pair performance comparisons with agreement checks.
 
 The [package overview](vignettes/fastglm-overview.Rmd) maps these methods to their supported models. Dedicated guides cover [bias reduction](vignettes/firth-fastglm.Rmd), [counts](vignettes/count-firth-fastglm.Rmd), [ordered outcomes](vignettes/ordinal-fastglm.Rmd), [two-part outcomes](vignettes/semicontinuous-fastglm.Rmd), and [large-data computation](vignettes/large-data-fastglm.Rmd). See [NEWS](NEWS.md) for the version history.
 
@@ -234,9 +234,9 @@ Gaussian-identity fits can reuse their matrix decomposition because it depends o
 
 Different storage formats suit different datasets:
 
-- **`Matrix::dgCMatrix`** stores only nonzero predictor entries. It can be passed directly to `fastglm()`, for example when indicator variables produce a mostly zero design.
-- **`bigmemory::big.matrix`** provides a mapped view of predictors, which may be backed by a file. Fitting reads row blocks without making a complete ordinary R-matrix copy.
-- **`fastglm_streaming()`** repeatedly requests manageable blocks from a supplied function, called a callback. This supports data that need to be read from an external source or constructed as fitting proceeds.
+- `Matrix::dgCMatrix` stores only nonzero predictor entries. It can be passed directly to `fastglm()`, for example when indicator variables produce a mostly zero design.
+- `bigmemory::big.matrix` provides a mapped view of predictors, which may be backed by a file. Fitting reads row blocks without making a complete ordinary R-matrix copy.
+- `fastglm_streaming()` repeatedly requests manageable blocks from a supplied function, called a callback. This supports data that need to be read from an external source or constructed as fitting proceeds.
 
 The following example divides one dataset into four blocks and compares the fitted coefficients with an in-memory fit:
 
@@ -340,7 +340,7 @@ scaling_benchmark <- read.csv(file.path(benchmark_directory, "scaling-summary.cs
 benchmark_metadata <- readRDS(file.path(benchmark_directory, "metadata.rds"))
 ```
 
-These measurements were recorded on **`r substr(benchmark_metadata$timestamp_utc, 1, 10)` (UTC)** with *fastglm* **`r benchmark_metadata$fastglm_version`** and `r benchmark_metadata$R` on `r benchmark_metadata$system[["sysname"]]` (`r benchmark_metadata$system[["machine"]]`). The saved environment and individual timings accompany the benchmark script.
+These measurements were recorded on `r substr(benchmark_metadata$timestamp_utc, 1, 10)` (UTC) with *fastglm* `r benchmark_metadata$fastglm_version` and `r benchmark_metadata$R` on `r benchmark_metadata$system[["sysname"]]` (`r benchmark_metadata$system[["machine"]]`). The saved environment and individual timings accompany the benchmark script.
 
 ![Current logistic-regression fitting times for glm.fit and four fastglm solvers. Lower times indicate faster fitting; the points mark medians.](man/figures/README-glm_bench-1.png)
 

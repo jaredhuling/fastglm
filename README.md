@@ -7,8 +7,8 @@ version](https://www.r-pkg.org/badges/version/fastglm)](https://cran.r-project.o
 
 # fastglm
 
-The *fastglm* package provides **fast regression modeling, mean bias
-reduction, and inference** for continuous, binary, count, and ordered
+The *fastglm* package provides fast regression modeling, mean bias
+reduction, and inference for continuous, binary, count, and ordered
 outcomes. C++ fitting routines and numerical checks support familiar R
 workflows, including `summary()`, `coef()`, `vcov()`, `predict()`,
 `residuals()`, and `logLik()`.
@@ -31,22 +31,22 @@ hurdle, and zero-inflated count fitting currently uses ML.
 
 ## Inference and computation
 
-- **Uncertainty and testing.** Model-based intervals, joint Wald tests,
+- Uncertainty and testing. Model-based intervals, joint Wald tests,
   robust and clustered covariance, and refitting bootstraps are
   available for supported classes. Profile inference covers dense
   binomial-logit Firth fits, ordinal ML fits with common or
   threshold-specific slopes, and negative-binomial size. Ordinal score
   tests address coefficient hypotheses or the common-slope assumption.
-- **Prediction and interpretation.** Response means or category
+- Prediction and interpretation. Response means or category
   probabilities, prediction standard errors, averages and contrasts,
   residuals, and ordinal calibration summaries connect fitted
   coefficients to outcomes. Shared printed tables and optional broom
   methods support reporting.
-- **Large datasets.** Dense, sparse, mapped, and repeatable-source
+- Large datasets. Dense, sparse, mapped, and repeatable-source
   inputs serve different model classes. Streaming supports GLMs,
   negative-binomial, hurdle, two-part, and ordinal models with common or
   threshold-specific slopes.
-- **Repeated fitting and numerical control.** Prepared GLM and ordinal
+- Repeated fitting and numerical control. Prepared GLM and ordinal
   designs reuse predictor setup across responses. GLMs offer six
   decompositions and an automatic choice, with diagnostics for
   convergence and numerical conditioning. The timing sections pair
@@ -425,13 +425,13 @@ a refit.
 
 Different storage formats suit different datasets:
 
-- **`Matrix::dgCMatrix`** stores only nonzero predictor entries. It can
+- `Matrix::dgCMatrix` stores only nonzero predictor entries. It can
   be passed directly to `fastglm()`, for example when indicator
   variables produce a mostly zero design.
-- **`bigmemory::big.matrix`** provides a mapped view of predictors,
+- `bigmemory::big.matrix` provides a mapped view of predictors,
   which may be backed by a file. Fitting reads row blocks without making
   a complete ordinary R-matrix copy.
-- **`fastglm_streaming()`** repeatedly requests manageable blocks from a
+- `fastglm_streaming()` repeatedly requests manageable blocks from a
   supplied function, called a callback. This supports data that need to
   be read from an external source or constructed as fitting proceeds.
 
@@ -574,8 +574,8 @@ microbenchmark::microbenchmark(
 )
 ```
 
-These measurements were recorded on **2026-11-03 (UTC)** with *fastglm*
-**0.1.3** and R version 4.5.1 (2025-06-13) on Darwin (arm64). The saved
+These measurements were recorded on 2026-11-03 (UTC) with *fastglm*
+0.1.3 and R version 4.5.1 (2025-06-13) on Darwin (arm64). The saved
 environment and individual timings accompany the benchmark script.
 
 <figure>
