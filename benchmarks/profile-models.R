@@ -67,12 +67,16 @@ tasks <- list(
     `Ordinal predict` = function() predict(ordinal_fit, newdata = X),
     `Ordinal robust covariance` = function() fastglm_vcov(ordinal_fit, type = "HC0"),
     `Ordinal profile interval` = function() confint(ordinal_fit, parm = "x1", method = "profile"),
-    `Ordinal score test` = function() fastglm_score_test(ordinal_fit, parm = "x1"),
+    `Ordinal score test` = function() fastglm_score_test(ordinal_fit, terms = "x1"),
     `Ordinal common-slope test` = function() fastglm_po_test(ordinal_fit),
-    `Ordinal marginal effects` = function() fastglm_marginal_effects(ordinal_fit),
+    `Ordinal marginal effects` = function() fastglm_marginal_effects(ordinal_fit, variable = "x1"),
     `Ordinal assessment` = function() fastglm_ordinal_assess(ordinal_fit),
     `Ordinal bootstrap 5,000 rows, 20 refits` = function() fastglm_bootstrap(small_fit, R = 20L),
     `Partial profile interval` = function() confint(partial_fit, parm = "x1", method = "profile"))
+wrappers <- Filter(function(name) {
+    value <- get(name, envir = asNamespace("fastglm"))
+    is.function(value) && any(grepl(".Call(", deparse(body(value)), fixed = TRUE)) && length(deparse(body(value))) <= 4L
+}, ls(asNamespace("fastglm"), all.names = TRUE))
 native <- c(".Call", ".External", ".External2", ".Fortran", ".C", "La_solve", "La_chol", "La_chol2inv", "La_qr", "qr.default",
             "%*%", "crossprod", "tcrossprod", "backsolve")
 profile_task <- function(name, task) {
@@ -97,7 +101,8 @@ profile_task <- function(name, task) {
     unlink(trace)
     names_self <- gsub('"', "", rownames(self))
     total <- sum(self$self.time)
-    compiled <- names_self %in% c(".Call", ".External", ".External2", ".Fortran", ".C")
+    # The profiler can credit compiled time to the wrapper function's name.
+    compiled <- names_self %in% c(".Call", ".External", ".External2", ".Fortran", ".C", wrappers)
     algebra <- names_self %in% setdiff(native, c(".Call", ".External", ".External2", ".Fortran", ".C"))
     other <- self[!compiled & !algebra, ]
     data.frame(task = name, status = "completed", median_seconds = median(elapsed),
