@@ -52,9 +52,14 @@
             control$condition.tol,.ordinal_link_code(.ordinal_link(object)))
         value$valid <- TRUE;value$message <- "";value
     },error=function(e) list(valid=FALSE,message=conditionMessage(e)))
+    constrained <- function(gamma,basis,adjusted) ordinal_partial_constrained_native(common,varying,
+        category$codes,category$counts,category$weights,offset,q+1L,gamma,basis,positive,adjusted,
+        object$block.size,control$condition.tol,.ordinal_link_code(.ordinal_link(object)),
+        as.integer(control$maxit),control$score.tol,control$step.tol,control$max.step,
+        as.integer(control$max.halves))
     list(coefficients=b,q=q,p=d-q,pc=pc,pn=pn,d=d,T=T,Ti=Ti,x=common,z=varying,
         domain.z=varying[positive,,drop=FALSE],positive=positive,partial=TRUE,
-        evaluate=evaluate,control=control,frequency=object$frequency,observations=object$nobs.rows)
+        evaluate=evaluate,constrained=constrained,control=control,frequency=object$frequency,observations=object$nobs.rows)
 }
 
 .ordinal_partial_profile_gaps <- function(setup,b) {
@@ -65,14 +70,6 @@
     for(j in seq_len(setup$q-1L)) gaps[,j] <- streaming_qr_eta(design,
         c(b[j+1L],-b[j],-slopes[,j+1L],slopes[,j]),numeric(nrow(design)))
     gaps
-}
-
-.ordinal_partial_profile_predictor_step <- function(setup,delta) {
-    slopes <- matrix(delta[setup$q+setup$pc+seq_len(setup$q*setup$pn)],setup$pn,setup$q)
-    design <- cbind(1,setup$x[setup$positive,,drop=FALSE],setup$domain.z)
-    max(vapply(seq_len(setup$q),function(j)
-        max(abs(streaming_qr_eta(design,c(delta[j],-delta[setup$q+seq_len(setup$pc)],-slopes[,j]),
-            numeric(nrow(design))))),numeric(1)))
 }
 
 .ordinal_partial_constraint_start <- function(setup,null,start,constraint) {

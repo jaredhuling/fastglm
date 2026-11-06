@@ -69,7 +69,8 @@ intercept because the thresholds already specify location.}
 
 \item{y}{an ordered factor, a factor or character response with an explicit
 category order in \code{levels}, integer category codes with \code{levels}, or a
-matrix whose columns contain category counts in increasing outcome order.}
+matrix whose columns contain category counts in increasing outcome order.
+Named columns must match \code{levels} in the same order.}
 
 \item{weights}{nonnegative integer frequency weights for individual
 responses. For count matrices, counts times weights must be integers.

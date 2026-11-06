@@ -106,3 +106,16 @@ test_that("public boundary fits preserve the declared scale and qualify uncertai
     expect_equal(unname(coef(g)),unname(coef(f)),tolerance=1e-8)
     expect_equal(unname(predict(g)),matrix(expected,7,6,byrow=TRUE),tolerance=1e-9)
 })
+
+test_that("dense count fits require named columns to match the declared levels", {
+    set.seed(123)
+    x <- cbind(a=rnorm(120))
+    y <- ordered(sample(c("l","m","h"),120,TRUE),levels=c("l","m","h"))
+    counts <- t(vapply(seq_along(y),function(i)as.numeric(levels(y)==y[i]),numeric(3)))
+    colnames(counts) <- levels(y)
+    ordered.fit <- fastglm_ordinal(x,counts,levels=levels(y))
+    expect_equal(coef(ordered.fit),coef(fastglm_ordinal(x,y)),tolerance=1e-7)
+    expect_error(fastglm_ordinal(x,counts[,c("h","m","l")],levels=levels(y)),"must match 'levels' in order")
+    expect_error(fastglm_ordinal(x,`colnames<-`(counts,c("p","q","r")),levels=levels(y)),"must match 'levels' in order")
+    expect_equal(coef(fastglm_ordinal(x,unname(counts),levels=levels(y))),coef(ordered.fit))
+})

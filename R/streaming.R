@@ -129,36 +129,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     state <- new.env(parent=emptyenv()); state$passes <- 0L; state$reads <- 0L
     state$columns <- NULL; state$p <- NULL; state$rows <- integer(n_chunks)
     state$initialization.warnings <- character()
-    initialize <- function(z) {
-        x <- z$X; y <- z$y; nobs <- n <- NROW(y)
-        if(inherits(x,"sparseMatrix")) x <- as.matrix(x)
-        weights <- if(is.null(z$weights)) rep(1,nobs) else z$weights
-        offset <- if(is.null(z$offset)) rep(0,nobs) else z$offset
-        if (!is.matrix(x) || !is.numeric(x)) stop("each chunk$X must be a numeric matrix",call.=FALSE)
-        if(is.integer(x)) storage.mode(x)<-"double"
-        if (nobs == 0L) stop("empty chunks are not supported; omit them from the source",call.=FALSE)
-        if (nrow(x) != nobs || any(!is.finite(x)) || anyNA(y) ||
-            any(!is.finite(weights)) || length(weights)!=nobs || any(weights<0) ||
-            length(offset)!=nobs || any(!is.finite(offset))) stop("invalid chunk rows, weights, offsets, or values",call.=FALSE)
-        mustart <- etastart <- NULL
-        withCallingHandlers(eval(family$initialize),warning=function(w) {
-            message <- conditionMessage(w)
-            if(message %in% state$initialization.warnings) invokeRestart("muffleWarning")
-            state$initialization.warnings <- c(state$initialization.warnings,message)
-        })
-        list(X=x,y=as.numeric(y),weights=as.numeric(weights),offset=as.numeric(offset),
-             trials=n,mustart=mustart)
-    }
-    fetch <- function(k) {
-        if(k == 1L) state$passes <- state$passes+1L
-        state$reads <- state$reads+1L
-        z <- initialize(source$callback(k))
-        if(is.null(state$p)) { state$p <- ncol(z$X); state$columns <- colnames(z$X) }
-        if(ncol(z$X)!=state$p || !identical(colnames(z$X),state$columns)) stop("chunk columns changed from the source schema",call.=FALSE)
-        if(state$rows[k] != 0L && state$rows[k] != nrow(z$X)) stop("chunk size changed between passes",call.=FALSE)
-        state$rows[k] <- nrow(z$X)
-        z
-    }
+    fetch <- .stream_reader(source,state,family,start)
     # One validation pass also constructs the usual family-initialized WLS start.
     a <- rhs <- low <- high <- qr.state <- NULL; nobs <- sumw <- sumwy <- 0; has.offset <- FALSE
     gamma.null.total <- -Inf
@@ -252,4 +223,42 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     if(!res$converged) warning("streaming GLM did not converge",call.=FALSE)
     class(res) <- c("fastglm_stream",if(firth) "fastglm_firth","fastglm")
     res
+}
+
+# The fit keeps this reader. A separate frame keeps fitting variables, including
+# the last source block, out of the fitted object. Family initialization
+# expressions can read `family` and `start` from this enclosing frame.
+.stream_reader <- function(source,state,family,start) {
+    force(source);force(state);force(family);force(start)
+    initialize <- function(z) {
+        x <- z$X; y <- z$y; nobs <- n <- NROW(y)
+        if(inherits(x,"sparseMatrix")) x <- as.matrix(x)
+        weights <- if(is.null(z$weights)) rep(1,nobs) else z$weights
+        offset <- if(is.null(z$offset)) rep(0,nobs) else z$offset
+        if (!is.matrix(x) || !is.numeric(x)) stop("each chunk$X must be a numeric matrix",call.=FALSE)
+        if(is.integer(x)) storage.mode(x)<-"double"
+        if (nobs == 0L) stop("empty chunks are not supported; omit them from the source",call.=FALSE)
+        if (nrow(x) != nobs || any(!is.finite(x)) || anyNA(y) ||
+            any(!is.finite(weights)) || length(weights)!=nobs || any(weights<0) ||
+            length(offset)!=nobs || any(!is.finite(offset))) stop("invalid chunk rows, weights, offsets, or values",call.=FALSE)
+        mustart <- etastart <- NULL
+        withCallingHandlers(eval(family$initialize),warning=function(w) {
+            message <- conditionMessage(w)
+            if(message %in% state$initialization.warnings) invokeRestart("muffleWarning")
+            state$initialization.warnings <- c(state$initialization.warnings,message)
+        })
+        list(X=x,y=as.numeric(y),weights=as.numeric(weights),offset=as.numeric(offset),
+             trials=n,mustart=mustart)
+    }
+    fetch <- function(k) {
+        if(k == 1L) state$passes <- state$passes+1L
+        state$reads <- state$reads+1L
+        z <- initialize(source$callback(k))
+        if(is.null(state$p)) { state$p <- ncol(z$X); state$columns <- colnames(z$X) }
+        if(ncol(z$X)!=state$p || !identical(colnames(z$X),state$columns)) stop("chunk columns changed from the source schema",call.=FALSE)
+        if(state$rows[k] != 0L && state$rows[k] != nrow(z$X)) stop("chunk size changed between passes",call.=FALSE)
+        state$rows[k] <- nrow(z$X)
+        z
+    }
+    fetch
 }

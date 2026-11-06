@@ -81,6 +81,18 @@ ordinal_partial_native_fit <- function(x, z, y, counts, weights, offset, categor
     .Call(`_fastglm_ordinal_partial_native_fit`, x, z, y, counts, weights, offset, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link)
 }
 
+ordinal_constrained_native <- function(x, y, counts, weights, offset, categories, start, basis, positive, adjusted, block_size, condition_tol, link, maxit, score_tol, step_tol, max_step, max_halves) {
+    .Call(`_fastglm_ordinal_constrained_native`, x, y, counts, weights, offset, categories, start, basis, positive, adjusted, block_size, condition_tol, link, maxit, score_tol, step_tol, max_step, max_halves)
+}
+
+ordinal_partial_constrained_native <- function(x, z, y, counts, weights, offset, categories, start, basis, positive, adjusted, block_size, condition_tol, link, maxit, score_tol, step_tol, max_step, max_halves) {
+    .Call(`_fastglm_ordinal_partial_constrained_native`, x, z, y, counts, weights, offset, categories, start, basis, positive, adjusted, block_size, condition_tol, link, maxit, score_tol, step_tol, max_step, max_halves)
+}
+
+ordinal_partial_domain_values <- function(x, z, thresholds, coefficients) {
+    .Call(`_fastglm_ordinal_partial_domain_values`, x, z, thresholds, coefficients)
+}
+
 streaming_qr_eta <- function(x, beta, offset) {
     .Call(`_fastglm_streaming_qr_eta`, x, beta, offset)
 }
