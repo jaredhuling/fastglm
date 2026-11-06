@@ -35,9 +35,10 @@ maxit <- 500L
 loglik_tolerance <- 1e-4
 slope_tolerance <- 1e-3
 
+# Hash the label: a sum of character codes gives many replicates the same seed.
 make_seed <- function(...) {
-    text <- paste(..., sep = "|")
-    as.integer((sum(utf8ToInt(text) * seq_len(nchar(text))) %% 1000000L) + 500000L)
+    hash <- tools::md5sum(bytes = charToRaw(paste(..., sep = "|")))
+    strtoi(substr(hash, 1L, 7L), 16L)
 }
 
 # DGP1 has common slopes. DGP2 draws from a partial proportional-odds model whose

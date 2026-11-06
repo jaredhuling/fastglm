@@ -72,7 +72,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
     link.code <- .ordinal_link_code(link);link <- c("logit","probit","cloglog")[link.code+1L]
     .check_iterations(tol,maxit);.check_iterations(tol,block.size)
     defaults <- list(score.tol=tol,step.tol=tol,max.step=4,max.halves=35L,
-        condition.tol=1e-14,standardize=TRUE,trace=FALSE)
+        condition.tol=1e-14,standardize=TRUE,trace=FALSE,observed=TRUE)
     if(!is.list(control) || (length(control) && (is.null(names(control)) || anyNA(names(control)) ||
        any(!nzchar(names(control))) || anyDuplicated(names(control)))) || length(setdiff(names(control),names(defaults))))
         stop("unknown or duplicated ordinal optimizer control",call.=FALSE)
@@ -83,7 +83,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
            (nm=="max.halves" && (z!=floor(z) || z>.Machine$integer.max)))
             stop("invalid ordinal optimizer control: ",nm,call.=FALSE)
     }
-    for(nm in c("standardize","trace"))
+    for(nm in c("standardize","trace","observed"))
         if(!is.logical(ctl[[nm]]) || length(ctl[[nm]])!=1L || is.na(ctl[[nm]]))
             stop("invalid ordinal optimizer flag: ",nm,call.=FALSE)
     state <- new.env(parent=emptyenv())
@@ -185,7 +185,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
     } else {
         fit <- ordinal_stream_native_fit(fetch,source$n_chunks,p,q+1L,c(alpha,numeric(p)),firth,
             ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),ctl$max.step,
-            as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
+            as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code,ctl$observed)
         object <- .ordinal_stream_result(fit,center,scale,response,frequency,positive.rows,
             firth,link,ctl,tol,maxit,block.size,state$columns)
     }
@@ -319,7 +319,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         score=effective$score,ordinary.score=effective$ordinary.score,adjustment=effective$adjustment,
         scaled.score=fit$scaled.score,predictor.step=fit$predictor.step,information.rcond=fit$information.rcond,
         minimum.log.probability=fit$minimum.log.probability,converged=fit$converged,convergence.reason=fit$convergence.reason,
-        iterations=fit$iterations,evaluations=fit$evaluations,fallbacks=fit$fallbacks,
+        iterations=fit$iterations,observed.iterations=fit$observed.iterations,evaluations=fit$evaluations,fallbacks=fit$fallbacks,
         last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,loglik=fit$loglik,
         rank=d,df.residual=frequency-d,nobs=frequency,nobs.rows=positive.rows,frequency=frequency,
         category=response,response=response,preparation.reused=FALSE,firth=firth,link=link,

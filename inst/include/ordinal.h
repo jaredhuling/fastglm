@@ -112,8 +112,7 @@ struct OrdinalRow {
             for(int s=0;s<q;++s) {
                 eta[s]=alpha[s]-linear;
                 if(link==1) {
-                    logcdf[s]=R::pnorm(eta[s],0,1,true,true);
-                    logsurvival[s]=R::pnorm(eta[s],0,1,false,true);
+                    Rf_pnorm_both(eta[s],&logcdf[s],&logsurvival[s],2,1);
                     logg[s]=R::dnorm(eta[s],0,1,true);
                     g[s]=std::exp(logg[s]);gprime[s]=-eta[s]*g[s];
                 } else {
@@ -330,24 +329,290 @@ inline Rcpp::List ordinal_state_list(const OrdinalState& state) {
         Rcpp::_["information.rcond"]=state.rcond,Rcpp::_["minimum.log.probability"]=state.min_logp);
 }
 
+// Observed-information Newton iterations for maximum likelihood. A row touches
+// only the thresholds bounding its observed categories, so a pass costs far less
+// than the expected information, which needs every threshold of every row. The
+// iterate is a starting point only: ordinal_fit() still certifies convergence
+// with the expected information and continues from here if needed.
+struct ObservedTerms {
+    double logp=0,left=0,right=0,location=0,upper=0,lower=0,cross=0,upper_x=0,lower_x=0,slope=0;
+};
+
+struct ObservedThresholds {
+    VectorXd alpha,inverse_gap,loggap,one_minus;
+    int q,link;
+    ObservedThresholds(const VectorXd& a,int link_code) : alpha(a),inverse_gap(VectorXd::Zero(a.size())),
+        loggap(VectorXd::Zero(a.size())),one_minus(VectorXd::Zero(a.size())),q(a.size()),link(link_code) {
+        for(int s=1;s<q;++s) {
+            const double gap=alpha[s]-alpha[s-1];
+            loggap[s]=ordinal_log1mexp(-gap);inverse_gap[s]=1/std::expm1(gap);one_minus[s]=-std::expm1(-gap);
+        }
+    }
+    // Logit terms simplify exactly. With a = f_u/P and b = f_l/P, the location
+    // curvature reduces to (a+b)P, so no term cancels in the tails.
+    ObservedTerms logit(int k,double linear) const {
+        ObservedTerms t;
+        double Fu=1,Su=0,logFu=0,Fl=0,Sl=1,logSl=0;
+        if(k<q) {
+            const double e=alpha[k]-linear,x=std::exp(-std::abs(e)),den=1+x,l=std::log1p(x);
+            Fu=e>=0 ? 1/den : x/den;Su=e>=0 ? x/den : 1/den;logFu=e>=0 ? -l : e-l;
+        }
+        if(k>0) {
+            const double e=alpha[k-1]-linear,x=std::exp(-std::abs(e)),den=1+x,l=std::log1p(x);
+            Fl=e>=0 ? 1/den : x/den;Sl=e>=0 ? x/den : 1/den;logSl=e>=0 ? -e-l : -l;
+        }
+        const bool interior=k>0 && k<q;
+        const double G=interior ? inverse_gap[k] : 0;
+        const double P=interior ? Fu*Sl*one_minus[k] : (k==0 ? Fu : Sl);
+        t.logp=logFu+logSl+(interior ? loggap[k] : 0);
+        t.left=k<q ? Su+G : 0;t.right=k>0 ? Fl+G : 0;t.location=Su-Fl;
+        t.upper=t.left*(G+Fu);t.lower=t.right*(G+Sl);t.cross=-t.left*t.right;
+        t.upper_x=-t.left*P;t.lower_x=-t.right*P;t.slope=(t.left+t.right)*P;
+        return t;
+    }
+    ObservedTerms general(int k,double linear) const {
+        ObservedTerms t;
+        double eu=0,el=0,logFu=0,logSu=0,logFl=0,logSl=0,logGu=0,logGl=0,hu=0,hl=0;
+        const auto read=[&](int s,double& e,double& logF,double& logS,double& logG,double& h) {
+            e=alpha[s]-linear;
+            if(link==1) {
+                Rf_pnorm_both(e,&logF,&logS,2,1);
+                logG=R::dnorm(e,0,1,true);h=-e;
+            } else {
+                const double x=std::exp(e);
+                logF=e<-36 ? e : ordinal_log1mexp(-x);logS=-x;logG=e-x;h=1-x;
+            }
+        };
+        if(k<q) read(k,eu,logFu,logSu,logGu,hu);
+        if(k>0) read(k-1,el,logFl,logSl,logGl,hl);
+        if(k==0) {
+            t.logp=logFu;t.left=std::exp(logGu-t.logp);t.location=t.left;
+        } else if(k==q) {
+            t.logp=logSl;t.right=link==2 ? std::exp(el) : std::exp(logGl-t.logp);t.location=-t.right;
+        } else {
+            const double gap=alpha[k]-alpha[k-1];
+            double logden=0;
+            if(link==2) {
+                const double ld=eu+std::log(one_minus[k]);
+                logden=ld<-36 ? ld : std::log(-std::expm1(-std::exp(ld)));
+            }
+            t.logp=eu<=0 ? logFu+ordinal_log1mexp(logFl-logFu) :
+                logSl+(link==2 ? logden : ordinal_log1mexp(logSu-logSl));
+            if(link==2) {
+                const double difference=std::exp(eu)*one_minus[k];
+                t.left=std::exp(eu-difference-logden);t.right=std::exp(el-logden);
+            } else {
+                t.left=std::exp(logGu-t.logp);t.right=std::exp(logGl-t.logp);
+            }
+            const double delta=link==1 ? -.5*gap*(eu+el) : gap-std::exp(eu)*one_minus[k];
+            t.location=delta>=0 ? t.left*(-std::expm1(-delta)) : -t.right*(-std::expm1(delta));
+        }
+        t.upper=t.left*(t.left-hu);t.lower=t.right*(t.right+hl);t.cross=-t.left*t.right;
+        t.upper_x=t.left*(hu-t.location);t.lower_x=t.right*(t.location-hl);
+        t.slope=t.location*t.location-t.left*hu+t.right*hl;
+        return t;
+    }
+    ObservedTerms terms(int k,double linear) const { return link==0 ? logit(k,linear) : general(k,linear); }
+};
+
+struct ObservedState {
+    MatrixXd information;
+    VectorXd score;
+    double loglik=0,change=0,row_norm=0;
+    explicit ObservedState(int d=0) : information(MatrixXd::Zero(d,d)),score(VectorXd::Zero(d)) {}
+};
+
+// Adds one data block. `direction` is optional and records the largest change in
+// a cumulative predictor, computed in this pass so a source needs no second read.
+inline void observed_add(const OrdinalData& data,const ObservedThresholds& thresholds,const VectorXd& beta,
+    const VectorXd* direction,ObservedState& out) {
+    const int p=data.p,q=data.q;
+    VectorXd eta,change,slope_score,slope_weight,upper_x,lower_x;
+    Eigen::VectorXi category;
+    for(int first=0;first<data.n;first+=data.block) {
+        Rcpp::checkUserInterrupt();
+        const int length=std::min(data.block,data.n-first);
+        const auto xx=data.x.middleRows(first,length);
+        eta.resize(length);
+        if(p) eta.noalias()=xx*beta; else eta.setZero();
+        if(direction && p) {
+            const double low=direction->head(q).minCoeff(),high=direction->head(q).maxCoeff();
+            change.noalias()=xx*direction->tail(p);
+            for(int r=0;r<length;++r) if(data.totals[first+r]>0)
+                out.change=std::max(out.change,std::max(std::abs(low-change[r]),std::abs(high-change[r])));
+        } else if(direction) out.change=std::max(out.change,direction->head(q).cwiseAbs().maxCoeff());
+        slope_score.setZero(length);slope_weight.setZero(length);
+        if(data.grouped) {
+            MatrixXd rows=MatrixXd::Zero(length,q);
+            for(int r=0;r<length;++r) {
+                const int i=first+r;
+                if(data.totals[i]==0) continue;
+                const double linear=eta[r]+data.offset[i];
+                for(int k=0;k<data.K;++k) {
+                    const double y=data.weights[i]*data.counts(i,k);
+                    if(y==0) continue;
+                    const ObservedTerms t=thresholds.terms(k,linear);
+                    out.loglik+=y*t.logp;slope_score[r]-=y*t.location;slope_weight[r]+=y*t.slope;
+                    if(k<q) {
+                        out.score[k]+=y*t.left;out.information(k,k)+=y*t.upper;rows(r,k)+=y*t.upper_x;
+                    }
+                    if(k>0) {
+                        out.score[k-1]-=y*t.right;out.information(k-1,k-1)+=y*t.lower;rows(r,k-1)+=y*t.lower_x;
+                        if(k<q) out.information(k,k-1)+=y*t.cross;
+                    }
+                }
+            }
+            if(p) out.information.topRightCorner(q,p).noalias()+=rows.transpose()*xx;
+        } else {
+            upper_x.setZero(length);lower_x.setZero(length);category.resize(length);
+            for(int r=0;r<length;++r) {
+                const int i=first+r;const double y=data.totals[i];
+                category[r]=-1;
+                if(y==0) continue;
+                const int k=data.codes[i]-1;
+                category[r]=k;
+                const ObservedTerms t=thresholds.terms(k,eta[r]+data.offset[i]);
+                out.loglik+=y*t.logp;slope_score[r]=-y*t.location;slope_weight[r]=y*t.slope;
+                upper_x[r]=y*t.upper_x;lower_x[r]=y*t.lower_x;
+                if(k<q) {out.score[k]+=y*t.left;out.information(k,k)+=y*t.upper;}
+                if(k>0) {
+                    out.score[k-1]-=y*t.right;out.information(k-1,k-1)+=y*t.lower;
+                    if(k<q) out.information(k,k-1)+=y*t.cross;
+                }
+            }
+            for(int j=0;j<p;++j) {
+                double* column=out.information.col(q+j).data();
+                for(int r=0;r<length;++r) {
+                    const int k=category[r];
+                    if(k<0) continue;
+                    const double value=xx(r,j);
+                    if(k<q) column[k]+=upper_x[r]*value;
+                    if(k>0) column[k-1]+=lower_x[r]*value;
+                }
+            }
+        }
+        if(p) {
+            out.score.tail(p).noalias()+=xx.transpose()*slope_score;
+            if(slope_weight.minCoeff()<0) throw OrdinalEvaluationError("negative observed curvature");
+            const MatrixXd root=slope_weight.cwiseSqrt().asDiagonal()*xx;
+            out.information.bottomRightCorner(p,p).selfadjointView<Eigen::Lower>().rankUpdate(root.transpose());
+            for(int r=0;r<length;++r) if(data.totals[first+r]>0)
+                out.row_norm=std::max(out.row_norm,xx.row(r).norm());
+        }
+    }
+}
+
+template<class Data>
+ObservedState observed_evaluate(const Data& data,const VectorXd& parameters,const VectorXd* direction) {
+    const int p=data.p,q=data.q;
+    if(!parameters.allFinite()) throw OrdinalEvaluationError("invalid ordinal parameters");
+    for(int s=1;s<q;++s) if(!(parameters[s]>parameters[s-1]))
+        throw OrdinalEvaluationError("ordinal thresholds are not strictly ordered");
+    const ObservedThresholds thresholds(parameters.head(q),data.link);
+    const VectorXd beta=parameters.tail(p);
+    ObservedState out(data.d);
+    data.visit([&](const OrdinalData& block) { observed_add(block,thresholds,beta,direction,out); });
+    if(!std::isfinite(out.loglik) || !out.score.allFinite() || !out.information.allFinite())
+        throw OrdinalEvaluationError("non-finite observed ordinal terms");
+    for(int s=1;s<q;++s) out.information(s-1,s)=out.information(s,s-1);
+    if(p) {
+        out.information.bottomRightCorner(p,p).template triangularView<Eigen::StrictlyUpper>()=
+            out.information.bottomRightCorner(p,p).transpose();
+        out.information.bottomLeftCorner(p,q)=out.information.topRightCorner(q,p).transpose();
+    }
+    return out;
+}
+
+// Returns the iterations used. Any failure stops here, because the expected
+// information loop continues from the last accepted parameters.
+template<class Data>
+int observed_newton(const Data& data,VectorXd& parameters,double score_tol,double step_tol,int maxit,
+    double max_step,int max_halves,bool trace,int& evaluations) {
+    const int q=data.q,p=data.p,d=data.d;
+    int iterations=0;
+    try {
+        ObservedState current=observed_evaluate(data,parameters,nullptr);
+        ++evaluations;
+        double row_norm=current.row_norm;
+        for(;iterations<maxit;++iterations) {
+            Rcpp::checkUserInterrupt();
+            const VectorXd diagonal=current.information.diagonal();
+            if((diagonal.array()<=0).any()) return iterations;
+            const VectorXd inverse_scale=diagonal.cwiseSqrt().cwiseInverse();
+            const MatrixXd correlation=inverse_scale.asDiagonal()*current.information*inverse_scale.asDiagonal();
+            const Eigen::LLT<MatrixXd> factor(correlation);
+            if(factor.info()!=Eigen::Success) return iterations;
+            const VectorXd direction=inverse_scale.asDiagonal()*factor.solve(inverse_scale.cwiseProduct(current.score));
+            if(!direction.allFinite()) return iterations;
+            const double scaled=current.score.cwiseProduct(inverse_scale).cwiseAbs().maxCoeff();
+            const double bound=direction.head(q).cwiseAbs().maxCoeff()+row_norm*(p ? direction.tail(p).norm() : 0);
+            if(trace) Rcpp::Rcout<<"observed iteration "<<iterations<<": score "<<scaled<<", step bound "<<bound<<"\n";
+            double fraction=1;
+            for(int s=1;s<q;++s) {
+                const double change=direction[s]-direction[s-1];
+                if(change<0) fraction=std::min(fraction,.9*(parameters[s]-parameters[s-1])/(-change));
+            }
+            if(scaled<score_tol && bound<step_tol) {
+                if(fraction==1) parameters+=direction;
+                return iterations+1;
+            }
+            const double ascent=current.score.dot(direction);
+            const double rounding=64*std::numeric_limits<double>::epsilon()*(1+std::abs(current.loglik));
+            bool accepted=false;
+            VectorXd candidate(d);
+            ObservedState trial;
+            for(int h=0;h<=max_halves && !accepted;++h) {
+                candidate=parameters+fraction*direction;
+                const VectorXd scaled_direction=fraction*direction;
+                const bool measure=fraction*bound>max_step;
+                try {
+                    trial=observed_evaluate(data,candidate,measure ? &scaled_direction : nullptr);
+                    ++evaluations;
+                    if(measure && trial.change>max_step) { fraction*=max_step/trial.change;continue; }
+                    if(trial.loglik>=current.loglik+1e-4*fraction*ascent-rounding) accepted=true;
+                    else fraction/=2;
+                } catch(const OrdinalEvaluationError&) { ++evaluations;fraction/=2; }
+            }
+            if(!accepted) return iterations;
+            parameters=candidate;current=std::move(trial);
+        }
+    } catch(const OrdinalEvaluationError&) {}
+    return iterations;
+}
+
 template<class Data>
 Rcpp::List ordinal_fit(const Data& data,const VectorXd& start,bool firth,
     double score_tol,double step_tol,int maxit,double max_step,int max_halves,
-    double condition_tol,bool trace) {
+    double condition_tol,bool trace,bool observed=true) {
     if(!(score_tol>0) || !(step_tol>0) || maxit<1 || !(max_step>0) || max_halves<1 ||
        !(condition_tol>0) || !std::isfinite(score_tol+step_tol+max_step+condition_tol))
         Rcpp::stop("invalid ordinal optimizer controls");
     VectorXd parameters=start;
     int evaluations=0,fallbacks=0,iterations=0;
+    // Bias reduction needs expected-information terms in every iteration.
+    const int observed_iterations=!observed || firth || maxit<2 ? 0 :
+        observed_newton(data,parameters,score_tol,step_tol,std::min(maxit-1,30),max_step,max_halves,trace,evaluations);
+    const int expected_limit=maxit-observed_iterations;
+    // Newton can reach a point, such as near separation, where the expected
+    // information cannot be evaluated. The scoring loop then starts as if Newton
+    // had not run, so it reports the same non-convergence diagnostics.
+    const auto evaluate_state=[&](const VectorXd& b) { ++evaluations;return ordinal_evaluate(data,b,firth,condition_tol); };
+    const auto first_state=[&]() {
+        if(observed_iterations>0) {
+            try { return evaluate_state(parameters); }
+            catch(const OrdinalEvaluationError&) { parameters=start; }
+        }
+        return evaluate_state(parameters);
+    };
     auto evaluate=[&](const VectorXd& b) { ++evaluations;return ordinal_evaluate(data,b,firth,condition_tol); };
-    OrdinalState current=evaluate(parameters);
+    OrdinalState current=first_state();
     bool converged=false;std::string reason="iteration_limit",last_rejection;
     // A two-category cumulative-link model is a binomial GLM. Use its bounded
     // adjusted scoring iteration: a likelihood-score norm need not decrease
     // along this non-gradient direction, even on a path to a regular root.
     const bool binary_scoring=firth && data.q==1 && data.link!=0;
-    MatrixXd history(maxit,4);
-    for(int iter=1;iter<=maxit;++iter) {
+    MatrixXd history(expected_limit,4);
+    for(int iter=1;iter<=expected_limit;++iter) {
         Rcpp::checkUserInterrupt();iterations=iter;
         double gap=std::numeric_limits<double>::infinity();
         for(int s=1;s<data.q;++s) gap=std::min(gap,parameters[s]-parameters[s-1]);
@@ -419,7 +684,8 @@ Rcpp::List ordinal_fit(const Data& data,const VectorXd& start,bool firth,
     }
     Rcpp::List out=ordinal_state_list(current);
     out["coefficients"]=parameters;out["converged"]=converged;
-    out["convergence.reason"]=reason;out["iterations"]=iterations;
+    out["convergence.reason"]=reason;out["iterations"]=observed_iterations+iterations;
+    out["observed.iterations"]=observed_iterations;
     out["evaluations"]=evaluations;out["fallbacks"]=fallbacks;
     out["last.rejected.evaluation"]=last_rejection;
     out["history"]=MatrixXd(history.topRows(iterations));

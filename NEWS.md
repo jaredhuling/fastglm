@@ -15,6 +15,14 @@
 
 ## Performance
 
+* Common-slope ordinal maximum likelihood now begins with observed-information
+  Newton steps, whose cost does not grow with the number of categories. Expected
+  information still certifies convergence and gives the reported covariance, and
+  estimates and standard errors are unchanged within the convergence tolerance.
+  Streamed fits read their source fewer times. `control=list(observed=FALSE)`
+  restores expected scoring throughout.
+* Ordinal design setup and category totals now run in C++, and probit kernels
+  compute both tails together.
 * Constrained ordinal iterations for profile intervals and likelihood-ratio and
   score tests now run in C++, with results that match the earlier R loop.
 

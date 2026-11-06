@@ -22,7 +22,7 @@
     if(!positive.scalar(maxit,TRUE)) stop("'maxit' must be a positive integer",call.=FALSE)
     if(!positive.scalar(block.size,TRUE)) stop("'block.size' must be a positive integer",call.=FALSE)
     defaults<-list(score.tol=tol,step.tol=tol,max.step=4,max.halves=35L,
-                   condition.tol=1e-14,standardize=TRUE,trace=FALSE)
+                   condition.tol=1e-14,standardize=TRUE,trace=FALSE,observed=TRUE)
     if(!is.list(control) || (length(control) &&
        (is.null(names(control)) || anyNA(names(control)) || any(!nzchar(names(control))) ||
         anyDuplicated(names(control)))) || length(setdiff(names(control),names(defaults))))
@@ -31,7 +31,7 @@
     for(nm in c("score.tol","step.tol","max.step","max.halves","condition.tol"))
         if(!positive.scalar(ctl[[nm]],nm=="max.halves"))
             stop("invalid ordinal optimizer control: ",nm,call.=FALSE)
-    for(nm in c("standardize","trace"))
+    for(nm in c("standardize","trace","observed"))
         if(!is.logical(ctl[[nm]]) || length(ctl[[nm]])!=1L || is.na(ctl[[nm]]))
             stop("invalid ordinal optimizer flag: ",nm,call.=FALSE)
 
@@ -52,7 +52,7 @@
     alpha<-.ordinal_start_thresholds(cumulative,remaining,link)+sum(offset[good]*(totals[good]/frequency))
     fit<-ordinal_native_fit(xx,response$codes,response$counts,response$weights,
         working.offset,K,c(alpha,numeric(p)),firth,ctl$score.tol,ctl$step.tol,as.integer(maxit),
-        as.integer(block.size),ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
+        as.integer(block.size),ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code,ctl$observed)
 
     # Original effective coordinates = T times the centered/scaled coordinates.
     # Form the inverse analytically: solve(T) can reject a valid transformation
@@ -114,7 +114,7 @@
          predictor.step=fit$predictor.step,information.rcond=fit$information.rcond,
          minimum.log.probability=fit$minimum.log.probability,
          converged=fit$converged,convergence.reason=fit$convergence.reason,
-         iterations=fit$iterations,evaluations=fit$evaluations,fallbacks=fit$fallbacks,
+         iterations=fit$iterations,observed.iterations=fit$observed.iterations,evaluations=fit$evaluations,fallbacks=fit$fallbacks,
          last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,
          loglik=fit$loglik,rank=d,df.residual=frequency-d,nobs=sum(good),
          frequency=frequency,weights=response$weights,offset=offset,response=response,category=response,
@@ -144,25 +144,22 @@
     if(p) {
         # Rank is assessed after centering and scaling, so a change of units or
         # origin does not by itself imply nonidentifiability. Zero-frequency
-        # rows must be excluded before squaring finite extreme values.
-        active<-if(all(good)) x else x[good,,drop=FALSE]
-        center<-colSums(active*(totals[good]/frequency))
-        centered<-sweep(active,2,center,"-")
-        scale<-sqrt(colSums(centered^2*(totals[good]/frequency)))
-        if(any(!is.finite(scale)|scale<=0))
+        # rows are excluded before squaring finite extreme values.
+        if(is.integer(x)) storage.mode(x)<-"double"
+        native<-ordinal_design_native(x,totals,frequency,standardize)
+        if(any(!is.finite(native$scale)|native$scale<=0))
             stop("the ordinal location design contains a redundant constant column or cannot be scaled",call.=FALSE)
-        standardized<-sweep(centered,2,scale,"/")
-        if(qr(cbind(1,standardized))$rank!=p+1L)
-            stop("the ordinal location design must be full rank with a separate threshold intercept",call.=FALSE)
-        if(standardize) {
-            if(all(good)) xx<-standardized else {
-                xx<-matrix(0,n,p,dimnames=dimnames(x))
-                xx[good,]<-standardized
-            }
-        } else {
-            center<-numeric(p);scale<-rep(1,p)
-            if(any(!good)) xx[!good,]<-0
+        # The native crossproduct certifies clear full rank. Only a near-singular
+        # design needs the pivoted decomposition and its tolerance.
+        if(!native$full.rank) {
+            active<-x[good,,drop=FALSE]
+            standardized<-sweep(sweep(active,2,native$center,"-"),2,native$scale,"/")
+            if(qr(cbind(1,standardized))$rank!=p+1L)
+                stop("the ordinal location design must be full rank with a separate threshold intercept",call.=FALSE)
         }
+        xx<-native$x
+        dimnames(xx)<-dimnames(x)
+        if(standardize) {center<-native$center;scale<-native$scale}
     }
     if(is.integer(xx)) storage.mode(xx)<-"double"
     value<-list(x=xx,center=center,scale=scale,positive=good,frequency=frequency,reused=FALSE)
