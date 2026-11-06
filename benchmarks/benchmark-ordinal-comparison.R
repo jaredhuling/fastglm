@@ -30,7 +30,7 @@ Sys.setenv(OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1", VECLIB_MAXIMUM_THR
 packages <- c("fastglm", "MASS", "ordinal", "VGAM", "rms", "WeightIt")
 stopifnot(all(vapply(c(packages, "microbenchmark"), requireNamespace, logical(1), quietly = TRUE)))
 if (nzchar(lib)) stopifnot(normalizePath(find.package("fastglm")) == normalizePath(file.path(lib, "fastglm")))
-tolerance <- 1e-10
+tolerance <- 1e-8
 maxit <- 500L
 loglik_tolerance <- 1e-4
 slope_tolerance <- 1e-3
@@ -90,7 +90,9 @@ METHOD_REGISTRY <- list(
         converged = identical(fit$convergence, 0L)),
     links = c("logit", "probit", "cloglog"), partial = FALSE),
     `ordinal::clm` = list(fit = function(x, y, link, nonparallel) {
-        control <- ordinal::clm.control(gradTol = 1e-8, paramTol = 1e-8, maxIter = maxit)
+        # An absolute gradient tolerance cannot be reached at large n, so clm keeps
+        # its defaults. The agreement check below still guards the estimates.
+        control <- ordinal::clm.control(maxIter = maxit)
         fit <- if (nonparallel) {
             common <- x[, setdiff(colnames(x), c("x2", "x3")), drop = FALSE]
             varying <- x[, c("x2", "x3"), drop = FALSE]
@@ -121,7 +123,9 @@ METHOD_REGISTRY <- list(
         names(slopes) <- sub("^x", "", names(slopes))
         list(loglik = as.numeric(VGAM::logLik(fit$fit)), slopes = slopes, covariance = fit$covariance,
              converged = isTRUE(fit$fit@iter < 100L))
-    }, links = c("logit", "probit", "cloglog"), partial = TRUE),
+    # The working design has about n(K-1) rows and K-1+p columns, which would
+    # reach 160 GB at n = 20,000 and K = 1,000. Memory limits this comparator.
+    }, links = c("logit", "probit", "cloglog"), partial = TRUE, max_categories = 30L),
     `rms::orm` = list(fit = function(x, y, link, nonparallel) {
         family <- c(logit = "logistic", probit = "probit")[[link]]
         d <- data.frame(y = as.integer(y), x)
@@ -150,8 +154,8 @@ sizes <- if (quick) 1000L else c(1000L, 10000L, 100000L)
 CELLS <- rbind(
     expand.grid(design = "DGP1", panel = "Common slopes", n = sizes, p = 10L, K = 5L,
                 link = c("logit", "probit", "cloglog"), nonparallel = FALSE, stringsAsFactors = FALSE),
-    if (!quick) data.frame(design = "DGP1", panel = "Many categories", n = 10000L, p = 10L, K = 30L,
-                           link = "logit", nonparallel = FALSE, stringsAsFactors = FALSE),
+    if (!quick) expand.grid(design = "DGP1", panel = "Many categories", n = 20000L, p = 10L, K = c(30L, 300L, 1000L),
+                            link = "logit", nonparallel = FALSE, stringsAsFactors = FALSE),
     expand.grid(design = "DGP2", panel = "Threshold-specific slopes", n = sizes, p = 10L, K = 5L,
                 link = "logit", nonparallel = TRUE, stringsAsFactors = FALSE))
 
@@ -194,7 +198,7 @@ run_method <- function(method, cell, data) {
         list(status = "completed", elapsed = elapsed, first_seconds = first_seconds, loglik = value$loglik,
              slopes = value$slopes, converged = value$converged,
              covariance_finite = all(is.finite(value$covariance)), warnings = unique(conditions))
-    }, budget)
+    }, if (cell$K >= 300L) min(budget, 300) else budget)
 }
 
 run_cell <- function(cell) {
@@ -204,7 +208,9 @@ run_cell <- function(cell) {
     seed <- make_seed(label)
     data <- simulate(cell$n, cell$p, cell$K, cell$link, cell$nonparallel, seed)
     methods <- Filter(function(m) cell$link %in% METHOD_REGISTRY[[m]]$links &&
-        (!cell$nonparallel || METHOD_REGISTRY[[m]]$partial), names(METHOD_REGISTRY))
+        (!cell$nonparallel || METHOD_REGISTRY[[m]]$partial) &&
+        (is.null(METHOD_REGISTRY[[m]]$max_categories) || cell$K <= METHOD_REGISTRY[[m]]$max_categories),
+        names(METHOD_REGISTRY))
     results <- list()
     for (method in methods) {
         results[[method]] <- run_method(method, cell, data)

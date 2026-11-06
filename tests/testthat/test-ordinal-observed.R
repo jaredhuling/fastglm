@@ -76,3 +76,16 @@ test_that("separated data report nonconvergence with or without Newton steps", {
         if(is.list(reference)) expect_identical(newton$converged,reference$converged)
     }
 })
+
+test_that("Newton steps stop promptly when likelihood changes reach rounding size", {
+    skip_on_cran()
+    # Near a million rows, rounding in the likelihood sum exceeds a valid step's gain.
+    set.seed(123)
+    n <- 1000000L;p <- 10L
+    x <- matrix(rnorm(n*p),n,p,dimnames=list(NULL,paste0("x",seq_len(p))))
+    latent <- drop(x%*%(0.6*(-1)^seq_len(p)/sqrt(seq_len(p))))+rlogis(n)
+    y <- ordered(findInterval(latent,qlogis(c(0.2,0.4,0.6,0.8)))+1L)
+    fit <- fastglm_ordinal(x,y)
+    expect_true(fit$converged)
+    expect_lte(fit$observed.iterations,10L)
+})

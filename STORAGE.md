@@ -10,6 +10,8 @@ The archive is a complete copy of the tracked `benchmarks/` directory at commit 
 
 Raw replicates from `benchmarks/ordinal-covariance/run.R` are in `Box-Box/Research/fastglm/ordinal-covariance-raw-v2-20261106/` (30 files).
 
+Raw per-cell results from `benchmarks/benchmark-ordinal-comparison.R` are in `Box-Box/Research/fastglm/ordinal-comparison-raw-20261106/`.
+
 ## What stays in the repository
 
 `.gitignore` defines the rule. These files remain tracked:

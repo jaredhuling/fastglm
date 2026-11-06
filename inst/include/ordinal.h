@@ -648,7 +648,9 @@ int observed_newton(const Data& data,VectorXd& parameters,double score_tol,doubl
                     trial=observed_evaluate(data,candidate,measure ? &scaled_direction : nullptr);
                     ++evaluations;
                     if(measure && trial.change>max_step) { fraction*=max_step/trial.change;continue; }
-                    if(trial.loglik>=current.loglik+1e-4*fraction*ascent-rounding) accepted=true;
+                    // A predicted gain near the rounding error of a long sum cannot be
+                    // measured, so comparing likelihoods would reject valid steps.
+                    if(ascent<1024*rounding || trial.loglik>=current.loglik+1e-4*fraction*ascent-rounding) accepted=true;
                     else fraction/=2;
                 } catch(const OrdinalEvaluationError&) { ++evaluations;fraction/=2; }
             }
