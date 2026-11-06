@@ -140,7 +140,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
             if(method!=0L) { a <- matrix(0,ncol(x),ncol(x)); rhs <- numeric(ncol(x)) }
             low <- rep(Inf,ncol(x)); high <- rep(-Inf,ncol(x))
         }
-        low <- pmin(low,apply(x,2,min)); high <- pmax(high,apply(x,2,max))
+        low <- pmin(low,drop(colMin_dense(x))); high <- pmax(high,drop(colMax_dense(x)))
         eta <- family$linkfun(z$mustart); mu <- family$linkinv(eta)
         dm <- family$mu.eta(eta)
         ww <- if(fc==10L) w else w*dm^2/family$variance(mu)
@@ -238,7 +238,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         if (!is.matrix(x) || !is.numeric(x)) stop("each chunk$X must be a numeric matrix",call.=FALSE)
         if(is.integer(x)) storage.mode(x)<-"double"
         if (nobs == 0L) stop("empty chunks are not supported; omit them from the source",call.=FALSE)
-        if (nrow(x) != nobs || any(!is.finite(x)) || anyNA(y) ||
+        if (nrow(x) != nobs || !all_finite_dense(x) || anyNA(y) ||
             any(!is.finite(weights)) || length(weights)!=nobs || any(weights<0) ||
             length(offset)!=nobs || any(!is.finite(offset))) stop("invalid chunk rows, weights, offsets, or values",call.=FALSE)
         mustart <- etastart <- NULL

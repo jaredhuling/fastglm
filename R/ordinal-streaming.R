@@ -134,7 +134,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         variance <- numeric(p)
         for(k in seq_len(source$n_chunks)) {
             z <- read(k);good <- z$totals>0
-            if(any(good)) variance <- variance+colSums(sweep(z$X[good,,drop=FALSE],2,center,"-")^2*(z$totals[good]/frequency))
+            if(any(good)) variance <- variance+colSums(ordinal_center_scale(z$X[good,,drop=FALSE],center,rep(1,p))^2*(z$totals[good]/frequency))
         }
         scale <- sqrt(variance)
         if(any(!is.finite(scale)|scale<=0)) stop("the ordinal location design contains a redundant constant column or cannot be scaled",call.=FALSE)
@@ -142,7 +142,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         for(k in seq_len(source$n_chunks)) {
             z <- read(k);good <- z$totals>0
             if(any(good)) {
-                xx <- sweep(sweep(z$X[good,,drop=FALSE],2,center,"-"),2,scale,"/")
+                xx <- ordinal_center_scale(z$X[good,,drop=FALSE],center,scale)
                 xx <- cbind(1,xx)
                 qr.state <- streaming_qr_update(xx,numeric(nrow(xx)),rep(1,nrow(xx)),qr.state)
             }
@@ -157,7 +157,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         ".",call.=FALSE)
     fetch <- function(k) {
         z <- read(k);good <- z$totals>0
-        if(p) z$X <- sweep(sweep(z$X,2,center,"-"),2,scale,"/")
+        if(p) z$X <- ordinal_center_scale(z$X,center,scale)
         z$X[!good,] <- 0;z$offset[!good] <- 0
         if(state$grouped) z$counts <- z$counts[,response$retained.categories,drop=FALSE] else {
             z$codes <- match(z$codes,response$retained.categories)
@@ -281,18 +281,8 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
 .ordinal_stream_result <- function(fit,center,scale,response,frequency,positive.rows,
     firth,link,ctl,tol,maxit,block.size,columns) {
     q <- length(response$levels)-1L;p <- length(columns);d <- q+p
-    T <- Ti <- diag(d)
-    if(p) {
-        T[seq_len(q),q+seq_len(p)] <- matrix(center/scale,q,p,byrow=TRUE)
-        T[q+seq_len(p),q+seq_len(p)] <- diag(1/scale,nrow=p)
-        Ti[seq_len(q),q+seq_len(p)] <- matrix(-center,q,p,byrow=TRUE)
-        Ti[q+seq_len(p),q+seq_len(p)] <- diag(scale,nrow=p)
-    }
     nms <- c(paste(response$levels[-(q+1L)],response$levels[-1L],sep="|"),columns)
-    effective <- list(coefficients=drop(T%*%fit$coefficients),covariance=T%*%fit$cov.unscaled%*%t(T),
-        information=crossprod(Ti,fit$information%*%Ti),score=drop(crossprod(Ti,fit$score)),
-        ordinary.score=drop(crossprod(Ti,fit$ordinary.score)),adjustment=drop(crossprod(Ti,fit$adjustment)),
-        step=drop(T%*%fit$step),levels=response$levels)
+    effective <- .ordinal_effective_terms(fit,center,scale,q,response$levels)
     for(nm in c("coefficients","score","ordinary.score","adjustment","step")) names(effective[[nm]]) <- nms
     for(nm in c("covariance","information")) dimnames(effective[[nm]]) <- list(nms,nms)
     effective$alpha <- effective$coefficients[seq_len(q)];effective$beta <- effective$coefficients[q+seq_len(p)]

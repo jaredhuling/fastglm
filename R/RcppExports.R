@@ -29,6 +29,14 @@ constant_columns_dense <- function(x) {
     .Call(`_fastglm_constant_columns_dense`, x)
 }
 
+count_block_summary <- function(x, y, weights, offset, beta, theta, truncated, link, system, derivatives) {
+    .Call(`_fastglm_count_block_summary`, x, y, weights, offset, beta, theta, truncated, link, system, derivatives)
+}
+
+count_block_nb_information <- function(x, y, weights, offset, beta, theta, link) {
+    .Call(`_fastglm_count_block_nb_information`, x, y, weights, offset, beta, theta, link)
+}
+
 firth_profile_evaluate <- function(x, y, weights, offset, coefficients) {
     .Call(`_fastglm_firth_profile_evaluate`, x, y, weights, offset, coefficients)
 }
@@ -83,6 +91,22 @@ ordinal_design_native <- function(x, totals, frequency, standardize) {
 
 ordinal_observed_evaluate <- function(x, y, counts, weights, offset, categories, coefficients, block_size = 2048L, link = 0L) {
     .Call(`_fastglm_ordinal_observed_evaluate`, x, y, counts, weights, offset, categories, coefficients, block_size, link)
+}
+
+ordinal_effective_native <- function(covariance, information, center, scale, thresholds) {
+    .Call(`_fastglm_ordinal_effective_native`, covariance, information, center, scale, thresholds)
+}
+
+ordinal_center_scale <- function(x, center, scale) {
+    .Call(`_fastglm_ordinal_center_scale`, x, center, scale)
+}
+
+ordinal_sandwich_native <- function(x, alpha, beta, offset, codes, counts, weights, frequency, independent, link) {
+    .Call(`_fastglm_ordinal_sandwich_native`, x, alpha, beta, offset, codes, counts, weights, frequency, independent, link)
+}
+
+ordinal_po_moments_native <- function(x, codes, counts, weights, offset, alpha_values, beta_values, selected, frequency, block_size, link) {
+    .Call(`_fastglm_ordinal_po_moments_native`, x, codes, counts, weights, offset, alpha_values, beta_values, selected, frequency, block_size, link)
 }
 
 ordinal_partial_native_evaluate <- function(x, z, y, counts, weights, offset, categories, coefficients, firth = FALSE, block_size = 2048L, condition_tol = 1e-14, link = 0L) {

@@ -54,24 +54,8 @@
         working.offset,K,c(alpha,numeric(p)),firth,ctl$score.tol,ctl$step.tol,as.integer(maxit),
         as.integer(block.size),ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code,ctl$observed)
 
-    # Original effective coordinates = T times the centered/scaled coordinates.
-    # Form the inverse analytically: solve(T) can reject a valid transformation
-    # solely because a predictor has a very large origin or small measurement unit.
-    T<-Ti<-diag(d)
-    if(p) {
-        T[seq_len(q),q+seq_len(p)]<-matrix(center/scale,q,p,byrow=TRUE)
-        T[q+seq_len(p),q+seq_len(p)]<-diag(1/scale,nrow=p)
-        Ti[seq_len(q),q+seq_len(p)]<-matrix(-center,q,p,byrow=TRUE)
-        Ti[q+seq_len(p),q+seq_len(p)]<-diag(scale,nrow=p)
-    }
     parameter.names<-c(paste(response$levels[-K],response$levels[-1L],sep="|"),colnames(x))
-    effective<-list(coefficients=drop(T%*%fit$coefficients),
-        covariance=T%*%fit$cov.unscaled%*%t(T),
-        information=crossprod(Ti,fit$information%*%Ti),
-        score=drop(crossprod(Ti,fit$score)),
-        ordinary.score=drop(crossprod(Ti,fit$ordinary.score)),
-        adjustment=drop(crossprod(Ti,fit$adjustment)),step=drop(T%*%fit$step),
-        levels=response$levels)
+    effective<-.ordinal_effective_terms(fit,center,scale,q,response$levels)
     for(nm in c("coefficients","score","ordinary.score","adjustment","step"))
         names(effective[[nm]])<-parameter.names
     for(nm in c("covariance","information")) dimnames(effective[[nm]])<-list(parameter.names,parameter.names)
@@ -121,6 +105,21 @@
          preparation.reused=setup$reused,
          firth=firth,link=link,method=if(firth) "meanBR" else "ML",control=ctl,
          tol=tol,maxit=as.integer(maxit),block.size=as.integer(block.size))
+}
+
+# Original effective coordinates = T times the centered/scaled coordinates, where
+# T adds (center/scale)'beta to each threshold and divides slopes by scale. Its
+# inverse is written analytically: solve(T) can reject a valid transformation
+# solely because a predictor has a very large origin or small measurement unit.
+.ordinal_effective_terms <- function(fit,center,scale,q,levels) {
+    p<-length(center);index<-seq_len(q)
+    forward<-function(b) c(b[index]+sum(center/scale*b[q+seq_len(p)]),b[q+seq_len(p)]/scale)
+    dual<-function(u) c(u[index],scale*u[q+seq_len(p)]-center*sum(u[index]))
+    matrices<-ordinal_effective_native(fit$cov.unscaled,fit$information,center,scale,q)
+    list(coefficients=forward(fit$coefficients),covariance=matrices$covariance,
+        information=matrices$information,score=dual(fit$score),
+        ordinary.score=dual(fit$ordinary.score),adjustment=dual(fit$adjustment),
+        step=forward(fit$step),levels=levels)
 }
 
 .ordinal_design_setup <- function(x,totals,standardize,cache=NULL,nonparallel=NULL) {

@@ -451,9 +451,7 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profi
 
 .ordinal_prediction_scale <- function(x,center,scale) {
     if(!ncol(x)) return(x)
-    out <- matrix(NA_real_,nrow(x),ncol(x),dimnames=dimnames(x))
-    for(j in seq_len(ncol(x))) out[,j] <- (x[,j]-center[j])/scale[j]
-    out
+    ordinal_center_scale(x,center,scale)
 }
 
 .ordinal_probability_block <- function(object,x,offset,what="all",derivatives=TRUE,rows=NULL) {

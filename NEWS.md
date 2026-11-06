@@ -21,8 +21,16 @@
   estimates and standard errors are unchanged within the convergence tolerance.
   Streamed fits read their source fewer times. `control=list(observed=FALSE)`
   restores expected scoring throughout.
-* Ordinal design setup and category totals now run in C++, and probit kernels
-  compute both tails together.
+* Ordinal design setup, category totals, and block scaling now run in C++, and
+  probit kernels compute both tails together.
+* Ordinal fits with many categories now use a block factorization and structured
+  coordinate changes instead of dense matrix products. `information.rcond` now
+  reports the exact one-norm value rather than an estimate.
+* Negative-binomial, hurdle, and truncated-count block calculations for dense
+  designs now run in C++, and dense matrix fits no longer copy or revalidate rows
+  on each pass. Streamed GLM validation allocates less.
+* Ordinal common-slope score moments and logit and probit sandwich blocks now run
+  in C++, reusing the fitting kernels.
 * Constrained ordinal iterations for profile intervals and likelihood-ratio and
   score tests now run in C++, with results that match the earlier R loop.
 
