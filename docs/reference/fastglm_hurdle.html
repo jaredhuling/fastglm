@@ -23,7 +23,7 @@ IRLS.'><!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathj
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -44,22 +44,28 @@ IRLS.'><!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathj
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul></li>
 <li>
@@ -115,7 +121,11 @@ IRLS.</p>
 <span>  theta.maxit <span class="op">=</span> <span class="fl">100L</span>,</span>
 <span>  model <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  y <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  x <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  x <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  response <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  z <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  method <span class="op">=</span> <span class="fl">2L</span>,</span>
+<span>  block.size <span class="op">=</span> <span class="fl">8192L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -124,7 +134,8 @@ IRLS.</p>
 
 
 <dl><dt id="arg-formula">formula<a class="anchor" aria-label="anchor" href="#arg-formula"></a></dt>
-<dd><p>a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
+<dd><p>a numeric matrix, `dgCMatrix`, [fastglm_source()], or a
+[Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 where the right-hand side after `|` specifies the zero-model design.
 If `|` is absent, the same RHS is used for both parts.</p></dd>
 
@@ -163,7 +174,8 @@ currently supported.</p></dd>
 
 <dt id="arg-init-theta">init.theta<a class="anchor" aria-label="anchor" href="#arg-init-theta"></a></dt>
 <dd><p>optional positive scalar starting value for the NB
-dispersion.  If `NULL`, a method-of-moments initializer is used.</p></dd>
+dispersion. Formula fits use a moment initializer by default; matrix
+and source fits start at one after fitting a truncated Poisson model.</p></dd>
 
 
 <dt id="arg-tol-maxit">tol, maxit<a class="anchor" aria-label="anchor" href="#arg-tol-maxit"></a></dt>
@@ -176,8 +188,8 @@ tolerance and iteration cap (only used when `dist = "negbin"`).</p></dd>
 
 
 <dt id="arg-theta-tol-theta-maxit">theta.tol, theta.maxit<a class="anchor" aria-label="anchor" href="#arg-theta-tol-theta-maxit"></a></dt>
-<dd><p>Brent-loop tolerance / iteration cap for
-the inner theta MLE (only used when `dist = "negbin"`).</p></dd>
+<dd><p>tolerance and iteration cap for the inner
+theta update (only used when `dist = "negbin"`).</p></dd>
 
 
 <dt id="arg-model">model<a class="anchor" aria-label="anchor" href="#arg-model"></a></dt>
@@ -185,7 +197,29 @@ the inner theta MLE (only used when `dist = "negbin"`).</p></dd>
 
 
 <dt id="arg-y-x">y, x<a class="anchor" aria-label="anchor" href="#arg-y-x"></a></dt>
-<dd><p>logical; keep the response / design matrices on the result.</p></dd>
+<dd><p>logical; retain the response and, for formula fits, design
+matrices. Matrix fits retain their supplied designs for prediction;
+source fits retain the reader instead of observation-level data.</p></dd>
+
+
+<dt id="arg-response">response<a class="anchor" aria-label="anchor" href="#arg-response"></a></dt>
+<dd><p>nonnegative integer response for a matrix design. A source
+supplies its response in each block; the existing `y` argument controls
+whether a fitted model retains its response.</p></dd>
+
+
+<dt id="arg-z">z<a class="anchor" aria-label="anchor" href="#arg-z"></a></dt>
+<dd><p>optional binary-component matrix for matrix inputs; defaults to
+the count design. Source blocks can supply `Z` separately from `X`.</p></dd>
+
+
+<dt id="arg-method">method<a class="anchor" aria-label="anchor" href="#arg-method"></a></dt>
+<dd><p>decomposition for matrix/source component GLMs, as in [fastglm()].</p></dd>
+
+
+<dt id="arg-block-size">block.size<a class="anchor" aria-label="anchor" href="#arg-block-size"></a></dt>
+<dd><p>maximum number of matrix rows processed together for the
+truncated count component. A source determines its own block sizes.</p></dd>
 
 </dl></div>
     <div id="value">
@@ -197,8 +231,9 @@ the inner theta MLE (only used when `dist = "negbin"`).</p></dd>
     </div>
     <div id="details">
     <h2>Details</h2>
-    <p>This is the fastglm analogue of [pscl::hurdle()] – coefficients agree
-to 1e-6 on standard datasets, with all numerical loops in C++.</p>
+    <p>Formula fits use the native count-model driver. Sparse designs and data
+supplied in blocks use the same likelihood with blockwise score updates.
+The latter permits repeated passes over data that need not fit in memory.</p>
     </div>
 
     <div id="ref-examples">

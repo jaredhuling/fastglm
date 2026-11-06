@@ -23,7 +23,7 @@ summary_dir <- argument("summary", if (quick) tempfile("ordinal-comparison-") el
 figure_file <- argument("figure", if (quick) tempfile(fileext = ".png") else "man/figures/README-ordinal-benchmarks.png")
 plot_only <- "--plot-only" %in% args
 raw_dir <- argument("output", file.path(summary_dir, "raw"))
-budget <- as.numeric(argument("budget", if (quick) "120" else "900"))
+budget <- as.numeric(argument("budget", if (quick) "120" else "1800"))
 dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
 Sys.setenv(OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1")
 
@@ -186,9 +186,10 @@ run_method <- function(method, cell, data) {
         first_seconds <- as.numeric(difftime(Sys.time(), started, units = "secs"))
         value <- spec$read(first, data$x, cell$nonparallel)
         rm(first)
-        repetitions <- if (quick) 2L else if (first_seconds > 60) 1L else if (cell$n >= 100000L) 3L else
-            if (cell$n >= 10000L) 5L else 25L
-        elapsed <- numeric(repetitions)
+        # A fit slower than five minutes counts once, using the fit already timed.
+        repetitions <- if (quick) 2L else if (first_seconds > 300) 0L else if (first_seconds > 60) 1L else
+            if (cell$n >= 100000L) 3L else if (cell$n >= 10000L) 5L else 25L
+        elapsed <- if (repetitions) numeric(repetitions) else first_seconds
         for (r in seq_len(repetitions)) {
             gc(FALSE)
             begin <- microbenchmark::get_nanotime()
@@ -198,7 +199,7 @@ run_method <- function(method, cell, data) {
         list(status = "completed", elapsed = elapsed, first_seconds = first_seconds, loglik = value$loglik,
              slopes = value$slopes, converged = value$converged,
              covariance_finite = all(is.finite(value$covariance)), warnings = unique(conditions))
-    }, if (cell$K >= 300L) min(budget, 300) else budget)
+    }, budget)
 }
 
 run_cell <- function(cell) {
@@ -218,7 +219,9 @@ run_cell <- function(cell) {
                 format(median(results[[method]]$elapsed), digits = 3L))
     }
     temporary <- paste0(file, ".tmp")
-    saveRDS(list(cell = cell, label = label, seed = seed, results = results), temporary)
+    # Concurrent work can distort timings, so each cell records the load it ended under.
+    load <- sub(".*load averages?: *", "", system2("uptime", stdout = TRUE))
+    saveRDS(list(cell = cell, label = label, seed = seed, results = results, load = load), temporary)
     file.rename(temporary, file)
     invisible(file)
 }
@@ -278,7 +281,7 @@ merge_results <- function() {
                 isTRUE(loglik_difference < loglik_tolerance) &&
                 (is.na(slope_error) || slope_error < slope_tolerance)
             data.frame(block$cell[c("design", "panel", "n", "p", "K", "link")], method,
-                status = value$status, seed = block$seed,
+                status = value$status, seed = block$seed, system_load = if (is.null(block$load)) NA_character_ else block$load,
                 repetitions = if (completed) length(value$elapsed) else 0L,
                 median_seconds = if (completed) median(value$elapsed) else NA_real_,
                 minimum_seconds = if (completed) min(value$elapsed) else NA_real_,

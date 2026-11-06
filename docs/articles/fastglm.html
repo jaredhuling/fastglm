@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -55,22 +55,28 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul>
 </li>
@@ -102,7 +108,7 @@
                         <h4 data-toc-skip class="author">Jared
 Huling</h4>
             
-            <h4 data-toc-skip class="date">2026-06-07</h4>
+            <h4 data-toc-skip class="date">2026-11-06</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/jaredhuling/fastglm/blob/HEAD/vignettes/fastglm.Rmd" class="external-link"><code>vignettes/fastglm.Rmd</code></a></small>
       <div class="hidden name"><code>fastglm.Rmd</code></div>
@@ -111,12 +117,13 @@ Huling</h4>
 
     
     
-<p>The <em>fastglm</em> package is intended to be a
-<strong>fast</strong> <em>and</em> <strong>stable</strong> alternative
-to the <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> and <code><a href="https://rdrr.io/pkg/glm2/man/glm2.html" class="external-link">glm2::glm2()</a></code> functions for
-fitting generalized linear models. <em>fastglm</em> is compatible with
-<code>R</code>’s <code>family</code> objects (see <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">?family</a></code>).
-The package can be installed via</p>
+<p>Generalized linear models relate an outcome mean to predictors while
+allowing response distributions such as binomial or Poisson. The
+<em>fastglm</em> package performs the fitting calculations in C++ and
+provides several ways to solve the weighted regressions used during
+fitting. <em>fastglm</em> is compatible with <code>R</code>’s
+<code>family</code> objects (see <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">?family</a></code>). The package can
+be installed via</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"fastglm"</span><span class="op">)</span></span>
 <span><span class="co"># pak::pak("jaredhuling/fastglm") #development version</span></span></code></pre></div>
@@ -126,10 +133,10 @@ The package can be installed via</p>
 <div class="section level2">
 <h2 id="example">Example<a class="anchor" aria-label="anchor" href="#example"></a>
 </h2>
-<p>The main package function is <code><a href="../reference/fastglm.html">fastglm()</a></code>. Currently,
-<code><a href="../reference/fastglm.html">fastglm()</a></code> does not allow for formula-based data input and
-is restricted to matrices. We use the following example to demonstrate
-the usage of <code><a href="../reference/fastglm.html">fastglm()</a></code>:</p>
+<p>The main function, <code><a href="../reference/fastglm.html">fastglm()</a></code>, accepts either a model
+formula and data frame or a predictor matrix and response vector. A
+matrix is convenient when the predictor columns have already been
+constructed. The following example illustrates that interface:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">esoph</span><span class="op">)</span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>,</span>
@@ -140,89 +147,84 @@ the usage of <code><a href="../reference/fastglm.html">fastglm()</a></code>:</p>
 <span><span class="va">gfit1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">x</span>, y <span class="op">=</span> <span class="va">y</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"cloglog"</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">gfit1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Generalized linear model</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Call:</span></span>
 <span><span class="co">#&gt; fastglm.default(x = x, y = y, family = binomial(link = "cloglog"))</span></span>
+<span><span class="co">#&gt; Family: binomial (cloglog link)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Coefficients:</span></span>
 <span><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
-<span><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414  &lt; 2e-16 ***</span></span>
-<span><span class="co">#&gt; agegp.L         3.30677    0.63454   5.211 1.88e-07 ***</span></span>
-<span><span class="co">#&gt; agegp.Q        -1.35525    0.57310  -2.365    0.018 *  </span></span>
-<span><span class="co">#&gt; agegp.C         0.20296    0.43333   0.468    0.640    </span></span>
+<span><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; agegp.L         3.30677    0.63456   5.211   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; agegp.Q        -1.35525    0.57311  -2.365    0.018 *  </span></span>
+<span><span class="co">#&gt; agegp.C         0.20296    0.43334   0.468    0.640    </span></span>
 <span><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
 <span><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
-<span><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568 4.93e-06 ***</span></span>
-<span><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664  &lt; 2e-16 ***</span></span>
+<span><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664   &lt;1e-04 ***</span></span>
 <span><span class="co">#&gt; ---</span></span>
 <span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; (Dispersion parameter for binomial family taken to be 1)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     Null deviance: 61.609  on 87  degrees of freedom</span></span>
-<span><span class="co">#&gt; Residual deviance: 96.950  on 80  degrees of freedom</span></span>
-<span><span class="co">#&gt; AIC: 228</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Number of Fisher Scoring iterations: 6</span></span></code></pre></div>
-<p>Alternatively, to use the built-in function of <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> for
-processing formulas and data frames, we can use <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> with
-<code>method = fastglm_fit</code> to call the <em>fastglm</em> fitting
-functionality:</p>
+<span><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df AIC</span></span>
+<span><span class="co">#&gt;           1           368      87    96.95          80 228</span></span>
+<span><span class="co">#&gt; Convergence: converged (6 iterations)</span></span></code></pre></div>
+<p>A formula can be passed directly to <code><a href="../reference/fastglm.html">fastglm()</a></code>. The
+fitting routine can also be used inside <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> by supplying
+<code>method = fastglm_fit</code>, which is useful when existing
+analysis code already uses <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gfit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">ncases</span>, <span class="va">ncontrols</span><span class="op">)</span> <span class="op">~</span> <span class="va">agegp</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">tobgp</span><span class="op">)</span> <span class="op">+</span></span>
 <span>                 <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">alcgp</span><span class="op">)</span>, data <span class="op">=</span> <span class="va">esoph</span>,</span>
 <span>             family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"cloglog"</span><span class="op">)</span>,</span>
 <span>             method <span class="op">=</span> <span class="va">fastglm_fit</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">gfit2</span>, refit <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">gfit2</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Generalized linear model</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Call:</span></span>
 <span><span class="co">#&gt; glm(formula = cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + </span></span>
 <span><span class="co">#&gt;     unclass(alcgp), family = binomial(link = "cloglog"), data = esoph, </span></span>
 <span><span class="co">#&gt;     method = fastglm_fit)</span></span>
+<span><span class="co">#&gt; Family: binomial (cloglog link)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Coefficients:</span></span>
 <span><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
-<span><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414  &lt; 2e-16 ***</span></span>
-<span><span class="co">#&gt; agegp.L         3.30677    0.63454   5.211 1.88e-07 ***</span></span>
-<span><span class="co">#&gt; agegp.Q        -1.35525    0.57310  -2.365    0.018 *  </span></span>
-<span><span class="co">#&gt; agegp.C         0.20296    0.43333   0.468    0.640    </span></span>
+<span><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; agegp.L         3.30677    0.63456   5.211   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; agegp.Q        -1.35525    0.57311  -2.365    0.018 *  </span></span>
+<span><span class="co">#&gt; agegp.C         0.20296    0.43334   0.468    0.640    </span></span>
 <span><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
 <span><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
-<span><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568 4.93e-06 ***</span></span>
-<span><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664  &lt; 2e-16 ***</span></span>
+<span><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568   &lt;1e-04 ***</span></span>
+<span><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664   &lt;1e-04 ***</span></span>
 <span><span class="co">#&gt; ---</span></span>
 <span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; (Dispersion parameter for binomial family taken to be 1)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     Null deviance: 367.95  on 87  degrees of freedom</span></span>
-<span><span class="co">#&gt; Residual deviance:  96.95  on 80  degrees of freedom</span></span>
-<span><span class="co">#&gt; AIC: 1099.6</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Number of Fisher Scoring iterations: 6</span></span></code></pre></div>
-<p>Setting <code>refit = FALSE</code> in <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> uses the
-standard errors computed by the internal fitting functions of
-<em>fastglm</em>. The default, <code>refit = TRUE</code>, re-fits the
-model using <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> with <code>method = "glm.fit"</code> and
-one IRLS iteration with the coefficients computed previously as the
-starting values.</p>
+<span><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df AIC</span></span>
+<span><span class="co">#&gt;           1           368      87    96.95          80 228</span></span>
+<span><span class="co">#&gt; Convergence: converged (6 iterations)</span></span></code></pre></div>
+<p>The coefficient summary uses the covariance calculated during
+fitting, evaluated at the reported coefficient estimates. It therefore
+obtains standard errors without fitting the model again.</p>
 </div>
 <div class="section level2">
 <h2 id="computational-stability">Computational stability<a class="anchor" aria-label="anchor" href="#computational-stability"></a>
 </h2>
-<p><em>fastglm</em> does not compromise computational stability for
-speed. In fact, for many situations where <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code> and even
-<code><a href="https://rdrr.io/pkg/glm2/man/glm2.html" class="external-link">glm2::glm2()</a></code> do not converge, <code><a href="../reference/fastglm.html">fastglm()</a></code> does
-converge.</p>
-<p>As an example, consider the following data scenario, where the
-response distribution is (mildly) misspecified, but the link function is
-quite badly misspecified. In such scenarios, the standard IRLS algorithm
-tends to have convergence issues. The <em>glm2</em> package was designed
-to handle such cases, however, it still can have convergence issues.
-<em>fastglm</em> uses a similar step-halving technique as
-<code><a href="https://rdrr.io/pkg/glm2/man/glm2.html" class="external-link">glm2::glm2()</a></code>, but it starts at better initialized values
-and thus tends to have better convergence properties in practice.</p>
+<p>A GLM is usually fitted through a sequence of weighted regression
+updates, called iteratively reweighted least squares (IRLS). An update
+can increase the discrepancy between the fitted and observed outcomes or
+produce means outside the distribution’s allowed range. The
+<em>fastglm</em> safeguards shorten such steps until an acceptable
+update is found. This step-halving procedure can improve convergence,
+although difficult models can still fail.</p>
+<p>The following example deliberately fits an inappropriate link, the
+function relating the response mean to the linear predictor. It
+illustrates numerical difficulties that can arise when proposed means
+leave the allowed range. Different starting values and step safeguards
+can lead to different convergence behavior. Numerical convergence alone
+does not make the chosen response distribution or link scientifically
+appropriate.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10000</span> <span class="op">*</span> <span class="fl">100</span><span class="op">)</span>, ncol <span class="op">=</span> <span class="fl">100</span><span class="op">)</span></span>
@@ -233,18 +235,18 @@ and thus tends to have better convergence properties in practice.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span>,</span>
 <span>                         method <span class="op">=</span> <span class="va">fastglm_fit</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   0.305   0.009   0.313</span></span>
+<span><span class="co">#&gt;   0.296   0.008   0.304</span></span>
 <span></span>
 <span><span class="co"># glm</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   1.670   0.046   1.725</span></span>
+<span><span class="co">#&gt;   1.589   0.042   1.634</span></span>
 <span></span>
 <span><span class="co"># glm2</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit3</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span>,</span>
 <span>                         method <span class="op">=</span> <span class="fu">glm2</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/glm2/man/glm.fit2.html" class="external-link">glm.fit2</a></span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   1.142   0.035   1.181</span></span>
+<span><span class="co">#&gt;   1.099   0.030   1.130</span></span>
 <span></span>
 <span><span class="co">## Note that fastglm() returns estimates with the</span></span>
 <span><span class="co">## largest likelihood</span></span>
@@ -289,7 +291,7 @@ and thus tends to have better convergence properties in practice.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="va">gfit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span>link <span class="op">=</span> <span class="st">"sqrt"</span><span class="op">)</span>,</span>
 <span>                         control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>maxit <span class="op">=</span> <span class="fl">100</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    user  system elapsed </span></span>
-<span><span class="co">#&gt;   6.037   0.147   6.192</span></span>
+<span><span class="co">#&gt;   5.800   0.125   5.926</span></span>
 <span></span>
 <span><span class="va">gfit2</span><span class="op">$</span><span class="va">converged</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>

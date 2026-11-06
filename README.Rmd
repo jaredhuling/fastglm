@@ -408,6 +408,71 @@ These are measurements of the displayed designs and software environment. The be
 
 The [benchmark vignette](vignettes/benchmarks-fastglm.Rmd) retains the earlier, dated study, including sparse and mapped-matrix comparisons. Current scripts also cover numerical accuracy (`benchmarks/benchmark.R`), model and weight patterns (`benchmarks/benchmark-models.R`), large-data Firth fitting (`benchmarks/benchmark-firth-backends.R`), and prepared Firth batches (`benchmarks/benchmark-prepared-firth.R`).
 
+### Ordinal comparison
+
+```{r ordinal-benchmark-data, include=FALSE}
+ordinal_benchmark <- read.csv("benchmarks/ordinal-comparison/summary.csv")
+ordinal_internal <- read.csv("benchmarks/ordinal-comparison/internal-summary.csv")
+ordinal_versions <- read.csv("benchmarks/ordinal-comparison/packages.csv")
+ordinal_metadata <- read.csv("benchmarks/ordinal-comparison/metadata.csv")
+ordinal_method_order <- c("fastglm", "rms::orm", "ordinal::clm", "MASS::polr", "VGAM::vglm", "WeightIt::ordinal_weightit")
+ordinal_cell <- function(panel, link, n, K) {
+    z <- ordinal_benchmark[ordinal_benchmark$panel==panel & ordinal_benchmark$link==link &
+        ordinal_benchmark$n==n & ordinal_benchmark$K==K, ]
+    z[order(match(z$method, ordinal_method_order)), ]
+}
+ordinal_ratio <- function(panel, link, n, K, method) {
+    z <- ordinal_cell(panel, link, n, K)
+    round(z$speedup[z$method==method], 1)
+}
+ordinal_seconds <- function(panel, link, n, K, method) {
+    z <- ordinal_cell(panel, link, n, K)
+    signif(z$median_seconds[z$method==method], 3)
+}
+```
+
+The ordinal study compares cumulative-link fits with packages that fit the same model: `rms::orm`, `ordinal::clm`, `MASS::polr`, `VGAM::vglm`, and `WeightIt::ordinal_weightit`. Each design has 10 predictors, and every timing includes coefficient covariance. A comparison time is reported only when that fit converges and agrees with *fastglm* on the log likelihood and on the common slopes. These measurements used *fastglm* commit `r substr(ordinal_metadata$value[ordinal_metadata$item=="commit"], 1, 7)` on `r substr(ordinal_metadata$value[ordinal_metadata$item=="date_utc"], 1, 10)` (UTC), on a machine that was also running other work.
+
+![Ordinal fitting times across sample sizes for common and threshold-specific slopes. Lower times indicate faster fitting.](man/figures/README-ordinal-benchmarks.png)
+
+```{r ordinal-results, echo=FALSE, results='asis'}
+ordinal_table <- do.call(rbind, lapply(c("logit", "probit", "cloglog"), function(link) {
+    z <- ordinal_cell("Common slopes", link, 100000L, 5L)
+    data.frame(Link=link, Method=z$method, Seconds=z$median_seconds,
+        Ratio=ifelse(z$agrees, z$speedup, NA))
+}))
+knitr::kable(ordinal_table, col.names=c("Link", "Method", "Seconds", "Time ratio"),
+    digits=c(0, 0, 3, 1), row.names=FALSE)
+```
+
+The table shows 100,000 observations and 5 categories, and its ratio is the comparison time divided by the *fastglm* time. The closest comparison is `rms::orm`, at `r ordinal_ratio("Common slopes", "logit", 100000L, 5L, "rms::orm")` times the *fastglm* time for logit and `r ordinal_ratio("Common slopes", "probit", 100000L, 5L, "rms::orm")` times for probit. `rms::orm` was benchmarked for these two links only. For cloglog, `VGAM::vglm` warned about intersecting predictors and returned a different fit, so it has no ratio.
+
+The number of categories changes this comparison. `rms::orm` is designed for outcomes with very many distinct values, and it overtakes *fastglm* between 30 and 300 categories:
+
+```{r ordinal-categories, echo=FALSE, results='asis'}
+ordinal_many <- do.call(rbind, lapply(c(30L, 300L, 1000L), function(K) {
+    z <- ordinal_cell("Many categories", "logit", 20000L, K)
+    data.frame(Categories=K, Method=z$method, Seconds=z$median_seconds, Ratio=z$speedup)
+}))
+knitr::kable(ordinal_many, col.names=c("Categories", "Method", "Seconds", "Time ratio"),
+    digits=c(0, 0, 3, 2), row.names=FALSE)
+```
+
+With 20,000 observations, `rms::orm` takes `r ordinal_ratio("Many categories", "logit", 20000L, 300L, "rms::orm")` times the *fastglm* time at 300 categories and `r ordinal_ratio("Many categories", "logit", 20000L, 1000L, "rms::orm")` times at 1,000, so it is the faster choice in that range. Most of the remaining *fastglm* time there is the final expected-information calculation, which the reported covariance uses. `VGAM::vglm` was limited to 30 categories because its working design would need about 160 GB of memory at 1,000 categories.
+
+The threshold-specific panel compares `ordinal::clm` and `VGAM::vglm`. At 1,000 observations, the *fastglm* fit for this design reported nonconvergence, because the best fit with ordered cumulative probabilities at every row lies on the ordering boundary. `ordinal::clm` reported convergence with a higher log likelihood, but its cumulative predictors cross at 3 of the 1,000 rows, which is not a valid probability model at those rows. This cell therefore has no time comparison. At 100,000 observations, `ordinal::clm` took `r ordinal_seconds("Threshold-specific slopes", "logit", 100000L, 5L, "ordinal::clm")` seconds and reported that it had not converged, although its log likelihood agreed with *fastglm*, so it is also omitted from the panel.
+
+No package in this comparison fits mean bias-reduced cumulative-link models or reads ordinal data in blocks, so these fits have no external time ratio. The last column compares each streamed fit with the dense fit of the same estimator:
+
+```{r ordinal-internal, echo=FALSE, results='asis'}
+ordinal_internal$n <- format(ordinal_internal$n, big.mark=",", trim=TRUE, scientific=FALSE)
+knitr::kable(ordinal_internal[, c("n", "way", "median_seconds", "coefficient_difference")],
+    col.names=c("Observations", "Fit", "Seconds", "Largest coefficient difference from dense fit"),
+    digits=c(0, 0, 3, 17), row.names=FALSE)
+```
+
+Streamed fits use blocks of 10,000 rows. `benchmarks/benchmark-ordinal-comparison.R` regenerates this section. `benchmarks/ordinal-comparison` records package versions and agreement checks, and `benchmarks/profile-models.R` reports where time is spent across model classes.
+
 ## References
 
 - Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika*, 80(1), 27--38. [doi:10.1093/biomet/80.1.27](https://doi.org/10.1093/biomet/80.1.27)

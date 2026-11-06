@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -55,22 +55,28 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul>
 </li>
@@ -112,18 +118,20 @@ Huling</h4>
 
     
     
-<p>Standard negative-binomial GLM fitting alternates between IRLS for
-the regression coefficients
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math>
-(at fixed dispersion
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>)
-and a one-dimensional MLE update for
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>.
-Both <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> and <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> follow
-this strategy, but their implementations differ in initialization and
-numerical handling. This vignette compares the two on a deliberately
-challenging data-generating process where MASS frequently fails to
-converge.</p>
+<p>Negative-binomial regression estimates both the response mean and
+theta, which controls variation beyond a Poisson distribution. The fit
+alternates between updating coefficients with theta fixed and updating
+theta with the fitted means fixed. Coefficient updates use iteratively
+reweighted least squares (IRLS), a sequence of weighted regressions;
+theta updates maximize the likelihood with respect to that single
+parameter. Both <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> and
+<code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> follow this strategy, but their
+implementations differ in initialization and numerical handling. This
+vignette compares the two on a deliberately challenging data-generating
+process where MASS frequently fails to converge.</p>
+<p>The saved results below come from the historical run dated above.
+They describe that implementation and dataset generator, rather than all
+subsequent versions or a general guarantee of convergence.</p>
 <div class="section level2">
 <h2 id="data-generating-process">Data-generating process<a class="anchor" aria-label="anchor" href="#data-generating-process"></a>
 </h2>
@@ -254,12 +262,14 @@ maximized log-likelihoods.</p>
 </h3>
 <p>When both methods converge they should find the same MLE, so their
 log-likelihoods should agree. In a small number of replications
-<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> nominally converges but lands at a
-degenerate solution with
+<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> reports convergence with an extreme theta
+estimate with
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>θ</mi><mo accent="true">̂</mo></mover><mo>&gt;</mo><msup><mn>10</mn><mn>6</mn></msup></mrow><annotation encoding="application/x-tex">\hat\theta &gt; 10^6</annotation></semantics></math>
 and very poor log-likelihood. We exclude these (identified by
 <code>fastglm</code> achieving a strictly higher log-likelihood by more
-than 1 unit) to focus on genuine agreement:</p>
+than 1 unit) from the following agreement plot. These exclusions mean
+that the plot describes only the remaining subset, and the excluded fits
+must still be counted when evaluating numerical reliability:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">both</span> <span class="op">&lt;-</span> <span class="va">results</span><span class="op">$</span><span class="va">mass_conv</span> <span class="op">&amp;</span> <span class="va">results</span><span class="op">$</span><span class="va">fg_conv</span></span>
 <span><span class="va">ll_diff</span> <span class="op">&lt;-</span> <span class="va">results</span><span class="op">$</span><span class="va">fg_loglik</span><span class="op">[</span><span class="va">both</span><span class="op">]</span> <span class="op">-</span> <span class="va">results</span><span class="op">$</span><span class="va">mass_loglik</span><span class="op">[</span><span class="va">both</span><span class="op">]</span></span>

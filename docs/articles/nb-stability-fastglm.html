@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">fastglm</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.3</span>
       </span>
     </div>
 
@@ -55,22 +55,28 @@
       <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/count-firth-fastglm.html">Negative-Binomial, Hurdle, and Zero-Inflation with 'fastglm'</a>
+      <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Overview of the 'fastglm' Package</a>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
     </li>
     <li>
       <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
-      <a href="../articles/large-data-fastglm.html">Large-Data and Out-of-Core GLMs with 'fastglm'</a>
+      <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
+    </li>
+    <li>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
+    </li>
+    <li>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul>
 </li>
@@ -112,18 +118,19 @@ Huling</h4>
 
     
     
-<p>Negative-binomial regression is fit by alternating between IRLS for
-the regression coefficients <code>beta</code> (at a fixed dispersion)
-and a one-dimensional MLE update for the dispersion <code>theta</code>.
-This is a harder problem than an ordinary GLM: the two updates interact,
-and the joint likelihood is slow to converge, or fails outright, when
-the fitted means span many orders of magnitude or when
-<code>theta</code> drifts toward a boundary. <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code>
-runs the entire <code>(beta, theta)</code> MLE in C++ (IRLS for
-<code>beta</code>, Brent for <code>theta</code>) with the same
-step-halving safeguard following Marschner (2011) that <em>fastglm</em>
-uses for ordinary GLMs, so it tends to converge in cases where
-<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> (Venables and Ripley, 2002) does not.</p>
+<p>A negative-binomial regression estimates both the response mean and
+an additional parameter, theta, that determines variation beyond the
+Poisson model. Fitting alternates between weighted-regression updates of
+the coefficients with theta fixed and likelihood-based updates of theta
+with the fitted means fixed. This is called maximum likelihood
+estimation (MLE). The two updates can converge slowly when fitted means
+differ by many orders of magnitude or when theta approaches the Poisson
+limit. Step halving shortens an unsuccessful coefficient update,
+providing a safeguard against some numerical failures.</p>
+<p>This vignette retains a historical simulation run from the displayed
+date. The recorded results predate later numerical changes and should be
+interpreted as evidence about that run, not as a validation of version
+0.1.3.</p>
 <p>The companion vignette
 <code><a href="../articles/nb-convergence-fastglm.html">vignette("nb-convergence-fastglm", package = "fastglm")</a></code>
 compares the two solvers on a single difficult data-generating process.
@@ -134,15 +141,16 @@ under-dispersion, small samples, high dimension, collinearity, and
 contaminating outliers). For each scenario we fit both solvers over many
 replications and tabulate how often each one converges cleanly, whether
 they agree when both succeed, and where one rescues the other.</p>
-<p>Both solvers are given a matched iteration budget so the comparison
-is fair: <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> runs with
-<code>glm.control(maxit = 50)</code>, and <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> uses
-its default <code>outer.maxit = 50</code>.</p>
+<p>The original comparison used the following iteration settings, whose
+meanings differ between implementations: <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code>
+runs with <code>glm.control(maxit = 50)</code>, and
+<code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> uses its default
+<code>outer.maxit = 50</code>.</p>
 <div class="section level2">
 <h2 id="data-generating-process">Data-generating process<a class="anchor" aria-label="anchor" href="#data-generating-process"></a>
 </h2>
 <p>A single generator produces negative-binomial data with a log link.
-Its arguments dial each stress axis independently: the number of columns
+Its arguments vary each feature separately: the number of columns
 <code>p</code>, the true dispersion <code>theta</code>, the spread of
 the coefficients <code>coef_sd</code>, the intercept (which shifts the
 fitted-mean scale), an optional near-duplicate column
@@ -168,8 +176,8 @@ fitted-mean scale), an optional near-duplicate column
 <span>    <span class="op">}</span></span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>X <span class="op">=</span> <span class="va">X</span>, y <span class="op">=</span> <span class="va">y</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>The twelve scenarios span the range from a benign reference case to
-designs that base IRLS routinely chokes on:</p>
+<p>The twelve scenarios range from a well-conditioned reference case to
+designs intended to challenge the weighted-regression updates:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">scen</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  baseline      <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>n <span class="op">=</span> <span class="fl">200</span>, p <span class="op">=</span> <span class="fl">3</span>,  theta <span class="op">=</span> <span class="fl">1</span>,    coef_sd <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span>,</span>
@@ -209,18 +217,16 @@ whether it errored, whether it converged, whether <em>MASS</em> emitted
 an iteration- or step-limit warning, the maximized log-likelihood, the
 dispersion estimate, and the maximum relative coefficient
 discrepancy.</p>
-<p>The scoring is deliberately strict on <em>MASS</em> and lenient
-nowhere: <em>MASS</em> counts as cleanly converged only when it
-converges and emits no warning, since an iteration-limit warning means
-the reported fit is not to be trusted. <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> counts
-as converged when it returns without error, sets
-<code>converged = TRUE</code>, and produces no <code>NaN</code>
-coefficients. Near-Poisson and badly overfit cells can drive
-<code>theta</code> toward a non-identifiable boundary, which is a
-property of the data rather than a failure of the solver, so we score
-convergence at the solver level and separately verify that, whenever
-both methods succeed, <code>fastglm</code> never lands at a worse
-optimum.</p>
+<p>The historical scoring rules differ between the packages:
+<em>MASS</em> is counted as cleanly converged only when it returns a
+convergence flag without warnings, whereas <em>fastglm</em> is counted
+when it returns a convergence flag and finite coefficients.
+Consequently, these counts are not a comparison under identical success
+criteria. A current evaluation should record errors, warnings,
+convergence flags, finite estimates, and likelihood values separately
+for both methods. Theta estimates close to the Poisson limit also
+require separate interpretation because the data may provide little
+information about theta there.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_both</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">d</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">X</span> <span class="op">&lt;-</span> <span class="va">d</span><span class="op">$</span><span class="va">X</span>; <span class="va">y</span> <span class="op">&lt;-</span> <span class="va">d</span><span class="op">$</span><span class="va">y</span></span>
@@ -497,39 +503,21 @@ conv’) where fastglm’s log-likelihood is at least MASS’s.</caption>
 <div class="float">
 <img src="nb-stability-figs/convergence-plot-1.png" alt="plot of chunk convergence-plot"><div class="figcaption">plot of chunk convergence-plot</div>
 </div>
-<p>The headline result is that <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> converges at
-least as often as <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> in every scenario, and
-never finds a worse optimum when both succeed. In all but a handful of
-high-dimensional replications (where <code>theta</code> itself is
-non-identifiable and both methods drift to the same degenerate boundary)
-<code>fastglm</code>’s maximized log-likelihood is greater than or equal
-to <em>MASS</em>’s. Across all 12 scenarios and 50 replications, 600
-fits in total, <em>MASS</em> converged cleanly 425 times (71%) against
-<em>fastglm</em>’s 555 (92%). <em>fastglm</em> rescued 131 replications
-where <em>MASS</em> did not converge cleanly, and lost only 1; in 11 of
-the 12 scenarios its log-likelihood was at least as large as
-<em>MASS</em>’s on every shared fit.</p>
-<p>The gaps open up exactly where the joint <code>(beta, theta)</code>
-problem is hardest. When the fitted means span many orders of magnitude
-(<code>wide_mu</code>, <code>extreme_mu</code>,
-<code>big_intercept</code>), <em>MASS</em>’s IRLS frequently exhausts
-its iteration budget while <em>fastglm</em>’s step-halving keeps it on
-the likelihood ascent. At the dispersion extremes
-(<code>vtiny_theta</code>, <code>near_poisson</code>), <em>MASS</em>
-often warns or stalls and <em>fastglm</em> rescues roughly twenty
-replications in each. In the high-dimensional case
-(<code>high_dim</code>, <code>p = 60</code>), <em>MASS</em> cleanly
-converges only a few times while <em>fastglm</em> converges on nearly
-every replication. On the well-conditioned cells (<code>baseline</code>,
-<code>collinear</code>, <code>many_zeros</code>, <code>small_n</code>)
-the two agree essentially perfectly, the necessary sanity check that the
-added robustness costs nothing on easy problems.</p>
-<p>Whenever both solvers reach a genuine (non-degenerate) optimum their
-coefficient estimates agree to within 1%, true in 8 of the 12 scenarios,
-which confirms that <code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> and
-<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> are solving the same maximum-likelihood
-problem. <em>fastglm</em> is simply more reliable at reaching the
-solution.</p>
+<p>Under the recorded rules, <em>MASS</em> had 425 clean convergences
+and <em>fastglm</em> had 555 convergences among 600 simulated fits. The
+table also contains exceptions: in the <code>tiny_theta</code> scenario,
+<em>MASS</em> has 47 successful fits and <em>fastglm</em> has 46, and in
+the <code>high_dim</code> scenario the likelihood comparison favors
+<em>MASS</em> in four of the 23 fits counted as converged by both. These
+results therefore do not establish that either method is uniformly more
+reliable.</p>
+<p>The larger differences occur when fitted means vary widely, theta is
+near an extreme, or many coefficients are estimated from a limited
+sample. Those settings are useful targets for further numerical checks.
+Coefficient and likelihood comparisons should be interpreted alongside
+warnings and the degree to which theta is identified by the data. A
+convergence flag alone does not establish that the same likelihood
+maximum has been reached.</p>
 </div>
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
