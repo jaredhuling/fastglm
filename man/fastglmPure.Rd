@@ -43,7 +43,9 @@ This should be a numeric vector of length equal to the number of cases}
 \item{method}{a decomposition name (`qr`, `qr_unpivoted`, `llt`, `ldlt`,
   `qr_full`, `svd`, or `auto`) or an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and
-Conquer SVD}
+Conquer SVD. For a dense design whose Cholesky factorization is singular or
+ill-conditioned, methods 2 and 3 refit with the column-pivoted QR decomposition
+and warn; `auto` does so silently.}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
 

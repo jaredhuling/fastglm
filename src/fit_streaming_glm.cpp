@@ -426,7 +426,7 @@ static VectorXd spd_factorize_and_solve(int type, const MatrixXd& A,
         return llt.solve(rhs);
     }
     ldlt.compute(A);
-    if (ldlt.info() != Eigen::Success || !ldlt.isPositive() || ldlt.rcond() < 1e-12)
+    if (fglm::ldlt_unusable(ldlt))
         Rcpp::stop("Cholesky factorization (LDLT) failed; "
                    "design may be rank-deficient. "
                    "Streaming mode requires full column rank.");

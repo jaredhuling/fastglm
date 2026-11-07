@@ -7,6 +7,17 @@
 
 namespace fglm {
 
+// An LDLT factorization is unusable for a full-rank solve when it failed, is
+// indefinite, is ill-conditioned, or has a zero pivot. Eigen counts a positive
+// semidefinite matrix as positive and drops zero pivots from its rcond()
+// estimate, so an exactly singular X'WX would otherwise pass.
+template <typename LDLTType>
+inline bool ldlt_unusable(const LDLTType& f) {
+    if (f.info() != Eigen::Success || !f.isPositive() || f.rcond() < 1e-12) return true;
+    const Eigen::VectorXd d = f.vectorD();
+    return d.size() > 0 && !(d.minCoeff() > 1e-12 * d.maxCoeff());
+}
+
 // Family/link codes.  Mirror the R-side mapping in family_code().  -1 means
 // "unknown / fall back to R callbacks".
 enum FamilyCode {

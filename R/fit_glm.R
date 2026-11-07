@@ -142,7 +142,9 @@ tweedie_link_power <- function(family) {
 #' @param method a decomposition name (`qr`, `qr_unpivoted`, `llt`, `ldlt`,
 #'   `qr_full`, `svd`, or `auto`) or an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 #' 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and
-#' Conquer SVD
+#' Conquer SVD. For a dense design whose Cholesky factorization is singular or
+#' ill-conditioned, methods 2 and 3 refit with the column-pivoted QR decomposition
+#' and warn; `auto` does so silently.
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
 #' @param inference retain full covariance, diagonal standard errors, or no inference.
@@ -428,7 +430,10 @@ fastglmPure <- function(x, y,
 
     res
     }, error = function(e) {
-        if (auto && is.matrix(x) && grepl("Cholesky factorization", conditionMessage(e), fixed = TRUE)) {
+        if (is.matrix(x) && grepl("Cholesky factorization", conditionMessage(e), fixed = TRUE)) {
+            if (!auto)
+                warning("Cholesky factorization is singular or ill-conditioned; ",
+                        "the model was fit with pivoted QR (method = 0) instead.", call. = FALSE)
             method <<- 0L
             is.int <<- .intercept_columns(x)
             ans <- if (firth) fit_glm_firth(x, y, weights, offset, start, mu, eta,
@@ -503,7 +508,9 @@ fastglmPure <- function(x, y,
 #' @param mustart values for the vector of means.
 #' @param method a decomposition name (`qr`, `qr_unpivoted`, `llt`, `ldlt`,
 #'   `qr_full`, `svd`, or `auto`) or an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
-#' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
+#' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky. For a dense design whose
+#' Cholesky factorization is singular or ill-conditioned, methods 2 and 3 refit
+#' with the column-pivoted QR decomposition and warn; `auto` does so silently.
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
 #' @param inference retain full covariance, diagonal standard errors, or no inference.
