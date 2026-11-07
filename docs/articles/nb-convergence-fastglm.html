@@ -251,8 +251,8 @@ maximized log-likelihoods.</p>
 </tr>
 </tbody>
 </table>
-<p><code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> converges on every replication.
-<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> fails on roughly one in six.</p>
+<p><code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> converges on 200 of 200 replications, and
+<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> fails on 35.</p>
 </div>
 <div class="section level3">
 <h3 id="log-likelihood-comparison">Log-likelihood comparison<a class="anchor" aria-label="anchor" href="#log-likelihood-comparison"></a>
@@ -274,23 +274,11 @@ must still be counted when evaluating numerical reliability:</p>
 <span><span class="va">n_degenerate</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">ll_diff</span> <span class="op">&gt;</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">agree</span> <span class="op">&lt;-</span> <span class="va">both</span></span>
 <span><span class="va">agree</span><span class="op">[</span><span class="va">both</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ll_diff</span> <span class="op">&lt;=</span> <span class="fl">1</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"Replications where both converge:         %d / %d\n"</span>,</span>
-<span>            <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">both</span><span class="op">)</span>, <span class="va">n_reps</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Replications where both converge:         165 / 200</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"  of which MASS lands at degenerate MLE:  %d\n"</span>, <span class="va">n_degenerate</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   of which MASS lands at degenerate MLE:  3</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"  genuine agreement (|diff| &lt;= 1):        %d\n"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">agree</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   genuine agreement (|diff| &lt;= 1):        162</span></span>
-<span></span>
-<span><span class="va">ll_good</span> <span class="op">&lt;-</span> <span class="va">results</span><span class="op">$</span><span class="va">fg_loglik</span><span class="op">[</span><span class="va">agree</span><span class="op">]</span> <span class="op">-</span> <span class="va">results</span><span class="op">$</span><span class="va">mass_loglik</span><span class="op">[</span><span class="va">agree</span><span class="op">]</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"\nAmong agreeing fits:\n"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Among agreeing fits:</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"  Max |logLik difference|:  %.2e\n"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">ll_good</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Max |logLik difference|:  1.53e-06</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"  Mean |logLik difference|: %.2e\n"</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">ll_good</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Mean |logLik difference|: 1.92e-08</span></span></code></pre></div>
+<span><span class="va">ll_good</span> <span class="op">&lt;-</span> <span class="va">results</span><span class="op">$</span><span class="va">fg_loglik</span><span class="op">[</span><span class="va">agree</span><span class="op">]</span> <span class="op">-</span> <span class="va">results</span><span class="op">$</span><span class="va">mass_loglik</span><span class="op">[</span><span class="va">agree</span><span class="op">]</span></span></code></pre></div>
+<p>Both methods converge on 165 of 200 replications.
+<code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> reaches a degenerate fit in 3 of these,
+which leaves 162 agreeing fits. Among them, the largest absolute
+log-likelihood difference is 1.5e-06, and the mean is 1.9e-08.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
 <span><span class="va">agreement</span> <span class="op">&lt;-</span> <span class="va">results</span><span class="op">[</span><span class="va">agree</span>, <span class="op">]</span></span>
@@ -317,29 +305,17 @@ must still be counted when evaluating numerical reliability:</p>
 <div class="float">
 <img src="nb-convergence-figs/theta-plot-1.png" alt="plot of chunk theta-plot"><div class="figcaption">plot of chunk theta-plot</div>
 </div>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"Max |theta difference|: %.2e\n"</span>,</span>
-<span>            <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">results</span><span class="op">$</span><span class="va">fg_theta</span><span class="op">[</span><span class="va">agree</span><span class="op">]</span> <span class="op">-</span> <span class="va">results</span><span class="op">$</span><span class="va">mass_theta</span><span class="op">[</span><span class="va">agree</span><span class="op">]</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Max |theta difference|: 4.26e-07</span></span></code></pre></div>
+<p>The largest absolute theta difference among these fits is
+4.3e-07.</p>
 </div>
 <div class="section level3">
 <h3 id="cases-where-only-fastglm-converges">Cases where only fastglm converges<a class="anchor" aria-label="anchor" href="#cases-where-only-fastglm-converges"></a>
 </h3>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fg_only</span> <span class="op">&lt;-</span> <span class="va">results</span><span class="op">$</span><span class="va">fg_conv</span> <span class="op">&amp;</span> <span class="op">!</span><span class="va">results</span><span class="op">$</span><span class="va">mass_conv</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"fastglm converges, MASS fails: %d replications\n"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">fg_only</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; fastglm converges, MASS fails: 35 replications</span></span>
-<span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/any.html" class="external-link">any</a></span><span class="op">(</span><span class="va">fg_only</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"  theta range:  [%.3f, %.3f]\n"</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">results</span><span class="op">$</span><span class="va">fg_theta</span><span class="op">[</span><span class="va">fg_only</span><span class="op">]</span><span class="op">)</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">results</span><span class="op">$</span><span class="va">fg_theta</span><span class="op">[</span><span class="va">fg_only</span><span class="op">]</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"  logLik range: [%.1f, %.1f]\n"</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">results</span><span class="op">$</span><span class="va">fg_loglik</span><span class="op">[</span><span class="va">fg_only</span><span class="op">]</span><span class="op">)</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">results</span><span class="op">$</span><span class="va">fg_loglik</span><span class="op">[</span><span class="va">fg_only</span><span class="op">]</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span><span class="co">#&gt;   theta range:  [0.861, 1.242]</span></span>
-<span><span class="co">#&gt;   logLik range: [-1123.1, -935.4]</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fg_only</span> <span class="op">&lt;-</span> <span class="va">results</span><span class="op">$</span><span class="va">fg_conv</span> <span class="op">&amp;</span> <span class="op">!</span><span class="va">results</span><span class="op">$</span><span class="va">mass_conv</span></span></code></pre></div>
+<p><code><a href="../reference/fastglm_nb.html">fastglm_nb()</a></code> converges while <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code>
+fails in 35 replications. Across these fits, theta ranges from 0.861 to
+1.242, and the log likelihood ranges from -1123.1 to -935.4.</p>
 </div>
 </div>
   </div>

@@ -73,7 +73,8 @@ mb <- microbenchmark::microbenchmark(
                                data = sex2, pl = FALSE, plconf = NULL),
     times = 3L
 )
-print(mb, unit = "ms")
+knitr::kable(summary(mb, unit = "ms")[, c("expr", "min", "median", "max")], digits = 2,
+             col.names = c("Method", "Minimum (ms)", "Median (ms)", "Maximum (ms)"), row.names = FALSE)
 ```
 
 # General GLM families
@@ -94,17 +95,23 @@ eta_true <- 0.5 + 0.3 * x1 - 0.2 * x2
 ## Binomial (logit, probit, cloglog)
 
 ```{r}
+# Largest coefficient difference from brglm2, by link.
+difference_table <- function(differences) {
+    knitr::kable(data.frame(Link = names(differences),
+                            Difference = formatC(differences, format = "e", digits = 1)),
+                 col.names = c("Link", "Largest coefficient difference"), row.names = FALSE)
+}
 y_bin <- rbinom(n, 1, plogis(eta_true))
 df <- data.frame(y = y_bin, x1 = x1, x2 = x2)
 
-for (lnk in c("logit", "probit", "cloglog")) {
+differences <- sapply(c("logit", "probit", "cloglog"), function(lnk) {
     fam <- binomial(lnk)
     f <- fastglm(X, y_bin, family = fam, firth = TRUE, tol = 1e-10)
     b <- glm(y ~ x1 + x2, data = df, family = fam, method = "brglmFit",
              type = "AS_mean", control = list(epsilon = 1e-10, maxit = 200))
-    cat(sprintf("binomial %-8s max|diff| = %.2e\n", lnk,
-                max(abs(unname(coef(f)) - unname(coef(b))))))
-}
+    max(abs(unname(coef(f)) - unname(coef(b))))
+})
+difference_table(differences)
 ```
 
 ## Poisson (log, sqrt)
@@ -112,15 +119,15 @@ for (lnk in c("logit", "probit", "cloglog")) {
 ```{r}
 y_pois <- rpois(n, exp(eta_true))
 
-for (lnk in c("log", "sqrt")) {
+differences <- sapply(c("log", "sqrt"), function(lnk) {
     fam <- poisson(lnk)
     f <- fastglm(X, y_pois, family = fam, firth = TRUE, tol = 1e-10)
     b <- glm(y ~ x1 + x2, data = data.frame(y = y_pois, x1 = x1, x2 = x2),
              family = fam, method = "brglmFit", type = "AS_mean",
              control = list(epsilon = 1e-10, maxit = 200))
-    cat(sprintf("poisson  %-8s max|diff| = %.2e\n", lnk,
-                max(abs(unname(coef(f)) - unname(coef(b))))))
-}
+    max(abs(unname(coef(f)) - unname(coef(b))))
+})
+difference_table(differences)
 ```
 
 ## Gamma (log, inverse)
@@ -128,15 +135,15 @@ for (lnk in c("log", "sqrt")) {
 ```{r}
 y_gam <- rgamma(n, shape = 5, rate = 5 / exp(eta_true))
 
-for (lnk in c("log", "inverse")) {
+differences <- sapply(c("log", "inverse"), function(lnk) {
     fam <- Gamma(lnk)
     f <- fastglm(X, y_gam, family = fam, firth = TRUE, tol = 1e-10)
     b <- glm(y ~ x1 + x2, data = data.frame(y = y_gam, x1 = x1, x2 = x2),
              family = fam, method = "brglmFit", type = "AS_mean",
              control = list(epsilon = 1e-10, maxit = 200))
-    cat(sprintf("Gamma    %-8s max|diff| = %.2e\n", lnk,
-                max(abs(unname(coef(f)) - unname(coef(b))))))
-}
+    max(abs(unname(coef(f)) - unname(coef(b))))
+})
+difference_table(differences)
 ```
 
 ## Gaussian (identity, log)
@@ -144,16 +151,16 @@ for (lnk in c("log", "inverse")) {
 ```{r}
 y_gauss <- eta_true + rnorm(n, 0, 0.5)
 
-for (lnk in c("identity", "log")) {
+differences <- sapply(c("identity", "log"), function(lnk) {
     fam <- gaussian(lnk)
     y0 <- if (lnk == "log") pmax(y_gauss, 0.01) else y_gauss
     f <- fastglm(X, y0, family = fam, firth = TRUE, tol = 1e-10)
     b <- glm(y ~ x1 + x2, data = data.frame(y = y0, x1 = x1, x2 = x2),
              family = fam, method = "brglmFit", type = "AS_mean",
              control = list(epsilon = 1e-10, maxit = 200))
-    cat(sprintf("gaussian %-8s max|diff| = %.2e\n", lnk,
-                max(abs(unname(coef(f)) - unname(coef(b))))))
-}
+    max(abs(unname(coef(f)) - unname(coef(b))))
+})
+difference_table(differences)
 ```
 
 ## Inverse Gaussian (log)
@@ -167,9 +174,9 @@ f <- fastglm(X, y_ig, family = inverse.gaussian("log"), firth = TRUE, tol = 1e-1
 b <- glm(y ~ x1 + x2, data = data.frame(y = y_ig, x1 = x1, x2 = x2),
          family = inverse.gaussian("log"), method = "brglmFit", type = "AS_mean",
          control = list(epsilon = 1e-10, maxit = 200))
-cat(sprintf("inv.gauss log      max|diff| = %.2e\n",
-            max(abs(unname(coef(f)) - unname(coef(b))))))
 ```
+
+The largest coefficient difference from `brglm2` is `r formatC(max(abs(unname(coef(f)) - unname(coef(b)))), format = "e", digits = 1)`.
 
 # Standard errors
 
