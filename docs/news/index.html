@@ -96,7 +96,8 @@
 <h2 class="page-header" data-toc-text="0.1.3" id="fastglm-013">fastglm 0.1.3<a class="anchor" aria-label="anchor" href="#fastglm-013"></a></h2>
 <div class="section level3">
 <h3 id="behavior-changes-0-1-3">Behavior changes<a class="anchor" aria-label="anchor" href="#behavior-changes-0-1-3"></a></h3>
-<ul><li>Explicit Cholesky solves now reject singular or ill-conditioned information matrices instead of returning arbitrary coefficients or invalid covariance. With redundant predictors, use pivoted QR or <code>method = "auto"</code>, which report aliased coefficients as <code>NA</code>.</li>
+<ul><li>Aliased coefficients from rank-deficient designs are reported as <code>NA</code>, as in <code><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm()</a></code>, instead of 0.</li>
+<li>When the Cholesky factorization of a dense design is singular or ill-conditioned, <code>method = 2</code> and <code>method = 3</code> now refit with pivoted QR and warn, instead of returning arbitrary coefficients or invalid covariance. Sparse and <code>big.matrix</code> designs, which cannot use QR, report an error.</li>
 <li>Indefinite mixture information no longer produces standard errors from absolute values, and information matrices are evaluated at the reported estimates.</li>
 <li>Streaming fits now validate every chunk and propagate source errors.</li>
 <li>Printed output for models, summaries, diagnostics, predictions, bootstraps, and tests now shares one format. Numeric fields are unchanged, and test results and predictions support <code><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame()</a></code>.</li>

@@ -28,8 +28,10 @@ test_that("streaming QR retains stable uncertainty for nearly redundant predicto
     expect_equal(fastglm_average(fit),fastglm_average(ref),tolerance=2e-7)
     contrast <- function(x) { x[,2:3] <- x[,2:3]+1; x }
     contrast.ref <- function(x) { x[,2] <- x[,2]+1; x }
+    # The design has condition number near 2e8, and conf.low = estimate - 1.96 se
+    # cancels digits, so its relative error across platforms reaches about 4e-7.
     expect_equal(fastglm_average(fit,contrast=contrast),
-                 fastglm_average(ref,contrast=contrast.ref),tolerance=2e-7)
+                 fastglm_average(ref,contrast=contrast.ref),tolerance=1e-6)
 
     # Transform the well-conditioned reference covariance into X coordinates.
     transform <- matrix(c(1,0,0,0,1,0,0,-1/gap,1/gap),3,3)
