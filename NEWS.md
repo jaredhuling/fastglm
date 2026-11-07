@@ -2,10 +2,12 @@
 
 ## Behavior changes
 
-* Explicit Cholesky solves now reject singular or ill-conditioned information
-  matrices instead of returning arbitrary coefficients or invalid covariance.
-  With redundant predictors, use pivoted QR or `method = "auto"`, which report
-  aliased coefficients as `NA`.
+* Aliased coefficients from rank-deficient designs are reported as `NA`, as in
+  `glm()`, instead of 0.
+* When the Cholesky factorization of a dense design is singular or
+  ill-conditioned, `method = 2` and `method = 3` now refit with pivoted QR and
+  warn, instead of returning arbitrary coefficients or invalid covariance.
+  Sparse and `big.matrix` designs, which cannot use QR, report an error.
 * Indefinite mixture information no longer produces standard errors from absolute
   values, and information matrices are evaluated at the reported estimates.
 * Streaming fits now validate every chunk and propagate source errors.

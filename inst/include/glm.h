@@ -715,7 +715,7 @@ protected:
                         Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
                 } else {
                     ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                    if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                    if (fglm::ldlt_unusable(ChD))
                         Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
                 }
                 compute_log_det_XtWX(); update_A_prev(); factor_ready = true;
@@ -743,7 +743,7 @@ protected:
             } else {
                 if (!reuse_factor) {
                     ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                    if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                    if (fglm::ldlt_unusable(ChD))
                         Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
                     Dplus(ChD.vectorD());
                 }
@@ -785,7 +785,7 @@ protected:
             } else if (type == 3) {
                 update_XtWX();
                 ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                    if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                    if (fglm::ldlt_unusable(ChD))
                         Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
                 Dplus(ChD.vectorD());
                 rank = nvars;
@@ -890,7 +890,7 @@ protected:
                 beta = Ch.solve(Xtwz_buf);
             } else if (type == 3) {
                 ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                if (fglm::ldlt_unusable(ChD))
                     Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
                 Dplus(ChD.vectorD());  // sets rank
                 beta = ChD.solve(Xtwz_buf);
@@ -944,7 +944,7 @@ protected:
         {
             update_XtWX();
             ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                if (fglm::ldlt_unusable(ChD))
                     Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
             Dplus(ChD.vectorD());	// to set the rank
             //FIXME: Check on the permutation in the LDLT and incorporate it in
@@ -1030,7 +1030,7 @@ protected:
                     Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
             } else {
                 ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                if (ChD.info() != Eigen::Success || !ChD.isPositive() || ChD.rcond() < 1e-12)
+                if (fglm::ldlt_unusable(ChD))
                     Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
             }
         }

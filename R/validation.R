@@ -90,7 +90,9 @@
         relation <- qr.coef(qr(sweep(xx[, good, drop = FALSE], 2L, scales, "/"), tol = 1e-12), xx[, !good, drop = FALSE])
         res$alias.relation <- relation / scales
     }
-    res$offset <- offset
+    # As in earlier releases, a fit without an offset stores NULL. Callers
+    # use a non-NULL offset to detect that the model was fit with one.
+    res$offset <- if (length(offset) && any(offset != 0)) offset else NULL
     res$intercept <- intercept
     res$nobs <- sum(positive)
     res$df.residual <- res$nobs - res$rank

@@ -11,7 +11,9 @@ test_that("pivoted QR gives stable fitted values with aliases", {
             expect_equal(nrow(summary(f)$coefficients),4L)
             expect_equal(predict(f),f$linear.predictors)
         }
-        expect_error(fastglm(x,y,binomial(),method=2),"Cholesky")
+        expect_warning(f <- fastglm(x,y,binomial(),method=2),"pivoted QR")
+        expect_equal(f$fitted.values,reference$fitted.values,tolerance=1e-7)
+        expect_equal(sum(is.na(coef(f))),1L)
         expect_error(fastglm_fit(x,y,family=binomial(),singular.ok=FALSE),"singular")
     }
 })
