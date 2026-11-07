@@ -590,14 +590,14 @@ Times include ordinary covariance calculations.
 
 | Method | Median time (ms) | Max. coefficient difference | Max. fitted-probability difference |
 |:---|---:|:---|:---|
-| glm.fit | 283.71 | 0.00e+00 | 0.00e+00 |
-| fastglm QR | 99.36 | 1.30e-15 | 6.22e-15 |
-| fastglm LLT | 23.77 | 1.22e-15 | 6.55e-15 |
+| glm.fit | 282.64 | 0.00e+00 | 0.00e+00 |
+| fastglm QR | 98.77 | 1.30e-15 | 6.22e-15 |
+| fastglm LLT | 23.18 | 1.22e-15 | 6.55e-15 |
 | fastglm LDLT | 23.55 | 1.22e-15 | 6.44e-15 |
-| fastglm auto | 28.80 | 9.44e-16 | 5.22e-15 |
+| fastglm auto | 28.98 | 9.44e-16 | 5.22e-15 |
 
-For this design, the median time for `glm.fit()` was 283.7 ms, compared
-with 23.8 ms for LLT. The coefficient and fitted-probability differences
+For this design, the median time for `glm.fit()` was 282.6 ms, compared
+with 23.2 ms for LLT. The coefficient and fitted-probability differences
 are close to floating-point rounding error, so the fits agree to
 numerical precision.
 
@@ -675,17 +675,17 @@ At 100,000 observations, using medians of five repetitions:
 
 | Model | Design columns | fastglm (ms) | Reference | Reference (ms) | Time ratio |
 |:---|---:|---:|:---|---:|---:|
-| Logistic | 30 | 59.17 | speedglm.wfit | 165.13 | 2.79 |
-| Poisson | 30 | 64.31 | speedglm.wfit | 222.45 | 3.46 |
-| Negative binomial | 4 | 124.90 | MASS::glm.nb | 564.95 | 4.52 |
-| Hurdle Poisson | 3 | 42.52 | pscl::hurdle | 600.81 | 14.13 |
-| Zero-inflated Poisson | 3 | 314.47 | pscl::zeroinfl | 1255.69 | 3.99 |
-| Firth binomial-logit | 6 | 39.37 | brglm2::brglmFit | 83.29 | 2.12 |
-| Firth Poisson-log | 6 | 36.67 | brglm2::brglmFit | 103.77 | 2.83 |
-| Firth Gamma-log | 6 | 36.00 | brglm2::brglmFit | 1028.00 | 28.56 |
-| Firth Gaussian-identity | 6 | 11.59 | brglm2::brglmFit | 210.40 | 18.15 |
+| Logistic | 30 | 57.17 | speedglm.wfit | 164.04 | 2.87 |
+| Poisson | 30 | 62.05 | speedglm.wfit | 221.72 | 3.57 |
+| Negative binomial | 4 | 124.87 | MASS::glm.nb | 571.93 | 4.58 |
+| Hurdle Poisson | 3 | 42.30 | pscl::hurdle | 597.84 | 14.13 |
+| Zero-inflated Poisson | 3 | 313.61 | pscl::zeroinfl | 1209.55 | 3.86 |
+| Firth binomial-logit | 6 | 45.28 | brglm2::brglmFit | 81.77 | 1.81 |
+| Firth Poisson-log | 6 | 37.01 | brglm2::brglmFit | 157.35 | 4.25 |
+| Firth Gamma-log | 6 | 30.86 | brglm2::brglmFit | 1005.47 | 32.58 |
+| Firth Gaussian-identity | 6 | 11.43 | brglm2::brglmFit | 184.63 | 16.15 |
 
-At this sample size, the largest time ratio is 28.6 for Firth Gamma-log.
+At this sample size, the largest time ratio is 32.6 for Firth Gamma-log.
 Gamma bias-reduction fits combine identical prior-weight contributions
 in the dispersion equation and reuse matrix calculations that remain
 constant during fitting.
@@ -723,22 +723,22 @@ fitting.</figcaption>
 | Link    | Method                     | Seconds | Time ratio |
 |:--------|:---------------------------|--------:|-----------:|
 | logit   | fastglm                    |   0.067 |        1.0 |
-| logit   | rms::orm                   |   0.196 |        2.9 |
-| logit   | ordinal::clm               |   0.695 |       10.3 |
-| logit   | MASS::polr                 |   1.392 |       20.7 |
-| logit   | VGAM::vglm                 |   1.783 |       26.5 |
-| logit   | WeightIt::ordinal_weightit |   3.021 |       44.9 |
-| probit  | fastglm                    |   0.100 |        1.0 |
+| logit   | rms::orm                   |   0.197 |        2.9 |
+| logit   | ordinal::clm               |   0.690 |       10.3 |
+| logit   | MASS::polr                 |   1.405 |       20.9 |
+| logit   | VGAM::vglm                 |   1.762 |       26.2 |
+| logit   | WeightIt::ordinal_weightit |   3.049 |       45.4 |
+| probit  | fastglm                    |   0.101 |        1.0 |
 | probit  | rms::orm                   |   0.219 |        2.2 |
-| probit  | ordinal::clm               |   0.688 |        6.9 |
-| probit  | MASS::polr                 |   1.794 |       17.9 |
-| probit  | VGAM::vglm                 |   1.920 |       19.2 |
-| probit  | WeightIt::ordinal_weightit |   6.300 |       62.9 |
-| cloglog | fastglm                    |   0.098 |        1.0 |
-| cloglog | ordinal::clm               |   0.747 |        7.6 |
-| cloglog | MASS::polr                 |   1.403 |       14.3 |
-| cloglog | VGAM::vglm                 |   6.508 |         NA |
-| cloglog | WeightIt::ordinal_weightit |   5.783 |       58.8 |
+| probit  | ordinal::clm               |   0.688 |        6.8 |
+| probit  | MASS::polr                 |   1.800 |       17.9 |
+| probit  | VGAM::vglm                 |   2.007 |       20.0 |
+| probit  | WeightIt::ordinal_weightit |   6.429 |       63.9 |
+| cloglog | fastglm                    |   0.100 |        1.0 |
+| cloglog | ordinal::clm               |   0.763 |        7.7 |
+| cloglog | MASS::polr                 |   1.477 |       14.8 |
+| cloglog | VGAM::vglm                 |   6.579 |         NA |
+| cloglog | WeightIt::ordinal_weightit |   5.922 |       59.5 |
 
 With 100,000 observations and 5 categories, `rms::orm` is the closest
 comparison, at 2.9 times the *fastglm* time for logit and 2.2 times for
@@ -760,21 +760,21 @@ faster fitting.</figcaption>
 | Categories | Method                     | Seconds | Time ratio |
 |-----------:|:---------------------------|--------:|-----------:|
 |         30 | fastglm                    |   0.017 |       1.00 |
-|         30 | rms::orm                   |   0.042 |       2.51 |
-|         30 | ordinal::clm               |   0.643 |      38.02 |
-|         30 | MASS::polr                 |   0.888 |      52.56 |
-|         30 | VGAM::vglm                 |   5.331 |     315.44 |
-|         30 | WeightIt::ordinal_weightit |   2.352 |     139.15 |
-|        300 | fastglm                    |   0.096 |       1.00 |
-|        300 | rms::orm                   |   0.047 |       0.49 |
-|        300 | ordinal::clm               |  40.457 |     421.96 |
-|        300 | MASS::polr                 |  29.138 |     303.90 |
-|        300 | WeightIt::ordinal_weightit |  48.617 |     507.07 |
-|       1000 | fastglm                    |   0.315 |       1.00 |
-|       1000 | rms::orm                   |   0.088 |       0.28 |
-|       1000 | ordinal::clm               | 484.423 |    1537.47 |
-|       1000 | MASS::polr                 | 325.835 |    1034.14 |
-|       1000 | WeightIt::ordinal_weightit | 334.278 |    1060.94 |
+|         30 | rms::orm                   |   0.044 |       2.56 |
+|         30 | ordinal::clm               |   0.649 |      38.06 |
+|         30 | MASS::polr                 |   0.891 |      52.25 |
+|         30 | VGAM::vglm                 |   5.443 |     319.08 |
+|         30 | WeightIt::ordinal_weightit |   2.578 |     151.13 |
+|        300 | fastglm                    |   0.098 |       1.00 |
+|        300 | rms::orm                   |   0.049 |       0.50 |
+|        300 | ordinal::clm               |  41.008 |     418.83 |
+|        300 | MASS::polr                 |  29.603 |     302.35 |
+|        300 | WeightIt::ordinal_weightit |  47.976 |     490.00 |
+|       1000 | fastglm                    |   0.316 |       1.00 |
+|       1000 | rms::orm                   |   0.085 |       0.27 |
+|       1000 | ordinal::clm               | 483.794 |    1530.82 |
+|       1000 | MASS::polr                 | 277.030 |     876.58 |
+|       1000 | WeightIt::ordinal_weightit | 330.964 |    1047.24 |
 
 With 20,000 observations, `rms::orm` takes 0.5 times the *fastglm* time
 at 300 categories and 0.3 times at 1,000, so it is the faster choice in
@@ -789,7 +789,7 @@ probabilities at every row lies on the ordering boundary, so there is no
 time comparison at that size. `ordinal::clm` reported convergence with a
 higher log likelihood, but its cumulative predictors cross at 3 of the
 1,000 rows, which is not a valid probability model at those rows. At
-100,000 observations, `ordinal::clm` took 79.3 seconds and reported that
+100,000 observations, `ordinal::clm` took 78.9 seconds and reported that
 it had not converged, although its log likelihood agreed with *fastglm*,
 so it is omitted there as well.
 
@@ -807,14 +807,14 @@ faster fitting.</figcaption>
 
 | Observations | Fit | Seconds | Largest coefficient difference from dense fit |
 |:---|:---|---:|---:|
-| 100,000 | Dense ML | 0.066 | 0.0e+00 |
-| 100,000 | Dense mean bias reduction | 0.155 | 0.0e+00 |
-| 100,000 | Streamed ML | 0.154 | 2.2e-16 |
-| 100,000 | Streamed mean bias reduction | 0.369 | 1.1e-16 |
-| 1,000,000 | Dense ML | 0.671 | 0.0e+00 |
-| 1,000,000 | Dense mean bias reduction | 1.533 | 0.0e+00 |
-| 1,000,000 | Streamed ML | 1.596 | 1.1e-16 |
-| 1,000,000 | Streamed mean bias reduction | 3.573 | 3.0e-17 |
+| 100,000 | Dense ML | 0.068 | 0.0e+00 |
+| 100,000 | Dense mean bias reduction | 0.154 | 0.0e+00 |
+| 100,000 | Streamed ML | 0.157 | 2.2e-16 |
+| 100,000 | Streamed mean bias reduction | 0.362 | 1.1e-16 |
+| 1,000,000 | Dense ML | 0.673 | 0.0e+00 |
+| 1,000,000 | Dense mean bias reduction | 1.536 | 0.0e+00 |
+| 1,000,000 | Streamed ML | 1.570 | 1.1e-16 |
+| 1,000,000 | Streamed mean bias reduction | 3.540 | 3.0e-17 |
 
 Streamed fits use blocks of 10,000 rows.
 

@@ -1,28 +1,28 @@
 "model","n","p","fastglm_ms","reference","reference_ms","speedup","fastglm_method","panel","repetitions","seed"
-"Logistic",1000,30,0.792571,"speedglm.wfit",2.178084,2.74812477367958,"fastglm auto","Ordinary likelihood fits",5,421001
-"Poisson",1000,30,0.786257,"speedglm.wfit",2.267546,2.88397559576576,"fastglm auto","Ordinary likelihood fits",5,421002
-"Negative binomial",1000,4,1.609496,"MASS::glm.nb",10.392598,6.45705115141634,"fastglm_nb","Ordinary likelihood fits",5,421003
-"Hurdle Poisson",1000,3,0.617009,"pscl::hurdle",5.872102,9.51704432188185,"fastglm_hurdle","Ordinary likelihood fits",5,421004
-"Zero-inflated Poisson",1000,3,3.162863,"pscl::zeroinfl",12.289955,3.88570576721154,"fastglm_zi","Ordinary likelihood fits",5,421005
-"Firth binomial-logit",1000,6,1.007616,"brglm2::brglmFit",1.657958,1.64542643229167,"fastglm auto","Mean bias-reduced fits",5,421006
-"Firth Poisson-log",1000,6,0.737467,"brglm2::brglmFit",1.7138,2.32390059487408,"fastglm auto","Mean bias-reduced fits",5,421007
-"Firth Gamma-log",1000,6,0.815039,"brglm2::brglmFit",13.447631,16.4993711957342,"fastglm auto","Mean bias-reduced fits",5,421008
-"Firth Gaussian-identity",1000,6,0.731563,"brglm2::brglmFit",3.293284,4.50170935380822,"fastglm auto","Mean bias-reduced fits",5,421009
-"Logistic",10000,30,5.144598,"speedglm.wfit",16.48938,3.20518337875962,"fastglm auto","Ordinary likelihood fits",5,430001
-"Poisson",10000,30,5.614171,"speedglm.wfit",21.432094,3.81749932447729,"fastglm auto","Ordinary likelihood fits",5,430002
-"Negative binomial",10000,4,13.878295,"MASS::glm.nb",83.557139,6.02070636198467,"fastglm_nb","Ordinary likelihood fits",5,430003
-"Hurdle Poisson",10000,3,3.964003,"pscl::hurdle",53.325584,13.4524580329531,"fastglm_hurdle","Ordinary likelihood fits",5,430004
-"Zero-inflated Poisson",10000,3,30.858896,"pscl::zeroinfl",101.235191,3.2805836929487,"fastglm_zi","Ordinary likelihood fits",5,430005
-"Firth binomial-logit",10000,6,4.543251,"brglm2::brglmFit",10.519247,2.31535677865916,"fastglm auto","Mean bias-reduced fits",5,430006
-"Firth Poisson-log",10000,6,4.070849,"brglm2::brglmFit",10.455287,2.56833083221706,"fastglm auto","Mean bias-reduced fits",5,430007
-"Firth Gamma-log",10000,6,3.2964,"brglm2::brglmFit",100.733023,30.5584950248756,"fastglm auto","Mean bias-reduced fits",5,430008
-"Firth Gaussian-identity",10000,6,1.417985,"brglm2::brglmFit",19.13142,13.4919762902993,"fastglm auto","Mean bias-reduced fits",5,430009
-"Logistic",100000,30,59.166485,"speedglm.wfit",165.133527,2.79099775827481,"fastglm auto","Ordinary likelihood fits",5,520001
-"Poisson",100000,30,64.305589,"speedglm.wfit",222.446443,3.45920854562113,"fastglm auto","Ordinary likelihood fits",5,520002
-"Negative binomial",100000,4,124.90158,"MASS::glm.nb",564.945724,4.52312712137028,"fastglm_nb","Ordinary likelihood fits",5,520003
-"Hurdle Poisson",100000,3,42.516549,"pscl::hurdle",600.806005,14.131109394603,"fastglm_hurdle","Ordinary likelihood fits",5,520004
-"Zero-inflated Poisson",100000,3,314.474551,"pscl::zeroinfl",1255.688345,3.99297285267449,"fastglm_zi","Ordinary likelihood fits",5,520005
-"Firth binomial-logit",100000,6,39.366109,"brglm2::brglmFit",83.29437,2.11589034618585,"fastglm auto","Mean bias-reduced fits",5,520006
-"Firth Poisson-log",100000,6,36.66753,"brglm2::brglmFit",103.770221,2.8300303020138,"fastglm auto","Mean bias-reduced fits",5,520007
-"Firth Gamma-log",100000,6,35.999558,"brglm2::brglmFit",1027.998658,28.5558688803901,"fastglm auto","Mean bias-reduced fits",5,520008
-"Firth Gaussian-identity",100000,6,11.590864,"brglm2::brglmFit",210.39765,18.1520247325825,"fastglm auto","Mean bias-reduced fits",5,520009
+"Logistic",1000,30,0.786749,"speedglm.wfit",2.15127,2.73437907134296,"fastglm auto","Ordinary likelihood fits",5,421001
+"Poisson",1000,30,0.747717,"speedglm.wfit",2.210679,2.95657180457312,"fastglm auto","Ordinary likelihood fits",5,421002
+"Negative binomial",1000,4,1.614949,"MASS::glm.nb",10.09379,6.25022214323796,"fastglm_nb","Ordinary likelihood fits",5,421003
+"Hurdle Poisson",1000,3,0.614713,"pscl::hurdle",5.654433,9.19849262989395,"fastglm_hurdle","Ordinary likelihood fits",5,421004
+"Zero-inflated Poisson",1000,3,3.133507,"pscl::zeroinfl",12.027391,3.8383163018305,"fastglm_zi","Ordinary likelihood fits",5,421005
+"Firth binomial-logit",1000,6,0.946567,"brglm2::brglmFit",1.675137,1.7696972322086,"fastglm auto","Mean bias-reduced fits",5,421006
+"Firth Poisson-log",1000,6,0.907699,"brglm2::brglmFit",1.741967,1.91910203712905,"fastglm auto","Mean bias-reduced fits",5,421007
+"Firth Gamma-log",1000,6,0.798352,"brglm2::brglmFit",13.360711,16.735363599014,"fastglm auto","Mean bias-reduced fits",5,421008
+"Firth Gaussian-identity",1000,6,0.493845,"brglm2::brglmFit",3.23859,6.55790784557908,"fastglm auto","Mean bias-reduced fits",5,421009
+"Logistic",10000,30,5.205934,"speedglm.wfit",16.288234,3.12878227038606,"fastglm auto","Ordinary likelihood fits",5,430001
+"Poisson",10000,30,5.437461,"speedglm.wfit",21.968989,4.04030281780412,"fastglm auto","Ordinary likelihood fits",5,430002
+"Negative binomial",10000,4,14.57714,"MASS::glm.nb",81.943297,5.6213562468358,"fastglm_nb","Ordinary likelihood fits",5,430003
+"Hurdle Poisson",10000,3,3.957197,"pscl::hurdle",52.808369,13.3448926095921,"fastglm_hurdle","Ordinary likelihood fits",5,430004
+"Zero-inflated Poisson",10000,3,29.083268,"pscl::zeroinfl",96.216053,3.30829578711718,"fastglm_zi","Ordinary likelihood fits",5,430005
+"Firth binomial-logit",10000,6,3.811524,"brglm2::brglmFit",9.865871,2.58843208123575,"fastglm auto","Mean bias-reduced fits",5,430006
+"Firth Poisson-log",10000,6,3.591846,"brglm2::brglmFit",10.381733,2.89036139077232,"fastglm auto","Mean bias-reduced fits",5,430007
+"Firth Gamma-log",10000,6,3.386887,"brglm2::brglmFit",99.50741,29.3801978040602,"fastglm auto","Mean bias-reduced fits",5,430008
+"Firth Gaussian-identity",10000,6,1.528685,"brglm2::brglmFit",18.66771,12.211613249296,"fastglm auto","Mean bias-reduced fits",5,430009
+"Logistic",100000,30,57.172081,"speedglm.wfit",164.038294,2.86920278448497,"fastglm auto","Ordinary likelihood fits",5,520001
+"Poisson",100000,30,62.053131,"speedglm.wfit",221.71693,3.57301761292271,"fastglm auto","Ordinary likelihood fits",5,520002
+"Negative binomial",100000,4,124.866115,"MASS::glm.nb",571.931263,4.58035603173847,"fastglm_nb","Ordinary likelihood fits",5,520003
+"Hurdle Poisson",100000,3,42.301012,"pscl::hurdle",597.84396,14.1330888253926,"fastglm_hurdle","Ordinary likelihood fits",5,520004
+"Zero-inflated Poisson",100000,3,313.613059,"pscl::zeroinfl",1209.547396,3.85681450848002,"fastglm_zi","Ordinary likelihood fits",5,520005
+"Firth binomial-logit",100000,6,45.281958,"brglm2::brglmFit",81.774705,1.80590037648107,"fastglm auto","Mean bias-reduced fits",5,520006
+"Firth Poisson-log",100000,6,37.013611,"brglm2::brglmFit",157.348529,4.25109911594413,"fastglm auto","Mean bias-reduced fits",5,520007
+"Firth Gamma-log",100000,6,30.860905,"brglm2::brglmFit",1005.470757,32.5807281737201,"fastglm auto","Mean bias-reduced fits",5,520008
+"Firth Gaussian-identity",100000,6,11.434367,"brglm2::brglmFit",184.628043,16.1467655358622,"fastglm auto","Mean bias-reduced fits",5,520009

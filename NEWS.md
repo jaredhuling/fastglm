@@ -1,356 +1,102 @@
 # fastglm 0.1.3
 
-## Bug fixes
+## Behavior changes
 
-* `fastglm_ordinal()` now stops when named count-matrix columns do not match
-  `levels` in order, as `fastglm_ordinal_streaming()` already did. These columns
-  were previously assigned by position, which could silently reverse a fit.
-* Printed coefficient tables without p-values no longer round small estimates,
-  standard errors, or bootstrap limits to zero.
-* Streamed GLM, negative-binomial, hurdle, two-part, and ordinal fits no longer
-  retain the last source block, so saving a fit does not write those rows.
-* `predict(type="class")` for ordinal source fits no longer depends on the
-  factor method for `c()`, which requires R 4.1.0.
-* Models without a size parameter no longer print a missing `Theta` row.
+* Explicit Cholesky solves now reject singular or ill-conditioned information
+  matrices instead of returning arbitrary coefficients or invalid covariance.
+  With redundant predictors, use pivoted QR or `method = "auto"`, which report
+  aliased coefficients as `NA`.
+* Indefinite mixture information no longer produces standard errors from absolute
+  values, and information matrices are evaluated at the reported estimates.
+* Streaming fits now validate every chunk and propagate source errors.
+* Printed output for models, summaries, diagnostics, predictions, bootstraps, and
+  tests now shares one format. Numeric fields are unchanged, and test results and
+  predictions support `as.data.frame()`.
+* The plot method for ordinal assessments uses *ggplot2* when it is installed.
 
-## Performance
+## Ordinal models
 
-* Common-slope ordinal maximum likelihood now begins with observed-information
-  Newton steps, whose cost does not grow with the number of categories. Expected
-  information still certifies convergence and gives the reported covariance, and
-  estimates and standard errors are unchanged within the convergence tolerance.
-  Streamed fits read their source fewer times. `control=list(observed=FALSE)`
-  restores expected scoring throughout.
-* Ordinal design setup, category totals, and block scaling now run in C++, and
-  probit kernels compute both tails together.
-* Ordinal fits with many categories now use a block factorization and structured
-  coordinate changes instead of dense matrix products. `information.rcond` now
-  reports the exact one-norm value rather than an estimate.
-* Negative-binomial, hurdle, and truncated-count block calculations for dense
-  designs now run in C++, and dense matrix fits no longer copy or revalidate rows
-  on each pass. Streamed GLM validation allocates less.
-* Threshold-specific ordinal maximum likelihood also begins with
-  observed-information Newton steps.
-* Threshold-specific maximum-likelihood fits that reach the ordering boundary now
-  stop with `convergence.reason = "ordering_boundary"` and a message explaining the
-  cause, instead of using every remaining iteration.
-* Ordinal common-slope score moments and logit and probit sandwich blocks now run
-  in C++, reusing the fitting kernels.
-* Constrained ordinal iterations for profile intervals and likelihood-ratio and
-  score tests now run in C++, with results that match the earlier R loop.
-
-## Model interfaces and inference
-
-* Ordinal source fits now support prediction scores and cumulative calibration
-  directly through `fastglm_ordinal_assess()`. The default retains compact
-  summaries; `keep.rows` collects row scores and `sink` writes them blockwise.
-  Dense and streamed assessments use the same frequency and loss conventions.
-* Common-slope tests now operate directly on ordinal sources, including
-  complete terms, separate partial-model term nulls, ordinary score tests with
-  ML or reduced-null meanBR estimation, and partial-model ML likelihood ratios.
-  Refits and information calculations retain bounded observation-block storage.
-* Added optional ordinal boundary-row diagnostics through
-  `fastglm_diagnostics(boundary=TRUE)`. Tables identify the smallest category
-  probabilities and predictor gaps, observed frequencies, and source rows.
-  Raw and standardized scores are labeled by their parameter coordinates.
-  These diagnostics do not certify absence of an interior solution.
-* Partial ordinal evaluation computes each compensated adjacent predictor gap
-  once and limits logit-specific gap calculations to the logit link. The
-  probability equations, arithmetic order, and convergence criteria are retained.
-
-* Added a sufficient preflight check for saturated, fully varying logit models
-  with mean bias reduction. An absent intermediate category within a predictor
-  pattern can force a boundary solution despite all categories being observed
-  overall. Certified cases now explain the unavailable interior solution before
-  iteration; other boundary failures retain their existing diagnostics.
-* Partial ordinal fitting reuses the predictor-step bound already calculated
-  for its first scoring direction. This removes a duplicate source scan while
-  preserving direction scaling, probability ordering, and fallback checks.
-
-* Extended `fastglm_po_test()` to partial ordinal models. Complete terms can
-  be tested for common slopes while other varying effects remain unrestricted,
-  with joint or term-specific score tests and an ML likelihood-ratio option.
-  The meanBR null option retains its ordinary projected-score convention;
-  full-model adjusted-score hypotheses remain available through
-  `fastglm_score_test()`.
-* Added HC0/HC1 and clustered covariance for streamed common-slope and partial
-  ordinal fits. One source pass accumulates the same observed-information
-  and ordinary-score contributions as dense fits. Cluster labels are matched
-  across blocks without rounding numeric identifiers, and storage depends on
-  the block, coefficient dimension, and number of clusters.
-
-* Added selected threshold-specific effects through `nonparallel` in dense, prepared,
-  and streamed ordinal fits. Partial proportional odds and nonparallel probit
-  and complementary log-log models support maximum likelihood and full-model
-  mean bias reduction, formula terms or matrix column selections, grouped
-  frequencies, and offsets. Training and prediction checks enforce valid
-  cumulative probabilities at the relevant predictor values.
-* Added readable partial-model summaries, full expected-information covariance,
-  Wald intervals and term tests, probability standard errors, averages, and
-  prediction assessment. The ordinal vignette explains the model, prediction
-  domain, and bias-reduced wine example. Retained partial fits also support
-  robust and clustered covariance, automatic marginal effects, ML profiles,
-  and ordinary or full-model adjusted-score tests. Linear profile contrasts
-  can test equality of selected varying slopes while other effects remain
-  unrestricted. Partial models still require every declared category to have
-  positive frequency; refitting bootstrap support remains limited to common
-  slopes.
-* Corrected cumulative Pearson residuals for ordinal probit and complementary
-  log-log fits to use the binomial variance of each cumulative indicator.
-
-* Added ML profile-likelihood intervals and joint likelihood-ratio tests for
-  retained dense ordinal fits, and `fastglm_score_test()` for ordinary or
-  full-model mean-bias-adjusted ordinal scores under linear constraints.
-  The procedures use first-order chi-square references, retain constrained-fit
-  diagnostics, and require every category to be observed. Profile intervals
-  have a compact shared display; failed limits remain missing.
-* Added `fastglm_ordinal_streaming()` for repeatable sources, with logit,
-  probit, and complementary log-log links, maximum likelihood and mean bias
-  reduction, frequency counts, and offsets. Category and rank checks combine
-  all blocks. The bias adjustment uses information from the complete source.
-  Predictions, residuals, and weights support block destinations without
-  collecting the complete result. Model-based covariance is retained;
-  robust covariance rereads the source, while constrained coefficient
-  inference requires retained data.
-* Reduced binomial probit and complementary log-log post-fit overhead by
-  combining accurate likelihood and residual summaries, reusing the solver's
-  current deviance, and calculating prediction derivatives without allocating
-  unused probability summaries. The estimating equations are unchanged.
-
-* Binomial probit and complementary log-log bias reduction now evaluates tail
-  probabilities, scores, and information without separately flooring means and
-  derivatives. This corrects the estimating equations for nearly deterministic
-  outcomes. QR and SVD adjustments avoid amplification of roundoff in rows with
-  tiny working weights. Likelihoods, residuals, and diagnostics use the same
-  calculations across dense, sparse, mapped, and streamed fits.
-* Logistic ordinal fitting reuses threshold-gap calculations and algebraic
-  probability identities to reduce exponential and logarithm evaluations without
-  storing observation-level probability arrays. Binary probit and complementary
-  log-log bias reduction uses bounded Fisher scoring, retaining checks of the
-  adjusted score and remaining predictor change.
-
-* Binomial probit and complementary log-log mean bias reduction now limits
-  oversized scoring updates on the linear-predictor scale. Sparse, mapped, and
-  streamed fits use current information for these adjustments, avoiding delayed
-  adjustment oscillation. Diagnostics report reduced steps. Streaming null
-  deviances handle all-zero/all-one binomial outcomes with offsets directly.
-* Extended `fastglm_wald_test()` to truncated, hurdle, zero-inflated, and two-part
-  fits. Component selection, complete formula terms, and named contrasts retain
-  joint regression covariance, including supplied cross-component covariance.
-  Estimated negative-binomial size boundaries return unavailable tests.
-
-* Ordinal models now support probit and complementary log-log links with
-  maximum likelihood and mean bias reduction. Predictions, marginal effects,
-  expected and robust covariance, assessment, common-slope score tests, prepared
-  designs, and bootstrap refits retain the selected link.
-* Dense Firth GLMs with a numerically zero-rank working design no longer report
-  successful convergence from a zero coefficient update.
-
-* Added `fastglm_wald_test()` for joint formula-term tests and named linear
-  coefficient contrasts in GLMs and ordinal models, with model-based or supplied
-  covariance and the shared test display. Nonestimability and unavailable
-  covariance remain explicit; the chi-square reference is a first-order approximation.
-* Proportional-odds score tests now use the tridiagonal threshold information
-  directly, reducing intermediate allocations. `fastglm_po_test(by.term=TRUE)`
-  shares one null fit and one information calculation across joint and term-specific
-  tests, with readable tables and numeric extraction.
-
-* Unified printed model, summary, diagnostics, prediction, bootstrap, and hypothesis-test output with
-  common headings, aligned tables, display precision, and fitting status.
-  Test results retain numeric fields and provide `as.data.frame()` and optional
-  `broom::tidy()` extraction, including failure explanations.
-  Diagnostics use readable solver names and labeled numerical checks.
-  Predictions with standard errors print aligned tables and support
-  `as.data.frame()`, while retaining the original `fit` and `se.fit` components.
-  Vignettes use these displays directly.
-* Added `fastglm_po_test()` for direct proportional-odds testing and an explicit
-  `null.estimation = "meanBR"` option (`po.estimation` within assessment).
-  This evaluates the ordinary nuisance-projected score at a bias-reduced null;
-  its chi-square reference has first-order justification. A sufficient
-  separation check identifies two-valued predictor groups observed only in an
-  endpoint category. ML separation is reported before optimization; empty
-  categories and deficient rank remain unsupported.
-
-* Added an optional analytic proportional-odds score test to
-  `fastglm_ordinal_assess()`, using an ML null refit and expected Fisher
-  information. Joint and selected-term tests support frequency counts and
-  offsets. Empty categories, deficient designs, failed null fits, and unusable
-  information return explicit diagnostics and unavailable p-values. The test
-  uses a first-order chi-square reference without resampling.
-
-* Added `fastglm_marginal_effects()` for average derivatives of ordinal category
-  and cumulative probabilities with respect to a continuous predictor. Formula
-  interactions and smooth transformations are differentiated together, with
-  offsets held fixed and delta-method uncertainty for thresholds and slopes.
-* Added ordinal prediction assessment with logarithmic and ranked probability
-  scores, cumulative calibration plots, and descriptive threshold-specific
-  slope comparisons. Frequency counts contribute individual-observation scores,
-  and supplied evaluation outcomes are kept separate from fitting.
-* Ordinal parametric bootstraps now reuse response-independent design setup
-  within each process while retaining replicate-specific fitting diagnostics.
-
+* Added `fastglm_ordinal()` for cumulative-link models with logit, probit, and
+  complementary log-log links, by maximum likelihood or mean bias reduction, with
+  formula and matrix interfaces, frequency counts, and offsets.
+* Added threshold-specific effects through `nonparallel`, including partial
+  proportional odds. Fits whose best solution lies on the ordering boundary stop
+  with `convergence.reason = "ordering_boundary"` and an explanation.
+* Added category and cumulative predictions with standard errors, average
+  probabilities and contrasts, `fastglm_marginal_effects()`, simulation, residuals,
+  and optional broom methods.
+* Added `fastglm_ordinal_assess()` for prediction scores and calibration,
+  `fastglm_po_test()` for common-slope tests, and boundary-row diagnostics through
+  `fastglm_diagnostics(boundary = TRUE)`.
+* Added robust and clustered covariance, refitting bootstraps for common-slope fits,
+  profile-likelihood intervals, and score tests.
 * Added `fastglm_ordinal_prepare()` and `fastglm_ordinal_batch()` for repeated
-  ordinal responses on a common predictor design. Saved centering, scaling,
-  and rank checks are reused when predictors and effective row frequencies
-  agree; changed inputs rebuild the preparation. Formula metadata and ordinary
-  R serialization are retained, with separate category mappings and convergence
-  diagnostics for each fit.
-* Added ordinal simulation, probability-scale and cumulative residuals, and
-  optional broom tidy, glance, and augment methods. Simulation preserves
-  effective category frequencies without expanding grouped observations.
-* Added HC0/HC1 and cluster covariance for ordinal fits, using the observed
-  ordinary-score Jacobian and explicit frequency semantics. For mean bias
-  reduction this is a first-order sandwich convention, with regularity and
-  positive-category requirements. Supplied covariance matrices can be used
-  in summaries, tidy output, and average probability contrasts.
-* Added ordinal pairs, cluster, and parametric refitting bootstraps. Replicate
-  diagnostics retain failures and category changes. Uncertainty summaries
-  remain unavailable when refits fail or an interior category is empty. For
-  mean bias-reduced parametric bootstraps, empty endpoints are allowed when
-  all interior categories remain represented in the original fit and every
-  refit.
+  responses, and `fastglm_ordinal_streaming()` for data read in blocks.
 
-* Added cumulative-logit proportional-odds models through `fastglm_ordinal()`,
-  with formula and matrix interfaces, maximum likelihood and mean bias
-  reduction, frequency counts, offsets, and native fitting.
-  Empty interior categories retain their labels through an explicit reduced
-  model mapping; tied-threshold Wald uncertainty is unavailable.
-  Category/cumulative predictions, model-based standard errors, and average
-  probability contrasts use the common model interface.
+## GLMs and count models
+
+* Added a formula interface, named and automatic solver choices, prediction with
+  offsets, leverage, simulation, Wald intervals, numerical diagnostics, and optional
+  broom methods.
+* Added `fastglm_prepare()` and `fastglm_batch()` for repeated outcomes on a common
+  design, including bias reduction, optional process workers, and
+  `inference = "none"` to skip covariance.
+* Added `fastglm_truncated()` for zero-truncated Poisson and negative-binomial
+  regression, and `fastglm_twopart()` for nonnegative continuous outcomes.
+* Count models now provide component and marginal predictions, probability masses,
+  delta-method standard errors, residuals, simulation, and profile intervals for
+  theta. Negative-binomial, hurdle, and two-part fits also accept sparse designs and
+  repeatable sources.
+* Added joint robust and clustered covariance for count and two-part models, average
+  response contrasts, and refitting bootstraps.
+
+## Inference
+
+* Added `fastglm_wald_test()` for joint term tests and named contrasts in GLMs,
+  ordinal, truncated, hurdle, zero-inflated, and two-part models.
+* Added profile-likelihood intervals and `fastglm_profile_test()` for dense
+  binomial-logit Firth fits.
+
+## Large data
 
 * Added `method = "qr"` to streaming GLMs, including mean bias reduction.
-  Incremental QR avoids weighted crossproducts in initialization and fitting,
-  retaining a triangular factor for covariance, prediction uncertainty,
-  leverage, robust covariance, and average-prediction inference. Rank is
-  assessed across the complete source; globally redundant columns still
-  produce an explicit error. The default Cholesky solver is unchanged.
-
-* Added penalized profile-likelihood intervals through
-  `confint(..., method = "profile")` and joint coefficient tests through
-  `fastglm_profile_test()` for retained dense binomial-logit Firth fits.
-  Constrained fits retain the full original Jeffreys penalty. The procedures
-  support binomial counts and frequency weights, use an asymptotic chi-square
-  reference, and report numerical failures through missing results and diagnostics.
-* Added `firth` to prepared designs and batch fits. Dense Gaussian-identity,
-  Gamma-log, and Poisson-square-root batches reuse common setup with the
-  automatic or LLT solver; other solvers retain their requested decomposition.
-  Modified predictors or weights invalidate the saved setup, and prepared
-  objects remain serializable across R sessions and process workers.
-
-* Extended estimated-theta negative-binomial, hurdle, and two-part fitting
-  to sparse matrices and repeatable block readers, with consistent offsets,
-  formula transformations, and joint theta uncertainty.
-* Added joint HC0/HC1 and cluster covariance for count and two-part models,
-  average response contrasts, and refitting bootstrap uncertainty. Bootstrap
-  output records failed fits, preserves reproducible replicate seeds, and
-  supports sparse designs and repeatable sources.
-
-* Added a direct formula interface, named and automatic solver choices,
-  prediction with offsets and term standard errors, leverage, simulation,
-  Wald intervals, numerical diagnostics, and optional broom methods.
-* Added reusable designs and batch fitting, including a shared Gaussian
-  factorization, optional process workers, and controls for retained data
-  and inference. `inference = "none"` skips covariance calculation.
-* Added standalone zero-truncated Poisson/NB regression and two-part
-  binomial/Gamma regression for nonnegative continuous outcomes.
-* Count models now provide component and marginal predictions, probability
-  masses, delta-method standard errors, summaries, residuals, and simulation.
-  Theta profile intervals are available for ordinary, truncated, and hurdle NB.
-* Added resettable sources with fixed formula schemas and optional DBI and
-  Parquet adapters. Streaming fits support prediction and diagnostic sinks,
-  robust/cluster covariance, and average predictions and contrasts.
+* Added resettable sources with fixed formula schemas, optional DBI and Parquet
+  adapters, sinks for predictions and diagnostics, robust and clustered covariance,
+  and average predictions for streamed fits.
 
 ## Numerical corrections
 
-* Streaming QR Firth convergence now checks the actual remaining changes in
-  fitted linear predictors, joint adjusted scores, and dispersion.
-  The criterion avoids requiring tiny changes to large cancelling coefficients.
-  Additional precision is used to verify highly ill-conditioned designs;
-  fits that fail the verified criteria still report nonconvergence.
+* Binomial probit and complementary log-log bias reduction now evaluates tail
+  probabilities, scores, and information accurately for nearly deterministic
+  outcomes, and limits oversized scoring updates.
+* Gamma mean bias reduction now solves the adjusted dispersion equation and guards
+  against overshooting initial steps. Dense Firth fits with a zero-rank working
+  design no longer report convergence.
+* Negative-binomial theta scores and likelihoods are stable near the Poisson limit.
+  Boundary theta estimates have unavailable standard errors, and hurdle
+  negative-binomial covariance uses joint observed information.
+* Corrected rank-deficient QR updates, aliased coefficient reporting, mapped matrix
+  views, offset null models, zero-weight degrees of freedom, grouped-binomial
+  likelihoods, and simulation of numeric binomial proportions.
+* `fastglm_ordinal()` now stops when named count-matrix columns do not match `levels`
+  in order. These columns were previously assigned by position, which could silently
+  reverse a fit.
+* Printed tables without p-values no longer round small estimates, standard errors,
+  or bootstrap limits to zero, and models without a size parameter no longer print a
+  missing `Theta` row.
+* Streamed fits no longer retain the last source block, so saving a fit does not
+  write those rows.
 
-* Safeguarded Gamma-log mean bias reduction against initial coefficient steps
-  that overshoot the adjusted-score solution. Firth diagnostics now distinguish
-  ordinary and adjusted coefficient scores, report the adjusted dispersion
-  score where applicable, and retain the solver's convergence reason.
-  Source initialization uses consistent fitted means and derivatives for very
-  small responses. Gamma-log null models with offsets use their explicit score
-  solution, avoiding a separate unstable intercept-only iteration.
+## Performance
 
-* Stabilized negative-binomial theta scores and likelihood calculations near
-  the Poisson limit. Boundary theta estimates have explicitly unavailable
-  theta standard errors; `SE.theta` elsewhere uses joint observed information.
-  The default beta-only NB covariance retains the usual expected-information
-  convention, while `vcov(..., full = TRUE)` includes theta jointly.
-* Truncated NB means and likelihood now correspond to the returned coefficients
-  and theta even when the outer iteration limit is reached.
-* Preserved sequential readers during component fits and bootstrap resampling,
-  retained external source offsets in new-data prediction, and corrected
-  simulation of numeric binomial proportions with integer trial weights.
-
-* Fixed rank-deficient QR updates and aliased coefficient reporting. Explicit
-  Cholesky solves reject singular or ill-conditioned information matrices;
-  automatic dense fits can fall back to pivoted QR.
-  Calls that previously returned arbitrary coefficients or invalid covariance
-  matrices can now fail explicitly. Callers with redundant predictors should
-  use pivoted QR or `method = "auto"` and handle aliased coefficients as `NA`.
-* Unified matrix/formula initialization and model accounting, including
-  grouped-binomial trials, zero-weight degrees of freedom, offset null models,
-  fixed dispersion, NB AIC, and working residuals.
-* Native family dispatch preserves modified-family callback semantics and
-  exact negative-binomial theta parameters.
-* Fixed mapped matrix views and matrix products involving row/column offsets.
-* Gamma mean bias reduction now solves the adjusted dispersion equation.
-  Supported families and the distinction between adjusted scores and penalized
-  likelihood are documented explicitly.
-* Hurdle NB covariance now uses joint coefficient–theta observed information.
-  Truncated-count iterations check likelihood improvement, and small-rate
-  derivatives use the correct limits. Component offsets are handled separately.
-* Information matrices are evaluated at the reported estimate. Indefinite
-  mixture information no longer produces standard errors from absolute values.
-* Streaming validates every chunk, uses family-specific initialization, and
-  propagates source errors. Grouped-binomial likelihoods retain trial totals.
-
-## Performance and verification
-
-* Added a reproducible ordinal uncertainty development study comparing
-  model-based, sandwich, and bootstrap intervals across small samples, rare
-  categories, correlated predictors, and independent clusters. Results retain
-  unavailable intervals and failures separately from conditional coverage.
-
-* Added a reproducible ordinal development study spanning small samples,
-  rare categories, separation, correlated predictors, grouped frequencies,
-  and larger predictor/category dimensions. It distinguishes convergence,
-  reduced-category fits, and regular interval coverage, with simulation error
-  reported separately from computational performance.
-
-* Replaced numerical differentiation in joint count-model information with
-  analytic derivatives, retaining coefficient--theta dependence, mixture
-  cross-component terms, and the existing covariance validity checks.
-
-* Reused constant Firth information matrices in sparse, mapped, and callback
-  fits. Gamma-log fitting also reuses the common adjustment after its initial
-  calculation. Gamma callback fits combine repeated prior weights within each
-  block while preserving sequential reads and bounded block storage.
-* Included `NEWS.md` in source packages so the README link resolves in the
-  packaged source; this repairs the incoming-check note from Windows.
-
-* Accelerated Gamma mean bias reduction by combining identical prior weights
-  in its dispersion equation and replacing fixed bisection with a safeguarded
-  Brent solve. Constant-weight Firth fits reuse matrix decompositions and
-  leverage calculations without changing the estimating equations.
-* Final dense Cholesky inference omits an unnecessary weighted-response solve,
-  and intercept detection stops scanning a column once it is nonconstant.
-* Revised vignette explanations to define technical terms and their practical
-  consequences, corrected outdated interface descriptions, and distinguished
-  historical benchmark outputs from current measurements.
-
-* Removed sparse intercept densification and duplicate covariance inversions.
-* Reused constant-weight factors and accepted streaming weighted systems;
-  omitted covariance calculations from mixture intermediate fits.
-* Added regression tests against base R, brglm2, and pscl, an accuracy-checked
-  timing script, and automatic Linux/macOS/Windows package checks.
-* Expanded the vignettes and restored the static benchmark regeneration script.
-
+* Ordinal maximum likelihood begins with observed-information Newton steps, whose
+  cost does not grow with the number of categories. Expected information still
+  certifies convergence and gives the reported covariance.
+  `control = list(observed = FALSE)` restores expected scoring throughout.
+* Ordinal fits with many categories use a block factorization, and setup, robust
+  covariance, common-slope tests, and constrained fits run in C++.
+* Negative-binomial, hurdle, and truncated-count calculations for dense designs run
+  in C++, and Firth fits reuse constant matrix calculations where possible.
 
 # fastglm 0.1.2
 
