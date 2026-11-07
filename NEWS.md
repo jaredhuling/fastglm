@@ -2,6 +2,7 @@
 
 ## Behavior changes
 
+* Requires R 4.1.0 or later.
 * Aliased coefficients from rank-deficient designs are reported as `NA`, as in
   `glm()`, instead of 0.
 * When the Cholesky factorization of a dense design is singular or
