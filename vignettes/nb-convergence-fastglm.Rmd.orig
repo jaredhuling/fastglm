@@ -124,8 +124,8 @@ knitr::kable(tab, align = "lrrl",
              caption = sprintf("Convergence over %d replications", n_reps))
 ```
 
-`fastglm_nb()` converges on every replication.  `MASS::glm.nb()` fails
-on roughly one in six.
+`fastglm_nb()` converges on `r sum(results$fg_conv)` of `r n_reps` replications, and
+`MASS::glm.nb()` fails on `r sum(!results$mass_conv)`.
 
 ### Log-likelihood comparison
 
@@ -143,17 +143,10 @@ ll_diff <- results$fg_loglik[both] - results$mass_loglik[both]
 n_degenerate <- sum(ll_diff > 1)
 agree <- both
 agree[both] <- ll_diff <= 1
-
-cat(sprintf("Replications where both converge:         %d / %d\n",
-            sum(both), n_reps))
-cat(sprintf("  of which MASS lands at degenerate MLE:  %d\n", n_degenerate))
-cat(sprintf("  genuine agreement (|diff| <= 1):        %d\n", sum(agree)))
-
 ll_good <- results$fg_loglik[agree] - results$mass_loglik[agree]
-cat(sprintf("\nAmong agreeing fits:\n"))
-cat(sprintf("  Max |logLik difference|:  %.2e\n", max(abs(ll_good))))
-cat(sprintf("  Mean |logLik difference|: %.2e\n", mean(abs(ll_good))))
 ```
+
+Both methods converge on `r sum(both)` of `r n_reps` replications. `MASS::glm.nb()` reaches a degenerate fit in `r n_degenerate` of these, which leaves `r sum(agree)` agreeing fits. Among them, the largest absolute log-likelihood difference is `r formatC(max(abs(ll_good)), format = "e", digits = 1)`, and the mean is `r formatC(mean(abs(ll_good)), format = "e", digits = 1)`.
 
 ```{r loglik-plot, fig.width = 6, fig.height = 4.5}
 library(ggplot2)
@@ -175,22 +168,14 @@ ggplot(agreement, aes(mass_theta, fg_theta)) +
     labs(x = expression(hat(theta) ~ "(MASS)"), y = expression(hat(theta) ~ "(fastglm)"),
          title = expression("Dispersion" ~ hat(theta) ~ "agreement")) +
     theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
-
-cat(sprintf("Max |theta difference|: %.2e\n",
-            max(abs(results$fg_theta[agree] - results$mass_theta[agree]))))
 ```
+
+The largest absolute theta difference among these fits is `r formatC(max(abs(results$fg_theta[agree] - results$mass_theta[agree])), format = "e", digits = 1)`.
 
 ### Cases where only fastglm converges
 
 ```{r fg-only}
 fg_only <- results$fg_conv & !results$mass_conv
-cat(sprintf("fastglm converges, MASS fails: %d replications\n", sum(fg_only)))
-if (any(fg_only)) {
-    cat(sprintf("  theta range:  [%.3f, %.3f]\n",
-                min(results$fg_theta[fg_only]),
-                max(results$fg_theta[fg_only])))
-    cat(sprintf("  logLik range: [%.1f, %.1f]\n",
-                min(results$fg_loglik[fg_only]),
-                max(results$fg_loglik[fg_only])))
-}
 ```
+
+`fastglm_nb()` converges while `MASS::glm.nb()` fails in `r sum(fg_only)` replications. Across these fits, theta ranges from `r round(min(results$fg_theta[fg_only]), 3)` to `r round(max(results$fg_theta[fg_only]), 3)`, and the log likelihood ranges from `r round(min(results$fg_loglik[fg_only]), 1)` to `r round(max(results$fg_loglik[fg_only]), 1)`.

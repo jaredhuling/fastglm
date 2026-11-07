@@ -226,11 +226,30 @@ depends on the problem and computing environment:</p>
 <span>                               data <span class="op">=</span> <span class="va">sex2</span>, pl <span class="op">=</span> <span class="cn">FALSE</span>, plconf <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span>,</span>
 <span>    times <span class="op">=</span> <span class="fl">3L</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">mb</span>, unit <span class="op">=</span> <span class="st">"ms"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Unit: milliseconds</span></span>
-<span><span class="co">#&gt;     expr      min        lq     mean   median       uq      max neval cld</span></span>
-<span><span class="co">#&gt;  fastglm 0.657476 0.6857045 0.745134 0.713933 0.788963 0.863993     3  a </span></span>
-<span><span class="co">#&gt;  logistf 1.374033 1.3792810 1.423342 1.384529 1.447997 1.511465     3   b</span></span></code></pre></div>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">mb</span>, unit <span class="op">=</span> <span class="st">"ms"</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"expr"</span>, <span class="st">"min"</span>, <span class="st">"median"</span>, <span class="st">"max"</span><span class="op">)</span><span class="op">]</span>, digits <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>             col.names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Method"</span>, <span class="st">"Minimum (ms)"</span>, <span class="st">"Median (ms)"</span>, <span class="st">"Maximum (ms)"</span><span class="op">)</span>, row.names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<thead><tr class="header">
+<th align="left">Method</th>
+<th align="right">Minimum (ms)</th>
+<th align="right">Median (ms)</th>
+<th align="right">Maximum (ms)</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">fastglm</td>
+<td align="right">0.66</td>
+<td align="right">0.70</td>
+<td align="right">0.89</td>
+</tr>
+<tr class="even">
+<td align="left">logistf</td>
+<td align="right">1.28</td>
+<td align="right">1.32</td>
+<td align="right">1.50</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section level2">
 <h2 id="general-glm-families">General GLM families<a class="anchor" aria-label="anchor" href="#general-glm-families"></a>
@@ -258,20 +277,43 @@ linear predictor.</p>
 <h3 id="binomial-logit-probit-cloglog">Binomial (logit, probit, cloglog)<a class="anchor" aria-label="anchor" href="#binomial-logit-probit-cloglog"></a>
 </h3>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">y_bin</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="va">eta_true</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># Largest coefficient difference from brglm2, by link.</span></span>
+<span><span class="va">difference_table</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">differences</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>Link <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">differences</span><span class="op">)</span>,</span>
+<span>                            Difference <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">differences</span>, format <span class="op">=</span> <span class="st">"e"</span>, digits <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>                 col.names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Link"</span>, <span class="st">"Largest coefficient difference"</span><span class="op">)</span>, row.names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">y_bin</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Logistic.html" class="external-link">plogis</a></span><span class="op">(</span><span class="va">eta_true</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">df</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">y_bin</span>, x1 <span class="op">=</span> <span class="va">x1</span>, x2 <span class="op">=</span> <span class="va">x2</span><span class="op">)</span></span>
 <span></span>
-<span><span class="kw">for</span> <span class="op">(</span><span class="va">lnk</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"logit"</span>, <span class="st">"probit"</span>, <span class="st">"cloglog"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span><span class="va">differences</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"logit"</span>, <span class="st">"probit"</span>, <span class="st">"cloglog"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">fam</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span></span>
 <span>    <span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_bin</span>, family <span class="op">=</span> <span class="va">fam</span>, firth <span class="op">=</span> <span class="cn">TRUE</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span>
 <span>    <span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="va">df</span>, family <span class="op">=</span> <span class="va">fam</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>,</span>
 <span>             type <span class="op">=</span> <span class="st">"AS_mean"</span>, control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"binomial %-8s max|diff| = %.2e\n"</span>, <span class="va">lnk</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span><span class="co">#&gt; binomial logit    max|diff| = 2.29e-12</span></span>
-<span><span class="co">#&gt; binomial probit   max|diff| = 1.20e-11</span></span>
-<span><span class="co">#&gt; binomial cloglog  max|diff| = 3.27e-11</span></span></code></pre></div>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu">difference_table</span><span class="op">(</span><span class="va">differences</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<thead><tr class="header">
+<th align="left">Link</th>
+<th align="left">Largest coefficient difference</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">logit</td>
+<td align="left">2.3e-12</td>
+</tr>
+<tr class="even">
+<td align="left">probit</td>
+<td align="left">1.2e-11</td>
+</tr>
+<tr class="odd">
+<td align="left">cloglog</td>
+<td align="left">3.3e-11</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section level3">
 <h3 id="poisson-log-sqrt">Poisson (log, sqrt)<a class="anchor" aria-label="anchor" href="#poisson-log-sqrt"></a>
@@ -279,17 +321,31 @@ linear predictor.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">y_pois</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Poisson.html" class="external-link">rpois</a></span><span class="op">(</span><span class="va">n</span>, <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">eta_true</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="kw">for</span> <span class="op">(</span><span class="va">lnk</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"log"</span>, <span class="st">"sqrt"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span><span class="va">differences</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"log"</span>, <span class="st">"sqrt"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">fam</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson</a></span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span></span>
 <span>    <span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_pois</span>, family <span class="op">=</span> <span class="va">fam</span>, firth <span class="op">=</span> <span class="cn">TRUE</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span>
 <span>    <span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">y_pois</span>, x1 <span class="op">=</span> <span class="va">x1</span>, x2 <span class="op">=</span> <span class="va">x2</span><span class="op">)</span>,</span>
 <span>             family <span class="op">=</span> <span class="va">fam</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>, type <span class="op">=</span> <span class="st">"AS_mean"</span>,</span>
 <span>             control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"poisson  %-8s max|diff| = %.2e\n"</span>, <span class="va">lnk</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span><span class="co">#&gt; poisson  log      max|diff| = 2.13e-12</span></span>
-<span><span class="co">#&gt; poisson  sqrt     max|diff| = 6.30e-11</span></span></code></pre></div>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu">difference_table</span><span class="op">(</span><span class="va">differences</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<thead><tr class="header">
+<th align="left">Link</th>
+<th align="left">Largest coefficient difference</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">log</td>
+<td align="left">2.1e-12</td>
+</tr>
+<tr class="even">
+<td align="left">sqrt</td>
+<td align="left">6.3e-11</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section level3">
 <h3 id="gamma-log-inverse">Gamma (log, inverse)<a class="anchor" aria-label="anchor" href="#gamma-log-inverse"></a>
@@ -297,17 +353,31 @@ linear predictor.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">y_gam</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">rgamma</a></span><span class="op">(</span><span class="va">n</span>, shape <span class="op">=</span> <span class="fl">5</span>, rate <span class="op">=</span> <span class="fl">5</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">eta_true</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="kw">for</span> <span class="op">(</span><span class="va">lnk</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"log"</span>, <span class="st">"inverse"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span><span class="va">differences</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"log"</span>, <span class="st">"inverse"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">fam</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma</a></span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span></span>
 <span>    <span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_gam</span>, family <span class="op">=</span> <span class="va">fam</span>, firth <span class="op">=</span> <span class="cn">TRUE</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span>
 <span>    <span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">y_gam</span>, x1 <span class="op">=</span> <span class="va">x1</span>, x2 <span class="op">=</span> <span class="va">x2</span><span class="op">)</span>,</span>
 <span>             family <span class="op">=</span> <span class="va">fam</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>, type <span class="op">=</span> <span class="st">"AS_mean"</span>,</span>
 <span>             control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"Gamma    %-8s max|diff| = %.2e\n"</span>, <span class="va">lnk</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span><span class="co">#&gt; Gamma    log      max|diff| = 7.36e-07</span></span>
-<span><span class="co">#&gt; Gamma    inverse  max|diff| = 5.66e-07</span></span></code></pre></div>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu">difference_table</span><span class="op">(</span><span class="va">differences</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<thead><tr class="header">
+<th align="left">Link</th>
+<th align="left">Largest coefficient difference</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">log</td>
+<td align="left">7.4e-07</td>
+</tr>
+<tr class="even">
+<td align="left">inverse</td>
+<td align="left">5.7e-07</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section level3">
 <h3 id="gaussian-identity-log">Gaussian (identity, log)<a class="anchor" aria-label="anchor" href="#gaussian-identity-log"></a>
@@ -315,18 +385,32 @@ linear predictor.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">y_gauss</span> <span class="op">&lt;-</span> <span class="va">eta_true</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span>, <span class="fl">0</span>, <span class="fl">0.5</span><span class="op">)</span></span>
 <span></span>
-<span><span class="kw">for</span> <span class="op">(</span><span class="va">lnk</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"identity"</span>, <span class="st">"log"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span><span class="va">differences</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"identity"</span>, <span class="st">"log"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">fam</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">gaussian</a></span><span class="op">(</span><span class="va">lnk</span><span class="op">)</span></span>
 <span>    <span class="va">y0</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">lnk</span> <span class="op">==</span> <span class="st">"log"</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">pmax</a></span><span class="op">(</span><span class="va">y_gauss</span>, <span class="fl">0.01</span><span class="op">)</span> <span class="kw">else</span> <span class="va">y_gauss</span></span>
 <span>    <span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y0</span>, family <span class="op">=</span> <span class="va">fam</span>, firth <span class="op">=</span> <span class="cn">TRUE</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span>
 <span>    <span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">y0</span>, x1 <span class="op">=</span> <span class="va">x1</span>, x2 <span class="op">=</span> <span class="va">x2</span><span class="op">)</span>,</span>
 <span>             family <span class="op">=</span> <span class="va">fam</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>, type <span class="op">=</span> <span class="st">"AS_mean"</span>,</span>
 <span>             control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"gaussian %-8s max|diff| = %.2e\n"</span>, <span class="va">lnk</span>,</span>
-<span>                <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span><span class="co">#&gt; gaussian identity max|diff| = 1.67e-16</span></span>
-<span><span class="co">#&gt; gaussian log      max|diff| = 1.78e-06</span></span></code></pre></div>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu">difference_table</span><span class="op">(</span><span class="va">differences</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<thead><tr class="header">
+<th align="left">Link</th>
+<th align="left">Largest coefficient difference</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">identity</td>
+<td align="left">1.7e-16</td>
+</tr>
+<tr class="even">
+<td align="left">log</td>
+<td align="left">1.8e-06</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section level3">
 <h3 id="inverse-gaussian-log">Inverse Gaussian (log)<a class="anchor" aria-label="anchor" href="#inverse-gaussian-log"></a>
@@ -339,10 +423,9 @@ linear predictor.</p>
 <span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_ig</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">inverse.gaussian</a></span><span class="op">(</span><span class="st">"log"</span><span class="op">)</span>, firth <span class="op">=</span> <span class="cn">TRUE</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">y_ig</span>, x1 <span class="op">=</span> <span class="va">x1</span>, x2 <span class="op">=</span> <span class="va">x2</span><span class="op">)</span>,</span>
 <span>         family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">inverse.gaussian</a></span><span class="op">(</span><span class="st">"log"</span><span class="op">)</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>, type <span class="op">=</span> <span class="st">"AS_mean"</span>,</span>
-<span>         control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"inv.gauss log      max|diff| = %.2e\n"</span>,</span>
-<span>            <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; inv.gauss log      max|diff| = 1.16e-06</span></span></code></pre></div>
+<span>         control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>The largest coefficient difference from <code>brglm2</code> is
+1.2e-06.</p>
 </div>
 </div>
 <div class="section level2">
@@ -783,54 +866,54 @@ designs.</p>
 <tbody>
 <tr class="odd">
 <td align="left">binomial logit</td>
-<td align="right">4.942</td>
-<td align="right">14.995</td>
-<td align="right">3.034</td>
+<td align="right">4.553</td>
+<td align="right">14.429</td>
+<td align="right">3.169</td>
 <td align="right">5</td>
 <td align="right">2</td>
 <td align="left">1.20e-11</td>
 </tr>
 <tr class="even">
 <td align="left">binomial probit</td>
-<td align="right">8.089</td>
-<td align="right">15.529</td>
-<td align="right">1.920</td>
+<td align="right">7.010</td>
+<td align="right">14.254</td>
+<td align="right">2.033</td>
 <td align="right">6</td>
 <td align="right">2</td>
 <td align="left">7.27e-10</td>
 </tr>
 <tr class="odd">
 <td align="left">binomial cloglog</td>
-<td align="right">9.895</td>
-<td align="right">15.818</td>
-<td align="right">1.599</td>
+<td align="right">7.394</td>
+<td align="right">15.609</td>
+<td align="right">2.111</td>
 <td align="right">7</td>
 <td align="right">2</td>
 <td align="left">4.18e-09</td>
 </tr>
 <tr class="even">
 <td align="left">poisson log</td>
-<td align="right">4.992</td>
-<td align="right">114.268</td>
-<td align="right">22.889</td>
+<td align="right">5.498</td>
+<td align="right">112.049</td>
+<td align="right">20.380</td>
 <td align="right">6</td>
 <td align="right">1</td>
 <td align="left">8.35e-09</td>
 </tr>
 <tr class="odd">
 <td align="left">Gamma log</td>
-<td align="right">3.301</td>
-<td align="right">91.971</td>
-<td align="right">27.860</td>
+<td align="right">3.473</td>
+<td align="right">88.040</td>
+<td align="right">25.351</td>
 <td align="right">6</td>
 <td align="right">2</td>
 <td align="left">1.04e-10</td>
 </tr>
 <tr class="even">
 <td align="left">gaussian identity</td>
-<td align="right">1.381</td>
-<td align="right">20.895</td>
-<td align="right">15.134</td>
+<td align="right">1.371</td>
+<td align="right">19.271</td>
+<td align="right">14.053</td>
 <td align="right">2</td>
 <td align="right">2</td>
 <td align="left">1.11e-16</td>

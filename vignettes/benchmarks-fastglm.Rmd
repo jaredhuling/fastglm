@@ -40,6 +40,33 @@ bench_unit <- "milliseconds"
     names(s) <- c("expr", "min (ms)", "median (ms)", "mean (ms)", "max (ms)")
     s
 }
+# Summary of one comparison, as a table.
+.fmt_table <- function(mb, caption = NULL) {
+    knitr::kable(.fmt(mb), digits = 2, row.names = FALSE, caption = caption)
+}
+# Median times with one row per method and one column per sample size.
+.timing_table <- function(tim) {
+    methods <- unique(tim$expr)
+    sizes <- sort(unique(tim$n))
+    medians <- tapply(tim$median, list(tim$expr, tim$n), identity)[methods, as.character(sizes), drop = FALSE]
+    labels <- paste0("n = ", format(sizes, big.mark = ",", scientific = FALSE, trim = TRUE))
+    knitr::kable(data.frame(Method = methods, medians, check.names = FALSE, row.names = NULL),
+                 col.names = c("Method", labels), digits = 2,
+                 caption = "Median time in milliseconds")
+}
+# Paired medians for fastglm and brglm2, by family and sample size.
+.pair_table <- function(tim) {
+    keys <- unique(tim[, c("family", "n")])
+    median_of <- function(method, i) tim$median[tim$expr == method & tim$family == keys$family[i] & tim$n == keys$n[i]]
+    fast <- vapply(seq_len(nrow(keys)), function(i) median_of("fastglm", i), 0)
+    reference <- vapply(seq_len(nrow(keys)), function(i) median_of("brglm2", i), 0)
+    knitr::kable(data.frame(Family = keys$family, n = format(keys$n, big.mark = ",", scientific = FALSE, trim = TRUE),
+                            fastglm = fast, brglm2 = reference, Ratio = reference / fast),
+                 col.names = c("Family", "n", "fastglm (ms)", "brglm2 (ms)", "Time ratio"),
+                 digits = c(0, 0, 2, 2, 1), row.names = FALSE)
+}
+# Short scientific notation for numbers placed in the text.
+.sci <- function(x) formatC(x, format = "e", digits = 1)
 .collect <- function(mb, n) {
     s <- summary(mb, unit = bench_unit)
     data.frame(n = n, expr = as.character(s$expr), median = s$median,
@@ -154,36 +181,28 @@ run_one_logit <- function(n) {
 
 logit_tim <- list()
 for (n in c(1e3, 1e4, 1e5)) {
-    cat("\n--- n =", n, "---\n")
     mb <- run_one_logit(n)
-    print(.fmt(mb))
     logit_tim[[length(logit_tim) + 1]] <- .collect(mb, n)
 }
-#> 
-#> --- n = 1000 ---
-#>           expr min (ms) median (ms) mean (ms) max (ms)
-#> 1   fastglm_qr 1.301135    1.513392 1.8220728 3.389962
-#> 2 fastglm_chol 0.769365    0.863173 0.8779576 1.066492
-#> 3      glm.fit 2.936912    3.050974 3.7711718 6.679843
-#> 4    glm2_fit2 3.044660    3.118501 3.5302722 5.136152
-#> 5     speedglm 2.139503    2.233106 2.6489198 4.291388
-#> 
-#> --- n = 10000 ---
-#>           expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1   fastglm_qr 11.702630    11.75507 11.916453 12.466665
-#> 2 fastglm_chol  4.532591     4.74862  4.791547  5.004706
-#> 3      glm.fit 31.437611    32.28004 32.480159 33.671004
-#> 4    glm2_fit2 32.522676    33.59548 33.447734 34.045170
-#> 5     speedglm 21.467149    22.79813 40.159467 97.300585
-#> 
-#> --- n = 1e+05 ---
-#>           expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1   fastglm_qr 123.06408   123.82012 123.98238 124.88309
-#> 2 fastglm_chol  47.78173    50.04128  50.69724  53.89864
-#> 3      glm.fit 305.36410   371.64097 397.11524 503.54101
-#> 4    glm2_fit2 373.62878   376.79935 390.87670 443.26863
-#> 5     speedglm 218.20959   220.52969 232.93961 283.63722
 logit_tim <- do.call(rbind, logit_tim)
+.timing_table(logit_tim)
+```
+
+
+
+Table: Median time in milliseconds
+
+|Method       | n = 1,000| n = 10,000| n = 100,000|
+|:------------|---------:|----------:|-----------:|
+|fastglm_qr   |      1.43|      12.84|      125.61|
+|fastglm_chol |      0.79|       5.06|       51.93|
+|glm.fit      |      3.03|      32.93|      380.41|
+|glm2_fit2    |      3.16|      33.22|      451.84|
+|speedglm     |      2.42|      23.57|      286.21|
+
+
+
+``` r
 .plot_scaling(logit_tim, "Logistic regression: median time vs n (p = 30)")
 ```
 
@@ -211,36 +230,28 @@ run_one_poisson <- function(n) {
 
 pois_tim <- list()
 for (n in c(1e3, 1e4, 1e5)) {
-    cat("\n--- n =", n, "---\n")
     mb <- run_one_poisson(n)
-    print(.fmt(mb))
     pois_tim[[length(pois_tim) + 1]] <- .collect(mb, n)
 }
-#> 
-#> --- n = 1000 ---
-#>           expr min (ms) median (ms) mean (ms) max (ms)
-#> 1   fastglm_qr 1.257224    1.272722  1.270688 1.281332
-#> 2 fastglm_chol 0.636238    0.663216  0.682814 0.793227
-#> 3      glm.fit 2.920840    2.971639  2.974361 3.031417
-#> 4    glm2_fit2 3.044783    3.059584  3.082757 3.193736
-#> 5     speedglm 2.251925    2.290957  2.292179 2.350079
-#> 
-#> --- n = 10000 ---
-#>           expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1   fastglm_qr 11.200995   11.356426 11.523698 12.118247
-#> 2 fastglm_chol  4.178146    4.342433  4.372429  4.585973
-#> 3      glm.fit 30.311546   33.848903 33.159447 35.911244
-#> 4    glm2_fit2 30.309168   31.475044 32.597493 36.842518
-#> 5     speedglm 21.691378   21.929219 21.942856 22.455946
-#> 
-#> --- n = 1e+05 ---
-#>           expr min (ms) median (ms) mean (ms) max (ms)
-#> 1   fastglm_qr 117.9658   122.29365 122.21137 126.1346
-#> 2 fastglm_chol  43.4475    48.07156  61.44489 119.4351
-#> 3      glm.fit 382.7594   389.74801 391.94732 402.7147
-#> 4    glm2_fit2 387.8927   393.52444 409.50891 477.8814
-#> 5     speedglm 222.8311   226.07027 285.90325 427.1138
 pois_tim <- do.call(rbind, pois_tim)
+.timing_table(pois_tim)
+```
+
+
+
+Table: Median time in milliseconds
+
+|Method       | n = 1,000| n = 10,000| n = 100,000|
+|:------------|---------:|----------:|-----------:|
+|fastglm_qr   |      1.43|      11.99|      121.73|
+|fastglm_chol |      0.82|       4.54|       47.79|
+|glm.fit      |      3.12|      30.45|      387.58|
+|glm2_fit2    |      3.20|      31.19|      395.62|
+|speedglm     |      2.51|      22.57|      235.00|
+
+
+
+``` r
 .plot_scaling(pois_tim, "Poisson regression: median time vs n (p = 30)")
 ```
 
@@ -268,15 +279,19 @@ mb_sparse <- microbenchmark(
     fastglm_sparse = fastglm(Xs, y, family = binomial(), method = 2),
     times = 5L
 )
-print(.fmt(mb_sparse))
-#>             expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1  fastglm_dense 294.95732   297.70092 299.68892 311.21140
-#> 2 fastglm_sparse  24.11087    25.30643  26.07225  29.48724
-
-cat("ncol(Xd) =", ncol(Xd), "  fraction nonzero =",
-    round(length(Xs@x) / prod(dim(Xs)), 3), "\n")
-#> ncol(Xd) = 200   fraction nonzero = 0.02
+.fmt_table(mb_sparse)
 ```
+
+
+
+|expr           | min (ms)| median (ms)| mean (ms)| max (ms)|
+|:--------------|--------:|-----------:|---------:|--------:|
+|fastglm_dense  |   308.30|      311.63|    311.98|   315.80|
+|fastglm_sparse |    24.22|       27.68|     33.06|    47.03|
+
+
+
+The design has 200 columns, and 2% of its entries are nonzero.
 
 A `big.matrix` comparison on a large dense design, with `n = 5e5` and `p = 20`. The file-backed `big.matrix` reads blocks of rows and gives the same estimates:
 
@@ -294,18 +309,25 @@ mb_big <- microbenchmark(
     big.matrix  = fastglm(Xb, y, family = binomial(), method = 2),
     times = 3L
 )
-print(.fmt(mb_big))
-#>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1      dense 175.3551    179.9937  179.5951 183.4364
-#> 2 big.matrix 221.0303    222.0703  222.0067 222.9195
+.fmt_table(mb_big)
+```
+
+
+
+|expr       | min (ms)| median (ms)| mean (ms)| max (ms)|
+|:----------|--------:|-----------:|---------:|--------:|
+|dense      |   176.55|      179.85|    208.01|   267.63|
+|big.matrix |   219.15|      221.09|    220.90|   222.47|
+
+
+
+``` r
 
 f1 <- fastglm(X,  y, family = binomial(), method = 2)
 f2 <- fastglm(Xb, y, family = binomial(), method = 2)
-cat("max coef diff:", max(abs(coef(f1) - coef(f2))), "\n")
-#> max coef diff: 1.235123e-15
 ```
 
-Reading a file-backed matrix in blocks adds overhead but can reduce the need to copy a large predictor matrix. Another option is to supply blocks through `fastglm_source()` and fit them with `fastglm_streaming()`, as described in the large-data vignette. These choices have different memory requirements and should be compared on the intended data size.
+The largest coefficient difference between the two fits is 1.2e-15. Reading a file-backed matrix in blocks adds overhead but can reduce the need to copy a large predictor matrix. Another option is to supply blocks through `fastglm_source()` and fit them with `fastglm_streaming()`, as described in the large-data vignette. These choices have different memory requirements and should be compared on the intended data size.
 
 # Negative-binomial regression
 
@@ -328,38 +350,31 @@ run_one_nb <- function(n) {
 
 nb_tim <- list()
 for (n in c(1e3, 1e4, 1e5, 5e5)) {
-    cat("\n--- n =", n, "---\n")
     mb <- run_one_nb(n)
-    print(.fmt(mb))
     nb_tim[[length(nb_tim) + 1]] <- .collect(mb, n)
 }
-#> 
-#> --- n = 1000 ---
-#>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_nb 1.562305    1.700926  1.974913 3.210095
-#> 2     glm.nb 7.977780    8.122633  8.202271 8.664038
-#> 
-#> --- n = 10000 ---
-#>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_nb 14.53065    16.38668  16.10066 17.67444
-#> 2     glm.nb 63.11860    64.24831  65.97903 69.24884
-#> 
-#> --- n = 1e+05 ---
-#>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_nb 111.4100    113.2617  114.2445 118.1436
-#> 2     glm.nb 554.9145    571.3039  591.0110 645.6801
-#> 
-#> --- n = 5e+05 ---
-#>         expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_nb  593.4782    598.4045  600.1032  611.7583
-#> 2     glm.nb 2336.3375   2366.4425 2369.5331 2430.1351
 nb_tim <- do.call(rbind, nb_tim)
+.timing_table(nb_tim)
+```
+
+
+
+Table: Median time in milliseconds
+
+|Method     | n = 1,000| n = 10,000| n = 100,000| n = 500,000|
+|:----------|---------:|----------:|-----------:|-----------:|
+|fastglm_nb |      1.80|      12.82|      116.06|      591.15|
+|glm.nb     |      8.07|      65.48|      563.15|     2270.57|
+
+
+
+``` r
 .plot_scaling(nb_tim, "Negative-binomial joint MLE: median time vs n")
 ```
 
 ![plot of chunk unnamed-chunk-6](benchmarks-figs/unnamed-chunk-6-1.png)
 
-The following calculation reports coefficient and theta differences for the largest displayed case. Both functions target the same maximum likelihood fit, but numerical agreement also depends on convergence and stopping tolerances. Dense *fastglm* fits perform both coefficient and theta updates in C++, which reduces repeated calls between R and compiled code.
+For the largest case, both functions target the same maximum likelihood fit, and numerical agreement also depends on convergence and stopping tolerances. Dense *fastglm* fits perform both coefficient and theta updates in C++, which reduces repeated calls between R and compiled code.
 
 
 ``` r
@@ -371,14 +386,9 @@ y  <- MASS::rnegbin(n, mu = mu, theta = 2)
 df <- data.frame(y = y, x1 = X[, 2], x2 = X[, 3], x3 = X[, 4])
 f_nb <- fastglm_nb(X, y)
 m_nb <- MASS::glm.nb(y ~ x1 + x2 + x3, data = df)
-cat("coef max abs diff:", max(abs(unname(coef(f_nb)) - unname(coef(m_nb)))), "\n")
-#> coef max abs diff: 2.187139e-14
-cat("theta diff       :", abs(f_nb$theta - m_nb$theta), "\n")
-#> theta diff       : 9.680257e-12
-cat("logLik diff      :",
-    abs(as.numeric(logLik(f_nb)) - as.numeric(logLik(m_nb))), "\n")
-#> logLik diff      : 2.328306e-09
 ```
+
+The largest coefficient difference is 2.2e-14, the difference in theta is 9.7e-12, and the difference in log likelihood is 2.3e-09.
 
 # Firth bias-reduced GLMs
 
@@ -399,15 +409,20 @@ mb_firth_logistf <- microbenchmark(
                   family = binomial(), method = "brglmFit", type = "AS_mean"),
     times = 10L
 )
-cat("\n--- Heinze-Schemper sex2 (n =", nrow(sex2), ") ---\n")
-#> 
-#> --- Heinze-Schemper sex2 (n = 239 ) ---
-print(.fmt(mb_firth_logistf))
-#>      expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm 0.655385   0.7447855 0.8251496 1.635572
-#> 2 logistf 7.534283   7.8413115 7.9835282 9.730284
-#> 3  brglm2 2.647083   2.9364405 3.1550484 5.112987
+.fmt_table(mb_firth_logistf, caption = paste0("Heinze-Schemper sex2 data, n = ", nrow(sex2)))
 ```
+
+
+
+Table: Heinze-Schemper sex2 data, n = 239
+
+|expr    | min (ms)| median (ms)| mean (ms)| max (ms)|
+|:-------|--------:|-----------:|---------:|--------:|
+|fastglm |     0.65|        0.69|      0.78|     1.56|
+|logistf |     7.40|        7.46|      7.60|     8.61|
+|brglm2  |     2.58|        2.73|      2.98|     5.20|
+
+
 
 Next, a comprehensive comparison of `fastglm(firth = TRUE)` against `brglm2` across all supported families and links. We fix `n = 10000` and `p = 5` to see the per-family speedup:
 
@@ -451,22 +466,27 @@ for (fi in firth_families) {
                       method = "brglmFit", type = "AS_mean"),
         times = 10L
     )
-    s <- summary(mb, unit = bench_unit)
-    cat(sprintf("%-20s fastglm=%7.2f ms  brglm2=%7.2f ms  speedup=%5.1fx\n",
-                fi$label, s$median[1], s$median[2], s$median[2] / s$median[1]))
     firth_all_tim[[length(firth_all_tim) + 1]] <-
         transform(.collect(mb, n), family = fi$label)
 }
-#> binomial logit       fastglm=   5.79 ms  brglm2=  16.79 ms  speedup=  2.9x
-#> binomial probit      fastglm=   8.46 ms  brglm2=  17.48 ms  speedup=  2.1x
-#> binomial cloglog     fastglm=   8.02 ms  brglm2=  18.43 ms  speedup=  2.3x
-#> poisson log          fastglm=   4.58 ms  brglm2= 128.32 ms  speedup= 28.0x
-#> poisson sqrt         fastglm=   3.19 ms  brglm2= 126.89 ms  speedup= 39.7x
-#> Gamma log            fastglm=   4.14 ms  brglm2= 134.34 ms  speedup= 32.4x
-#> gaussian identity    fastglm=   1.62 ms  brglm2=  22.76 ms  speedup= 14.1x
-#> gaussian log         fastglm=   7.71 ms  brglm2=  31.65 ms  speedup=  4.1x
 firth_all_tim <- do.call(rbind, firth_all_tim)
+.pair_table(firth_all_tim)
 ```
+
+
+
+|Family            |n      | fastglm (ms)| brglm2 (ms)| Time ratio|
+|:-----------------|:------|------------:|-----------:|----------:|
+|binomial logit    |10,000 |         4.65|       15.25|        3.3|
+|binomial probit   |10,000 |         9.44|       16.94|        1.8|
+|binomial cloglog  |10,000 |         8.85|       18.40|        2.1|
+|poisson log       |10,000 |         5.27|      125.99|       23.9|
+|poisson sqrt      |10,000 |         3.04|      124.81|       41.0|
+|Gamma log         |10,000 |         3.45|      111.15|       32.2|
+|gaussian identity |10,000 |         1.65|       23.43|       14.2|
+|gaussian log      |10,000 |         7.33|       33.41|        4.6|
+
+
 
 The median time for each family, with each pair of methods joined by a line:
 
@@ -503,7 +523,6 @@ for (n_val in c(1e3, 1e4, 5e4)) {
     df_s <- data.frame(X_s[, -1])
     names(df_s) <- xnames
 
-    cat(sprintf("\n--- n = %d ---\n", n_val))
     for (fi in firth_scaling_fams) {
         y_s <- switch(fi$fam$family,
             "binomial" = rbinom(n_val, 1, plogis(eta_s)),
@@ -518,32 +537,34 @@ for (n_val in c(1e3, 1e4, 5e4)) {
                           method = "brglmFit", type = "AS_mean"),
             times = 5L
         )
-        s <- summary(mb, unit = bench_unit)
-        cat(sprintf("  %-20s fastglm=%7.2f ms  brglm2=%7.2f ms\n",
-                    fi$label, s$median[1], s$median[2]))
         firth_scale_tim[[length(firth_scale_tim) + 1]] <-
             transform(.collect(mb, n_val), family = fi$label)
     }
 }
-#> 
-#> --- n = 1000 ---
-#>   binomial logit       fastglm=   1.00 ms  brglm2=   2.56 ms
-#>   poisson log          fastglm=   1.02 ms  brglm2=  14.67 ms
-#>   Gamma log            fastglm=   0.74 ms  brglm2=  13.24 ms
-#>   gaussian identity    fastglm=   0.78 ms  brglm2=   4.12 ms
-#> 
-#> --- n = 10000 ---
-#>   binomial logit       fastglm=   6.86 ms  brglm2=  15.82 ms
-#>   poisson log          fastglm=   5.48 ms  brglm2= 129.55 ms
-#>   Gamma log            fastglm=   5.05 ms  brglm2= 153.36 ms
-#>   gaussian identity    fastglm=   1.57 ms  brglm2=  26.64 ms
-#> 
-#> --- n = 50000 ---
-#>   binomial logit       fastglm=  25.33 ms  brglm2=  75.54 ms
-#>   poisson log          fastglm=  26.31 ms  brglm2= 666.86 ms
-#>   Gamma log            fastglm=  15.45 ms  brglm2= 559.57 ms
-#>   gaussian identity    fastglm=   5.42 ms  brglm2= 114.05 ms
 firth_scale_tim <- do.call(rbind, firth_scale_tim)
+.pair_table(firth_scale_tim)
+```
+
+
+
+|Family            |n      | fastglm (ms)| brglm2 (ms)| Time ratio|
+|:-----------------|:------|------------:|-----------:|----------:|
+|binomial logit    |1,000  |         1.08|        2.63|        2.4|
+|poisson log       |1,000  |         2.20|       17.06|        7.8|
+|Gamma log         |1,000  |         0.96|       13.46|       14.1|
+|gaussian identity |1,000  |         0.65|        4.39|        6.7|
+|binomial logit    |10,000 |         6.32|       18.87|        3.0|
+|poisson log       |10,000 |         5.17|      131.05|       25.3|
+|Gamma log         |10,000 |         5.00|      119.97|       24.0|
+|gaussian identity |10,000 |         1.47|       22.64|       15.4|
+|binomial logit    |50,000 |        26.29|       79.68|        3.0|
+|poisson log       |50,000 |        25.84|      647.87|       25.1|
+|Gamma log         |50,000 |        14.83|      537.74|       36.3|
+|gaussian identity |50,000 |         5.49|      110.94|       20.2|
+
+
+
+``` r
 
 .plot_scaling(firth_scale_tim, "Firth bias reduction: median time by family", facet = ~family)
 ```
@@ -563,17 +584,27 @@ y_meth <- rbinom(n_meth, 1, plogis(X_meth %*% rnorm(p_meth) * 0.1))
 
 ref_coef <- coef(fastglm(X_meth, y_meth, family = binomial(), method = 2, firth = TRUE))
 method_names <- c("ColPivQR", "QR", "LLT", "LDLT", "FullPivQR", "SVD")
-for (m in c(0L, 1L, 3L, 4L, 5L)) {
-    d <- max(abs(coef(fastglm(X_meth, y_meth, family = binomial(), method = m,
-                               firth = TRUE)) - ref_coef))
-    cat(sprintf("  method %d (%s) vs LLT: max |diff| = %.2e\n",
-                m, method_names[m + 1], d))
-}
-#>   method 0 (ColPivQR) vs LLT: max |diff| = 5.83e-16
-#>   method 1 (QR) vs LLT: max |diff| = 6.94e-16
-#>   method 3 (LDLT) vs LLT: max |diff| = 8.33e-17
-#>   method 4 (FullPivQR) vs LLT: max |diff| = 6.66e-16
-#>   method 5 (SVD) vs LLT: max |diff| = 3.47e-16
+compared_methods <- c(0L, 1L, 3L, 4L, 5L)
+method_differences <- vapply(compared_methods, function(m) {
+    max(abs(coef(fastglm(X_meth, y_meth, family = binomial(), method = m, firth = TRUE)) - ref_coef))
+}, 0)
+knitr::kable(data.frame(Method = method_names[compared_methods + 1], Difference = .sci(method_differences)),
+             col.names = c("Method", "Largest coefficient difference from LLT"), row.names = FALSE)
+```
+
+
+
+|Method    |Largest coefficient difference from LLT |
+|:---------|:---------------------------------------|
+|ColPivQR  |5.8e-16                                 |
+|QR        |6.9e-16                                 |
+|LDLT      |8.3e-17                                 |
+|FullPivQR |6.7e-16                                 |
+|SVD       |3.5e-16                                 |
+
+
+
+``` r
 
 mb_methods <- microbenchmark(
     ColPivQR = fastglm(X_meth, y_meth, family = binomial(), method = 0, firth = TRUE),
@@ -584,18 +615,23 @@ mb_methods <- microbenchmark(
     SVD      = fastglm(X_meth, y_meth, family = binomial(), method = 5, firth = TRUE),
     times = 5L
 )
-cat(sprintf("\n--- Firth logistic, n=%d, p=%d ---\n", n_meth, p_meth))
-#> 
-#> --- Firth logistic, n=10000, p=10 ---
-print(.fmt(mb_methods))
-#>        expr    min (ms) median (ms)   mean (ms)    max (ms)
-#> 1  ColPivQR    7.143102    9.038983    9.179383   11.227686
-#> 2        QR    7.264667    7.422025    7.458023    7.667000
-#> 3       LLT    4.736320    5.011758    5.105377    5.632416
-#> 4      LDLT    5.343448    5.578624    5.987935    7.201281
-#> 5 FullPivQR 3225.353888 3249.939087 3276.678631 3337.867646
-#> 6       SVD   10.487595   11.394884   11.331514   12.144569
+.fmt_table(mb_methods, caption = paste0("Firth logistic regression, n = ", n_meth, ", p = ", p_meth))
 ```
+
+
+
+Table: Firth logistic regression, n = 10000, p = 10
+
+|expr      | min (ms)| median (ms)| mean (ms)| max (ms)|
+|:---------|--------:|-----------:|---------:|--------:|
+|ColPivQR  |     7.62|        7.84|      8.25|     9.64|
+|QR        |     7.04|        7.47|      7.47|     8.04|
+|LLT       |     4.79|        5.69|      5.92|     7.13|
+|LDLT      |     5.81|        6.40|      6.33|     7.04|
+|FullPivQR |  3125.84|     3180.37|   3201.78|  3346.50|
+|SVD       |    10.93|       11.53|     12.25|    13.88|
+
+
 
 All six methods agree to machine precision. The LLT and LDLT Cholesky methods are the fastest because they only decompose the `p x p` cross-product, while the QR and SVD methods work with the full `n x p` matrix.
 
@@ -626,15 +662,23 @@ mb_backends <- microbenchmark(
                                    family = binomial(), method = 2, firth = TRUE),
     times = 5L
 )
-cat(sprintf("\n--- Firth logistic across backends (n=%d, p=%d) ---\n", n_sp, p_sp))
-#> 
-#> --- Firth logistic across backends (n=5000, p=6) ---
-print(.fmt(mb_backends))
-#>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1      dense 1.975708    2.145940  2.183947 2.474186
-#> 2     sparse 4.172283    5.524381  5.338577 6.717194
-#> 3 big.matrix 2.329948    2.395835  2.442919 2.659752
-#> 4  streaming 5.268664    5.404743  5.793464 7.312719
+.fmt_table(mb_backends, caption = paste0("Firth logistic regression, n = ", n_sp, ", p = ", p_sp))
+```
+
+
+
+Table: Firth logistic regression, n = 5000, p = 6
+
+|expr       | min (ms)| median (ms)| mean (ms)| max (ms)|
+|:----------|--------:|-----------:|---------:|--------:|
+|dense      |     2.11|        2.30|      2.48|     3.44|
+|sparse     |     3.87|        5.35|      5.00|     5.76|
+|big.matrix |     2.18|        2.69|      2.77|     3.70|
+|streaming  |     5.12|        5.41|      5.75|     7.45|
+
+
+
+``` r
 
 # Verify agreement
 ref_sp <- coef(fastglm(X_sp, y_sp, family = binomial(), method = 2, firth = TRUE))
@@ -642,13 +686,20 @@ sp_c   <- coef(fastglm(Xs_sp, y_sp, family = binomial(), method = 2, firth = TRU
 bm_c   <- coef(fastglm(Xb_sp, y_sp, family = binomial(), method = 2, firth = TRUE))
 st_c   <- coef(fastglm_streaming(chunks_sp, n_chunks = n_sp / chunk_size_sp,
                                   family = binomial(), method = 2, firth = TRUE))
-cat(sprintf("  sparse  vs dense: max |diff| = %.2e\n", max(abs(sp_c - ref_sp))))
-#>   sparse  vs dense: max |diff| = 2.09e-10
-cat(sprintf("  big.mat vs dense: max |diff| = %.2e\n", max(abs(bm_c - ref_sp))))
-#>   big.mat vs dense: max |diff| = 2.09e-10
-cat(sprintf("  stream  vs dense: max |diff| = %.2e\n", max(abs(st_c - ref_sp))))
-#>   stream  vs dense: max |diff| = 1.10e-10
+knitr::kable(data.frame(Representation = c("sparse", "big.matrix", "streaming"),
+                        Difference = .sci(c(max(abs(sp_c - ref_sp)), max(abs(bm_c - ref_sp)), max(abs(st_c - ref_sp))))),
+             col.names = c("Representation", "Largest coefficient difference from dense"), row.names = FALSE)
 ```
+
+
+
+|Representation |Largest coefficient difference from dense |
+|:--------------|:-----------------------------------------|
+|sparse         |2.1e-10                                   |
+|big.matrix     |2.1e-10                                   |
+|streaming      |1.1e-10                                   |
+
+
 
 In this logistic example, the reported coefficient differences across data representations are below $10^{-7}$. Memory and runtime comparisons remain specific to the displayed design. For other families, the mean-bias adjustment is defined by adjusted estimating equations and need not correspond to a penalized likelihood.
 
@@ -678,32 +729,25 @@ run_one_hurdle <- function(n) {
 
 hurdle_tim <- list()
 for (n in c(1e3, 1e4, 5e4, 1e5)) {
-    cat("\n--- n =", n, "---\n")
     mb <- run_one_hurdle(n)
-    print(.fmt(mb))
     hurdle_tim[[length(hurdle_tim) + 1]] <- .collect(mb, n)
 }
-#> 
-#> --- n = 1000 ---
-#>             expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_hurdle 0.617009    0.714589  1.375993 3.826571
-#> 2    pscl_hurdle 5.357880    5.646971  5.841860 6.336591
-#> 
-#> --- n = 10000 ---
-#>             expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_hurdle  3.168316    3.660111  3.584351  4.029808
-#> 2    pscl_hurdle 44.858674   47.082883 49.614494 61.975805
-#> 
-#> --- n = 50000 ---
-#>             expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_hurdle  17.53951    18.30363  18.15041  18.50465
-#> 2    pscl_hurdle 291.29487   295.23038 295.08554 297.95602
-#> 
-#> --- n = 1e+05 ---
-#>             expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_hurdle  38.57661    40.34695  43.77946  52.73789
-#> 2    pscl_hurdle 520.42411   527.84450 526.39804 529.85456
 hurdle_tim <- do.call(rbind, hurdle_tim)
+.timing_table(hurdle_tim)
+```
+
+
+
+Table: Median time in milliseconds
+
+|Method         | n = 1,000| n = 10,000| n = 50,000| n = 100,000|
+|:--------------|---------:|----------:|----------:|-----------:|
+|fastglm_hurdle |      0.63|       3.58|      18.98|       38.86|
+|pscl_hurdle    |      5.29|      45.30|     304.96|      536.66|
+
+
+
+``` r
 .plot_scaling(hurdle_tim, "Hurdle Poisson: median time vs n")
 ```
 
@@ -733,11 +777,17 @@ mb_hurdle_nb <- microbenchmark(
     pscl_hurdle    = pscl::hurdle (y ~ x1 + x2, data = df, dist = "negbin"),
     times = 3L
 )
-print(.fmt(mb_hurdle_nb))
-#>             expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_hurdle 34.82179    35.09813  35.06155 35.26472
-#> 2    pscl_hurdle 53.31320    54.03566  54.64690 56.59185
+.fmt_table(mb_hurdle_nb)
 ```
+
+
+
+|expr           | min (ms)| median (ms)| mean (ms)| max (ms)|
+|:--------------|--------:|-----------:|---------:|--------:|
+|fastglm_hurdle |    33.15|       36.19|     35.90|    38.37|
+|pscl_hurdle    |    50.62|       50.80|     56.37|    67.69|
+
+
 
 # Zero-inflated models
 
@@ -762,32 +812,25 @@ run_one_zi <- function(n) {
 
 zi_tim <- list()
 for (n in c(1e3, 1e4, 5e4, 1e5)) {
-    cat("\n--- n =", n, "---\n")
     mb <- run_one_zi(n)
-    print(.fmt(mb))
     zi_tim[[length(zi_tim) + 1]] <- .collect(mb, n)
 }
-#> 
-#> --- n = 1000 ---
-#>         expr min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi 2.472710    2.635521  2.718726  3.190538
-#> 2    pscl_zi 9.508146    9.759558  9.769759 10.073864
-#> 
-#> --- n = 10000 ---
-#>         expr min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi 24.03100    25.81959  26.01459  28.41525
-#> 2    pscl_zi 97.39829   106.40336 110.95984 124.66148
-#> 
-#> --- n = 50000 ---
-#>         expr min (ms) median (ms) mean (ms) max (ms)
-#> 1 fastglm_zi 124.2580    130.5486  130.7155 143.4572
-#> 2    pscl_zi 560.4496    573.8759  581.9853 629.3859
-#> 
-#> --- n = 1e+05 ---
-#>         expr  min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi  250.0741    255.4823  256.5437  263.7073
-#> 2    pscl_zi 1095.5710   1153.3367 1158.0239 1218.4211
 zi_tim <- do.call(rbind, zi_tim)
+.timing_table(zi_tim)
+```
+
+
+
+Table: Median time in milliseconds
+
+|Method     | n = 1,000| n = 10,000| n = 50,000| n = 100,000|
+|:----------|---------:|----------:|----------:|-----------:|
+|fastglm_zi |      2.58|      28.20|     126.39|      249.66|
+|pscl_zi    |      9.26|     111.97|     578.99|     1165.21|
+
+
+
+``` r
 .plot_scaling(zi_tim, "Zero-inflated Poisson: median time vs n")
 ```
 
@@ -812,11 +855,17 @@ mb_zi_nb <- microbenchmark(
     pscl_zi    = pscl::zeroinfl(y ~ x1 + x2, data = df, dist = "negbin"),
     times = 3L
 )
-print(.fmt(mb_zi_nb))
-#>         expr min (ms) median (ms) mean (ms)  max (ms)
-#> 1 fastglm_zi  72.2746    88.97832  84.23587  91.45468
-#> 2    pscl_zi 149.7550   176.50578 168.24894 178.48604
+.fmt_table(mb_zi_nb)
 ```
+
+
+
+|expr       | min (ms)| median (ms)| mean (ms)| max (ms)|
+|:----------|--------:|-----------:|---------:|--------:|
+|fastglm_zi |    73.53|       77.08|     76.37|    78.49|
+|pscl_zi    |   149.64|      162.52|    158.52|   163.39|
+
+
 
 # Summary
 

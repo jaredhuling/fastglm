@@ -130,8 +130,8 @@ Table: Convergence over 200 replications
 
 
 
-`fastglm_nb()` converges on every replication.  `MASS::glm.nb()` fails
-on roughly one in six.
+`fastglm_nb()` converges on 200 of 200 replications, and
+`MASS::glm.nb()` fails on 35.
 
 ### Log-likelihood comparison
 
@@ -150,24 +150,10 @@ ll_diff <- results$fg_loglik[both] - results$mass_loglik[both]
 n_degenerate <- sum(ll_diff > 1)
 agree <- both
 agree[both] <- ll_diff <= 1
-
-cat(sprintf("Replications where both converge:         %d / %d\n",
-            sum(both), n_reps))
-#> Replications where both converge:         165 / 200
-cat(sprintf("  of which MASS lands at degenerate MLE:  %d\n", n_degenerate))
-#>   of which MASS lands at degenerate MLE:  3
-cat(sprintf("  genuine agreement (|diff| <= 1):        %d\n", sum(agree)))
-#>   genuine agreement (|diff| <= 1):        162
-
 ll_good <- results$fg_loglik[agree] - results$mass_loglik[agree]
-cat(sprintf("\nAmong agreeing fits:\n"))
-#> 
-#> Among agreeing fits:
-cat(sprintf("  Max |logLik difference|:  %.2e\n", max(abs(ll_good))))
-#>   Max |logLik difference|:  1.53e-06
-cat(sprintf("  Mean |logLik difference|: %.2e\n", mean(abs(ll_good))))
-#>   Mean |logLik difference|: 1.92e-08
 ```
+
+Both methods converge on 165 of 200 replications. `MASS::glm.nb()` reaches a degenerate fit in 3 of these, which leaves 162 agreeing fits. Among them, the largest absolute log-likelihood difference is 1.5e-06, and the mean is 1.9e-08.
 
 
 ``` r
@@ -197,28 +183,13 @@ ggplot(agreement, aes(mass_theta, fg_theta)) +
 
 ![plot of chunk theta-plot](nb-convergence-figs/theta-plot-1.png)
 
-``` r
-
-cat(sprintf("Max |theta difference|: %.2e\n",
-            max(abs(results$fg_theta[agree] - results$mass_theta[agree]))))
-#> Max |theta difference|: 4.26e-07
-```
+The largest absolute theta difference among these fits is 4.3e-07.
 
 ### Cases where only fastglm converges
 
 
 ``` r
 fg_only <- results$fg_conv & !results$mass_conv
-cat(sprintf("fastglm converges, MASS fails: %d replications\n", sum(fg_only)))
-#> fastglm converges, MASS fails: 35 replications
-if (any(fg_only)) {
-    cat(sprintf("  theta range:  [%.3f, %.3f]\n",
-                min(results$fg_theta[fg_only]),
-                max(results$fg_theta[fg_only])))
-    cat(sprintf("  logLik range: [%.1f, %.1f]\n",
-                min(results$fg_loglik[fg_only]),
-                max(results$fg_loglik[fg_only])))
-}
-#>   theta range:  [0.861, 1.242]
-#>   logLik range: [-1123.1, -935.4]
 ```
+
+`fastglm_nb()` converges while `MASS::glm.nb()` fails in 35 replications. Across these fits, theta ranges from 0.861 to 1.242, and the log likelihood ranges from -1123.1 to -935.4.
