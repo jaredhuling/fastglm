@@ -9,8 +9,10 @@ Aliased coefficients from rank-deficient designs are now reported as `NA`, as in
 
 ## Test environments
 
-* local macOS (aarch64, R 4.5.1)
-* R-hub and win-builder: results to be added before submission.
+* local macOS (aarch64), R 4.5.1
+* win-builder: R-devel
+* R-hub: Linux, Windows, and macOS (x86_64), R-devel
+* GitHub Actions: Ubuntu, Windows, and macOS, R-release; Ubuntu, R-devel and R 4.4
 
 ## R CMD check results
 
