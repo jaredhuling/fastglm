@@ -16,7 +16,8 @@ knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
   echo = TRUE,
-  eval = TRUE
+  eval = all(vapply(c("MASS", "brglm2", "logistf", "microbenchmark", "statmod"),
+                    requireNamespace, logical(1), quietly = TRUE))
 )
 ```
 
@@ -174,9 +175,8 @@ f <- fastglm(X, y_ig, family = inverse.gaussian("log"), firth = TRUE, tol = 1e-1
 b <- glm(y ~ x1 + x2, data = data.frame(y = y_ig, x1 = x1, x2 = x2),
          family = inverse.gaussian("log"), method = "brglmFit", type = "AS_mean",
          control = list(epsilon = 1e-10, maxit = 200))
+difference_table(c(log = max(abs(unname(coef(f)) - unname(coef(b))))))
 ```
-
-The largest coefficient difference from `brglm2` is `r formatC(max(abs(unname(coef(f)) - unname(coef(b)))), format = "e", digits = 1)`.
 
 # Standard errors
 

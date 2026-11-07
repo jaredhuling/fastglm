@@ -103,3 +103,19 @@ test_that("saturated logit models with positive intermediate counts retain their
     expect_true(fit$converged)
     expect_equal(predict(fit),expected,tolerance=1e-10,ignore_attr=TRUE)
 })
+
+test_that("maximum likelihood at the ordering boundary stops promptly with an explanation", {
+    set.seed(321)
+    n <- 1000L;p <- 10L
+    x <- matrix(rnorm(n*p),n,p,dimnames=list(NULL,paste0("x",seq_len(p))))
+    alpha <- qlogis(seq_len(4L)/5L);eta <- drop(x%*%(0.6*(-1)^seq_len(p)/sqrt(seq_len(p))))
+    # A design whose slopes change quickly across thresholds, relative to their gaps.
+    u <- runif(n);code <- rep(5L,n)
+    for(j in 4:1) code[u<=plogis(alpha[j]-eta-0.4*(j-2.5)*(x[,2]-x[,3]))] <- j
+    y <- ordered(code,levels=seq_len(5L))
+    expect_warning(fit <- fastglm_ordinal(x,y,nonparallel=c("x2","x3"),maxit=500L),"ordering boundary")
+    expect_false(fit$converged)
+    expect_identical(fit$convergence.reason,"ordering_boundary")
+    expect_lt(fit$iterations,200L)
+    expect_lt(fit$minimum.gap,1e-8)
+})

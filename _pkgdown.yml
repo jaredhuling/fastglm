@@ -1,0 +1,95 @@
+url: https://jaredhuling.org/fastglm/
+
+reference:
+- title: Generalized linear models
+  contents:
+  - fastglm
+  - fastglm.formula
+  - fastglmPure
+  - fastglm_fit
+  - summary.fastglm
+  - predict.fastglm
+- title: Count models
+  contents:
+  - fastglm_nb
+  - negbin
+  - fastglm_confint_theta
+  - fastglm_truncated
+  - fastglm_hurdle
+  - fastglm_zi
+  - predict.fastglm_hurdle
+- title: Two-part models
+  contents:
+  - fastglm_twopart
+- title: Ordinal models
+  contents:
+  - fastglm_ordinal
+  - update.fastglm_ordinal
+  - "`ordinal-partial-methods`"
+  - predict.fastglm_ordinal
+  - residuals.fastglm_ordinal
+  - simulate.fastglm_ordinal
+  - fastglm_ordinal_assess
+  - fastglm_po_test
+  - tidy.fastglm_ordinal
+- title: Inference
+  contents:
+  - vcov.fastglm
+  - fastglm_vcov
+  - "`fastglm-sandwich`"
+  - vcovHC.fastglm
+  - confint.fastglm
+  - "`fastglm-confint-methods`"
+  - fastglm_wald_test
+  - fastglm_score_test
+  - fastglm_profile_test
+  - "`fastglm-test-methods`"
+  - fastglm_bootstrap
+  - fastglm_average
+  - fastglm_marginal_effects
+- title: Repeated fits with a common design
+  contents:
+  - fastglm_prepare
+  - fastglm_batch
+  - fastglm_ordinal_prepare
+  - fastglm_ordinal_batch
+- title: Large data
+  contents:
+  - fastglm_streaming
+  - fastglm_ordinal_streaming
+  - fastglm_source
+  - fastglm_source_arrow
+  - fastglm_source_dbi
+  - predict.fastglm_stream
+  - predict.fastglm_ordinal_stream
+- title: Diagnostics and reporting
+  contents:
+  - fastglm_diagnostics
+  - "`fastglm-diagnostics-methods`"
+  - "`fastglm-prediction-methods`"
+  - "`%*%,big.matrix,vector-method`"
+  - "`fastglm-tidy`"
+
+articles:
+- title: Getting started
+  navbar: Getting started
+  contents:
+  - fastglm-overview
+  - fastglm
+- title: Models
+  navbar: Models
+  contents:
+  - firth-fastglm
+  - count-firth-fastglm
+  - semicontinuous-fastglm
+  - ordinal-fastglm
+- title: Large data
+  navbar: Large data
+  contents:
+  - large-data-fastglm
+- title: Performance and stability
+  navbar: Performance and stability
+  contents:
+  - benchmarks-fastglm
+  - nb-convergence-fastglm
+  - nb-stability-fastglm

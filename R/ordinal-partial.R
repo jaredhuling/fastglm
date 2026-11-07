@@ -53,7 +53,7 @@
     if(!positive(maxit,TRUE)) stop("'maxit' must be a positive integer",call.=FALSE)
     if(!positive(block.size,TRUE)) stop("'block.size' must be a positive integer",call.=FALSE)
     defaults <- list(score.tol=tol,step.tol=tol,max.step=4,max.halves=35L,
-        condition.tol=1e-14,standardize=TRUE,trace=FALSE)
+        condition.tol=1e-14,standardize=TRUE,trace=FALSE,observed=TRUE)
     if(!is.list(control) || (length(control) && (is.null(names(control)) || anyNA(names(control)) ||
        any(!nzchar(names(control))) || anyDuplicated(names(control)))) ||
        length(setdiff(names(control),names(defaults))))
@@ -62,7 +62,7 @@
     for(nm in c("score.tol","step.tol","max.step","max.halves","condition.tol"))
         if(!positive(ctl[[nm]],nm=="max.halves"))
             stop("invalid ordinal optimizer control: ",nm,call.=FALSE)
-    for(nm in c("standardize","trace"))
+    for(nm in c("standardize","trace","observed"))
         if(!is.logical(ctl[[nm]]) || length(ctl[[nm]])!=1L || is.na(ctl[[nm]]))
             stop("invalid ordinal optimizer flag: ",nm,call.=FALSE)
     setup <- .ordinal_design_setup(x,response$totals,ctl$standardize,cache,nonparallel)
@@ -88,7 +88,7 @@
     fit <- ordinal_partial_native_fit(xx[,common,drop=FALSE],xx[,nonparallel,drop=FALSE],
         response$codes,response$counts,response$weights,working.offset,K,c(alpha,numeric(d-q)),
         firth,ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),
-        ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
+        ctl$max.step,as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code,ctl$observed)
     object <- .ordinal_partial_result(fit,center,scale,response,setup$frequency,sum(good),
         firth,link,ctl,tol,maxit,block.size,colnames(x),nonparallel)
     object$x <- x;object$y <- y;object$weights <- response$weights;object$offset <- offset
@@ -138,7 +138,11 @@
         scaled.score=fit$scaled.score,predictor.step=fit$predictor.step,information.rcond=fit$information.rcond),
         parts(as.numeric(fit$coefficients)))
     colnames(fit$history) <- c("loglik","scaled.score","predictor.step","minimum.gap")
-    if(!isTRUE(fit$converged)) warning("nonparallel ordinal fitting did not converge: ",fit$convergence.reason,call.=FALSE)
+    if(!isTRUE(fit$converged)) warning(if(identical(fit$convergence.reason,"ordering_boundary"))
+        paste("nonparallel ordinal fitting stopped at the ordering boundary: the best fit has cumulative",
+              "probabilities that touch at some rows, so these coefficients are not an interior solution.",
+              "Use fastglm_diagnostics(fit, boundary = TRUE) to locate the rows, or fit fewer threshold-specific effects.")
+        else paste0("nonparallel ordinal fitting did not converge: ",fit$convergence.reason),call.=FALSE)
     object <- list(coefficients=effective$coefficients,alpha=effective$alpha,beta=effective$beta,
         gamma=effective$gamma,thresholds=effective$alpha,nonparallel=nonparallel,common=common,
         levels=response$levels,effective.levels=response$levels,threshold.map=seq_len(q),
@@ -150,7 +154,7 @@
         information.rcond=fit$information.rcond,minimum.gap=fit$minimum.gap,
         minimum.log.probability=fit$minimum.log.probability,converged=fit$converged,
         convergence.reason=fit$convergence.reason,iterations=fit$iterations,evaluations=fit$evaluations,
-        fallbacks=fit$fallbacks,last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,
+        observed.iterations=fit$observed.iterations,fallbacks=fit$fallbacks,last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,
         loglik=fit$loglik,rank=d,df.residual=frequency-d,nobs=frequency,
         nobs.rows=positive.rows,frequency=frequency,
         response=response,category=response,design.columns=columns,preparation.reused=FALSE,

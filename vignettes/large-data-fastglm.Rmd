@@ -9,7 +9,8 @@ vignette: >
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE)
+knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE,
+                      eval=requireNamespace("MASS",quietly=TRUE))
 ```
 
 Large regression analyses can require more memory than is available on a single computer. Much of that memory is used by the design matrix, whose rows represent observations and whose columns represent the predictors used in the regression. Memory can be reduced by storing only nonzero entries, accessing a matrix from a file, or reading a limited number of rows at a time. We describe when each approach is useful, then consider how to obtain predictions and standard errors without loading the complete dataset.
