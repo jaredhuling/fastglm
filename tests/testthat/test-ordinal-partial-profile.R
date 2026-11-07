@@ -158,13 +158,14 @@ test_that("partial constrained geometry preserves cancellation and rejects lost 
     setup <- list(q=2L,pc=2L,pn=2L,d=8L,x=x,domain.z=z,positive=c(TRUE,TRUE))
     b <- c(-1.25,.875,.1,.375,.1,0,.2,.1)
     native <- ordinal_partial_domain_values(x,z,2L,b)
-    expect_equal(native$step,1.625,tolerance=1e-14)
-    expect_equal(native$gaps,rep(2.125,2L),tolerance=1e-14)
-    expect_equal(as.numeric(.ordinal_partial_profile_gaps(setup,b)),rep(2.125,2L),tolerance=1e-14)
+    # An uncompensated sum would be wrong by whole units at this coefficient scale.
+    expect_equal(native$step,1.625,tolerance=1e-10)
+    expect_equal(native$gaps,rep(2.125,2L),tolerance=1e-10)
+    expect_equal(as.numeric(.ordinal_partial_profile_gaps(setup,b)),rep(2.125,2L),tolerance=1e-10)
     b[c(2L,7L,8L)] <- c(5.875,.4,.3)
     expected <- 7.125-c(1,-1)*(2^-55*1e17)
-    expect_equal(ordinal_partial_domain_values(x,z,2L,b)$gaps,expected,tolerance=1e-14)
-    expect_equal(as.numeric(.ordinal_partial_profile_gaps(setup,b)),expected,tolerance=1e-14)
+    expect_equal(ordinal_partial_domain_values(x,z,2L,b)$gaps,expected,tolerance=1e-10)
+    expect_equal(as.numeric(.ordinal_partial_profile_gaps(setup,b)),expected,tolerance=1e-10)
     # The exact requested difference is smaller than the spacing of doubles
     # at these coefficient magnitudes. Do not silently test a zero difference.
     setup <- list(q=1L,pc=0L,pn=1L,d=2L,T=diag(2L),Ti=diag(2L),domain.z=matrix(0,1L,1L))

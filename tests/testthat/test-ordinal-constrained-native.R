@@ -82,13 +82,18 @@ expect_constrained_match <- function(setup,L,null,adjusted=FALSE,start=setup$coe
     native <- .ordinal_constrained_fit(setup,L,null,start=start,adjusted=adjusted)
     reference <- reference_constrained_fit(setup,L,null,start=start,adjusted=adjusted)
     expect_identical(native$code,reference$code)
-    expect_identical(native$iterations,reference$iterations)
-    expect_identical(native$evaluations,reference$evaluations)
-    expect_identical(native$message,reference$message)
-    expect_equal(native$coefficients,reference$coefficients,tolerance=1e-10)
-    expect_equal(native$value,reference$value,tolerance=1e-10)
-    expect_equal(native$score,reference$score,tolerance=1e-6)
-    expect_equal(native$state$cov.unscaled,reference$state$cov.unscaled,tolerance=1e-8)
+    # Linear algebra libraries can change the path slightly, so exact iteration
+    # counts and the tightest tolerances are checked only in local development.
+    local <- identical(Sys.getenv("NOT_CRAN"),"true")
+    if(local) {
+        expect_identical(native$iterations,reference$iterations)
+        expect_identical(native$evaluations,reference$evaluations)
+        expect_identical(native$message,reference$message)
+    }
+    expect_equal(native$coefficients,reference$coefficients,tolerance=if(local) 1e-10 else 1e-5)
+    expect_equal(native$value,reference$value,tolerance=if(local) 1e-10 else 1e-6)
+    expect_equal(native$state$cov.unscaled,reference$state$cov.unscaled,tolerance=if(local) 1e-8 else 1e-4)
+    if(local) expect_equal(native$score,reference$score,tolerance=1e-6)
     native
 }
 

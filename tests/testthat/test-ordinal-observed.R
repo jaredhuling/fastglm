@@ -9,6 +9,7 @@ ordinal_reference_loglik <- function(b,x,counts,weights,offset,link) {
 }
 
 test_that("observed ordinal terms match numerical derivatives of the likelihood", {
+    skip_if_not_installed("numDeriv")
     set.seed(123)
     n <- 60L;x <- cbind(a=rnorm(n),b=rnorm(n));K <- 4L
     codes <- sample.int(K,n,TRUE);weights <- rpois(n,2)+1;offset <- rnorm(n,sd=0.2)
@@ -88,4 +89,48 @@ test_that("Newton steps stop promptly when likelihood changes reach rounding siz
     fit <- fastglm_ordinal(x,y)
     expect_true(fit$converged)
     expect_lte(fit$observed.iterations,10L)
+})
+
+test_that("observed threshold-specific terms match numerical derivatives", {
+    skip_if_not_installed("numDeriv")
+    set.seed(123)
+    n <- 60L;K <- 4L;x <- cbind(a=rnorm(n));z <- cbind(b=rnorm(n)/4,c=rnorm(n)/4)
+    codes <- sample.int(K,n,TRUE);weights <- rpois(n,2)+1;offset <- rnorm(n,sd=0.2)
+    counts <- matrix(0,n,K);counts[cbind(seq_len(n),codes)] <- 1
+    b <- c(-1,0.1,1,0.3,0.2,-0.1,0.25,-0.15,0.3,-0.05)
+    likelihood <- function(par,link) {
+        forward <- switch(link,logit=plogis,probit=pnorm,cloglog=function(u) -expm1(-exp(u)))
+        location <- drop(x%*%par[4L])+offset
+        upper <- sapply(1:3,function(s) forward(par[s]-location-drop(z%*%par[4L+(s-1L)*2L+1:2])))
+        sum(weights*counts*log(cbind(upper,1)-cbind(0,upper)))
+    }
+    for(link in c("logit","probit","cloglog")) {
+        code <- match(link,c("logit","probit","cloglog"))-1L
+        state <- fastglm:::ordinal_partial_observed_evaluate(x,z,codes,matrix(numeric(),0L,0L),weights,offset,K,b,7L,code)
+        f <- function(par) likelihood(par,link)
+        expect_equal(state$loglik,f(b),tolerance=1e-10)
+        expect_equal(state$score,numDeriv::grad(f,b),tolerance=1e-7)
+        expect_equal(state$information,-numDeriv::hessian(f,b),tolerance=1e-5)
+        grouped <- fastglm:::ordinal_partial_observed_evaluate(x,z,integer(),counts*weights,rep(1,n),offset,K,b,7L,code)
+        expect_equal(grouped$information,state$information,tolerance=1e-12)
+    }
+})
+
+test_that("threshold-specific Newton and expected scoring reach the same fit", {
+    set.seed(123)
+    n <- 1500L;x <- cbind(a=rnorm(n),b=rnorm(n),c=rbinom(n,1,0.3))
+    for(link in c("logit","probit","cloglog")) {
+        forward <- switch(link,logit=plogis,probit=pnorm,cloglog=function(z) -expm1(-exp(z)))
+        inverse <- switch(link,logit=qlogis,probit=qnorm,cloglog=function(u) log(-log1p(-u)))
+        eta <- drop(x%*%c(0.5,-0.3,0.4));u <- runif(n);y <- rep(4L,n);cuts <- inverse(c(.25,.5,.75))
+        for(j in 3:1) y[u<=forward(cuts[j]-eta-0.04*(j-2)*x[,2])] <- j
+        y <- ordered(y,levels=1:4)
+        fit <- fastglm_ordinal(x,y,link=link,nonparallel="b",tol=1e-10)
+        reference <- fastglm_ordinal(x,y,link=link,nonparallel="b",tol=1e-10,control=list(observed=FALSE))
+        expect_true(fit$converged);expect_true(reference$converged)
+        expect_gt(fit$observed.iterations,0L);expect_identical(reference$observed.iterations,0L)
+        expect_equal(coef(fit),coef(reference),tolerance=1e-8)
+        expect_equal(vcov(fit),vcov(reference),tolerance=1e-8)
+        expect_equal(as.numeric(logLik(fit)),as.numeric(logLik(reference)),tolerance=1e-10)
+    }
 })

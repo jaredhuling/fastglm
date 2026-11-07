@@ -240,20 +240,205 @@ inline Rcpp::List partial_state_list(const PartialOrdinalState& state) {
     Rcpp::List out=ordinal_state_list(state);out["minimum.gap"]=state.minimum_gap;return out;
 }
 
+// Observed-information Newton iterations for threshold-specific slopes. Each row
+// touches only the thresholds bounding its observed categories, and products use
+// vectorized arithmetic. The iterate is only a start: partial_fit() certifies
+// convergence with the expected information and compensated predictors.
+struct PartialObservedState {
+    MatrixXd information;
+    VectorXd score;
+    double loglik=0,minimum_gap=std::numeric_limits<double>::infinity();
+    explicit PartialObservedState(int d=0) : information(MatrixXd::Zero(d,d)),score(VectorXd::Zero(d)) {}
+};
+
+inline void partial_observed_add(const PartialOrdinalData& data,const VectorXd& b,PartialObservedState& out) {
+    const int q=data.q,p=data.p,pn=data.pn;
+    const VectorXd alpha=b.head(q),beta=b.segment(q,p);
+    const int width=2+p+2*pn;
+    std::vector<int> index(width);
+    VectorXd upper(width),lower(width);
+    VectorXd location,slope;
+    for(int first=0;first<data.n;first+=data.block) {
+        Rcpp::checkUserInterrupt();
+        const int length=std::min(data.block,data.n-first);
+        const auto xx=data.x.middleRows(first,length);
+        const auto zz=data.z.middleRows(first,length);
+        location.resize(length);
+        if(p) location.noalias()=xx*beta; else location.setZero();
+        // Ordering must hold at every positive-frequency row, not only at observed categories.
+        for(int s=1;s<q;++s) {
+            const VectorXd rowgap=VectorXd::Constant(length,alpha[s]-alpha[s-1])-
+                zz*(b.segment(q+p+s*pn,pn)-b.segment(q+p+(s-1)*pn,pn));
+            for(int r=0;r<length;++r) if(data.totals[first+r]>0) {
+                if(!(rowgap[r]>0)) throw OrdinalEvaluationError("nonparallel ordinal cumulative predictors are not strictly ordered");
+                out.minimum_gap=std::min(out.minimum_gap,rowgap[r]);
+            }
+        }
+        for(int r=0;r<length;++r) {
+            const int i=first+r;
+            if(data.totals[i]==0) continue;
+            const double linear=location[r]+data.offset[i];
+            const auto add=[&](int k,double y) {
+                double eu=0,el=0,gap=0;
+                if(k<q) eu=alpha[k]-linear-zz.row(r).dot(b.segment(q+p+k*pn,pn));
+                if(k>0) el=alpha[k-1]-linear-zz.row(r).dot(b.segment(q+p+(k-1)*pn,pn));
+                if(k>0 && k<q) gap=alpha[k]-alpha[k-1]-zz.row(r).dot(b.segment(q+p+k*pn,pn)-b.segment(q+p+(k-1)*pn,pn));
+                const double one_minus=gap>0 ? -std::expm1(-gap) : 0;
+                const ObservedTerms t=data.link==0 ?
+                    observed_logit(k,q,eu,el,gap>0 ? 1/std::expm1(gap) : 0,gap>0 ? ordinal_log1mexp(-gap) : 0,one_minus) :
+                    observed_general(k,q,data.link,eu,el,gap,one_minus);
+                out.loglik+=y*t.logp;
+                // Gradients of the upper and lower predictors in the coefficients.
+                int used=0;
+                const auto entry=[&](int at,double u,double l) { index[used]=at;upper[used]=u;lower[used]=l;++used; };
+                if(k<q) entry(k,1,0);
+                if(k>0) entry(k-1,0,1);
+                for(int j=0;j<p;++j) entry(q+j,k<q ? -xx(r,j) : 0,k>0 ? -xx(r,j) : 0);
+                for(int j=0;j<pn;++j) {
+                    if(k<q) entry(q+p+k*pn+j,-zz(r,j),0);
+                    if(k>0) entry(q+p+(k-1)*pn+j,0,-zz(r,j));
+                }
+                for(int a=0;a<used;++a) {
+                    out.score[index[a]]+=y*(t.left*upper[a]-t.right*lower[a]);
+                    for(int c=0;c<used;++c) {
+                        const double value=t.upper*upper[a]*upper[c]+t.lower*lower[a]*lower[c]+
+                            t.cross*(upper[a]*lower[c]+lower[a]*upper[c]);
+                        out.information(index[a],index[c])+=y*value;
+                    }
+                }
+            };
+            if(data.grouped) {
+                for(int k=0;k<data.K;++k) {
+                    const double y=data.weights[i]*data.counts(i,k);
+                    if(y!=0) add(k,y);
+                }
+            } else add(data.codes[i]-1,data.totals[i]);
+        }
+    }
+}
+
+template<class Data>
+PartialObservedState partial_observed_evaluate(const Data& data,const VectorXd& b) {
+    if(b.size()!=data.d || !b.allFinite()) throw OrdinalEvaluationError("invalid nonparallel ordinal parameters");
+    PartialObservedState out(data.d);
+    data.visit([&](const PartialOrdinalData& block) { partial_observed_add(block,b,out); });
+    if(!std::isfinite(out.loglik) || !out.score.allFinite() || !out.information.allFinite())
+        throw OrdinalEvaluationError("non-finite observed nonparallel ordinal terms");
+    return out;
+}
+
+// The largest predictor change and the largest step that keeps every row ordered.
+template<class Data>
+void partial_step_limits(const Data& data,const VectorXd& b,const VectorXd& direction,double& change,double& fraction) {
+    change=0;fraction=1;
+    data.visit([&](const PartialOrdinalData& block) {
+        const int q=block.q,p=block.p,pn=block.pn;
+        VectorXd location,value,previous;
+        for(int first=0;first<block.n;first+=block.block) {
+            const int length=std::min(block.block,block.n-first);
+            const auto xx=block.x.middleRows(first,length);
+            const auto zz=block.z.middleRows(first,length);
+            if(p) location.noalias()=xx*direction.segment(q,p); else location=VectorXd::Zero(length);
+            for(int s=0;s<q;++s) {
+                value=VectorXd::Constant(length,direction[s])-location-zz*direction.segment(q+p+s*pn,pn);
+                if(s>0) {
+                    const VectorXd current=VectorXd::Constant(length,b[s]-b[s-1])-
+                        zz*(b.segment(q+p+s*pn,pn)-b.segment(q+p+(s-1)*pn,pn));
+                    for(int r=0;r<length;++r) if(block.totals[first+r]>0) {
+                        const double difference=value[r]-previous[r];
+                        if(difference<0) fraction=std::min(fraction,.9*current[r]/(-difference));
+                    }
+                }
+                for(int r=0;r<length;++r) if(block.totals[first+r]>0) change=std::max(change,std::abs(value[r]));
+                previous=value;
+            }
+        }
+    });
+}
+
+template<class Data>
+int partial_observed_newton(const Data& data,VectorXd& b,double score_tol,double step_tol,int maxit,
+    double max_step,int max_halves,bool trace,int& evaluations) {
+    int iterations=0;
+    try {
+        PartialObservedState current=partial_observed_evaluate(data,b);
+        ++evaluations;
+        for(;iterations<maxit;++iterations) {
+            Rcpp::checkUserInterrupt();
+            // Near the ordering boundary the certifying iterations take over.
+            if(current.minimum_gap<1e-8) return iterations;
+            const VectorXd diagonal=current.information.diagonal();
+            if((diagonal.array()<=0).any()) return iterations;
+            const VectorXd inverse_scale=diagonal.cwiseSqrt().cwiseInverse();
+            const MatrixXd correlation=inverse_scale.asDiagonal()*current.information*inverse_scale.asDiagonal();
+            const Eigen::LLT<MatrixXd> factor(correlation);
+            if(factor.info()!=Eigen::Success) return iterations;
+            VectorXd direction=inverse_scale.cwiseProduct(factor.solve(inverse_scale.cwiseProduct(current.score)));
+            if(!direction.allFinite()) return iterations;
+            const double scaled=current.score.cwiseProduct(inverse_scale).cwiseAbs().maxCoeff();
+            double change=0,fraction=1;
+            partial_step_limits(data,b,direction,change,fraction);
+            if(trace) Rcpp::Rcout<<"observed iteration "<<iterations<<": score "<<scaled<<", predictor step "<<change<<"\n";
+            if(scaled<score_tol && change<step_tol) {
+                if(fraction==1) b+=direction;
+                return iterations+1;
+            }
+            if(change>max_step) { direction*=max_step/change;fraction=std::min(1.0,fraction*change/max_step); }
+            if(!(fraction>0)) return iterations;
+            const double ascent=current.score.dot(direction);
+            const double rounding=64*std::numeric_limits<double>::epsilon()*(1+std::abs(current.loglik));
+            bool accepted=false;
+            VectorXd candidate(b.size());
+            PartialObservedState trial;
+            for(int h=0;h<=max_halves && !accepted;++h) {
+                candidate=b+fraction*direction;
+                try {
+                    trial=partial_observed_evaluate(data,candidate);
+                    ++evaluations;
+                    if(ascent<1024*rounding || trial.loglik>=current.loglik+1e-4*fraction*ascent-rounding) accepted=true;
+                    else fraction/=2;
+                } catch(const OrdinalEvaluationError&) { ++evaluations;fraction/=2; }
+            }
+            if(!accepted) return iterations;
+            b=candidate;current=std::move(trial);
+        }
+    } catch(const OrdinalEvaluationError&) {}
+    return iterations;
+}
+
 template<class Data>
 inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
     bool firth,double score_tol,double step_tol,int maxit,double max_step,int max_halves,
-    double condition_tol,bool trace) {
+    double condition_tol,bool trace,bool observed=true) {
     if(!(score_tol>0) || !(step_tol>0) || maxit<1 || !(max_step>0) || max_halves<1 ||
        !(condition_tol>0) || !std::isfinite(score_tol+step_tol+max_step+condition_tol))
         Rcpp::stop("invalid nonparallel ordinal optimizer controls");
     VectorXd b=start;int evaluations=0,fallbacks=0,iterations=0;
+    // Bias reduction needs expected-information terms in every iteration.
+    const int observed_iterations=!observed || firth || maxit<2 ? 0 :
+        partial_observed_newton(data,b,score_tol,step_tol,std::min(maxit-1,30),max_step,max_halves,trace,evaluations);
+    const int expected_limit=maxit-observed_iterations;
     auto evaluate=[&](const VectorXd& candidate) {++evaluations;return partial_evaluate(data,candidate,firth,condition_tol);};
-    PartialOrdinalState current=evaluate(b);
+    // The certifying iterations restart if the Newton endpoint cannot be evaluated.
+    const auto first_state=[&]() {
+        if(observed_iterations>0) {
+            try { return evaluate(b); }
+            catch(const OrdinalEvaluationError&) { b=start; }
+        }
+        return evaluate(b);
+    };
+    PartialOrdinalState current=first_state();
     bool converged=false;std::string reason="iteration_limit",last_rejection;
     const bool binary_scoring=firth && data.q==1 && data.link!=0;
-    MatrixXd history(maxit,4);
-    for(int iter=1;iter<=maxit;++iter) {
+    // Maximum likelihood can lie where cumulative probabilities touch at some row.
+    // Every step then stops at the ordering constraint, and the search would crawl
+    // along it without reaching an interior solution, so it ends here instead.
+    int boundary_stall=0;
+    bool order_limited=false;
+    const int boundary_limit=20;
+    const double boundary_gap=1e-8;
+    MatrixXd history(expected_limit,4);
+    for(int iter=1;iter<=expected_limit;++iter) {
         Rcpp::checkUserInterrupt();iterations=iter;
         history.row(iter-1)<<current.loglik,current.scaled_score,current.predictor_step,current.minimum_gap;
         if(trace) Rcpp::Rcout<<"iteration "<<iter<<": score "<<current.scaled_score<<
@@ -277,6 +462,7 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
             if(!firth && !(ascent>0)) return false;
             double fraction=data.feasible_fraction(b,direction);
             if(!(fraction>0) || !std::isfinite(fraction)) return false;
+            order_limited=fraction<1;
             for(int h=0;h<=max_halves;++h) {
                 const VectorXd candidate=b+fraction*direction;
                 try {
@@ -325,15 +511,20 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
                 }
             }
         }
-        if(!accepted) {reason=firth ? "score_search_failed" : "likelihood_search_failed";break;}
+        if(!accepted) {
+            reason=firth ? "score_search_failed" : (current.minimum_gap<boundary_gap ? "ordering_boundary" : "likelihood_search_failed");
+            break;
+        }
         b=accepted_b;current=std::move(accepted_state);
+        boundary_stall=!firth && order_limited && current.minimum_gap<boundary_gap ? boundary_stall+1 : 0;
+        if(boundary_stall>=boundary_limit) {reason="ordering_boundary";break;}
     }
     if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
         converged=true;reason="score_and_predictor_step";
     }
     Rcpp::List out=partial_state_list(current);
     out["coefficients"]=b;out["converged"]=converged;out["convergence.reason"]=reason;
-    out["iterations"]=iterations;out["evaluations"]=evaluations;out["fallbacks"]=fallbacks;
+    out["iterations"]=observed_iterations+iterations;out["observed.iterations"]=observed_iterations;out["evaluations"]=evaluations;out["fallbacks"]=fallbacks;
     out["last.rejected.evaluation"]=last_rejection;out["history"]=MatrixXd(history.topRows(iterations));
     return out;
 }

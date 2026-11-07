@@ -177,7 +177,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         fit <- ordinal_partial_stream_native_fit(fetch,source$n_chunks,length(common),
             length(selected$columns),q+1L,c(alpha,numeric(d-q)),firth,
             ctl$score.tol,ctl$step.tol,as.integer(maxit),as.integer(block.size),ctl$max.step,
-            as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code)
+            as.integer(ctl$max.halves),ctl$condition.tol,ctl$trace,link.code,ctl$observed)
         object <- .ordinal_partial_result(fit,center,scale,response,frequency,positive.rows,
             firth,link,ctl,tol,maxit,block.size,state$columns,selected$columns)
         class(object) <- c("fastglm_ordinal_stream",class(object))

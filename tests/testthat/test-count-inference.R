@@ -1,4 +1,5 @@
 test_that("joint count scores differentiate the observation likelihood", {
+    skip_if_not_installed("MASS")
     set.seed(7401)
     n<-280;d<-data.frame(x=rnorm(n));d$y<-rnbinom(n,mu=exp(.4+.3*d$x),size=1.4)
     d$y[runif(n)<.25]<-0

@@ -29,6 +29,11 @@
 * Negative-binomial, hurdle, and truncated-count block calculations for dense
   designs now run in C++, and dense matrix fits no longer copy or revalidate rows
   on each pass. Streamed GLM validation allocates less.
+* Threshold-specific ordinal maximum likelihood also begins with
+  observed-information Newton steps.
+* Threshold-specific maximum-likelihood fits that reach the ordering boundary now
+  stop with `convergence.reason = "ordering_boundary"` and a message explaining the
+  cause, instead of using every remaining iteration.
 * Ordinal common-slope score moments and logit and probit sandwich blocks now run
   in C++, reusing the fitting kernels.
 * Constrained ordinal iterations for profile intervals and likelihood-ratio and

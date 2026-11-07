@@ -51,32 +51,44 @@
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu">
-<li>
-      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+<li class="divider">
+    </li>
+<li class="dropdown-header">Getting started</li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
+    </li>
+    <li class="divider">
+    </li>
+<li class="dropdown-header">Models</li>
+    <li>
+      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
     <li>
-      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
     </li>
+    <li class="divider">
+    </li>
+<li class="dropdown-header">Large data</li>
     <li>
       <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
+    </li>
+    <li class="divider">
+    </li>
+<li class="dropdown-header">Performance and stability</li>
+    <li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
-    </li>
-    <li>
-      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
-    </li>
-    <li>
-      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul>
 </li>
@@ -238,15 +250,15 @@ depends on the problem and computing environment:</p>
 <tbody>
 <tr class="odd">
 <td align="left">fastglm</td>
-<td align="right">0.66</td>
-<td align="right">0.70</td>
-<td align="right">0.89</td>
+<td align="right">0.73</td>
+<td align="right">0.78</td>
+<td align="right">0.94</td>
 </tr>
 <tr class="even">
 <td align="left">logistf</td>
-<td align="right">1.28</td>
-<td align="right">1.32</td>
-<td align="right">1.50</td>
+<td align="right">1.33</td>
+<td align="right">1.38</td>
+<td align="right">1.54</td>
 </tr>
 </tbody>
 </table>
@@ -423,9 +435,18 @@ linear predictor.</p>
 <span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm.html">fastglm</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">y_ig</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">inverse.gaussian</a></span><span class="op">(</span><span class="st">"log"</span><span class="op">)</span>, firth <span class="op">=</span> <span class="cn">TRUE</span>, tol <span class="op">=</span> <span class="fl">1e-10</span><span class="op">)</span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/glm.html" class="external-link">glm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x1</span> <span class="op">+</span> <span class="va">x2</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">y_ig</span>, x1 <span class="op">=</span> <span class="va">x1</span>, x2 <span class="op">=</span> <span class="va">x2</span><span class="op">)</span>,</span>
 <span>         family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">inverse.gaussian</a></span><span class="op">(</span><span class="st">"log"</span><span class="op">)</span>, method <span class="op">=</span> <span class="st">"brglmFit"</span>, type <span class="op">=</span> <span class="st">"AS_mean"</span>,</span>
-<span>         control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>The largest coefficient difference from <code>brglm2</code> is
-1.2e-06.</p>
+<span>         control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>epsilon <span class="op">=</span> <span class="fl">1e-10</span>, maxit <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu">difference_table</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>log <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<thead><tr class="header">
+<th align="left">Link</th>
+<th align="left">Largest coefficient difference</th>
+</tr></thead>
+<tbody><tr class="odd">
+<td align="left">log</td>
+<td align="left">1.2e-06</td>
+</tr></tbody>
+</table>
 </div>
 </div>
 <div class="section level2">
@@ -866,54 +887,54 @@ designs.</p>
 <tbody>
 <tr class="odd">
 <td align="left">binomial logit</td>
-<td align="right">4.553</td>
-<td align="right">14.429</td>
-<td align="right">3.169</td>
+<td align="right">4.905</td>
+<td align="right">13.381</td>
+<td align="right">2.728</td>
 <td align="right">5</td>
 <td align="right">2</td>
 <td align="left">1.20e-11</td>
 </tr>
 <tr class="even">
 <td align="left">binomial probit</td>
-<td align="right">7.010</td>
-<td align="right">14.254</td>
-<td align="right">2.033</td>
+<td align="right">7.729</td>
+<td align="right">15.765</td>
+<td align="right">2.040</td>
 <td align="right">6</td>
 <td align="right">2</td>
 <td align="left">7.27e-10</td>
 </tr>
 <tr class="odd">
 <td align="left">binomial cloglog</td>
-<td align="right">7.394</td>
-<td align="right">15.609</td>
-<td align="right">2.111</td>
+<td align="right">7.849</td>
+<td align="right">15.253</td>
+<td align="right">1.943</td>
 <td align="right">7</td>
 <td align="right">2</td>
 <td align="left">4.18e-09</td>
 </tr>
 <tr class="even">
 <td align="left">poisson log</td>
-<td align="right">5.498</td>
-<td align="right">112.049</td>
-<td align="right">20.380</td>
+<td align="right">5.520</td>
+<td align="right">115.431</td>
+<td align="right">20.912</td>
 <td align="right">6</td>
 <td align="right">1</td>
 <td align="left">8.35e-09</td>
 </tr>
 <tr class="odd">
 <td align="left">Gamma log</td>
-<td align="right">3.473</td>
-<td align="right">88.040</td>
-<td align="right">25.351</td>
+<td align="right">3.478</td>
+<td align="right">90.529</td>
+<td align="right">26.031</td>
 <td align="right">6</td>
 <td align="right">2</td>
 <td align="left">1.04e-10</td>
 </tr>
 <tr class="even">
 <td align="left">gaussian identity</td>
-<td align="right">1.371</td>
-<td align="right">19.271</td>
-<td align="right">14.053</td>
+<td align="right">1.449</td>
+<td align="right">19.984</td>
+<td align="right">13.790</td>
 <td align="right">2</td>
 <td align="right">2</td>
 <td align="left">1.11e-16</td>

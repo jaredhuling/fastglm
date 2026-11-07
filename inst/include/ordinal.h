@@ -406,6 +406,70 @@ struct ObservedTerms {
     double logp=0,left=0,right=0,location=0,upper=0,lower=0,cross=0,upper_x=0,lower_x=0,slope=0;
 };
 
+// Logit terms simplify exactly. With a = f_u/P and b = f_l/P, the location
+// curvature reduces to (a+b)P, so no term cancels in the tails. G is 1/expm1(gap).
+inline ObservedTerms observed_logit(int k,int q,double eu,double el,double G,double loggap,double one_minus) {
+    ObservedTerms t;
+    double Fu=1,Su=0,logFu=0,Fl=0,Sl=1,logSl=0;
+    if(k<q) {
+        const double x=std::exp(-std::abs(eu)),den=1+x,l=std::log1p(x);
+        Fu=eu>=0 ? 1/den : x/den;Su=eu>=0 ? x/den : 1/den;logFu=eu>=0 ? -l : eu-l;
+    }
+    if(k>0) {
+        const double x=std::exp(-std::abs(el)),den=1+x,l=std::log1p(x);
+        Fl=el>=0 ? 1/den : x/den;Sl=el>=0 ? x/den : 1/den;logSl=el>=0 ? -el-l : -l;
+    }
+    const bool interior=k>0 && k<q;
+    const double gap_term=interior ? G : 0;
+    const double P=interior ? Fu*Sl*one_minus : (k==0 ? Fu : Sl);
+    t.logp=logFu+logSl+(interior ? loggap : 0);
+    t.left=k<q ? Su+gap_term : 0;t.right=k>0 ? Fl+gap_term : 0;t.location=Su-Fl;
+    t.upper=t.left*(gap_term+Fu);t.lower=t.right*(gap_term+Sl);t.cross=-t.left*t.right;
+    t.upper_x=-t.left*P;t.lower_x=-t.right*P;t.slope=(t.left+t.right)*P;
+    return t;
+}
+
+inline ObservedTerms observed_general(int k,int q,int link,double eu,double el,double gap,double one_minus) {
+    ObservedTerms t;
+    double logFu=0,logSu=0,logFl=0,logSl=0,logGu=0,logGl=0,hu=0,hl=0;
+    const auto read=[&](double e,double& logF,double& logS,double& logG,double& h) {
+        if(link==1) {
+            Rf_pnorm_both(e,&logF,&logS,2,1);
+            logG=R::dnorm(e,0,1,true);h=-e;
+        } else {
+            const double x=std::exp(e);
+            logF=e<-36 ? e : ordinal_log1mexp(-x);logS=-x;logG=e-x;h=1-x;
+        }
+    };
+    if(k<q) read(eu,logFu,logSu,logGu,hu);
+    if(k>0) read(el,logFl,logSl,logGl,hl);
+    if(k==0) {
+        t.logp=logFu;t.left=std::exp(logGu-t.logp);t.location=t.left;
+    } else if(k==q) {
+        t.logp=logSl;t.right=link==2 ? std::exp(el) : std::exp(logGl-t.logp);t.location=-t.right;
+    } else {
+        double logden=0;
+        if(link==2) {
+            const double ld=eu+std::log(one_minus);
+            logden=ld<-36 ? ld : std::log(-std::expm1(-std::exp(ld)));
+        }
+        t.logp=eu<=0 ? logFu+ordinal_log1mexp(logFl-logFu) :
+            logSl+(link==2 ? logden : ordinal_log1mexp(logSu-logSl));
+        if(link==2) {
+            const double difference=std::exp(eu)*one_minus;
+            t.left=std::exp(eu-difference-logden);t.right=std::exp(el-logden);
+        } else {
+            t.left=std::exp(logGu-t.logp);t.right=std::exp(logGl-t.logp);
+        }
+        const double delta=link==1 ? -.5*gap*(eu+el) : gap-std::exp(eu)*one_minus;
+        t.location=delta>=0 ? t.left*(-std::expm1(-delta)) : -t.right*(-std::expm1(delta));
+    }
+    t.upper=t.left*(t.left-hu);t.lower=t.right*(t.right+hl);t.cross=-t.left*t.right;
+    t.upper_x=t.left*(hu-t.location);t.lower_x=t.right*(t.location-hl);
+    t.slope=t.location*t.location-t.left*hu+t.right*hl;
+    return t;
+}
+
 struct ObservedThresholds {
     VectorXd alpha,inverse_gap,loggap,one_minus;
     int q,link;
@@ -416,71 +480,12 @@ struct ObservedThresholds {
             loggap[s]=ordinal_log1mexp(-gap);inverse_gap[s]=1/std::expm1(gap);one_minus[s]=-std::expm1(-gap);
         }
     }
-    // Logit terms simplify exactly. With a = f_u/P and b = f_l/P, the location
-    // curvature reduces to (a+b)P, so no term cancels in the tails.
-    ObservedTerms logit(int k,double linear) const {
-        ObservedTerms t;
-        double Fu=1,Su=0,logFu=0,Fl=0,Sl=1,logSl=0;
-        if(k<q) {
-            const double e=alpha[k]-linear,x=std::exp(-std::abs(e)),den=1+x,l=std::log1p(x);
-            Fu=e>=0 ? 1/den : x/den;Su=e>=0 ? x/den : 1/den;logFu=e>=0 ? -l : e-l;
-        }
-        if(k>0) {
-            const double e=alpha[k-1]-linear,x=std::exp(-std::abs(e)),den=1+x,l=std::log1p(x);
-            Fl=e>=0 ? 1/den : x/den;Sl=e>=0 ? x/den : 1/den;logSl=e>=0 ? -e-l : -l;
-        }
+    ObservedTerms terms(int k,double linear) const {
+        const double eu=k<q ? alpha[k]-linear : 0,el=k>0 ? alpha[k-1]-linear : 0;
         const bool interior=k>0 && k<q;
-        const double G=interior ? inverse_gap[k] : 0;
-        const double P=interior ? Fu*Sl*one_minus[k] : (k==0 ? Fu : Sl);
-        t.logp=logFu+logSl+(interior ? loggap[k] : 0);
-        t.left=k<q ? Su+G : 0;t.right=k>0 ? Fl+G : 0;t.location=Su-Fl;
-        t.upper=t.left*(G+Fu);t.lower=t.right*(G+Sl);t.cross=-t.left*t.right;
-        t.upper_x=-t.left*P;t.lower_x=-t.right*P;t.slope=(t.left+t.right)*P;
-        return t;
+        if(link==0) return observed_logit(k,q,eu,el,interior ? inverse_gap[k] : 0,interior ? loggap[k] : 0,interior ? one_minus[k] : 0);
+        return observed_general(k,q,link,eu,el,interior ? alpha[k]-alpha[k-1] : 0,interior ? one_minus[k] : 0);
     }
-    ObservedTerms general(int k,double linear) const {
-        ObservedTerms t;
-        double eu=0,el=0,logFu=0,logSu=0,logFl=0,logSl=0,logGu=0,logGl=0,hu=0,hl=0;
-        const auto read=[&](int s,double& e,double& logF,double& logS,double& logG,double& h) {
-            e=alpha[s]-linear;
-            if(link==1) {
-                Rf_pnorm_both(e,&logF,&logS,2,1);
-                logG=R::dnorm(e,0,1,true);h=-e;
-            } else {
-                const double x=std::exp(e);
-                logF=e<-36 ? e : ordinal_log1mexp(-x);logS=-x;logG=e-x;h=1-x;
-            }
-        };
-        if(k<q) read(k,eu,logFu,logSu,logGu,hu);
-        if(k>0) read(k-1,el,logFl,logSl,logGl,hl);
-        if(k==0) {
-            t.logp=logFu;t.left=std::exp(logGu-t.logp);t.location=t.left;
-        } else if(k==q) {
-            t.logp=logSl;t.right=link==2 ? std::exp(el) : std::exp(logGl-t.logp);t.location=-t.right;
-        } else {
-            const double gap=alpha[k]-alpha[k-1];
-            double logden=0;
-            if(link==2) {
-                const double ld=eu+std::log(one_minus[k]);
-                logden=ld<-36 ? ld : std::log(-std::expm1(-std::exp(ld)));
-            }
-            t.logp=eu<=0 ? logFu+ordinal_log1mexp(logFl-logFu) :
-                logSl+(link==2 ? logden : ordinal_log1mexp(logSu-logSl));
-            if(link==2) {
-                const double difference=std::exp(eu)*one_minus[k];
-                t.left=std::exp(eu-difference-logden);t.right=std::exp(el-logden);
-            } else {
-                t.left=std::exp(logGu-t.logp);t.right=std::exp(logGl-t.logp);
-            }
-            const double delta=link==1 ? -.5*gap*(eu+el) : gap-std::exp(eu)*one_minus[k];
-            t.location=delta>=0 ? t.left*(-std::expm1(-delta)) : -t.right*(-std::expm1(delta));
-        }
-        t.upper=t.left*(t.left-hu);t.lower=t.right*(t.right+hl);t.cross=-t.left*t.right;
-        t.upper_x=t.left*(hu-t.location);t.lower_x=t.right*(t.location-hl);
-        t.slope=t.location*t.location-t.left*hu+t.right*hl;
-        return t;
-    }
-    ObservedTerms terms(int k,double linear) const { return link==0 ? logit(k,linear) : general(k,linear); }
 };
 
 struct ObservedState {

@@ -24,8 +24,31 @@ while an observed pass took 0.006 seconds and its slope solve 0.001 seconds (`co
 The designs ran in two sessions: 19 on one build and 11 on a later build. Those builds
 differ only in code that does not change these fits. Costs come from the later build.
 
+## Thresholds and misspecification
+
+`extended.R` compares expected, observed, and robust standard errors for thresholds and
+slopes, with the true link and with misspecified ones (logit fitted to probit, cloglog,
+heavy-tailed, and skewed errors; probit fitted to logit and heavy-tailed errors). Each
+design has 1,000 replicates, except that 9 logit and 6 probit replicates with 200
+categories had an empty category and were dropped. Under misspecification, the target
+is the fit to 2 million simulated rows. `extended-summary.csv` holds the results.
+
+Expected and observed information were practically interchangeable: their mean standard
+errors differed by at most 0.5% under the true link and 1.8% under misspecification.
+
+| 95% interval coverage | Expected | Observed | Robust |
+|:--|--:|--:|--:|
+| Slopes, true link | 94.9% | 94.9% | 94.8% |
+| Thresholds, true link | 95.1% | 95.1% | 95.0% |
+| Slopes, misspecified | 94.7% | 94.7% | 94.9% |
+| Thresholds, misspecified | 94.8% | 94.8% | 95.0% |
+
+Coverage was within Monte Carlo error of 95% except for model-based thresholds under
+misspecification, which ranged from 92% to 97.5%, with 7 expected and 8 observed values of
+72 beyond three Monte Carlo standard errors. Robust thresholds had none. Robust covariance
+is therefore the safer choice when the link is in doubt.
+
 ## Limits
 
-These results cover slopes only, under the true link, with no misspecification. They
-do not cover threshold standard errors, which rest on few observations when there are
-very many categories. They do not by themselves justify changing what `vcov()` reports.
+Thresholds were studied up to 200 categories, not at one category per observation. The
+designs use three predictors, and misspecification covers the listed error distributions only.

@@ -51,32 +51,44 @@
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu">
-<li>
-      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
+<li class="divider">
+    </li>
+<li class="dropdown-header">Getting started</li>
+    <li>
+      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
+    </li>
+    <li class="divider">
+    </li>
+<li class="dropdown-header">Models</li>
+    <li>
+      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/count-firth-fastglm.html">Count regression, truncation, and excess zeros with fastglm</a>
     </li>
     <li>
-      <a href="../articles/fastglm-overview.html">Models, inference, and computation with fastglm</a>
+      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
     <li>
-      <a href="../articles/firth-fastglm.html">Firth Bias-Reduced GLMs with 'fastglm'</a>
+      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
     </li>
+    <li class="divider">
+    </li>
+<li class="dropdown-header">Large data</li>
     <li>
       <a href="../articles/large-data-fastglm.html">Large-data estimation and inference with fastglm</a>
+    </li>
+    <li class="divider">
+    </li>
+<li class="dropdown-header">Performance and stability</li>
+    <li>
+      <a href="../articles/benchmarks-fastglm.html">Benchmark Study for 'fastglm'</a>
     </li>
     <li>
       <a href="../articles/nb-convergence-fastglm.html">Negative Binomial Convergence: fastglm vs MASS</a>
     </li>
     <li>
       <a href="../articles/nb-stability-fastglm.html">Negative Binomial Stability Benchmark: fastglm vs MASS</a>
-    </li>
-    <li>
-      <a href="../articles/ordinal-fastglm.html">Ordered outcomes and cumulative-link models with fastglm</a>
-    </li>
-    <li>
-      <a href="../articles/semicontinuous-fastglm.html">Two-part models for nonnegative continuous outcomes</a>
     </li>
   </ul>
 </li>
@@ -130,13 +142,13 @@ summaries, and fitting from repeatable blocks of data.</p>
 <div class="section level3">
 <h3 id="models-and-estimation">Models and estimation<a class="anchor" aria-label="anchor" href="#models-and-estimation"></a>
 </h3>
-<p>All three cumulative links, <strong>logit, probit, and complementary
-log-log</strong>, support maximum likelihood (ML) and <strong>mean bias
-reduction through <code>firth=TRUE</code></strong>. With the logit link,
-common slopes give proportional odds; allowing selected slopes to differ
-across thresholds gives partial proportional odds. The corresponding
-probit and complementary log-log specifications are nonparallel
-cumulative-link models.</p>
+<p>All three cumulative links, logit, probit, and complementary log-log,
+support maximum likelihood (ML) and <strong>mean bias reduction through
+<code>firth=TRUE</code></strong>. With the logit link, common slopes
+give proportional odds; allowing selected slopes to differ across
+thresholds gives partial proportional odds. The corresponding probit and
+complementary log-log specifications are nonparallel cumulative-link
+models.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -605,7 +617,7 @@ estimate the additional effects.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Uncertainty: expected Fisher information</span></span>
 <span><span class="co">#&gt; Sample: 1681 observations represented by 72 positive-frequency rows</span></span>
-<span><span class="co">#&gt; Convergence: converged (9 iterations)</span></span>
+<span><span class="co">#&gt; Convergence: converged (6 iterations)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">fit_partial</span><span class="op">$</span><span class="va">gamma</span><span class="op">)</span></span>
 <span><span class="co">#&gt;          Low|Medium Medium|High</span></span>
 <span><span class="co">#&gt; ContHigh   1.558883    1.331209</span></span></code></pre></div>
@@ -1252,7 +1264,10 @@ variation in these individual contributions, as described by <a href="https://ww
 distributional misspecification, provided observations are independent
 and the fitted parameter has a regular, identifiable population target.
 Robust standard errors do not correct an incorrect mean or probability
-model.</p>
+model. Robust covariance is the safer choice when the link is in doubt:
+in simulations with a misspecified link, model-based threshold intervals
+covered between 92% and 97.5% of the time at a nominal 95%, while robust
+intervals stayed close to 95%.</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">V_robust</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fastglm_vcov.html">fastglm_vcov</a></span><span class="op">(</span><span class="va">fit_br</span>,type<span class="op">=</span><span class="st">"HC0"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>model_based<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">fit_br</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -2200,11 +2215,9 @@ pattern:</p>
 <span>                        <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>low<span class="op">=</span><span class="fl">3</span>,middle<span class="op">=</span><span class="fl">5</span>,high<span class="op">=</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">pattern_message</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
 <span>    <span class="fu"><a href="../reference/fastglm_ordinal.html">fastglm_ordinal</a></span><span class="op">(</span><span class="va">pattern_x</span>,<span class="va">pattern_counts</span>,nonparallel<span class="op">=</span><span class="st">"group"</span>,firth<span class="op">=</span><span class="cn">TRUE</span><span class="op">)</span>,</span>
-<span>    error<span class="op">=</span><span class="va">conditionMessage</span><span class="op">)</span></span></code></pre></div>
-<p>The fit stops with this message: “this fully flexible logit model has
-no mean-bias-reduced solution with all category probabilities positive:
-an intermediate outcome category is absent within a predictor pattern:
-middle.”</p>
+<span>    error<span class="op">=</span><span class="va">conditionMessage</span><span class="op">)</span></span>
+<span><span class="va">pattern_message</span></span>
+<span><span class="co">#&gt; [1] "this fully flexible logit model has no mean-bias-reduced solution with all category probabilities positive: an intermediate outcome category is absent within a predictor pattern: middle."</span></span></code></pre></div>
 <p>The package detects this specific configuration and explains the
 unavailable interior solution before starting the optimizer. Dense,
 prepared, and streamed fits use the same criterion; a source check
