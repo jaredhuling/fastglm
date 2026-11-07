@@ -1,8 +1,8 @@
 ## Update to 'fastglm' 0.1.3
 
 This release adds cumulative-link ordinal models, including partial proportional
-odds, mean bias reduction, and blockwise fitting; extends inference for count and
-binomial models; and corrects several numerical and display issues. See NEWS.md.
+odds, mean bias reduction, and fitting from data read in blocks of rows; extends
+inference for count and binomial models; and corrects several numerical and display issues. See NEWS.md.
 
 Aliased coefficients from rank-deficient designs are now reported as `NA`, as in
 `glm()`, instead of 0. NEWS.md lists this and the other behavior changes.
@@ -12,7 +12,8 @@ Aliased coefficients from rank-deficient designs are now reported as `NA`, as in
 * local macOS (aarch64), R 4.5.1
 * win-builder: R-devel
 * R-hub: Linux, Windows, and macOS (x86_64), R-devel
-* GitHub Actions: Ubuntu, Windows, and macOS, R-release; Ubuntu, R-devel and R 4.4
+* GitHub Actions: Ubuntu, Windows, and macOS, R-release; Ubuntu, R-devel, R 4.4,
+  R 4.3, and R 4.2
 
 ## R CMD check results
 
@@ -31,4 +32,5 @@ Two have new problems, both caused by aliased coefficients now being `NA`:
 * FBMS: a vignette stores coefficients of rank-deficient candidate models, and
   the `NA` values propagate to its predictions.
 
-We notified both maintainers before submission.
+We notified both maintainers before submission. The DRDID maintainer has
+merged a corrected test into DRDID's development version.
