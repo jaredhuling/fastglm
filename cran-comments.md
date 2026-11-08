@@ -13,7 +13,7 @@ Aliased coefficients from rank-deficient designs are now reported as `NA`, as in
 * win-builder: R-devel
 * R-hub: Linux, Windows, and macOS (x86_64), R-devel
 * GitHub Actions: Ubuntu, Windows, and macOS, R-release; Ubuntu, R-devel, R 4.4,
-  R 4.3, and R 4.2
+  R 4.3, R 4.2, and R 4.1
 
 ## R CMD check results
 
