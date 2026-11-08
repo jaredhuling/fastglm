@@ -34,6 +34,7 @@ jobs:
           extra-packages: |
             any::rcmdcheck
             arrow=?ignore-before-r=4.2.0
+            logistf=?ignore-before-r=4.2.0
           needs: check
       - uses: r-lib/actions/check-r-package@v2
         with:

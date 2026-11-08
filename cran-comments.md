@@ -17,7 +17,8 @@ Aliased coefficients from rank-deficient designs are now reported as `NA`, as in
 
 ## R CMD check results
 
-Local `R CMD check --as-cran`: 0 errors | 0 warnings | 0 notes.
+0 errors | 0 warnings | 0 notes on win-builder R-devel. The local check has one
+NOTE, which says the local HTML Tidy is too old to validate the HTML manual.
 
 ## Reverse dependencies
 
