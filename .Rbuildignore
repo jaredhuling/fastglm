@@ -25,3 +25,4 @@ docs
 ^.*\.tar\.gz$
 ^benchmarks$
 ^STORAGE\.md$
+^CRAN-SUBMISSION$
