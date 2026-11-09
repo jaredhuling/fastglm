@@ -18,6 +18,7 @@ test_that("formula sources preserve both component designs and transformations",
 
 test_that("Parquet sources preserve factor levels, offsets, and fitted models", {
     skip_if_not_installed("arrow")
+    skip_if_not(arrow::arrow_with_parquet(),"arrow was built without Parquet support")
     set.seed(8022)
     d <- data.frame(x=rnorm(120),g=factor(rep(c("a","b","c"),each=40)),
                     exposure=runif(120,.5,2),w=rep(c(0,1,2),40))
