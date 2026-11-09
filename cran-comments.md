@@ -1,6 +1,7 @@
 ## Update to 'fastglm' 0.1.4
 
-This release fixes the problems reported for 0.1.3.
+This release fixes the problems reported for 0.1.3, which is why it follows
+that release so closely.
 
 * The M1mac ASAN/UBSAN check reported "applying non-zero offset 8 to null
   pointer" in `positive_rows()` (`inst/include/ordinal_constrained.h`), reached
@@ -16,12 +17,14 @@ This release fixes the problems reported for 0.1.3.
 ## Test environments
 
 * local macOS (aarch64), R 4.5.1, including a UBSAN build of the package
+* win-builder: R-devel
 * GitHub Actions: Ubuntu, Windows, and macOS, R-release; Ubuntu, R-devel, R 4.4,
   R 4.3, R 4.2, and R 4.1
 
 ## R CMD check results
 
-0 errors | 0 warnings locally and on GitHub Actions. The local check has two
+0 errors | 0 warnings locally, on win-builder, and on GitHub Actions. The only
+NOTE on win-builder is the days since the last update. The local check has two
 NOTEs about the local machine: the current time could not be verified, and the
 local HTML Tidy is too old to validate the HTML manual.
 
