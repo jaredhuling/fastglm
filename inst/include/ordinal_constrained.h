@@ -20,6 +20,9 @@ inline MatrixXd positive_rows(const MatrixXd& x,const Rcpp::LogicalVector& posit
     std::vector<int> rows;
     for(int i=0;i<positive.size();++i) if(positive[i]==TRUE) rows.push_back(i);
     MatrixXd out(rows.size(),x.cols());
+    // A matrix with no columns has no storage, and forming a row block of it
+    // offsets a null pointer.
+    if(x.cols()==0) return out;
     for(int i=0;i<(int)rows.size();++i) out.row(i)=x.row(rows[i]);
     return out;
 }
