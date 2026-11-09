@@ -16,8 +16,14 @@ This release fixes the problems reported for 0.1.3.
 ## Test environments
 
 * local macOS (aarch64), R 4.5.1, including a UBSAN build of the package
+* GitHub Actions: Ubuntu, Windows, and macOS, R-release; Ubuntu, R-devel, R 4.4,
+  R 4.3, R 4.2, and R 4.1
 
 ## R CMD check results
+
+0 errors | 0 warnings locally and on GitHub Actions. The local check has two
+NOTEs about the local machine: the current time could not be verified, and the
+local HTML Tidy is too old to validate the HTML manual.
 
 ## Reverse dependencies
 
