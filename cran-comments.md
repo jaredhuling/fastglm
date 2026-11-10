@@ -9,7 +9,13 @@ that release so closely.
   now returns before forming row blocks of a matrix with no columns. With the
   package compiled with `-fsanitize=undefined`, the full test suite now gives no
   sanitizer reports; the 0.1.3 code gives the two reported ones.
-* The same check failed `test-sources.R` because 'arrow' there was built without
+* The valgrind check reported "realloc() with size 0" from
+  `count_block_summary()` (`src/count_kernels.cpp`), where
+  `Eigen::VectorXi::conservativeResize(0)` reallocated the row index to size 0
+  when a data block had no rows with positive weight. The index is now copied
+  into a new vector instead, and Eigen does not allocate for a vector of size 0.
+  The same pattern in `count_block_nb_information()` is changed as well.
+* The same M1mac check failed `test-sources.R` because 'arrow' there was built without
   Parquet support. The test is now skipped in that case.
 * `Eigen::MappedSparseMatrix` is replaced by `Eigen::Map<Eigen::SparseMatrix>`,
   as requested by the 'RcppEigen' maintainers for the upcoming Eigen 5 release.
