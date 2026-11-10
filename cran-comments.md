@@ -26,10 +26,14 @@ that release so closely.
 * win-builder: R-devel
 * GitHub Actions: Ubuntu, Windows, and macOS, R-release; Ubuntu, R-devel, R 4.4,
   R 4.3, R 4.2, and R 4.1
+* R-hub (R-devel): valgrind, clang-asan, clang-ubsan
 
 ## R CMD check results
 
-0 errors | 0 warnings locally, on win-builder, and on GitHub Actions. The only
+0 errors | 0 warnings locally, on win-builder, on GitHub Actions, and on R-hub.
+Under valgrind 3.27.1 (the version in the CRAN report), the tests give
+0 errors and no leaks, with no "realloc() with size 0" report, and the
+sanitizer builds give no runtime errors. The only
 NOTE on win-builder is the days since the last update. The local check has two
 NOTEs about the local machine: the current time could not be verified, and the
 local HTML Tidy is too old to validate the HTML manual.
