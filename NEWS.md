@@ -5,6 +5,8 @@
   both the current and the upcoming 'RcppEigen'.
 * Constrained cumulative-link fits with no predictor columns no longer form a
   row block of an empty matrix, which offset a null pointer.
+* The count model kernels no longer call `realloc()` with size 0 when a data
+  block has no rows with positive weight.
 * The Parquet source test is skipped when 'arrow' is built without Parquet
   support.
 

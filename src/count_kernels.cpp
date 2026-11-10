@@ -63,7 +63,7 @@ Rcpp::List count_block_summary(Eigen::Map<Eigen::MatrixXd> x,Rcpp::NumericVector
     Eigen::VectorXi rows(n);
     int kept=0;
     for(int i=0;i<n;++i) if(weights[i]>0 && (!truncated || y[i]>0)) rows[kept++]=i;
-    rows.conservativeResize(kept);
+    rows = Eigen::VectorXi(rows.head(kept)); // not conservativeResize: it calls realloc(ptr, 0) when kept == 0
     double loglik=0,theta_total=0,theta_information=0;
     VectorXd score=VectorXd::Zero(p),curvature(system ? kept : 0);
     MatrixXd information=MatrixXd::Zero(p,p);
@@ -124,7 +124,7 @@ Rcpp::NumericMatrix count_block_nb_information(Eigen::Map<Eigen::MatrixXd> x,Rcp
     Eigen::VectorXi rows(n);
     int kept=0;
     for(int i=0;i<n;++i) if(weights[i]>0) rows[kept++]=i;
-    rows.conservativeResize(kept);
+    rows = Eigen::VectorXi(rows.head(kept)); // not conservativeResize: it calls realloc(ptr, 0) when kept == 0
     VectorXd curvature(kept),cross=VectorXd::Zero(n);
     double size=0;
     const double digamma_theta=R::digamma(theta),trigamma_theta=R::trigamma(theta);
