@@ -1,7 +1,11 @@
 ## Update to 'fastglm' 0.1.4
 
-This release fixes the problems reported for 0.1.3, which is why it follows
-that release so closely.
+We apologize for submitting again within a week of 0.1.3, which was published
+on 2026-11-09. After publication, the CRAN additional checks for 0.1.3 reported
+problems on M1mac ASAN/UBSAN and valgrind. This release fixes only those
+problems, plus the Eigen 5 change requested by the 'RcppEigen' maintainers, and
+does not change results. We submit it now so that the issues reported on the
+CRAN check page are resolved promptly.
 
 * The M1mac ASAN/UBSAN check reported "applying non-zero offset 8 to null
   pointer" in `positive_rows()` (`inst/include/ordinal_constrained.h`), reached
