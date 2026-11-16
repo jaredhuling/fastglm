@@ -97,12 +97,37 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
                fam_code, fam_params);
     solver.init_parms(beta0, mu0, eta0);
 
+    // Joint Fisher decrement (deviance units) at beta and theta; see (c).
+    auto joint_decrement = [&](const VectorXd& b, const VectorXd& mu, double th) {
+        fglm::FamilyParams fp; fp.theta = th;
+        const ArrayXd eta = (X * b + Off).array();
+        ArrayXd me(n), v(n);
+        fglm::mu_eta(fam_code, fp, eta, me);
+        fglm::variance(fam_code, fp, ArrayXd(mu.array()), v);
+        const VectorXd gw = (W.array() * (Y.array() - mu.array()) * me / v).matrix();
+        const VectorXd g = X.adjoint() * gw;
+        const VectorXd sw = (W.array() * me.square() / v).sqrt().matrix();
+        const MatrixXd Xs = sw.asDiagonal() * X;
+        MatrixXd I = MatrixXd::Zero(X.cols(), X.cols());
+        I.selfadjointView<Eigen::Lower>().rankUpdate(Xs.adjoint());
+        Eigen::LDLT<MatrixXd> ld(I.selfadjointView<Eigen::Lower>());
+        if (ld.info() != Eigen::Success) return std::numeric_limits<double>::infinity();
+        const double lam_b = g.dot(ld.solve(g));
+        const ArrayXd ya = Y.array(), ma = mu.array().max(1e-12), wa = W.array();
+        const double st = fglm::nb::score_theta(th, ya, ma, wa);
+        const double it = fglm::nb::info_theta(th, ya, ma, wa);
+        double lam_t = (it > 0) ? st * st / it : (st == 0 ? 0.0 : std::numeric_limits<double>::infinity());
+        // At the cap the score may point beyond it (the Poisson limit, or
+        // theta -> 0); the cap is then where the theta step stops.
+        if ((th >= 1e8 * (1 - 1e-12) && st > 0) || (th <= 1e-6 * (1 + 1e-12) && st < 0)) lam_t = 0;
+        return lam_b + lam_t;
+    };
+    double last_decrement = std::numeric_limits<double>::infinity();
+
     int    outer_iter   = 0;
     int    inner_iters  = 0;
     int    theta_iters  = 0;
     bool   outer_conv   = false;
-    double theta_prev   = theta;
-    VectorXd beta_prev  = beta0;
     bool   inner_conv_last = true;
 
     for (outer_iter = 0; outer_iter < outer_maxit; ++outer_iter) {
@@ -118,18 +143,44 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         ArrayXd mu_arr = mu_hat.array().max(1e-12);   // guard log
         ArrayXd w_arr  = W.array();
 
-        theta_prev = theta;
         theta = fglm::nb::mle_theta(theta, y_arr, mu_arr, w_arr,
                                     theta_tol, theta_maxit);
         ++theta_iters;
 
-        // (c) convergence: ||Δβ||_∞ + |Δθ|/θ.
-        double db = (beta_now - beta_prev).cwiseAbs().maxCoeff();
-        double dt = std::fabs(theta - theta_prev) / std::max(theta, 1e-12);
-        if (db + dt < outer_tol && outer_iter > 0) {
+        // (c) convergence: the joint Fisher decrement at (beta_now, theta),
+        // the deviance decrease predicted by one more scoring step in both
+        // blocks, relative to the deviance (the rule the IRLS solver uses).
+        // The expected cross information between beta and theta is zero
+        // (each term is proportional to E[y - mu] = 0), so the decrement is
+        // the sum of the two block decrements:
+        //   beta:  g' I^{-1} g, g = X' [w (y - mu) mu.eta / V],
+        //          I = X' diag(w mu.eta^2 / V) X, at the updated theta;
+        //   theta: s^2 / I_theta (s is ~0 right after the theta update),
+        //          omitted at the cap when the score points beyond it.
+        // A test on raw changes in beta cannot be met when the likelihood is
+        // flat in some direction of beta (e.g. very small theta): beta then
+        // moves by 1e-5 per outer iteration while the log-likelihood changes
+        // by 1e-9.
+        last_decrement = joint_decrement(beta_now, mu_hat, theta);
+        if (last_decrement / (0.1 + std::abs(solver.get_dev())) < outer_tol) {
             outer_conv = true;
-            // Push the new theta through one final IRLS pass so vcov
-            // reflects it.
+            // Polish: two more (beta, theta) rounds. Each inner solve takes
+            // at least one full scoring step, which near the optimum squares
+            // the error, while a solve warm-started close to the optimum can
+            // stop with its decrement just below tol (coefficient error of
+            // order sqrt(tol)). Without these rounds, coefficients agree with
+            // a tightly converged reference only to about 1e-6 (relative).
+            for (int polish = 0; polish < 2; ++polish) {
+                fglm::FamilyParams fp_p; fp_p.theta = theta;
+                solver.set_fam_params(fp_p);
+                inner_iters += solver.solve(maxit);
+                const ArrayXd mu_p = solver.get_mu().array().max(1e-12);
+                theta = fglm::nb::mle_theta(theta, ArrayXd(Y.array()), mu_p, ArrayXd(W.array()),
+                                            theta_tol, theta_maxit);
+                ++theta_iters;
+            }
+            // Push the final theta through one more IRLS pass so the
+            // coefficients and vcov reflect it.
             fglm::FamilyParams fp_final; fp_final.theta = theta;
             solver.set_fam_params(fp_final);
             VectorXd eta_now = solver.get_eta();
@@ -147,7 +198,6 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         Map<VectorXd> e_map(eta_now.data(),   eta_now.size());
         solver.init_parms(b_map, m_map, e_map);
 
-        beta_prev = beta_now;
     }
 
     // Extract final fit.
@@ -187,6 +237,7 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         _["cov.unscaled"]      = vcov,
         _["theta"]             = theta,
         _["SE.theta"]          = se_th,
-        _["twologlik"]         = twolog
+        _["twologlik"]         = twolog,
+        _["outer.decrement"]   = last_decrement
     );
 }

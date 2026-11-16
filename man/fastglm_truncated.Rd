@@ -36,7 +36,10 @@ fastglm_truncated(
 
 \item{tol, maxit}{coefficient convergence controls.}
 
-\item{outer.tol, outer.maxit}{joint coefficient--theta convergence controls.}
+\item{outer.tol, outer.maxit}{joint coefficient--theta convergence controls:
+the loop stops when the joint Newton decrement in the coefficients and
+`log(theta)` is below `outer.tol` times `0.1 + |2 * loglik|` (see
+[fastglm_hurdle()]).}
 }
 \value{
 A `fastglm_truncated` model with joint covariance when theta is estimated.

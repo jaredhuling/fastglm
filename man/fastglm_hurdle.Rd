@@ -61,7 +61,12 @@ and source fits start at one after fitting a truncated Poisson model.}
 \item{tol, maxit}{IRLS-loop convergence tolerance and iteration cap.}
 
 \item{outer.tol, outer.maxit}{`(beta, theta)` outer-loop convergence
-tolerance and iteration cap (only used when `dist = "negbin"`).}
+tolerance and iteration cap (only used when `dist = "negbin"`). Each
+outer iteration updates `theta`, then the coefficients, then takes a
+joint Newton step in the coefficients and `log(theta)` (the two are
+coupled under zero truncation); the loop stops when the joint Newton
+decrement is below `outer.tol` times `0.1 + |2 * loglik|` for the count
+part.}
 
 \item{theta.tol, theta.maxit}{tolerance and iteration cap for the inner
 theta update (only used when `dist = "negbin"`).}

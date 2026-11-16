@@ -40,6 +40,41 @@
   fits do; previously the first update from the starting means was not
   counted against `maxit`.
 
+## Negative binomial convergence
+
+* `fastglm_nb()` decides outer-loop convergence by the joint Fisher
+  decrement of the coefficients and `theta` (the deviance decrease predicted
+  by one more scoring step, relative to the deviance), the rule the IRLS
+  solver uses, instead of the raw change in the coefficients plus the
+  relative change in `theta`. The old rule could not be met when the
+  likelihood is flat in some direction of the coefficients (very small
+  `theta`, outliers): the coefficients kept moving by about 1e-5 per outer
+  iteration while the log-likelihood changed by 1e-9, and the fit stopped at
+  `outer.maxit` as not converged. Two polishing rounds after the rule is met
+  keep coefficients and `theta` within about 5e-8 (relative) of a tightly
+  converged reference, as before. On the 600 simulated data sets of the
+  nb-stability vignette, 599 fits now converge (563 before), with a median of
+  2 outer iterations (9 before). `outer.tol` keeps its default and now
+  applies to the decrement, which is returned as `outer.decrement`.
+* `fastglm_nb()` checks the `theta = Inf` limit, the Poisson model
+  (`poisson.limit = TRUE`, the default). The profile likelihood of `theta`
+  need not be unimodal, and the fit could stop at a finite local maximum
+  below the Poisson likelihood (17 log-likelihood units below it in one
+  simulated data set) or at the cap `theta = 1e8`, short of the Poisson
+  limit when fitted means are large. When the Poisson likelihood is higher,
+  the fit is restarted from the Poisson coefficients if the data show
+  overdispersion there, and otherwise the Poisson limit is returned with
+  `theta = Inf`, `convergence.reason = "theta_infinite"`, the Poisson family,
+  and a warning. In the nb-stability simulations this applies to 78 of 600
+  data sets, all with no overdispersion at the Poisson fit.
+* The zero-truncated negative binomial models (`fastglm_hurdle()`,
+  `fastglm_truncated()`, dense and source-backed) use the same decrement
+  rule, with a joint Newton step in the coefficients and `log(theta)` in
+  every outer iteration: under truncation the two are coupled, and
+  alternation alone could creep. In simulated hurdle models with
+  `theta = 0.05` and `0.2`, 39 and 40 of 40 fits converge (10 and 11
+  before), with log-likelihoods never lower than before.
+
 ## Streaming fits
 
 * `fastglm_streaming()` uses the same convergence check, step-halving rule,

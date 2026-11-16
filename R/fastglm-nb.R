@@ -26,14 +26,41 @@
 #' @param tol convergence tolerance for the IRLS inner loop.
 #' @param maxit maximum number of inner-loop IRLS iterations.
 #' @param outer.maxit maximum number of `(beta, theta)` outer iterations.
-#' @param outer.tol convergence tolerance for the outer loop on the
-#'   sup-norm of the beta update plus the relative change in `theta`.
+#' @param outer.tol convergence tolerance for the outer loop. The loop stops
+#'   when the joint Fisher decrement at the current coefficients and `theta`
+#'   (the deviance decrease predicted by one more scoring step in both) is
+#'   below `outer.tol` times `0.1 + |deviance|`. Because the expected
+#'   information between the coefficients and `theta` is zero, the decrement
+#'   is the sum of the coefficient decrement and the `theta` decrement. The
+#'   value is returned as `outer.decrement`.
 #' @param theta.tol tolerance for the inner theta update.
 #' @param theta.maxit max iterations for the inner theta MLE.
 #' @param block.size maximum rows processed together for sparse-model size
 #'   estimation and joint inference. A source determines its own block sizes.
+#' @param poisson.limit whether to compare the fit with its `theta = Inf`
+#'   limit, the Poisson model (see Details).
 #' @param data,subset,na.action,contrasts model-frame arguments used when `x`
 #'   is a formula, as in [stats::glm()].
+#'
+#' @details
+#' The fit alternates coefficient updates at fixed `theta` (iteratively
+#' reweighted least squares) with maximum likelihood updates of `theta` at
+#' fixed coefficients, and stops when the joint Fisher decrement is below
+#' `outer.tol` (see that argument).
+#'
+#' The parameter space includes `theta = Inf`, where the model is the Poisson
+#' model, and the profile likelihood of `theta` need not be unimodal: the
+#' alternation can stop at a finite local maximum while the likelihood is
+#' higher in the Poisson limit, or stop at the upper cap `theta = 1e8` short
+#' of that limit. With `poisson.limit = TRUE`, the Poisson fit is computed and
+#' compared. If its log likelihood is higher and the data show overdispersion
+#' at the Poisson fit (`sum(w * ((y - mu)^2 - y)) > 0`, the sign of the
+#' derivative of the profile likelihood as `theta` grows without bound), the
+#' fit is restarted from the Poisson coefficients with the moment estimate of
+#' `theta` and kept if it improves on the Poisson likelihood. Otherwise the
+#' Poisson limit is returned: `theta = Inf`, the Poisson coefficients and
+#' covariance, the Poisson family, `SE.theta = NA`,
+#' `convergence.reason = "theta_infinite"`, and a warning.
 #'
 #' @returns A list of class `c("fastglm_nb", "fastglm")` with the usual
 #'   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
@@ -73,6 +100,7 @@ fastglm_nb <- function(x, y = NULL,
                        theta.tol   = 1e-8,
                        theta.maxit = 100L,
                        block.size  = 8192L,
+                       poisson.limit = TRUE,
                        data        = NULL,
                        subset, na.action, contrasts = NULL)
 {
@@ -96,7 +124,7 @@ fastglm_nb <- function(x, y = NULL,
         fit <- fastglm_nb(X, yy, weights = w, offset = off, start = start, init.theta = init.theta,
                           link = link, method = method, tol = tol, maxit = maxit,
                           outer.maxit = outer.maxit, outer.tol = outer.tol, theta.tol = theta.tol,
-                          theta.maxit = theta.maxit, block.size = block.size)
+                          theta.maxit = theta.maxit, block.size = block.size, poisson.limit = poisson.limit)
         fit$terms <- mt
         fit$model <- mf
         fit$xlevels <- stats::.getXlevels(mt, mf)
@@ -106,7 +134,7 @@ fastglm_nb <- function(x, y = NULL,
     }
     if(inherits(x,"dgCMatrix") || inherits(x,"fastglm_source")) {
         out <- .count_backend_nb(x,y,weights,offset,start,init.theta,link,method,tol,maxit,
-                                 outer.maxit,outer.tol,theta.tol,theta.maxit,block.size)
+                                 outer.maxit,outer.tol,theta.tol,theta.maxit,block.size,poisson.limit)
         out$call <- match.call()
         return(out)
     }
@@ -231,13 +259,70 @@ fastglm_nb <- function(x, y = NULL,
     dimnames(joint) <- rep(list(c(names(res$coefficients),"theta")),2L)
     res$vcov.full <- joint
     res$SE.theta <- sqrt(joint[length(res$coefficients)+1L,length(res$coefficients)+1L])
-    if (!res$converged) warning("negative-binomial fit did not converge", call. = FALSE)
     res$call <- match.call()
     res$theta.estimated <- TRUE
     res$refit.controls <- list(link=link,method=method,tol=tol,maxit=maxit,outer.maxit=outer.maxit,
         outer.tol=outer.tol,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
     class(res) <- c("fastglm_nb", "fastglm")
+    if (poisson.limit) {
+        pois <- fastglm(x, y, family = poisson(link = link), weights = weights, offset = offset,
+                        method = method, tol = tol, maxit = maxit)
+        keep <- weights > 0
+        pois_ll <- sum(weights[keep] * dpois(y[keep], pois$fitted.values[keep], log = TRUE))
+        refit <- function(theta0) {
+            f <- tryCatch(suppressWarnings(fastglm_nb(x, y, weights = weights, offset = offset,
+                start = unname(coef(pois)), init.theta = theta0, link = link, method = method,
+                tol = tol, maxit = maxit, outer.maxit = outer.maxit, outer.tol = outer.tol,
+                theta.tol = theta.tol, theta.maxit = theta.maxit, block.size = block.size,
+                poisson.limit = FALSE)), error = function(e) NULL)
+            if (!is.null(f)) f$call <- res$call
+            f
+        }
+        mu <- pois$fitted.values
+        res <- .nb_poisson_limit(res, pois, pois_ll,
+                                 excess = sum(weights[keep] * ((y[keep] - mu[keep])^2 - y[keep])),
+                                 musq = sum(weights[keep] * mu[keep]^2), link, refit)
+    }
+    if (!res$converged) warning("negative-binomial fit did not converge", call. = FALSE)
     res
+}
+
+# The theta = Inf limit of a negative binomial fit (see ?fastglm_nb). nb: the
+# fit; pois: the Poisson fit with the same design, weights, offset, and link;
+# pois_ll: its log likelihood; excess = sum(w ((y - mu)^2 - y)) and
+# musq = sum(w mu^2) at the Poisson fit; refit(theta0): the NB fit restarted
+# from the Poisson coefficients with initial theta theta0 (NULL on failure).
+.nb_poisson_limit <- function(nb, pois, pois_ll, excess, musq, link, refit) {
+    nb_ll <- nb$twologlik / 2
+    if (!isTRUE(pois$converged) || !is.finite(pois_ll) || !(pois_ll > nb_ll)) return(nb)
+    if (is.finite(excess) && excess > 0) {
+        theta0 <- min(1e8, max(1e-6, musq / excess))
+        f <- refit(theta0)
+        if (!is.null(f) && isTRUE(f$converged) && f$twologlik / 2 > pois_ll) return(f)
+    }
+    out <- nb
+    for (nm in c("coefficients", "se", "cov.unscaled", "fitted.values", "linear.predictors",
+                 "weights", "deviance", "null.deviance", "residuals", "rank", "df.residual",
+                 "df.null", "iter"))
+        if (!is.null(pois[[nm]])) out[[nm]] <- pois[[nm]]
+    names(out$coefficients) <- names(out$se) <- names(nb$coefficients)
+    dimnames(out$cov.unscaled) <- dimnames(nb$cov.unscaled)
+    out$family <- poisson(link = link)
+    out$theta <- Inf; out$SE.theta <- NA_real_; out$theta.boundary <- TRUE
+    out$twologlik <- 2 * pois_ll
+    out$aic <- -2 * pois_ll + 2 * (out$rank + 1L)
+    p <- length(out$coefficients)
+    full <- matrix(NA_real_, p + 1L, p + 1L)
+    full[seq_len(p), seq_len(p)] <- out$cov.unscaled
+    dimnames(full) <- rep(list(c(names(out$coefficients), "theta")), 2L)
+    out$vcov.full <- full
+    out$converged <- isTRUE(pois$converged)
+    out$convergence.reason <- "theta_infinite"
+    out$outer.decrement <- NA_real_
+    warning("the theta estimate is infinite: the log likelihood is highest in the Poisson limit, ",
+            "and the returned fit is the Poisson fit (convergence.reason = 'theta_infinite')",
+            call. = FALSE)
+    out
 }
 
 #' @export

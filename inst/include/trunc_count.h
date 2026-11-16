@@ -612,10 +612,14 @@ struct TruncNbJointResult {
     MatrixXd joint_vcov;
 };
 
-inline MatrixXd joint_nb_covariance(
+// Joint score and observed information of the zero-truncated NB2 log
+// likelihood in (beta, log theta); the information is the central
+// difference of the analytic score. Returns false if it is not finite.
+inline bool joint_nb_score_information(
     const Eigen::Ref<const MatrixXd>& X, const VectorXd& beta,
     const Eigen::Ref<const VectorXd>& y, const Eigen::Ref<const VectorXd>& wt,
-    const Eigen::Ref<const VectorXd>& offset, double theta)
+    const Eigen::Ref<const VectorXd>& offset, double theta,
+    VectorXd& g, MatrixXd& info)
 {
     const int p = beta.size();
     VectorXd par(p + 1); par.head(p) = beta; par[p] = std::log(theta);
@@ -633,19 +637,55 @@ inline MatrixXd joint_nb_covariance(
         out[p] = th * trunc_nb_score_theta(th, ArrayXd(y), lam, ArrayXd(wt));
         return out;
     };
-    MatrixXd info(p + 1, p + 1);
+    g = score(par);
+    info.resize(p + 1, p + 1);
     for (int j = 0; j <= p; ++j) {
         double h = std::cbrt(std::numeric_limits<double>::epsilon()) * (1 + std::abs(par[j]));
         VectorXd plus = par, minus = par; plus[j] += h; minus[j] -= h;
         info.col(j) = -(score(plus) - score(minus)) / (2 * h);
     }
     info = ((info + info.transpose()) * 0.5).eval();
+    return g.allFinite() && info.allFinite();
+}
+
+inline MatrixXd joint_nb_covariance(
+    const Eigen::Ref<const MatrixXd>& X, const VectorXd& beta,
+    const Eigen::Ref<const VectorXd>& y, const Eigen::Ref<const VectorXd>& wt,
+    const Eigen::Ref<const VectorXd>& offset, double theta)
+{
+    const int p = beta.size();
+    VectorXd g; MatrixXd info;
+    if (!joint_nb_score_information(X, beta, y, wt, offset, theta, g, info))
+        return MatrixXd::Constant(p + 1, p + 1, NA_REAL);
     Eigen::LLT<MatrixXd> chol(info);
     if (chol.info() != Eigen::Success || chol.rcond() < 1e-12)
         return MatrixXd::Constant(p + 1, p + 1, NA_REAL);
     MatrixXd cov = chol.solve(MatrixXd::Identity(p + 1, p + 1));
     cov.row(p) *= theta; cov.col(p) *= theta;
     return cov;
+}
+
+// Joint Newton decrement g' I^{-1} g of the truncated NB2 log likelihood at
+// (beta, theta), in deviance units (minus twice the log likelihood). The
+// beta/theta cross information is not zero under truncation, so the full
+// joint information is used. At the theta cap, when the theta score points
+// beyond it, only the coefficient block is used. Infinite if the
+// information is not positive definite.
+inline double joint_nb_decrement(
+    const Eigen::Ref<const MatrixXd>& X, const VectorXd& beta,
+    const Eigen::Ref<const VectorXd>& y, const Eigen::Ref<const VectorXd>& wt,
+    const Eigen::Ref<const VectorXd>& offset, double theta)
+{
+    const int p = beta.size();
+    VectorXd g; MatrixXd info;
+    if (!joint_nb_score_information(X, beta, y, wt, offset, theta, g, info))
+        return std::numeric_limits<double>::infinity();
+    const bool at_cap = (theta >= 1e8 * (1 - 1e-12) && g[p] > 0) ||
+                        (theta <= 1e-6 * (1 + 1e-12) && g[p] < 0);
+    const int m = at_cap ? p : p + 1;
+    Eigen::LLT<MatrixXd> chol(info.topLeftCorner(m, m));
+    if (chol.info() != Eigen::Success) return std::numeric_limits<double>::infinity();
+    return g.head(m).dot(chol.solve(g.head(m)));
 }
 
 inline TruncNbJointResult fit_trunc_nb_joint(
@@ -678,8 +718,6 @@ inline TruncNbJointResult fit_trunc_nb_joint(
 
     int outer_iter = 0, theta_iter = 0;
     bool outer_conv = false;
-    double theta_prev = theta;
-    VectorXd beta_prev = beta_curr;
 
     // is_negbin_ is set at construction, so we use a separate NB solver for
     // the joint loop.  beta is warm-started from the Poisson pilot above and
@@ -700,14 +738,50 @@ inline TruncNbJointResult fit_trunc_nb_joint(
         ArrayXd lam_arr = lam_curr.array().max(1e-12);
         ArrayXd wt_arr  = wt.array();
 
-        theta_prev = theta;
         theta = mle_trunc_theta(theta, y_arr, lam_arr, wt_arr,
                                 theta_tol, theta_maxit);
         ++theta_iter;
 
-        const double db = (beta_curr - beta_prev).cwiseAbs().maxCoeff();
-        const double dt = std::fabs(theta - theta_prev) / std::max(theta, 1e-12);
-        if (db + dt < outer_tol && outer_iter > 0) {
+        // Joint Newton step in (beta, log theta), halved until the log
+        // likelihood does not decrease. Under truncation beta and theta are
+        // coupled (the intercept and theta can be nearly confounded), and
+        // alternation alone then converges only linearly, sometimes too
+        // slowly to finish within outer_maxit; the joint step converges
+        // quadratically near the optimum.
+        const int p = X.cols();
+        auto loglik_at = [&](const VectorXd& b, double th) {
+            nb_solver.set_theta(th); nb_solver.init_from_beta(b);
+            return nb_solver.compute_loglik();
+        };
+        double ll = loglik_at(beta_curr, theta);
+        auto newton_step = [&]() {
+            VectorXd g; MatrixXd info;
+            if (!joint_nb_score_information(X, beta_curr, y, wt, offset, theta, g, info)) return false;
+            Eigen::LLT<MatrixXd> chol(info);
+            if (chol.info() != Eigen::Success) return false;
+            const VectorXd step = chol.solve(g);
+            const double rounding = 64 * std::numeric_limits<double>::epsilon() * (1 + std::abs(ll));
+            double frac = 1;
+            for (int half = 0; half < 30; ++half, frac *= 0.5) {
+                const VectorXd b = beta_curr + frac * step.head(p);
+                const double th = std::exp(std::min(std::log(1e8), std::max(std::log(1e-6),
+                                            std::log(theta) + frac * step[p])));
+                const double lc = loglik_at(b, th);
+                if (std::isfinite(lc) && lc >= ll - rounding) {
+                    beta_curr = b; theta = th; ll = lc; return true;
+                }
+            }
+            return false;
+        };
+        newton_step();
+
+        // Convergence: joint Newton decrement relative to minus twice the
+        // log likelihood (as fastglm_nb, src/fit_glm_nb.cpp), then up to two
+        // more joint Newton steps to restore full accuracy.
+        const double dec = joint_nb_decrement(X, beta_curr, y, wt, offset, theta);
+        if (inner_conv && dec / (0.1 + std::abs(2 * ll)) < outer_tol) {
+            for (int polish = 0; polish < 2; ++polish) if (!newton_step()) break;
+            lam_curr = (X * beta_curr + offset).array().exp().matrix();
             // One last beta-IRLS pass at the converged theta so vcov / se
             // reflect the final value.
             nb_solver.set_theta(theta);
@@ -719,7 +793,6 @@ inline TruncNbJointResult fit_trunc_nb_joint(
             outer_conv = inner_conv;
             break;
         }
-        beta_prev = beta_curr;
     }
 
     // The last theta update may exhaust the outer loop before another beta

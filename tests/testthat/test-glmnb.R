@@ -96,3 +96,65 @@ test_that("fastglm_nb returns a fastglm-classed object with the expected slots",
     v <- vcov(f)
     expect_equal(dim(v), rep(ncol(X), 2))
 })
+
+test_that("fits with a flat likelihood in the coefficients are reported as converged", {
+    # nb-stability vignette, scenario tiny_theta (theta = 0.05), replication 14.
+    # Until 0.1.5 the outer loop required the raw coefficient change between
+    # outer iterations to fall below outer.tol; here the log-likelihood is
+    # flat in one direction, so the coefficients kept moving by 1e-5 while the
+    # log-likelihood changed by 1e-9, and the fit stopped at outer.maxit as
+    # not converged. Reference: the log-likelihood that 50 outer iterations
+    # of the old rule reached (-235.1419368241), and theta 0.05120323528.
+    set.seed(40014L); n <- 200L; p <- 3L
+    X <- cbind(1, matrix(rnorm(n * (p - 1)), n, p - 1))
+    beta <- c(1.0, rnorm(p - 1, sd = 0.6))
+    y <- MASS::rnegbin(n, mu = exp(pmin(drop(X %*% beta), 12)), theta = 0.05)
+    f <- fastglm_nb(X, y)
+    expect_true(f$converged)
+    expect_lt(f$outer.iter, 10)
+    expect_lt(abs(as.numeric(logLik(f)) - (-235.1419368241)), 1e-6)
+    expect_equal(f$theta, 0.05120323528, tolerance = 1e-5)
+})
+
+nb_stability_data <- function(seed, n, p, theta, coef_sd = 0.5, intercept = 1.0) {
+    # Generator of the nb-stability vignette (no collinear column, no outliers).
+    set.seed(seed)
+    X <- cbind(1, matrix(rnorm(n * (p - 1)), n, p - 1))
+    beta <- c(intercept, rnorm(p - 1, sd = coef_sd))
+    y <- MASS::rnegbin(n, mu = exp(pmin(as.vector(X %*% beta), 12)), theta = theta)
+    list(X = X, y = y)
+}
+
+test_that("a fit whose likelihood is highest in the Poisson limit returns theta = Inf", {
+    # nb-stability vignette, near_poisson replication 24: the profile
+    # likelihood increases toward theta = Inf. Until 0.1.5 the fit stopped
+    # at the cap theta = 1e8.
+    d <- nb_stability_data(60024L, 200L, 3L, 5000)
+    expect_warning(f <- fastglm_nb(d$X, d$y), "theta estimate is infinite")
+    pf <- glm.fit(d$X, d$y, family = poisson(), control = list(epsilon = 1e-12))
+    expect_identical(f$theta, Inf)
+    expect_identical(f$convergence.reason, "theta_infinite")
+    expect_true(f$converged)
+    expect_true(is.na(f$SE.theta))
+    expect_equal(unname(coef(f)), unname(pf$coefficients), tolerance = 1e-7)
+    expect_equal(as.numeric(logLik(f)), sum(dpois(d$y, pf$fitted.values, log = TRUE)), tolerance = 1e-10)
+    expect_output(print(f), "Poisson limit")
+    sparse <- suppressWarnings(fastglm_nb(as(d$X, "dgCMatrix"), d$y))
+    expect_identical(sparse$theta, Inf)
+    expect_equal(unname(coef(sparse)), unname(coef(f)), tolerance = 1e-10)
+    g <- suppressWarnings(fastglm_nb(d$X, d$y, poisson.limit = FALSE))
+    expect_equal(g$theta, 1e8)
+})
+
+test_that("a local maximum of the profile likelihood is replaced by the Poisson limit", {
+    # nb-stability vignette, high_dim replication 10 (n = 120, p = 60): the
+    # profile likelihood of theta has a local maximum near theta = 22
+    # (log likelihood -324.765) and its supremum in the Poisson limit
+    # (-307.434); profile values computed with glm.fit at fixed theta.
+    d <- nb_stability_data(80010L, 120L, 60L, 2)
+    f <- suppressWarnings(fastglm_nb(d$X, d$y))
+    pf <- glm.fit(d$X, d$y, family = poisson(), control = list(epsilon = 1e-12, maxit = 100))
+    expect_identical(f$theta, Inf)
+    expect_equal(as.numeric(logLik(f)), sum(dpois(d$y, pf$fitted.values, log = TRUE)), tolerance = 1e-9)
+    expect_lt(as.numeric(logLik(suppressWarnings(fastglm_nb(d$X, d$y, poisson.limit = FALSE)))), -324)
+})

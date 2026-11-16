@@ -300,7 +300,7 @@
     info
 }
 
-.count_backend_joint <- function(reader,beta,theta=NULL,truncated=FALSE,link="log",theta.estimated=!is.null(theta)) {
+.count_backend_object <- function(reader,beta,theta=NULL,truncated=FALSE,link="log",theta.estimated=!is.null(theta)) {
     names(beta) <- reader$columns$count
     object <- list(coefficients=beta,theta=theta,theta.estimated=theta.estimated,
         dist=if(is.null(theta)) "poisson" else "negbin",
@@ -316,6 +316,11 @@
         z
     }
     class(object) <- if(truncated) "fastglm_truncated" else "fastglm_nb"
+    object
+}
+
+.count_backend_joint <- function(reader,beta,theta=NULL,truncated=FALSE,link="log",theta.estimated=!is.null(theta)) {
+    object <- .count_backend_object(reader,beta,theta,truncated,link,theta.estimated)
     tryCatch(.count_natural_covariance(
         if(!truncated && theta.estimated) .count_inverse_information(.count_backend_nb_information(reader,beta,theta,link))
         else .count_information(object)$inverse,object),
@@ -327,9 +332,54 @@
         })
 }
 
+# sum(w ((y - mu)^2 - y)) and sum(w mu^2) at a Poisson fit, in one pass. A
+# separate function, so that no source block stays in the environment of
+# the fit's fetch closure.
+.count_backend_overdispersion <- function(reader,beta,link) {
+    lnk <- make.link(link);excess <- musq <- 0
+    for(k in seq_len(reader$source$n_chunks)) {
+        a <- reader$fetch(k);keep <- a$weights>0
+        mu <- lnk$linkinv(as.numeric(a$X%*%beta)+a$offset$count)[keep]
+        excess <- excess+sum(a$weights[keep]*((a$y[keep]-mu)^2-a$y[keep]))
+        musq <- musq+sum(a$weights[keep]*mu^2)
+    }
+    c(excess=excess,musq=musq)
+}
+
+# Joint score, Newton step, and Newton decrement of the zero-truncated NB2
+# log likelihood in (beta, log theta), with the observed joint information
+# from .count_information(). At the theta cap, when the theta score points
+# beyond it, only the coefficient block is used.
+.count_backend_trunc_newton <- function(reader,beta,theta) {
+    v <- .count_backend_count_summary(reader,beta,theta,TRUE,"log",system=TRUE,theta.derivatives=TRUE)
+    if(!is.finite(v$loglik)) return(list(decrement=Inf,loglik=v$loglik,step=NULL))
+    g <- c(v$score,v$theta.score)
+    object <- .count_backend_object(reader,beta,theta,TRUE,"log")
+    info <- tryCatch(.count_information(object)$information,error=function(e) NULL)
+    if(is.null(info)) return(list(decrement=Inf,loglik=v$loglik,step=NULL))
+    p <- length(beta)
+    at.cap <- (theta>=1e8*(1-1e-12) && g[p+1L]>0) || (theta<=1e-6*(1+1e-12) && g[p+1L]<0)
+    m <- if(at.cap) p else p+1L
+    step <- tryCatch(solve(info[seq_len(m),seq_len(m),drop=FALSE],g[seq_len(m)]),error=function(e) NULL)
+    if(is.null(step)) return(list(decrement=Inf,loglik=v$loglik,step=NULL))
+    if(at.cap) step <- c(step,0)
+    list(decrement=sum(g[seq_len(m)]*step[seq_len(m)]),loglik=v$loglik,step=step)
+}
+
+.count_backend_nb_decrement <- function(reader,beta,theta,link) {
+    v <- .count_backend_count_summary(reader,beta,theta,FALSE,link,system=TRUE,theta.derivatives=TRUE)
+    if(!is.finite(v$loglik)) return(Inf)
+    lb <- tryCatch(sum(v$score*solve(v$information,v$score)),error=function(e) Inf)
+    st <- v$theta.score;it <- v$theta.information
+    lt <- if(it>0) st^2/it else if(st==0) 0 else Inf
+    if((theta>=1e8*(1-1e-12) && st>0) || (theta<=1e-6*(1+1e-12) && st<0)) lt <- 0
+    lb+lt
+}
+
 .count_backend_nb <- function(x,y=NULL,weights=NULL,offset=NULL,start=NULL,init.theta=NULL,
                               link="log",method=2L,tol=1e-8,maxit=100L,outer.maxit=50L,
-                              outer.tol=1e-7,theta.tol=1e-8,theta.maxit=100L,block.size=8192L) {
+                              outer.tol=1e-7,theta.tol=1e-8,theta.maxit=100L,block.size=8192L,
+                              poisson.limit=TRUE) {
     reader <- .count_backend_reader(x,y,weights=weights,offset=offset,block.size=block.size)
     .check_iterations(tol,maxit);.check_iterations(outer.tol,outer.maxit);.check_iterations(theta.tol,theta.maxit)
     if(!is.null(init.theta) && (length(init.theta)!=1L || !is.finite(init.theta) || init.theta<=0))
@@ -337,15 +387,29 @@
     method <- .solver_method(method)
     if(!method %in% 2:3) stop("sparse and streaming NB fits require LLT or LDLT",call.=FALSE)
     fit <- .count_backend_glm(reader,"count",poisson(link),start=start,method=method,tol=tol,maxit=maxit)
+    pilot <- fit
     beta <- coef(fit);theta <- if(is.null(init.theta)) 1 else init.theta
-    converged <- FALSE;theta.iter <- 0L
-    for(iter in seq_len(outer.maxit)) {
-        previous <- c(beta,log(theta))
+    converged <- FALSE;theta.iter <- 0L;decrement <- Inf
+    step <- function() {
         th <- .count_backend_theta(reader,beta,theta,FALSE,link,theta.tol,theta.maxit)
-        theta <- th$theta;theta.iter <- theta.iter+th$iter
-        fit <- .count_backend_glm(reader,"count",negbin(theta,link),start=beta,method=method,tol=tol,maxit=maxit)
-        beta <- coef(fit)
-        if(fit$converged && th$converged && max(abs(c(beta,log(theta))-previous))<outer.tol) {converged<-TRUE;break}
+        theta <<- th$theta;theta.iter <<- theta.iter+th$iter
+        fit <<- .count_backend_glm(reader,"count",negbin(theta,link),start=beta,method=method,tol=tol,maxit=maxit)
+        beta <<- coef(fit)
+        th
+    }
+    for(iter in seq_len(outer.maxit)) {
+        th <- step()
+        # Joint Fisher decrement at (beta, theta), as in the dense driver
+        # (src/fit_glm_nb.cpp): the coefficient block g' I^{-1} g plus the
+        # theta block s^2 / I_theta (on the log scale, which leaves it
+        # unchanged), omitted at the cap when the score points beyond it.
+        decrement <- .count_backend_nb_decrement(reader,beta,theta,link)
+        if(fit$converged && th$converged && decrement/(0.1+abs(fit$deviance))<outer.tol) {
+            # Two polishing rounds, as in the dense driver.
+            for(polish in 1:2) th <- step()
+            converged <- fit$converged && th$converged
+            break
+        }
     }
     final <- .count_backend_count_summary(reader,beta,theta,FALSE,link)
     cn <- reader$state$columns$count
@@ -362,6 +426,7 @@
     } else joint <- .count_backend_joint(reader,beta,theta,FALSE,link)
     dimnames(joint) <- rep(list(c(names(beta),"theta")),2L)
     fit$vcov.full <- joint;fit$SE.theta <- sqrt(joint[length(beta)+1L,length(beta)+1L])
+    fit$outer.decrement <- decrement
     fit$aic <- -2*final$loglik+2*(length(beta)+1L)
     fit$refit.controls <- list(link=link,method=method,tol=tol,maxit=maxit,outer.maxit=outer.maxit,
         outer.tol=outer.tol,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
@@ -371,6 +436,17 @@
         fit$passes <- reader$state$passes;fit$chunk.reads <- reader$state$reads
     }
     class(fit) <- c("fastglm_nb",if(reader$streaming) "fastglm_stream","fastglm")
+    if(poisson.limit) {
+        # The theta = Inf limit (see ?fastglm_nb), with the Poisson pilot fit.
+        names(pilot$coefficients) <- names(pilot$se) <- cn;dimnames(pilot$cov.unscaled) <- list(cn,cn)
+        pois.ll <- .count_backend_count_summary(reader,coef(pilot),NULL,FALSE,link)$loglik
+        od <- .count_backend_overdispersion(reader,coef(pilot),link)
+        refit <- function(theta0) tryCatch(suppressWarnings(.count_backend_nb(x,y,weights,offset,unname(coef(pilot)),
+            theta0,link,method,tol,maxit,outer.maxit,outer.tol,theta.tol,theta.maxit,block.size,FALSE)),
+            error=function(e) NULL)
+        fit <- .nb_poisson_limit(fit,pilot,pois.ll,od[["excess"]],od[["musq"]],link,refit)
+        converged <- isTRUE(fit$converged)
+    }
     if(!converged) warning("negative-binomial fit did not converge",call.=FALSE)
     fit
 }
@@ -418,15 +494,44 @@
     theta <- NULL;outer <- theta.iter <- 0L
     if(dist=="negbin") {
         theta <- if(is.null(init.theta)) 1 else init.theta
-        converged <- FALSE
+        converged <- FALSE;decrement <- Inf
         for(outer in seq_len(outer.maxit)) {
-            previous <- c(fit$coefficients,log(theta))
             th <- .count_backend_theta(reader,fit$coefficients,theta,TRUE,"log",theta.tol,theta.maxit)
             theta <- th$theta;theta.iter <- theta.iter+th$iter
             fit <- .count_backend_trunc_beta(reader,theta,fit$coefficients,tol,maxit)
-            if(fit$converged && th$converged && max(abs(c(fit$coefficients,log(theta))-previous))<outer.tol) {converged<-TRUE;break}
+            # A joint Newton step in (beta, log theta) after each alternation
+            # round, then the joint Newton decrement and up to two polishing
+            # steps, as in the dense truncated loop (inst/include/trunc_count.h):
+            # under truncation beta and theta are coupled, and alternation
+            # alone can converge too slowly.
+            beta <- fit$coefficients
+            jd <- .count_backend_trunc_newton(reader,beta,theta);ll <- jd$loglik
+            newton <- function() {
+                if(is.null(jd$step)) return(FALSE)
+                for(half in 0:29) {
+                    fr <- 2^(-half)
+                    b <- beta+fr*jd$step[seq_along(beta)]
+                    t <- exp(min(log(1e8),max(log(1e-6),log(theta)+fr*jd$step[length(beta)+1L])))
+                    lc <- .count_backend_count_summary(reader,b,t,TRUE,"log")$loglik
+                    if(is.finite(lc) && lc>=ll-64*.Machine$double.eps*(1+abs(ll))) {
+                        beta <<- b;theta <<- t;ll <<- lc
+                        jd <<- .count_backend_trunc_newton(reader,beta,theta)
+                        return(TRUE)
+                    }
+                }
+                FALSE
+            }
+            newton()
+            decrement <- jd$decrement
+            if(fit$converged && th$converged && decrement/(0.1+abs(2*ll))<outer.tol) {
+                for(polish in 1:2) if(!newton()) break
+                fit <- .count_backend_trunc_beta(reader,theta,beta,tol,maxit)
+                converged <- fit$converged
+                break
+            }
+            fit$coefficients <- beta
         }
-        fit$converged <- converged
+        fit$converged <- converged;fit$outer.decrement <- decrement
     }
     fit$theta <- theta;fit$theta.estimated <- dist=="negbin"
     fit$theta.boundary <- !is.null(theta) && (theta<=1e-6*(1+theta.tol) || theta>=1e8/(1+theta.tol))

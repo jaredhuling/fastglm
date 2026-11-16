@@ -204,3 +204,23 @@ test_that("unfinished truncated NB fits report their returned parameter values",
         expect_equal(unname(vcov(f,full=TRUE)),expected,tolerance=1e-5)
     }
 })
+
+test_that("hurdle NB with a weakly identified size parameter converges to the optimum", {
+    # Under zero truncation the intercept and theta can be nearly confounded;
+    # alternating beta and theta updates then crept, and until 0.1.5 this fit
+    # stopped at outer.maxit (count log-likelihood -97.47969, theta 0.0813).
+    # Reference: count log-likelihood -97.47895835, theta 0.0743748, from a
+    # direct optim() maximization of the zero-truncated NB2 likelihood
+    # (BFGS, Nelder-Mead, BFGS at reltol 1e-16; gradient 3.9e-7).
+    set.seed(505003L); n <- 300L
+    d <- data.frame(x1 = rnorm(n), x2 = rnorm(n))
+    d$y <- rnbinom(n, mu = exp(1 + 0.5 * d$x1 - 0.4 * d$x2), size = 0.05) * rbinom(n, 1, 0.7)
+    f <- fastglm_hurdle(y ~ x1 + x2 | x1, d, dist = "negbin")
+    expect_true(f$converged)
+    expect_lt(abs(f$loglik_count - (-97.47895835)), 1e-6)
+    expect_equal(f$theta, 0.0743748, tolerance = 1e-5)
+    x <- model.matrix(~ x1 + x2, d); z <- model.matrix(~ x1, d)
+    sparse <- fastglm_hurdle(as(x, "dgCMatrix"), response = d$y, z = as(z, "dgCMatrix"), dist = "negbin")
+    expect_true(sparse$converged)
+    expect_equal(coef(sparse), coef(f), tolerance = 1e-6)
+})

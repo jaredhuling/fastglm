@@ -20,6 +20,7 @@ fastglm_nb(
   theta.tol = 1e-08,
   theta.maxit = 100L,
   block.size = 8192L,
+  poisson.limit = TRUE,
   data = NULL,
   subset,
   na.action,
@@ -57,8 +58,13 @@ fitting the Poisson mean model.}
 
 \item{outer.maxit}{maximum number of `(beta, theta)` outer iterations.}
 
-\item{outer.tol}{convergence tolerance for the outer loop on the
-sup-norm of the beta update plus the relative change in `theta`.}
+\item{outer.tol}{convergence tolerance for the outer loop. The loop stops
+when the joint Fisher decrement at the current coefficients and `theta`
+(the deviance decrease predicted by one more scoring step in both) is
+below `outer.tol` times `0.1 + |deviance|`. Because the expected
+information between the coefficients and `theta` is zero, the decrement
+is the sum of the coefficient decrement and the `theta` decrement. The
+value is returned as `outer.decrement`.}
 
 \item{theta.tol}{tolerance for the inner theta update.}
 
@@ -66,6 +72,9 @@ sup-norm of the beta update plus the relative change in `theta`.}
 
 \item{block.size}{maximum rows processed together for sparse-model size
 estimation and joint inference. A source determines its own block sizes.}
+
+\item{poisson.limit}{whether to compare the fit with its `theta = Inf`
+limit, the Poisson model (see Details).}
 
 \item{data, subset, na.action, contrasts}{model-frame arguments used when `x`
 is a formula, as in [stats::glm()].}
@@ -85,6 +94,26 @@ NB2 dispersion `theta`. It is the fastglm analogue of [MASS::glm.nb()],
 Dense fits use native coefficient and size updates. Sparse and streamed
 fits alternate the existing GLM solver with size updates accumulated over
 row blocks, without loading the full design into a dense matrix.
+}
+\details{
+The fit alternates coefficient updates at fixed `theta` (iteratively
+reweighted least squares) with maximum likelihood updates of `theta` at
+fixed coefficients, and stops when the joint Fisher decrement is below
+`outer.tol` (see that argument).
+
+The parameter space includes `theta = Inf`, where the model is the Poisson
+model, and the profile likelihood of `theta` need not be unimodal: the
+alternation can stop at a finite local maximum while the likelihood is
+higher in the Poisson limit, or stop at the upper cap `theta = 1e8` short
+of that limit. With `poisson.limit = TRUE`, the Poisson fit is computed and
+compared. If its log likelihood is higher and the data show overdispersion
+at the Poisson fit (`sum(w * ((y - mu)^2 - y)) > 0`, the sign of the
+derivative of the profile likelihood as `theta` grows without bound), the
+fit is restarted from the Poisson coefficients with the moment estimate of
+`theta` and kept if it improves on the Poisson likelihood. Otherwise the
+Poisson limit is returned: `theta = Inf`, the Poisson coefficients and
+covariance, the Poisson family, `SE.theta = NA`,
+`convergence.reason = "theta_infinite"`, and a warning.
 }
 \examples{
 set.seed(1)

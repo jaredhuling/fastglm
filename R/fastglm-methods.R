@@ -358,6 +358,7 @@ print.fastglm <- function(x, digits = max(3L, getOption("digits") - 3L), ...)
     .fastglm_print_coefficients(coef(x),digits=digits,...)
     cat("\n")
     if(isTRUE(is.finite(x$theta))) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    else if(identical(x$theta,Inf)) .fastglm_print_field("Theta","Inf (the Poisson limit; no overdispersion)")
     .fastglm_print_convergence(x$converged,x$iter,x$convergence.reason)
     invisible(x)
 }
