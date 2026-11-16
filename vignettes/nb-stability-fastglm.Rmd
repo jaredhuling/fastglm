@@ -1,7 +1,7 @@
 ---
 title: "Negative Binomial Stability Benchmark: fastglm vs MASS"
 author: "Jared Huling"
-date: "2026-11-06"
+date: "2026-11-16"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Negative Binomial Stability Benchmark: fastglm vs MASS}
@@ -194,13 +194,13 @@ Table: Convergence over 50 replications per scenario. 'MASS clean' = converged w
 |baseline      |well-conditioned reference case            |         50|      50|      0|    0|        50|         50|
 |wide_mu       |fitted means span many orders of magnitude |         34|      50|     16|    0|        35|         35|
 |extreme_mu    |even wider mean range, p = 12              |         23|      50|     27|    0|        29|         29|
-|tiny_theta    |heavy overdispersion (theta = 0.05)        |         47|      46|      0|    1|        46|         46|
-|vtiny_theta   |extreme overdispersion (theta = 0.01)      |         16|      35|     19|    0|        23|         23|
+|tiny_theta    |heavy overdispersion (theta = 0.05)        |         47|      50|      3|    0|        48|         48|
+|vtiny_theta   |extreme overdispersion (theta = 0.01)      |         16|      49|     33|    0|        27|         27|
 |near_poisson  |nearly Poisson (theta = 5000)              |         17|      50|     33|    0|        33|         32|
 |small_n       |small sample, n = 40                       |         48|      50|      2|    0|        50|         50|
-|high_dim      |high dimensional, p = 60                   |          3|      49|     46|    0|        23|         19|
+|high_dim      |high dimensional, p = 60                   |          3|      50|     47|    0|        24|         24|
 |collinear     |near-collinear design column               |         50|      50|      0|    0|        50|         50|
-|outliers      |five extreme response outliers             |         40|      40|      0|    0|        40|         40|
+|outliers      |five extreme response outliers             |         40|      50|     10|    0|        42|         42|
 |big_intercept |large intercept inflates the mean scale    |         47|      50|      3|    0|        47|         47|
 |many_zeros    |low mean, many zeros (theta = 0.3)         |         50|      50|      0|    0|        50|         50|
 
@@ -237,7 +237,7 @@ ggplot(plot_df, aes(scenario, count, fill = method)) +
 
 
 
-Under these rules, *MASS* had 425 clean convergences and *fastglm* had 570 convergences among 600 simulated fits. There are exceptions: in the `tiny_theta` scenario, *MASS* has 47 successful fits and *fastglm* has 46, and in the `high_dim` scenario the likelihood comparison favors *MASS* in 4 of the 23 fits counted as converged by both. These results do not establish that either method is uniformly more reliable.
+Under these rules, *MASS* had 425 clean convergences and *fastglm* had 599 convergences among 600 simulated fits. There are exceptions: in the `tiny_theta` scenario, *MASS* has 47 successful fits and *fastglm* has 50, and in the `high_dim` scenario the likelihood comparison favors *MASS* in 0 of the 24 fits counted as converged by both. These results do not establish that either method is uniformly more reliable.
 
 The larger differences occur when fitted means vary widely, theta is near an extreme, or many coefficients are estimated from a limited sample. Coefficient and likelihood comparisons should be interpreted alongside warnings and the degree to which theta is identified by the data. A convergence flag alone does not establish that the same likelihood maximum has been reached.
 
