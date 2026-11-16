@@ -276,6 +276,40 @@ nb12 <- do.call(rbind, lapply(names(scen), function(nm) {
 knitr::kable(nb12, row.names = FALSE)
 ```
 
+```{r nb12-plot, fig.height = 5.8}
+descriptions <- c(
+  baseline      = "well-conditioned reference case",
+  wide_mu       = "fitted means span many orders of magnitude",
+  extreme_mu    = "even wider mean range, p = 12",
+  tiny_theta    = "heavy overdispersion (theta = 0.05)",
+  vtiny_theta   = "extreme overdispersion (theta = 0.01)",
+  near_poisson  = "nearly Poisson (theta = 5000)",
+  small_n       = "small sample, n = 40",
+  high_dim      = "high dimensional, p = 60",
+  collinear     = "near-collinear design column",
+  outliers      = "five extreme response outliers",
+  big_intercept = "large intercept inflates the mean scale",
+  many_zeros    = "low mean, many zeros (theta = 0.3)"
+)
+nb12_long <- rbind(
+  data.frame(Scenario = nb12$Scenario, Method = "fastglm", count = nb12$fastglm),
+  data.frame(Scenario = nb12$Scenario, Method = "MASS::glm.nb", count = nb12[["MASS clean"]]))
+nb12_long$Method <- factor(nb12_long$Method, levels = c("MASS::glm.nb", "fastglm"))
+nb12_long$panel <- factor(paste0(nb12_long$Scenario, ": ", descriptions[nb12_long$Scenario]),
+                          levels = paste0(names(scen), ": ", descriptions[names(scen)]))
+ggplot(nb12_long, aes(count, Method, colour = Method, shape = Method)) +
+  geom_segment(aes(x = 0, xend = count, yend = Method), linewidth = 0.5, alpha = 0.5) +
+  geom_point(size = 2.4) +
+  facet_wrap(~ panel, ncol = 3, labeller = label_wrap_gen(width = 30)) +
+  scale_x_continuous(limits = c(0, 50), breaks = seq(0, 50, 10), expand = expansion(add = 1.5)) +
+  scale_colour_manual(values = method_colour) + scale_shape_manual(values = method_shape) +
+  labs(x = "converged fits (of 50 data sets); MASS::glm.nb counted only without a warning", y = NULL) +
+  theme_bw(base_size = 10) +
+  theme(legend.position = "none", panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(), strip.background = element_rect(fill = "grey95"),
+        strip.text = element_text(hjust = 0))
+```
+
 "MASS clean" counts `MASS::glm.nb()` fits reported as converged without a warning; "fastglm" counts converged *fastglm* fits; "Both" counts data sets where both report convergence; the last two columns count those where one log likelihood is lower than the other by more than 0.001. *fastglm* converges in `r sum(nb12$fastglm)` of `r 50 * nrow(nb12)` data sets and *MASS* without a warning in `r sum(nb12[["MASS clean"]])`.
 
 # Limitations
