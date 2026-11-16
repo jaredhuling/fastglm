@@ -438,14 +438,95 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
     const int boundary_limit=20;
     const double boundary_gap=1e-8;
     MatrixXd history(expected_limit,4);
+    // Boundary-aware scoring direction (maximum likelihood only). When the
+    // Fisher step would make the cumulative predictors of some row cross, the
+    // row-pair crossed first is held at half its current gap, and the step is
+    // recomputed on the remaining directions (null-space method), repeating
+    // until the step keeps every row ordered. Each ordering constraint is
+    // linear in the coefficients:
+    //   gap(i,s) = alpha_s - alpha_{s-1} - z_i'(gamma_s - gamma_{s-1}) > 0.
+    // Halving the gap, instead of holding the row on the boundary, keeps the
+    // evaluation finite; a row whose optimum is on the boundary approaches it
+    // geometrically. Near the boundary the expected information is dominated
+    // by rank-one terms along the held constraint's normal (the touched
+    // category's probability goes to zero), and the null space removes them.
+    // held = number of held row-pairs (0: the Fisher step is feasible).
+    auto boundary_direction=[&](VectorXd& direction,int& held) {
+        direction=current.step;held=0;
+        std::vector<VectorXd> normals;std::vector<double> targets;
+        for(int round=0;round<data.d;++round) {
+            double first=std::numeric_limits<double>::infinity();VectorXd normal;double gap0=0;
+            data.visit([&](const PartialOrdinalData& block) {
+                const int q=block.q,p=block.p,pn=block.pn;
+                for(int i=0;i<block.n;++i) if(block.totals[i]>0) for(int s=1;s<q;++s) {
+                    const double change=block.gap(i,direction,s);
+                    if(!(change<0)) continue;
+                    const double g=block.gap(i,b,s),t=g/(-change);
+                    if(t<first) {
+                        first=t;gap0=g;normal=VectorXd::Zero(block.d);
+                        normal[s]=1;normal[s-1]=-1;
+                        for(int j=0;j<pn;++j) {normal[q+p+s*pn+j]=-block.z(i,j);normal[q+p+(s-1)*pn+j]=block.z(i,j);}
+                    }
+                }
+            });
+            // feasible_fraction() stops a step at 0.9 of the distance to a
+            // crossing, so a pair that the full step brings within that
+            // margin (t < 1/0.9) limits the step as well and is held too.
+            if(!(first<1/.9)) return true;
+            for(const VectorXd& a:normals) if((a-normal).cwiseAbs().maxCoeff()==0) return false;
+            // Below 1e-10 a further halving of the gap is beyond the
+            // resolution of O(1) coefficients; hold the row where it is, so
+            // the step lies on the boundary face and the face problem can
+            // converge.
+            normals.push_back(normal);targets.push_back(gap0<1e-10 ? 0.0 : -.5*gap0);
+            const int k=normals.size(),d=data.d;
+            MatrixXd At(d,k);VectorXd r(k);
+            for(int j=0;j<k;++j) {At.col(j)=normals[j];r[j]=targets[j];}
+            Eigen::ColPivHouseholderQR<MatrixXd> qa(At);
+            if(qa.rank()<k) return false;
+            const MatrixXd Q=qa.householderQ()*MatrixXd::Identity(d,d);
+            const MatrixXd R=qa.matrixQR().topLeftCorner(k,k).template triangularView<Eigen::Upper>();
+            const VectorXd base=Q.leftCols(k)*R.transpose().triangularView<Eigen::Lower>().solve(
+                VectorXd(qa.colsPermutation().transpose()*r));
+            if(k==d) {direction=base;held=k;return direction.allFinite();}
+            const MatrixXd Q2=Q.rightCols(d-k);
+            const MatrixXd reduced=Q2.transpose()*current.information*Q2;
+            Eigen::LDLT<MatrixXd> factor(reduced);
+            if(factor.info()!=Eigen::Success) return false;
+            direction=base+Q2*factor.solve(Q2.transpose()*(current.score-current.information*base));
+            held=k;
+            if(!direction.allFinite()) return false;
+        }
+        return false;
+    };
+    // The interior certificate (small scaled score and Fisher predictor step)
+    // is not used where a constraint binds: the expected information diverges
+    // there and makes both quantities small without stationarity. At the
+    // boundary, convergence is certified by the constrained step instead.
+    auto certify=[&]() {
+        if(!firth && current.minimum_gap<boundary_gap) {
+            VectorXd direction;int held=0;
+            if(boundary_direction(direction,held) && held>0) {
+                if(data.predictor_step(direction)<step_tol) {converged=true;reason="converged_boundary";return true;}
+                return false;
+            }
+        }
+        if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
+            // A fit whose rows touch to within boundary_gap is on the
+            // ordering boundary even when its Fisher step no longer crosses
+            // (the step is then tiny because the information diverges).
+            converged=true;
+            reason=!firth && current.minimum_gap<boundary_gap ? "converged_boundary" : "score_and_predictor_step";
+            return true;
+        }
+        return false;
+    };
     for(int iter=1;iter<=expected_limit;++iter) {
         Rcpp::checkUserInterrupt();iterations=iter;
         history.row(iter-1)<<current.loglik,current.scaled_score,current.predictor_step,current.minimum_gap;
         if(trace) Rcpp::Rcout<<"iteration "<<iter<<": score "<<current.scaled_score<<
             ", predictor step "<<current.predictor_step<<", minimum gap "<<current.minimum_gap<<"\n";
-        if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
-            converged=true;reason="score_and_predictor_step";break;
-        }
+        if(certify()) break;
         const MatrixXd metric=current.inverse;const VectorXd score=current.score;
         const double merit0=.5*score.dot(metric*score);
         VectorXd accepted_b;PartialOrdinalState accepted_state(data.d);
@@ -480,7 +561,16 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
             }
             return false;
         };
-        bool accepted=search(current.step,current.predictor_step);
+        bool accepted=false;
+        if(!firth) {
+            VectorXd direction;int held=0;
+            const bool built=boundary_direction(direction,held);
+            if(built && held>0) accepted=search(direction);
+            if(trace && (held>0 || !built)) Rcpp::Rcout<<"  boundary step: "<<(built ? "built" : "not built")<<
+                ", held "<<held<<", "<<(accepted ? "accepted" : "rejected")<<
+                (accepted ? "" : std::string(" (")+last_rejection+")")<<"\n";
+        }
+        if(!accepted) accepted=search(current.step,current.predictor_step);
         if(!accepted) {
             ++fallbacks;MatrixXd jacobian(data.d,data.d);bool valid=true;
             for(int j=0;j<data.d;++j) {
@@ -519,9 +609,7 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
         boundary_stall=!firth && order_limited && current.minimum_gap<boundary_gap ? boundary_stall+1 : 0;
         if(boundary_stall>=boundary_limit) {reason="ordering_boundary";break;}
     }
-    if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
-        converged=true;reason="score_and_predictor_step";
-    }
+    if(!converged) certify();
     Rcpp::List out=partial_state_list(current);
     out["coefficients"]=b;out["converged"]=converged;out["convergence.reason"]=reason;
     out["iterations"]=observed_iterations+iterations;out["observed.iterations"]=observed_iterations;out["evaluations"]=evaluations;out["fallbacks"]=fallbacks;

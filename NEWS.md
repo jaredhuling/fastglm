@@ -32,6 +32,44 @@
   square-root link was reported as converged at deviance 654.32 against an
   optimum of 652.39). Sparse and dense fits now agree to rounding error on
   the boundary designs used in development.
+* Partial proportional odds models (`fastglm_ordinal()` with `nonparallel`)
+  now reach maxima on the ordering boundary, where cumulative probabilities
+  touch at some rows. When the scoring step would bring a row's cumulative
+  predictors to cross, the row-pair reached first is held at half its gap
+  (or where it is, once the gap is below 1e-10) and the step is recomputed
+  on the remaining directions; convergence there is certified by that
+  constrained step and reported as `convergence.reason = "converged_boundary"`
+  with a warning that Wald inference is not reliable. Previously such fits
+  stopped as `"ordering_boundary"`, not converged, up to 8.1 log-likelihood
+  units below the constrained maximum (68 units in one test design), and
+  three boundary maxima in 480 simulated fits were reported with an ordinary
+  convergence reason and ordinary standard errors, because the expected
+  information diverges as a category probability tends to zero. In those
+  simulations, 83 of 85 fits with a boundary maximum now converge there (none
+  did before), with dense and streamed fits agreeing; proportional odds fits
+  are unchanged.
+* Bias-reduced fits (`firth = TRUE`) keep their coefficient-change rule but
+  no longer count a step that was halved: at the boundary of the valid
+  region such steps shrink to nothing, and the rule could report convergence
+  wherever the iteration stalled (an identity-link Poisson fit was reported
+  as converged at deviance 913.601, above the optimum 913.487). Bias-reduced
+  fits whose estimate lies on that boundary (identity or square-root links,
+  log-binomial) are now reported as not converged; the boundary step is not
+  used for them.
+* `fastglm_zi()`: the negative binomial `theta` score is computed with the
+  cancellation-free series used by `fastglm_nb()`. The direct form lost its
+  sign to rounding error near `theta = 1e8`, which pushed `theta` to that
+  bound, and the EM rule then reported convergence at the zero-inflated
+  Poisson fit (in 17 of 40 simulated weakly identified data sets, up to 5.1
+  log-likelihood units below the maximum). EM is now followed by safeguarded
+  Newton steps, and convergence is reported only when the Newton decrement is
+  small (returned as `em.decrement`), so a stalled EM is not reported as
+  converged and a slow one finishes. SQUAREM extrapolates `theta` on the log
+  scale, the zero-model fits use the pivoted QR decomposition (the Cholesky
+  factorization failed when the zero-inflation probability approached 0), and
+  results carry `convergence.reason`. In those simulations false convergences
+  fell from 21 to 6 of 400; the remaining 6 are local maxima other than the
+  best one found (certified stationary, with positive definite information).
 * The zero-truncated count solver (`fastglm_hurdle()`, `fastglm_truncated()`)
   also confirms convergence with the Fisher decrement and halves until the
   deviance does not increase.

@@ -139,10 +139,16 @@
         parts(as.numeric(fit$coefficients)))
     colnames(fit$history) <- c("loglik","scaled.score","predictor.step","minimum.gap")
     if(!isTRUE(fit$converged)) warning(if(identical(fit$convergence.reason,"ordering_boundary"))
-        paste("nonparallel ordinal fitting stopped at the ordering boundary: the best fit has cumulative",
-              "probabilities that touch at some rows, so these coefficients are not an interior solution.",
-              "Use fastglm_diagnostics(fit, boundary = TRUE) to locate the rows, or fit fewer threshold-specific effects.")
+        paste("nonparallel ordinal fitting stopped near the ordering boundary without converging: the maximum",
+              "appears to have cumulative probabilities that touch at some rows, and these coefficients are not",
+              "that maximum. Use fastglm_diagnostics(fit, boundary = TRUE) to locate the rows, or fit fewer",
+              "threshold-specific effects.")
         else paste0("nonparallel ordinal fitting did not converge: ",fit$convergence.reason),call.=FALSE)
+    if(isTRUE(fit$converged) && identical(fit$convergence.reason,"converged_boundary"))
+        warning(paste("the nonparallel ordinal maximum is on the ordering boundary: cumulative probabilities",
+                      "touch at some rows (convergence.reason = 'converged_boundary'); Wald standard errors and",
+                      "tests are not reliable. Use fastglm_diagnostics(fit, boundary = TRUE) to locate the rows."),
+                call.=FALSE)
     object <- list(coefficients=effective$coefficients,alpha=effective$alpha,beta=effective$beta,
         gamma=effective$gamma,thresholds=effective$alpha,nonparallel=nonparallel,common=common,
         levels=response$levels,effective.levels=response$levels,threshold.map=seq_len(q),

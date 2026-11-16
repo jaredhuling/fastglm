@@ -42,7 +42,23 @@
 #' @returns A list of class `c("fastglm_zi", "fastglm")` with elements
 #'   `coefficients` (a list with `count` and `zero`), `se` (likewise),
 #'   `vcov` (full, including theta if NB), `loglik`, `theta`, `SE.theta`,
-#'   `tau` (posterior P(Z=1|y)), `em_iter`, `converged`.
+#'   `tau` (posterior P(Z=1|y)), `em_iter`, `newton.iter`, `em.decrement`,
+#'   `converged`, and `convergence.reason`.
+#'
+#' @details
+#' The fit runs EM iterations with SQUAREM acceleration (with `theta` on the
+#' log scale) and then safeguarded Newton steps on the observed information.
+#' It is reported as converged when the Newton decrement, the log-likelihood
+#' increase predicted by one more Newton step, is below `em.tol` times
+#' `0.1 + |2 loglik|`; a small change in the log likelihood between EM steps
+#' alone is not taken as convergence, because EM can stall or move slowly.
+#' Convergence certifies a local maximum (a stationary point with positive
+#' definite observed information). Zero-inflated likelihoods can have several
+#' local maxima, including fits in which the zero-inflation probability tends
+#' to zero over part of the covariate range, and the iteration does not search
+#' among them. When `theta` reaches its upper bound with its score pointing
+#' beyond it, the fit is the zero-inflated Poisson limit
+#' (`convergence.reason = "theta_boundary"`).
 #'
 #' @examples
 #' set.seed(1)
@@ -243,8 +259,17 @@ fastglm_zi <- function(formula, data, subset, na.action,
     if(out$theta.boundary) {
         out$SE.theta<-NA_real_
         out$vcov.full[,]<-NA_real_;out$vcov[,]<-NA_real_
-        warning("theta is on a numerical boundary; regular mixture covariance is unavailable",call.=FALSE)
+        warning(if(isTRUE(res$theta.at.bound) && out$theta>1)
+                    "theta is at its upper bound: the log likelihood is highest in the zero-inflated Poisson limit (theta = Inf); regular mixture covariance is unavailable"
+                else "theta is on a numerical boundary; regular mixture covariance is unavailable",call.=FALSE)
     }
+    # Convergence is certified by the Newton decrement after the EM iterations
+    # (see src/fit_glm_zi.cpp); em.decrement is that decrement.
+    out$newton.iter <- res$newton.iter
+    out$em.decrement <- res$em.decrement
+    out$convergence.reason <- if(isTRUE(out$converged)) {
+        if(isTRUE(res$theta.at.bound)) "theta_boundary" else "converged"
+    } else "not_converged"
     out
 }
 

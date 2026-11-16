@@ -81,6 +81,7 @@ protected:
     bool gamma_initial_consistent = false;
     bool firth_step_failed = false;
     bool firth_step_limited = false;
+    bool firth_step_halved_ = false;   // a step of the current iteration was halved
     int firth_step_reductions = 0;
     fglm::BinomialFirthWorking binomial_working;
     bool binomial_current=false;
@@ -280,6 +281,7 @@ protected:
 
     virtual void step_halve() override
     {
+        firth_step_halved_ = true;
         // take half step
         beta = 0.5 * (beta.array() + beta_prev.array());
 
@@ -378,7 +380,12 @@ protected:
     bool converged() override
     {
         if (firth_) {
-            if (failed() || firth_step_limited || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
+            // A small change after a halved step is not evidence of a root of
+            // the adjusted score: at the boundary of the valid region the
+            // step is halved to nothing and the change is small wherever the
+            // iteration stalls. Only an unhalved step counts.
+            if (failed() || firth_step_limited || firth_step_halved_ ||
+                (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
             if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
                 const double phi = compute_firth_phi();
                 const VectorXd score = X.adjoint() *
@@ -464,6 +471,7 @@ protected:
     virtual void run_step_halving(int &iterr) override
     {
         firth_step_limited=false;
+        firth_step_halved_=false;
         halving_exhausted_=false;
         if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
             const VectorXd delta=beta-beta_prev;

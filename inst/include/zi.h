@@ -26,6 +26,7 @@
 #include <RcppEigen.h>
 #include <boost/math/special_functions/digamma.hpp>
 #include "families.h"
+#include "nb_theta.h"
 #include <cmath>
 #include <limits>
 
@@ -216,14 +217,14 @@ inline double score_eta_count(int dist_code, double theta,
 
 // Score wrt theta (NB only):
 //   d log f / d theta = digamma(y+t) - digamma(t) + log(t/(t+mu)) + (mu - y)/(t+mu)
+// Evaluated with fglm::nb::score_theta_row, which switches to the series in
+// 1 / theta for large theta: the direct form is a difference of terms near
+// digamma(theta) whose leading parts cancel, and at theta = 1e8 its rounding
+// error (about 1e-15) exceeds the score itself (about 1e-17), so the sign of
+// the score, and with it the theta update, can be wrong.
 inline double score_theta_one(double theta, double y_i, double mu_i)
 {
-    using boost::math::digamma;
-    const double tm = theta + mu_i;
-    const double log_c = (mu_i < 1e-3 * theta)
-                          ? -std::log1p(mu_i / theta)
-                          : std::log(theta / tm);
-    return digamma(y_i + theta) - digamma(theta) + log_c + (mu_i - y_i) / tm;
+    return fglm::nb::score_theta_row(theta, y_i, mu_i, boost::math::digamma(theta));
 }
 
 }}  // namespace fglm::zi

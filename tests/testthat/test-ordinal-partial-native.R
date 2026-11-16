@@ -132,17 +132,27 @@ test_that("binary nonparallel slopes reproduce ordinary ordinal coordinates", {
     }
 })
 
-test_that("partial-model conditional category boundaries do not report convergence", {
+test_that("partial-model conditional category boundaries are reported as boundary fits", {
     # All declared categories are observed globally, but the saturated first
     # predictor group has no middle-category outcomes and reaches a zero gap.
+    # The model is saturated, so the maximum log likelihood is
+    # sum(counts * log(observed proportions)). Maximum likelihood converges
+    # there on the ordering boundary; bias reduction does not converge.
     x <- matrix(numeric(),2L,0L);z <- matrix(0:1,ncol=1)
     counts <- rbind(c(8,0,5),c(3,7,4))
+    maximum <- sum(ifelse(counts>0,counts*log(counts/rowSums(counts)),0))
     for(link in 0:2) for(firth in c(FALSE,TRUE)) {
         fit <- fastglm:::ordinal_partial_native_fit(x,z,integer(),counts,c(1,1),numeric(2),
             3L,c(-1,1,0,0),firth,maxit=80L,link=link)
-        expect_false(fit$converged)
         expect_true(fit$minimum.gap>0)
-        expect_true(fit$scaled.score>=1e-8 || fit$predictor.step>=1e-8)
+        if(firth) {
+            expect_false(fit$converged)
+            expect_true(fit$scaled.score>=1e-8 || fit$predictor.step>=1e-8)
+        } else {
+            expect_true(fit$converged)
+            expect_identical(fit$convergence.reason,"converged_boundary")
+            expect_lt(abs(fit$loglik-maximum),1e-7)
+        }
     }
 })
 

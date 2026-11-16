@@ -74,10 +74,13 @@ static double score_theta_zi(double theta,
                              const VectorXd& tau, const VectorXd& y,
                              const VectorXd& mu, const VectorXd& wts)
 {
+    // Cancellation-free per-row score (see fglm::zi::score_theta_one), with
+    // digamma(theta) computed once.
+    const double dig_th = boost::math::digamma(theta);
     double s = 0.0;
     for (Eigen::Index i = 0; i < y.size(); ++i) {
         s += wts[i] * (1.0 - tau[i])
-             * fglm::zi::score_theta_one(theta, y[i], mu[i]);
+             * fglm::nb::score_theta_row(theta, y[i], mu[i], dig_th);
     }
     return s;
 }
@@ -243,7 +246,7 @@ static PilotResult pilot_init(const Map<MatrixXd>& X, const Map<MatrixXd>& Z,
                      wts, off_z,
                      var_fun_z, mu_eta_fun_z, linkinv_fun_z,
                      dev_resids_fun_z, valideta_fun_z, validmu_fun_z,
-                     tol, maxit, 2, false, zero_fam_code, fp_empty);
+                     tol, maxit, 0, false, zero_fam_code, fp_empty);   // pivoted QR: see below
     gamma_solver.init_parms(Map<VectorXd>(zero_start.data(), zero_start.size()),
                             Map<VectorXd>(mu0_z.data(), n),
                             Map<VectorXd>(eta0_z.data(), n));
@@ -369,7 +372,7 @@ List fit_glm_zi(
                      W, OffZ,
                      var_fun_zero, mu_eta_fun_zero, linkinv_fun_zero,
                      dev_resids_fun_zero, valideta_fun_zero, validmu_fun_zero,
-                     tol, maxit, 2, false, zero_fam_code, fp_gamma);
+                     tol, maxit, 0, false, zero_fam_code, fp_gamma);   // pivoted QR: the zero model can approach pi = 0, where X'WX is too ill-conditioned for the Cholesky factorization
 
     fglm::FamilyParams fp_beta;
     fp_beta.theta = (dist_code == 1) ? theta : 1.0;
@@ -449,17 +452,17 @@ List fit_glm_zi(
         VectorXd x(n_params);
         x.head(p_z) = gamma;
         x.segment(p_z, p_c) = beta;
-        if (dist_code == 1) x[n_params - 1] = theta;
+        // theta enters on the log scale, so the extrapolation cannot leave
+        // (0, inf) and treats large theta multiplicatively.
+        if (dist_code == 1) x[n_params - 1] = std::log(theta);
         return x;
     };
 
     auto unpack_params = [&](const VectorXd& x) {
         gamma = x.head(p_z);
         beta  = x.segment(p_z, p_c);
-        if (dist_code == 1) {
-            theta = x[n_params - 1];
-            if (theta <= 0.0) theta = 1e-4;
-        }
+        if (dist_code == 1)
+            theta = std::exp(std::min(std::log(1e8), std::max(std::log(1e-6), x[n_params - 1])));
     };
 
     // Recompute eta/mu/warm-starts from current gamma,beta (not from IRLS)
@@ -480,7 +483,6 @@ List fit_glm_zi(
     };
 
     // ---------------- EM + SQUAREM loop -------------------------------------
-    double ll_prev = ll;
     bool   conv    = false;
     int    em_iter = 0;
 
@@ -543,6 +545,78 @@ List fit_glm_zi(
         }
     }
 
+    // ---------------- Newton finish and convergence certificate ---------------
+    // The EM stopping rule (relative change in the log likelihood) cannot
+    // tell a stalled or slowly creeping iteration from a maximum. Finish with
+    // safeguarded Newton steps on the observed information (the numerical
+    // Jacobian of the score, as for the covariance below), halved until the
+    // log likelihood does not decrease, and report convergence only when the
+    // Newton decrement s' I^{-1} s is below em_tol * (0.1 + |2 loglik|), the
+    // rule of the GLM solvers. theta is left out of the Newton system when it
+    // is at a bound and its score points beyond it (the zero-inflated Poisson
+    // limit as theta -> inf).
+    bool   theta_at_bound = false;
+    double em_decrement = std::numeric_limits<double>::infinity();
+    int    newton_iter = 0;
+    {
+        const double th_lo = 1e-6, th_hi = 1e8;
+        auto loglik_at = [&](const VectorXd& g, const VectorXd& b, double th) {
+            const VectorXd ez = Z * g + OffZ;
+            const VectorXd mc = (X * b + OffC).array().exp().matrix();
+            VectorXd tau_tmp(n);
+            return obs_loglik(dist_code, zero_fam_code, (dist_code == 1 ? th : 1.0),
+                              Y, mc, ez, W, tau_tmp);
+        };
+        bool certified = false;
+        for (int k = 0; k <= 20; ++k) {
+            const VectorXd s = full_score(dist_code, zero_fam_code, gamma, beta,
+                                          (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
+            const MatrixXd I = obs_info_numjac(dist_code, zero_fam_code, gamma, beta,
+                                               (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
+            const Eigen::Index pt = p_z + p_c;
+            theta_at_bound = dist_code == 1 &&
+                ((theta >= th_hi * (1 - 1e-12) && s[pt] > 0) || (theta <= th_lo * (1 + 1e-12) && s[pt] < 0));
+            const Eigen::Index m = (dist_code == 1 && !theta_at_bound) ? pt + 1 : pt;
+            if (!s.head(m).allFinite() || !I.topLeftCorner(m, m).allFinite()) break;
+            Eigen::LLT<MatrixXd> chol(I.topLeftCorner(m, m));
+            if (chol.info() != Eigen::Success) break;
+            const VectorXd step = chol.solve(s.head(m));
+            em_decrement = s.head(m).dot(step);
+            const bool small = std::isfinite(em_decrement) && em_decrement / (0.1 + std::abs(2 * ll)) < em_tol;
+            if (small && certified) break;      // after the polishing step below
+            if (k == 20) { certified = small; break; }
+            // Once certified, take one more (polishing) Newton step: near the
+            // maximum it squares the error, which matters where the likelihood
+            // is flat (e.g. in theta) and a small decrement still allows a
+            // visible coefficient error.
+            if (small) certified = true;
+            const double rounding = 64 * std::numeric_limits<double>::epsilon() * (1 + std::abs(ll));
+            double frac = 1; bool accepted = false;
+            for (int half = 0; half < 30; ++half, frac *= 0.5) {
+                const VectorXd g = gamma + frac * step.head(p_z);
+                const VectorXd b = beta + frac * step.segment(p_z, p_c);
+                double th = theta;
+                if (m > pt) {
+                    th = theta + frac * step[pt];
+                    if (!(th > 0)) continue;
+                    th = std::min(th_hi, std::max(th_lo, th));
+                }
+                const double lc = loglik_at(g, b, th);
+                if (std::isfinite(lc) && lc >= ll - rounding) {
+                    gamma = g; beta = b; theta = th; ll = lc; accepted = true; break;
+                }
+            }
+            if (!accepted) break;
+            ++newton_iter;
+            if (certified) break;
+        }
+        conv = certified;
+        // Refresh the fitted quantities and posterior zero probabilities.
+        set_warm_from_params();
+        ll = obs_loglik(dist_code, zero_fam_code, (dist_code == 1 ? theta : 1.0),
+                        Y, mu_c, eta_z, W, tau);
+    }
+
     // ---------------- final vcov via numerical-Jac observed information ------
     MatrixXd vcov_full;
     {
@@ -587,7 +661,7 @@ List fit_glm_zi(
         }
     }
 
-    return List::create(
+    List out = List::create(
         _["coefficients_count"] = beta,
         _["coefficients_zero"]  = gamma,
         _["se_count"]           = se_count,
@@ -609,4 +683,8 @@ List fit_glm_zi(
         _["n"]                  = (int)n,
         _["df"]                 = (int)(p_c + p_z + (dist_code == 1 ? 1 : 0))
     );
+    out["newton.iter"]    = newton_iter;
+    out["em.decrement"]   = em_decrement;
+    out["theta.at.bound"] = theta_at_bound;
+    return out;
 }

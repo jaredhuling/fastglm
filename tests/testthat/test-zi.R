@@ -152,3 +152,21 @@ test_that("pscl::zeroinfl on bioChemists matches fastglm_zi", {
     expect_equal(as.numeric(logLik(f)), as.numeric(logLik(p)),
                  tolerance = 1e-5)
 })
+
+test_that("zero-inflated NB theta is not trapped at its upper bound", {
+    skip_if_not_installed("pscl")
+    # Until 0.1.5 the theta score lost its sign to rounding error near theta =
+    # 1e8 (a difference of digamma values whose leading terms cancel), theta
+    # was pushed to the bound 1e8, and the EM rule reported convergence at the
+    # zero-inflated Poisson fit (log likelihood -302.0559). Reference:
+    # pscl::zeroinfl, theta 0.92174, log likelihood -300.405901.
+    set.seed(20268117); n <- 500
+    x <- rnorm(n); w <- rnorm(n)
+    yc <- rnbinom(n, size = 1.5, mu = exp(-1 + 0.3 * x))
+    y <- ifelse(rbinom(n, 1, plogis(-0.5 + 0.5 * w)) == 1, 0, yc)
+    f <- fastglm_zi(y ~ x | w, data = data.frame(y, x, w), dist = "negbin")
+    expect_true(f$converged)
+    expect_identical(f$convergence.reason, "converged")
+    expect_lt(abs(as.numeric(logLik(f)) - (-300.405901)), 1e-5)
+    expect_equal(f$theta, 0.92174, tolerance = 1e-3)
+})

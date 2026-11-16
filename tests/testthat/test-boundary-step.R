@@ -164,3 +164,21 @@ test_that("sparse designs use the decrement rule and the boundary step", {
         expect_equal(unname(coef(f)), unname(coef(dense)), tolerance = 1e-8)
     }
 })
+
+test_that("bias-reduced fits are not reported as converged after a halved step", {
+    # Identity-link Poisson with its optimum on the boundary mu = 0. Under the
+    # identity link the mean bias-reducing adjustment (proportional to the
+    # second derivative of the inverse link) is zero, so the bias-reduced
+    # estimate is the maximum likelihood estimate. Until 0.1.5 the Firth
+    # iteration stalled on the boundary, its steps were halved to nothing, and
+    # the coefficient-change rule reported convergence at deviance 913.601,
+    # above the optimum 913.487.
+    set.seed(5); n <- 800
+    z <- matrix(runif(n * 2), n, 2); x <- cbind(1, z)
+    y <- rpois(n, pmax(0.2 + 3 * z[, 1] - 2.5 * z[, 2], 0.02))
+    ml <- suppressWarnings(fastglm(x, y, family = poisson("identity")))
+    f <- suppressWarnings(fastglm(x, y, family = poisson("identity"), firth = TRUE, maxit = 1000L))
+    if (isTRUE(f$converged)) expect_lt(f$deviance - ml$deviance, 1e-6 * (1 + ml$deviance))
+    else expect_false(f$converged)
+    expect_lt(f$deviance - ml$deviance, 1e-3)
+})

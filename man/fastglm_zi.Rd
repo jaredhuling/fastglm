@@ -63,7 +63,8 @@ the inner theta MLE (only used when `dist = "negbin"`).}
 A list of class `c("fastglm_zi", "fastglm")` with elements
   `coefficients` (a list with `count` and `zero`), `se` (likewise),
   `vcov` (full, including theta if NB), `loglik`, `theta`, `SE.theta`,
-  `tau` (posterior P(Z=1|y)), `em_iter`, `converged`.
+  `tau` (posterior P(Z=1|y)), `em_iter`, `newton.iter`, `em.decrement`,
+  `converged`, and `convergence.reason`.
 }
 \description{
 Fits a zero-inflated count model: a binary inflation component combined
@@ -84,6 +85,21 @@ the EM fixed point (block-structured for `(gamma, beta, theta)`).
 This is the fastglm analogue of [pscl::zeroinfl()] -- coefficients
 agree to 1e-5 on standard datasets (slightly looser than hurdle to
 allow for the EM iteration), with all numerical loops in C++.
+
+
+The fit runs EM iterations with SQUAREM acceleration (with `theta` on the
+log scale) and then safeguarded Newton steps on the observed information.
+It is reported as converged when the Newton decrement, the log-likelihood
+increase predicted by one more Newton step, is below `em.tol` times
+`0.1 + |2 loglik|`; a small change in the log likelihood between EM steps
+alone is not taken as convergence, because EM can stall or move slowly.
+Convergence certifies a local maximum (a stationary point with positive
+definite observed information). Zero-inflated likelihoods can have several
+local maxima, including fits in which the zero-inflation probability tends
+to zero over part of the covariate range, and the iteration does not search
+among them. When `theta` reaches its upper bound with its score pointing
+beyond it, the fit is the zero-inflated Poisson limit
+(`convergence.reason = "theta_boundary"`).
 }
 \examples{
 set.seed(1)

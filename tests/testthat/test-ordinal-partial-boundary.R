@@ -104,7 +104,13 @@ test_that("saturated logit models with positive intermediate counts retain their
     expect_equal(predict(fit),expected,tolerance=1e-10,ignore_attr=TRUE)
 })
 
-test_that("maximum likelihood at the ordering boundary stops promptly with an explanation", {
+test_that("maximum likelihood at the ordering boundary converges to the constrained maximum", {
+    # Until 0.1.5 this fit stopped as "ordering_boundary" (not converged) at
+    # log likelihood -1432.572: steps shrank to 0.9 of the distance to the
+    # boundary and the search crawled along it. Reference: -1364.34298409,
+    # the maximum under the linear ordering constraints from a log-barrier
+    # method (stats::constrOptim) with an independent likelihood, reached from
+    # an independent start (fastglm-jss dev/audit_ordinal/ref_lik.R).
     set.seed(321)
     n <- 1000L;p <- 10L
     x <- matrix(rnorm(n*p),n,p,dimnames=list(NULL,paste0("x",seq_len(p))))
@@ -114,8 +120,27 @@ test_that("maximum likelihood at the ordering boundary stops promptly with an ex
     for(j in 4:1) code[u<=plogis(alpha[j]-eta-0.4*(j-2.5)*(x[,2]-x[,3]))] <- j
     y <- ordered(code,levels=seq_len(5L))
     expect_warning(fit <- fastglm_ordinal(x,y,nonparallel=c("x2","x3"),maxit=500L),"ordering boundary")
-    expect_false(fit$converged)
-    expect_identical(fit$convergence.reason,"ordering_boundary")
+    expect_true(fit$converged)
+    expect_identical(fit$convergence.reason,"converged_boundary")
     expect_lt(fit$iterations,200L)
     expect_lt(fit$minimum.gap,1e-8)
+    expect_lt(abs(as.numeric(logLik(fit))-(-1364.34298409)),1e-5)
+})
+
+test_that("a boundary optimum is not certified as an interior convergence", {
+    # Until 0.1.5 the expected information, which diverges as a category
+    # probability tends to zero at a touching row, made the interior
+    # certificate pass at this boundary optimum (minimum gap 2e-14), and the
+    # fit was reported with an ordinary convergence reason and ordinary
+    # standard errors (fastglm-jss dev/audit_ordinal, seed 7317010).
+    # Generator of the audit (setting ppo_interior, logit link, replicate 10).
+    set.seed(7317010); n <- 300; z <- rnorm(n)
+    alpha <- c(-1, 0, 1); beta <- c(.5, -.5); gam <- c(.2, .4, .6)
+    X <- matrix(rnorm(n * 2), n, 2, dimnames = list(NULL, c("x1", "x2")))
+    E <- outer(rep(1, n), alpha) - drop(X %*% beta) - outer(z, gam)
+    y <- 1L + rowSums(runif(n) > plogis(E))
+    fit <- suppressWarnings(fastglm_ordinal(cbind(X, z = z), ordered(y, levels = 1:4), nonparallel = "z"))
+    expect_true(fit$converged)
+    expect_lt(fit$minimum.gap, 1e-8)
+    expect_identical(fit$convergence.reason, "converged_boundary")
 })
