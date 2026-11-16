@@ -300,3 +300,27 @@
 BOUNDARY_WARNING <- paste("the estimate is on the boundary of the valid region for this family and link",
                           "(convergence.reason = 'converged_boundary');",
                           "Wald standard errors and tests are not reliable")
+
+# Intercept-only start for a streamed fit with an offset: an intercept b0
+# with b0 + o valid for every offset o in [off.lo, off.hi]. The valid linear
+# predictors of each family form an interval, so checking the two ends
+# suffices. Candidates centre linkfun(ybar) on the mean, the midpoint, and
+# each end of the offset range; NULL if none is valid.
+.feasible_start_offset <- function(low, is.int, ybar, off.lo, off.hi, off.mean, family) {
+    j <- which(is.int)[1L]
+    if (is.na(j) || !is.finite(off.lo) || !is.finite(off.hi)) return(NULL)
+    cval <- as.numeric(low[j])
+    c0 <- suppressWarnings(family$linkfun(ybar))
+    if (!is.finite(c0) || !is.finite(cval) || cval == 0) return(NULL)
+    valideta <- if (is.null(family$valideta)) function(x) TRUE else family$valideta
+    validmu <- if (is.null(family$validmu)) function(x) TRUE else family$validmu
+    ok <- function(b0) tryCatch({
+        e <- c(b0 + off.lo, b0 + off.hi); m <- family$linkinv(e)
+        isTRUE(valideta(e)) && isTRUE(validmu(m)) && all(is.finite(m))
+    }, error = function(e) FALSE)
+    for (b0 in c0 - c(off.mean, (off.lo + off.hi) / 2, off.lo, off.hi)) if (ok(b0)) {
+        start <- numeric(length(low)); start[j] <- b0 / cval
+        return(start)
+    }
+    NULL
+}

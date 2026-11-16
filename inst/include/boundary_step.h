@@ -187,40 +187,119 @@ inline bool descent_direction(const BlockSource& blocks, const Eigen::VectorXd& 
 // update; replaced by the constrained update on success, with n_held the
 // number of held rows. Returns false (beta_new unchanged) if the update is
 // already valid or no valid constrained update is found.
-inline bool boundary_step(const BlockSource& blocks, int p, const Eigen::VectorXd& beta,
-                          Eigen::VectorXd& beta_new, const RowValidity& valid,
-                          bool normal_equations, int& n_held)
+// Score sum_i W_i (z_i - eta0_i) x_i at beta (eta0 = X beta, no offset); the
+// deviance gradient is -2 times it (the IRLS score identity).
+inline Eigen::VectorXd deviance_score(const BlockSource& blocks, int p, const Eigen::VectorXd& beta)
+{
+    Eigen::VectorXd g = Eigen::VectorXd::Zero(p);
+    blocks([&](long, const Eigen::Ref<const Eigen::MatrixXd>& X, const Eigen::VectorXd&,
+               const Eigen::VectorXd* z, const Eigen::VectorXd* sw) {
+        const Eigen::ArrayXd W = sw->array().square();
+        g.noalias() += X.transpose() * (W * (z->array() - (X * beta).array())).matrix();
+    }, true);
+    return g;
+}
+
+// Builds the constrained update: starting from the unconstrained update,
+// hold the row reached first (among rows not released) and re-solve, until
+// the update is valid. Returns false if no valid update is found. held,
+// XAt (normals as columns) and sign (+1 lower bound, -1 upper bound)
+// describe the held rows.
+inline bool build_constrained_update(const BlockSource& blocks, int p, const Eigen::VectorXd& beta,
+                                     const Eigen::VectorXd& beta_unconstrained, const RowValidity& valid,
+                                     bool normal_equations, const std::vector<long>& released,
+                                     Eigen::VectorXd& cand, std::vector<long>& held,
+                                     Eigen::MatrixXd& XAt, std::vector<double>& sign, Eigen::VectorXd& c)
 {
     using Eigen::VectorXd;
-    std::vector<long> held; Eigen::MatrixXd XAt(p, 0); VectorXd c(0);
-    VectorXd cand = beta_new;
+    // held, XAt, sign and c may arrive with rows already held (a warm start
+    // after a release); their targets are kept.
+    cand = beta_unconstrained;
+    if (!held.empty() && !constrained_wls(blocks, p, held, XAt, c, normal_equations, cand)) return false;
     for (int round = 0; round < p; ++round) {
         const std::vector<BoundaryRow> bad = invalid_rows(blocks, cand, valid);
-        if (bad.empty()) {
-            if (round == 0) return false;
-            // Use the constrained update only if it is a descent direction for
-            // the deviance. Holding rows at fixed values moves the solution
-            // off the line through beta, so this is not automatic; when it
-            // fails, the caller halves the unconstrained update instead.
-            if (!descent_direction(blocks, beta, cand - beta)) return false;
-            beta_new = cand; n_held = held.size(); return true;
-        }
+        if (bad.empty()) return true;
         if ((int)held.size() >= p - 1) return false;
         int jbest = -1; double tbest = 2, e0best = 0, dbest = 0;
         for (int j = 0; j < (int)bad.size(); ++j) {
             if (std::find(held.begin(), held.end(), bad[j].id) != held.end()) continue;
+            if (std::find(released.begin(), released.end(), bad[j].id) != released.end()) return false;
             const double e0 = bad[j].x.dot(beta), d = bad[j].x.dot(cand) - e0;
             const double t = last_valid_fraction(e0 + bad[j].off, d, valid);
             if (t < tbest) { tbest = t; jbest = j; e0best = e0; dbest = d; }
         }
         if (jbest < 0) return false;   // a held row is invalid
         held.push_back(bad[jbest].id);
+        sign.push_back(dbest < 0 ? 1.0 : -1.0);
         XAt.conservativeResize(p, held.size()); XAt.col(held.size() - 1) = bad[jbest].x;
         c.conservativeResize(held.size());
         c[held.size() - 1] = e0best + BOUNDARY_STEP_FRACTION * tbest * dbest;
         if (!constrained_wls(blocks, p, held, XAt, c, normal_equations, cand)) return false;
     }
     return false;
+}
+
+// The boundary step. beta: current, valid estimate. beta_new: unconstrained
+// update; replaced by the constrained update on success, with n_held the
+// number of held rows. Returns false (beta_new unchanged) if the update is
+// already valid or no valid constrained update is found.
+//
+// Rows are held when the update would leave the valid region through them,
+// but that alone does not show that holding them is optimal: the Fisher
+// scoring direction and the direction of steepest descent can disagree, so
+// a held row can block a descent path that moves it inward together with
+// other coefficients. Each held row is therefore checked by its Karush-Kuhn-
+// Tucker multiplier, from the deviance gradient: on the face of held rows,
+// grad D = sum_j mu_j s_j x_j with s_j = +1 for a lower and -1 for an upper
+// bound, and a constrained minimum requires every mu_j >= 0. The row with
+// the most negative multiplier is released and the update rebuilt without
+// holding it (for a convex quadratic model this moves the row inward),
+// repeating while some multiplier is negative.
+inline bool boundary_step(const BlockSource& blocks, int p, const Eigen::VectorXd& beta,
+                          Eigen::VectorXd& beta_new, const RowValidity& valid,
+                          bool normal_equations, int& n_held)
+{
+    using Eigen::VectorXd;
+    std::vector<long> released, held; std::vector<double> sign; Eigen::MatrixXd XAt(p, 0);
+    VectorXd cand, c(0);
+    if (!build_constrained_update(blocks, p, beta, beta_new, valid, normal_equations, released,
+                                  cand, held, XAt, sign, c)) return false;
+    if (held.empty()) return false;   // the unconstrained update is valid
+    const VectorXd grad = -2.0 * deviance_score(blocks, p, beta);
+    const double tol = 1e-8 * (1 + grad.cwiseAbs().maxCoeff());
+    for (int k = 0; k < p && !held.empty(); ++k) {
+        Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qa(XAt);
+        if (qa.rank() < (int)held.size()) break;
+        const VectorXd nu = qa.solve(grad);
+        int worst = -1; double most = -tol;
+        for (int j = 0; j < (int)held.size(); ++j) {
+            const double mu = nu[j] * sign[j] * XAt.col(j).norm();
+            if (mu < most) { most = mu; worst = j; }
+        }
+        if (worst < 0) break;
+        // Warm start: keep the other held rows at their targets, drop the
+        // released one, and re-solve; rows that then leave the region are
+        // held as before. A released row that would leave the region again
+        // ends the release (it is held after all).
+        std::vector<long> rel2 = released; rel2.push_back(held[worst]);
+        std::vector<long> held2; std::vector<double> sign2; Eigen::MatrixXd XAt2(p, 0); VectorXd c2(0);
+        for (int j = 0; j < (int)held.size(); ++j) if (j != worst) {
+            held2.push_back(held[j]); sign2.push_back(sign[j]);
+            XAt2.conservativeResize(p, held2.size()); XAt2.col(held2.size() - 1) = XAt.col(j);
+            c2.conservativeResize(held2.size()); c2[held2.size() - 1] = c[j];
+        }
+        VectorXd cand2;
+        if (!build_constrained_update(blocks, p, beta, beta_new, valid, normal_equations, rel2,
+                                      cand2, held2, XAt2, sign2, c2)) break;
+        released = rel2; cand = cand2; held = held2; sign = sign2; XAt = XAt2; c = c2;
+    }
+    // Use the constrained update only if it is a descent direction for the
+    // deviance. Holding rows at fixed values moves the solution off the line
+    // through beta, so this is not automatic; when it fails, the caller
+    // halves the unconstrained update instead.
+    if (!descent_direction(blocks, beta, cand - beta)) return false;
+    beta_new = cand; n_held = held.size();
+    return true;
 }
 
 } // namespace fglm

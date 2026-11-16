@@ -23,6 +23,26 @@
 
 ## Boundary optima
 
+* The boundary step releases a held row when its Karush-Kuhn-Tucker
+  multiplier, computed from the deviance gradient, has the wrong sign. Rows
+  were held whenever the scoring step pushed them out of the valid region,
+  which does not show that holding them is optimal: in one simulated
+  square-root negative binomial data set a dense fit held two rows on the
+  boundary and was reported converged 0.042 log-likelihood units below the
+  maximum, which holds one.
+* Streamed fits with an offset now have an intercept-only fallback start
+  (previously only without an offset), so an invalid first update can be
+  halved back into the valid region instead of stopping with an error.
+* Sparse fits whose Cholesky factorization fails although the design has
+  full rank (working weights near the boundary of the valid region) are refit
+  with a dense copy and pivoted QR, with a warning, when the copy has at most
+  1e8 entries; streamed fits with the default method refit with the streaming
+  QR decomposition. Singular designs, and explicitly requested Cholesky
+  methods for streamed fits, still stop with an error.
+* Fisher scoring converges only linearly for non-canonical links, more slowly
+  as fitted means approach a bound; such fits can need more than the default
+  `maxit` and are then reported as not converged.
+
 * Sparse (`dgCMatrix`) designs now use the convergence rule of dense fits
   (deviance change confirmed by the Fisher decrement, with step-halving until
   the deviance does not increase) and the boundary step. Earlier 0.1.5
@@ -56,6 +76,13 @@
   fits whose estimate lies on that boundary (identity or square-root links,
   log-binomial) are now reported as not converged; the boundary step is not
   used for them.
+* `fastglm_zi()` and `fastglm_nb()`: where the log likelihood is flat in
+  `log(theta)` (large `theta`), the `theta` information need not be positive;
+  convergence is then certified on the other parameters when the `theta`
+  score on the log scale is below the tolerance. The zero-inflated Newton
+  finish works on `log(theta)` and allows up to 50 steps. Sparse and streamed
+  negative binomial fits report `convergence.reason = "iteration_limit"` when
+  the outer loop does not converge (previously the last inner fit's reason).
 * `fastglm_zi()`: the negative binomial `theta` score is computed with the
   cancellation-free series used by `fastglm_nb()`. The direct form lost its
   sign to rounding error near `theta = 1e8`, which pushed `theta` to that

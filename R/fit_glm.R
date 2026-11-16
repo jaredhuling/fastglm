@@ -476,6 +476,28 @@ fastglmPure <- function(x, y,
             ans$solver.fallback <- conditionMessage(e)
             return(ans)
         }
+        # Sparse designs have no QR solver here. Near the boundary of the
+        # valid region the working weights can make the sparse Cholesky
+        # factorization ill-conditioned; refit with a dense copy and pivoted
+        # QR when that copy is moderate (at most 1e8 entries).
+        # A design that is itself (nearly) singular still stops with the
+        # error: the fallback is for ill-conditioning from the weights.
+        if (is_sparse_matrix && grepl("Cholesky factorization", conditionMessage(e), fixed = TRUE) &&
+            prod(as.numeric(dim(x))) <= 1e8 && qr(as.matrix(x), tol = 1e-7)$rank == ncol(x)) {
+            warning("sparse Cholesky factorization is singular or ill-conditioned; ",
+                    "the model was fit with a dense copy of the design and pivoted QR (method = 0).", call. = FALSE)
+            method <<- 0L
+            xd <- as.matrix(x)
+            ans <- if (firth) fit_glm_firth(xd, y, weights, offset, start, mu, eta,
+                family$variance, family$mu.eta, family$linkinv, family$dev.resids,
+                valideta, validmu, 0L, tol, as.integer(maxit), fc, fp, inference = inference != "none") else
+                fit_glm(xd, y, weights, offset, start, mu, eta,
+                family$variance, family$mu.eta, family$linkinv, family$dev.resids,
+                valideta, validmu, 0L, tol, as.integer(maxit), fc, fp, inference = inference != "none")
+            ans$intercept <- any(is.int)
+            ans$solver.fallback <- conditionMessage(e)
+            return(ans)
+        }
         stop(e)
     })
 

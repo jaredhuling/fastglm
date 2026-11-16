@@ -126,6 +126,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
                               family = gaussian(), start = NULL, method = 2L,
                               tol = 1e-8, maxit = 100L, firth = FALSE,
                               covariance = c("estimate", "previous")) {
+    method.supplied <- !missing(method)
     old.rule <- set_conv_rule(.covariance_rule(covariance))
     on.exit(set_conv_rule(old.rule), add = TRUE)
     source <- if (inherits(chunk_callback, "fastglm_source")) chunk_callback else
@@ -148,10 +149,13 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     fetch <- .stream_reader(source,state,family,start)
     # One validation pass also constructs the usual family-initialized WLS start.
     a <- rhs <- low <- high <- qr.state <- NULL; nobs <- sumw <- sumwy <- 0; has.offset <- FALSE
+    off.lo <- Inf; off.hi <- -Inf; sumwo <- 0
     gamma.null.total <- -Inf
     for(k in seq_len(n_chunks)) {
         z <- fetch(k); x <- z$X; w <- z$weights
         has.offset <- has.offset || any(z$offset != 0)
+        if(any(w > 0)) { off.lo <- min(off.lo, z$offset[w > 0]); off.hi <- max(off.hi, z$offset[w > 0]) }
+        sumwo <- sumwo + sum(w * z$offset)
         if(is.null(low)) {
             if(method!=0L) { a <- matrix(0,ncol(x),ncol(x)); rhs <- numeric(ncol(x)) }
             low <- rep(Inf,ncol(x)); high <- rep(-Inf,ncol(x))
@@ -183,14 +187,32 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     # C++ fitter a pass of its own.
     anchor <- if (!has.offset) .feasible_start(matrix(low, 1L), sumwy / sumw, 1, 0, family,
         if(is.null(family$valideta)) function(x) TRUE else family$valideta,
-        if(is.null(family$validmu)) function(x) TRUE else family$validmu, is.int) else NULL
+        if(is.null(family$validmu)) function(x) TRUE else family$validmu, is.int) else
+        .feasible_start_offset(low, is.int, sumwy / sumw, off.lo, off.hi, sumwo / sumw, family)
     if (!is.null(anchor) && all(anchor == 0)) anchor <- NULL
-    res <- fit_streaming_glm(fetch,n_chunks,as.integer(p),method,tol,as.integer(maxit),fc,
+    # A Cholesky failure (working weights near the boundary of the valid
+    # region can make X'WX ill-conditioned) is refit with the streaming QR
+    # decomposition, as dense fits fall back to pivoted QR.
+    qr.fallback <- FALSE
+    res <- tryCatch(fit_streaming_glm(fetch,n_chunks,as.integer(p),method,tol,as.integer(maxit),fc,
         family$variance,family$mu.eta,family$linkinv,family$dev.resids,
         if(is.null(family$valideta)) function(x) TRUE else family$valideta,
         if(is.null(family$validmu)) function(x) TRUE else family$validmu,
         as.numeric(start),family_params(family),firth,pmax(abs(low),abs(high)),
-        anchor, c(sumwy, sumw, nobs), as.integer(!firth && start.from.means))
+        anchor, c(sumwy, sumw, nobs), as.integer(!firth && start.from.means)),
+        error = function(e) {
+            # Only for the default method: an explicitly requested Cholesky
+            # method still reports the failure (e.g. a near-collinear design).
+            if (!method.supplied && !firth && method %in% 2:3 &&
+                grepl("Cholesky factorization", conditionMessage(e), fixed = TRUE)) {
+                qr.fallback <<- TRUE; return(NULL)
+            }
+            stop(e)
+        })
+    if (qr.fallback) {
+        return(fastglm_streaming(source, family = family, start = if (start.from.means) NULL else start,
+                                 method = 0L, tol = tol, maxit = maxit, firth = firth, covariance = covariance))
+    }
     if(!firth && start.from.means) res$iter <- res$iter + 1L
     cn <- state$columns
     if(is.null(cn)) { cn <- paste0("X",seq_len(p)); cn[is.int] <- paste0("(Intercept)",if(sum(is.int)>1) seq_len(sum(is.int)) else "") }

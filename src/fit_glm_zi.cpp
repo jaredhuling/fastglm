@@ -568,23 +568,43 @@ List fit_glm_zi(
                               Y, mc, ez, W, tau_tmp);
         };
         bool certified = false;
-        for (int k = 0; k <= 20; ++k) {
-            const VectorXd s = full_score(dist_code, zero_fam_code, gamma, beta,
-                                          (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
-            const MatrixXd I = obs_info_numjac(dist_code, zero_fam_code, gamma, beta,
-                                               (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
+        for (int k = 0; k <= 50; ++k) {
+            VectorXd s = full_score(dist_code, zero_fam_code, gamma, beta,
+                                    (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
+            MatrixXd I = obs_info_numjac(dist_code, zero_fam_code, gamma, beta,
+                                         (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
             const Eigen::Index pt = p_z + p_c;
+            // Newton in phi = log(theta): with theta near 1e4 the theta score
+            // is O(1/theta^2) and the information O(1/theta^4), so the system
+            // in theta is badly scaled. s_phi = theta s_theta,
+            // I_phiphi = theta^2 I_thth - theta s_theta, I_phibeta = theta I_thbeta.
+            if (dist_code == 1) {
+                const double st = s[pt];
+                I.row(pt) *= theta; I.col(pt) *= theta;
+                I(pt, pt) -= theta * st;
+                s[pt] = theta * st;
+            }
             theta_at_bound = dist_code == 1 &&
                 ((theta >= th_hi * (1 - 1e-12) && s[pt] > 0) || (theta <= th_lo * (1 + 1e-12) && s[pt] < 0));
-            const Eigen::Index m = (dist_code == 1 && !theta_at_bound) ? pt + 1 : pt;
+            Eigen::Index m = (dist_code == 1 && !theta_at_bound) ? pt + 1 : pt;
             if (!s.head(m).allFinite() || !I.topLeftCorner(m, m).allFinite()) break;
             Eigen::LLT<MatrixXd> chol(I.topLeftCorner(m, m));
+            // Where the log likelihood is flat in log(theta) (large theta),
+            // the information is not positive definite only through theta.
+            // If changing log(theta) by one changes the log likelihood by
+            // less than the tolerance (|s_phi| small), hold theta and
+            // continue with the other parameters.
+            if (chol.info() != Eigen::Success && m == pt + 1 &&
+                std::abs(s[pt]) < em_tol * (0.1 + std::abs(2 * ll))) {
+                m = pt;
+                chol.compute(I.topLeftCorner(m, m));
+            }
             if (chol.info() != Eigen::Success) break;
             const VectorXd step = chol.solve(s.head(m));
             em_decrement = s.head(m).dot(step);
             const bool small = std::isfinite(em_decrement) && em_decrement / (0.1 + std::abs(2 * ll)) < em_tol;
             if (small && certified) break;      // after the polishing step below
-            if (k == 20) { certified = small; break; }
+            if (k == 50) { certified = small; break; }
             // Once certified, take one more (polishing) Newton step: near the
             // maximum it squares the error, which matters where the likelihood
             // is flat (e.g. in theta) and a small decrement still allows a
@@ -596,11 +616,7 @@ List fit_glm_zi(
                 const VectorXd g = gamma + frac * step.head(p_z);
                 const VectorXd b = beta + frac * step.segment(p_z, p_c);
                 double th = theta;
-                if (m > pt) {
-                    th = theta + frac * step[pt];
-                    if (!(th > 0)) continue;
-                    th = std::min(th_hi, std::max(th_lo, th));
-                }
+                if (m > pt) th = std::min(th_hi, std::max(th_lo, theta * std::exp(frac * step[pt])));
                 const double lc = loglik_at(g, b, th);
                 if (std::isfinite(lc) && lc >= ll - rounding) {
                     gamma = g; beta = b; theta = th; ll = lc; accepted = true; break;

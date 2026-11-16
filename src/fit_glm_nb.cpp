@@ -109,7 +109,12 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         const ArrayXd ya = Y.array(), ma = mu.array().max(1e-12), wa = W.array();
         const double st = fglm::nb::score_theta(th, ya, ma, wa);
         const double it = fglm::nb::info_theta(th, ya, ma, wa);
-        double lam_t = (it > 0) ? st * st / it : (st == 0 ? 0.0 : std::numeric_limits<double>::infinity());
+        // Where the log likelihood is flat in theta (large theta) the theta
+        // information need not be positive; a theta score on the log scale
+        // (theta * s) below the tolerance contributes nothing.
+        const double flat = outer_tol * (0.1 + std::abs(solver.get_dev()));
+        double lam_t = (it > 0) ? st * st / it :
+            (std::abs(th * st) <= flat ? 0.0 : std::numeric_limits<double>::infinity());
         // At the cap the score may point beyond it (the Poisson limit, or
         // theta -> 0); the cap is then where the theta step stops.
         if ((th >= 1e8 * (1 - 1e-12) && st > 0) || (th <= 1e-6 * (1 + 1e-12) && st < 0)) lam_t = 0;

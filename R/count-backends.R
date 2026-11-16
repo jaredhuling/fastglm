@@ -366,7 +366,7 @@
     list(decrement=sum(g[seq_len(m)]*step[seq_len(m)]),loglik=v$loglik,step=step)
 }
 
-.count_backend_nb_decrement <- function(reader,beta,theta,link,boundary=FALSE) {
+.count_backend_nb_decrement <- function(reader,beta,theta,link,boundary=FALSE,flat.tol=0) {
     v <- .count_backend_count_summary(reader,beta,theta,FALSE,link,system=TRUE,theta.derivatives=TRUE)
     if(!is.finite(v$loglik)) return(Inf)
     # beta was just fitted to convergence at this theta. When that fit held
@@ -375,7 +375,10 @@
     # the coefficient block; only the theta block remains.
     lb <- if(boundary) 0 else tryCatch(sum(v$score*solve(v$information,v$score)),error=function(e) Inf)
     st <- v$theta.score;it <- v$theta.information
-    lt <- if(it>0) st^2/it else if(st==0) 0 else Inf
+    # Where the log likelihood is flat in log(theta) (large theta) the theta
+    # information need not be positive; a theta score below flat.tol means
+    # that changing log(theta) by one changes the deviance negligibly.
+    lt <- if(it>0) st^2/it else if(abs(st)<=flat.tol) 0 else Inf
     if((theta>=1e8*(1-1e-12) && st>0) || (theta<=1e-6*(1+1e-12) && st<0)) lt <- 0
     lb+lt
 }
@@ -408,7 +411,8 @@
         # theta block s^2 / I_theta (on the log scale, which leaves it
         # unchanged), omitted at the cap when the score points beyond it.
         decrement <- .count_backend_nb_decrement(reader,beta,theta,link,
-                                                 identical(fit$convergence.reason,"converged_boundary"))
+                                                 identical(fit$convergence.reason,"converged_boundary"),
+                                                 outer.tol*(0.1+abs(fit$deviance)))
         if(fit$converged && th$converged && decrement/(0.1+abs(fit$deviance))<outer.tol) {
             # Two polishing rounds, as in the dense driver.
             for(polish in 1:2) th <- step()
@@ -424,6 +428,9 @@
     dimnames(fit$cov.unscaled) <- list(cn,cn)
     fit$theta <- theta;fit$theta.estimated <- TRUE;fit$twologlik <- 2*final$loglik
     fit$converged <- converged;fit$iter.theta <- iter;fit$theta.iterations <- theta.iter
+    # The coefficient fit's reason describes only the last inner fit; when the
+    # outer (beta, theta) loop did not converge, report that instead.
+    if(!converged) fit$convergence.reason <- "iteration_limit"
     fit$theta.boundary <- theta<=1e-6*(1+theta.tol) || theta>=1e8/(1+theta.tol)
     if(fit$theta.boundary) {
         joint <- matrix(NA_real_,length(beta)+1L,length(beta)+1L)
