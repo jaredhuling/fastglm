@@ -96,6 +96,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// set_conv_rule
+int set_conv_rule(int rule);
+RcppExport SEXP _fastglm_set_conv_rule(SEXP ruleSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type rule(ruleSEXP);
+    rcpp_result_gen = Rcpp::wrap(set_conv_rule(rule));
+    return rcpp_result_gen;
+END_RCPP
+}
 // count_block_summary
 Rcpp::List count_block_summary(Eigen::Map<Eigen::MatrixXd> x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Eigen::Map<Eigen::VectorXd> beta, double theta, bool truncated, int link, bool system, bool derivatives);
 RcppExport SEXP _fastglm_count_block_summary(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP betaSEXP, SEXP thetaSEXP, SEXP truncatedSEXP, SEXP linkSEXP, SEXP systemSEXP, SEXP derivativesSEXP) {
@@ -863,6 +874,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_colMin_dense", (DL_FUNC) &_fastglm_colMin_dense, 1},
     {"_fastglm_all_finite_dense", (DL_FUNC) &_fastglm_all_finite_dense, 1},
     {"_fastglm_constant_columns_dense", (DL_FUNC) &_fastglm_constant_columns_dense, 1},
+    {"_fastglm_set_conv_rule", (DL_FUNC) &_fastglm_set_conv_rule, 1},
     {"_fastglm_count_block_summary", (DL_FUNC) &_fastglm_count_block_summary, 10},
     {"_fastglm_count_block_nb_information", (DL_FUNC) &_fastglm_count_block_nb_information, 7},
     {"_fastglm_firth_profile_evaluate", (DL_FUNC) &_fastglm_firth_profile_evaluate, 5},

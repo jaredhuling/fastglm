@@ -198,3 +198,27 @@
     !is.null(ref) && all(vapply(c("linkinv", "mu.eta", "variance", "dev.resids", "validmu", "valideta"),
                                function(nm) .same_kernel(family[[nm]], ref[[nm]]), logical(1)))
 }
+
+# Default starting coefficients for fastglm(): the intercept-only fit,
+# mu = weighted mean of y, placed on the first intercept column. The IRLS
+# loop halves an invalid first step back toward these coefficients, so they
+# must give a valid fit. Falls back to zeros (the earlier default) when there
+# is no intercept column, the mean is on the boundary of the link's domain,
+# or the offsets make the intercept-only fit invalid.
+.feasible_start <- function(x, y, weights, offset, family, valideta, validmu, is.int) {
+    start <- numeric(ncol(x))
+    j <- which(is.int)[1L]
+    if (is.na(j) || !any(weights > 0)) return(start)
+    b <- suppressWarnings(family$linkfun(sum(weights * y) / sum(weights)))
+    cval <- as.numeric(x[1L, j])
+    if (length(b) != 1L || !is.finite(b) || !is.finite(cval) || cval == 0) return(start)
+    # Without offsets the intercept-only linear predictor is one value, so
+    # validity is checked once instead of per observation.
+    eta <- if (any(offset != 0)) offset + b else b
+    ok <- tryCatch({ mu <- family$linkinv(eta)
+                     isTRUE(valideta(eta)) && isTRUE(validmu(mu)) && all(is.finite(mu)) },
+                   error = function(e) FALSE)
+    if (!ok) return(start)
+    start[j] <- b / cval
+    start
+}

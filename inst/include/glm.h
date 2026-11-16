@@ -293,6 +293,17 @@ protected:
     // criterion every reference Firth implementation (logistf, brglm) uses.
     bool failed() const override { return gamma_step_failed || firth_step_failed; }
 
+    // Decrement-based convergence (GlmBase::solve) applies to maximum
+    // likelihood fits; bias-reduced fits keep their coefficient-change rule.
+    bool halving_exhausted_ = false;
+    bool supports_decrement() const override { return !firth_; }
+    bool halving_was_exhausted() const override { return halving_exhausted_; }
+    bool fit_is_valid() override { return valideta_check() && validmu_check(); }
+    bool can_reuse_factorization() override
+    {
+        return !firth_ && !prepared_info && get_rank() == nvars;
+    }
+
     bool converged() override
     {
         if (firth_) {
@@ -382,6 +393,7 @@ protected:
     virtual void run_step_halving(int &iterr) override
     {
         firth_step_limited=false;
+        halving_exhausted_=false;
         if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
             const VectorXd delta=beta-beta_prev;
             const VectorXd change=X*delta;
@@ -438,6 +450,7 @@ protected:
                 ++itrr;
                 if (itrr > maxit)
                 {
+                    halving_exhausted_ = true;
                     break;
                 }
 
@@ -455,6 +468,7 @@ protected:
                 ++itrr;
                 if (itrr > maxit)
                 {
+                    halving_exhausted_ = true;
                     break;
                 }
                 
@@ -477,11 +491,21 @@ protected:
             
             //std::cout << "dev:" << deviance << "dev prev:" << deviance_prev << std::endl;
             
-            while((dev - devold) / (0.1 + std::abs(dev)) >= -tol)
+            // Rule 0 (fastglm 0.1.4, glm2) halves until the deviance falls by
+            // more than tol, which cannot happen within tol of the optimum;
+            // the step is then halved to nothing and the deviance rule
+            // reports convergence wherever that occurs. The decrement rules
+            // halve only until the deviance does not increase, as in
+            // Marschner (2011), and leave the convergence decision to the
+            // decrement.
+            const double rounding = 64*std::numeric_limits<double>::epsilon()*(1+std::abs(devold));
+            while(conv_rule == 0 ? (dev - devold) / (0.1 + std::abs(dev)) >= -tol
+                                 : !(dev <= devold + rounding))
             {
                 ++itrr;
                 if (itrr > maxit)
                 {
+                    halving_exhausted_ = true;
                     break;
                 }
                 
@@ -881,8 +905,7 @@ protected:
         // never materialize the n*p product W*X.  Instead accumulate
         // X'W^2 X and X'W^2 z directly in row blocks.
         if (use_streaming) {
-            fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
-            fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf);
+            fglm::accumulate_xtwx_xtwz_fused(X, w, z, XtWX_buf, Xtwz_buf);
             if (type == 2) {
                 Ch.compute(XtWX_buf.selfadjointView<Lower>());
                 if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
@@ -898,9 +921,28 @@ protected:
             return;
         }
 
-        // Pre-multiply once per iteration into pre-allocated buffers,
-        // then feed them to every decomposition.  noalias() avoids a
-        // temporary; both buffers are sized in the constructor.
+        // Cholesky methods: accumulate X'WX and X'Wz over cache-sized row
+        // blocks in one pass, without writing the n x p weighted design.
+        if (type == 2 || type == 3) {
+            fglm::accumulate_xtwx_xtwz_fused(X, w, z, XtWX_buf, Xtwz_buf);
+            if (type == 2) {
+                Ch.compute(XtWX_buf.selfadjointView<Lower>());
+                if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                beta = Ch.solve(Xtwz_buf);
+            } else {
+                ChD.compute(XtWX_buf.selfadjointView<Lower>());
+                if (fglm::ldlt_unusable(ChD))
+                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
+                Dplus(ChD.vectorD());  // sets rank
+                beta = ChD.solve(Xtwz_buf);
+            }
+            return;
+        }
+
+        // QR and SVD methods decompose the weighted design itself.
+        // noalias() avoids a temporary; both buffers are sized in the
+        // constructor.
         WX.noalias() = w.asDiagonal() * X;
         wz.noalias() = w.cwiseProduct(z);
 
@@ -1019,7 +1061,7 @@ protected:
         update_mu_eta();
         update_w();
         if (!(constant_weights && factor_ready)) {
-            if (use_streaming) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
+            if (use_streaming || !firth_) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
             else {
                 WX.noalias() = w.asDiagonal() * X;
                 update_XtWX();

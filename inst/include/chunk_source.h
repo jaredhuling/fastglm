@@ -50,6 +50,35 @@ inline void accumulate_xtwx_streamed(
     }
 }
 
+// One pass over the rows of X: xtwx = X' diag(w^2) X (lower triangle) and
+// xtwz = X' diag(w^2) z, both from the same weighted row block while it is in
+// cache. Replaces the two separate passes of accumulate_xtwx_streamed and
+// accumulate_xtwz_streamed, and never forms the n x p weighted design.
+inline void accumulate_xtwx_xtwz_fused(
+    const Eigen::Ref<const Eigen::MatrixXd>& X,
+    const Eigen::Ref<const Eigen::VectorXd>& w,
+    const Eigen::Ref<const Eigen::VectorXd>& z,
+    Eigen::MatrixXd& xtwx,
+    Eigen::VectorXd& xtwz,
+    int chunk_rows = -1)
+{
+    if (chunk_rows <= 0) chunk_rows = default_chunk_rows();
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
+    xtwx.setZero(p, p);
+    xtwz.setZero(p);
+    const Eigen::Index rows = std::min<Eigen::Index>(chunk_rows, std::max<Eigen::Index>(n, 1));
+    Eigen::MatrixXd WB(rows, p);
+    Eigen::VectorXd wzb(rows);
+    for (Eigen::Index r = 0; r < n; r += chunk_rows) {
+        Eigen::Index k = std::min<Eigen::Index>(chunk_rows, n - r);
+        WB.topRows(k).noalias() = w.segment(r, k).asDiagonal() * X.middleRows(r, k);
+        wzb.head(k) = w.segment(r, k).cwiseProduct(z.segment(r, k));
+        xtwx.selfadjointView<Eigen::Lower>().rankUpdate(WB.topRows(k).adjoint());
+        xtwz.noalias() += WB.topRows(k).adjoint() * wzb.head(k);
+    }
+}
+
 // out += X' (w_squared .* z).  out is assumed to be sized p.
 inline void accumulate_xtwz_streamed(
     const Eigen::Ref<const Eigen::MatrixXd>& X,

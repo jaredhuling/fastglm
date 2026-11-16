@@ -378,7 +378,13 @@ fastglmPure <- function(x, y,
     if (!(validmu(mu) && valideta(eta)))
         stop("cannot find valid starting values: please specify some", call. = FALSE)
 
-    if (is.null(start)) start <- rep(0, nvars)
+    # Intercept columns are found once and reused below.
+    is.int <- .intercept_columns(x)
+    # Default anchor for step-halving in the first iteration: the
+    # intercept-only fit, which is valid whenever the mean response is
+    # (zeros, the earlier default, can lie outside the domain of the link,
+    # for example an identity link with positive means).
+    if (is.null(start)) start <- .feasible_start(x, y, weights, offset, family, valideta, validmu, is.int)
 
     fc <- family_code(family)
     fp <- family_params(family)
@@ -396,7 +402,7 @@ fastglmPure <- function(x, y,
                               family$valideta, family$validmu,
                               as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
                               as.integer(fc), fp, firth = firth, inference = inference != "none")
-        res$intercept <- any(is.int <- .intercept_columns(x))
+        res$intercept <- any(is.int)
     } else if (!is_big_matrix && firth)
     {
         res <- fit_glm_firth(x, drop(y), drop(weights), drop(offset),
@@ -405,7 +411,7 @@ fastglmPure <- function(x, y,
                              family$valideta, family$validmu,
                              as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
                              as.integer(fc), fp, inference = inference != "none")
-        res$intercept <- any(is.int <- .intercept_columns(x))
+        res$intercept <- any(is.int)
     } else if (!is_big_matrix)
     {
         res <- fit_glm(x, drop(y), drop(weights), drop(offset),
@@ -415,7 +421,7 @@ fastglmPure <- function(x, y,
                        as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
                        as.integer(fc), fp, inference = inference != "none")
 
-        res$intercept <- any(is.int <- .intercept_columns(x))
+        res$intercept <- any(is.int)
     } else
     {
         res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset),
@@ -425,7 +431,7 @@ fastglmPure <- function(x, y,
                            as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
                            as.integer(fc), fp, firth = firth, inference = inference != "none")
 
-        res$intercept <- any(is.int <- .intercept_columns(x))
+        res$intercept <- any(is.int)
     }
 
     res

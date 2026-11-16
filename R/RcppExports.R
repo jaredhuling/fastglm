@@ -29,6 +29,10 @@ constant_columns_dense <- function(x) {
     .Call(`_fastglm_constant_columns_dense`, x)
 }
 
+set_conv_rule <- function(rule) {
+    .Call(`_fastglm_set_conv_rule`, rule)
+}
+
 count_block_summary <- function(x, y, weights, offset, beta, theta, truncated, link, system, derivatives) {
     .Call(`_fastglm_count_block_summary`, x, y, weights, offset, beta, theta, truncated, link, system, derivatives)
 }

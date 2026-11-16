@@ -93,7 +93,8 @@ List fastglm(Rcpp::NumericMatrix Xs,
                         _["df.residual"]       = df,
                         _["iter"]              = iters,
                         _["converged"]         = converged,
-                        _["cov.unscaled"]      = vcov);
+                        _["cov.unscaled"]      = vcov,
+                        _["convergence.reason"] = glm_solver->get_stop_reason());
 }
 
 
@@ -216,6 +217,7 @@ List bigfastglm(XPtr<BigMatrix> Xs,
                             _["iter"]              = iters,
                             _["converged"]         = converged,
                             _["cov.unscaled"]      = vcov);
+    out["convergence.reason"] = solver->get_stop_reason();
     if (firth) {
         double log_det = solver->get_log_det_XtWX();
         Eigen::Map<const Eigen::ArrayXd> y_arr(y.data(), y.size());
@@ -317,6 +319,7 @@ List fit_sparse_glm(SEXP x_sparse,
                             _["iter"]              = iters,
                             _["converged"]         = conv,
                             _["cov.unscaled"]      = vc);
+    out["convergence.reason"] = solver.get_stop_reason();
     if (firth) {
         double log_det = solver.get_log_det_XtWX();
         Eigen::Map<const Eigen::ArrayXd> y_arr(Y.data(), Y.size());
