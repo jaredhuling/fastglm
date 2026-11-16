@@ -1,257 +1,84 @@
 # fastglm 0.1.5
 
-## Convergence and starting values
+## Convergence
 
-* A GLM fit is reported as converged only when the Fisher decrement at the
-  estimate, the deviance decrease predicted by a full scoring step, is below
-  the tolerance. Previously a step halved to nothing could satisfy the
-  deviance-change rule anywhere, so a fit could report convergence at a
-  poor estimate: for one Gamma model with a square-root link, fastglm 0.1.4
-  reported convergence at deviance 5293 when the optimum is 1787.
-  Unsuccessful step searches now end with `converged = FALSE` and
-  `convergence.reason = "step_halving_failed"`.
-* Step-halving after an increase in deviance now stops once the deviance no
-  longer increases (Marschner 2011), instead of requiring a decrease larger
-  than the tolerance, which cannot occur near the optimum.
-* The default starting coefficients are the intercept-only fit instead of
-  zeros, so an invalid first step is halved back toward a valid fit. Poisson
-  and Gamma models with identity links, which previously stopped with
-  "cannot find valid starting values", now fit without user-supplied starts.
-* The convergence pass supplies the information matrix at the reported
-  estimate, so covariance no longer requires a separate pass over the data.
-* Dense and `big.matrix` fits return `convergence.reason`.
+* A fit is now reported as converged only when one more step would barely
+  improve it. Previously a fit whose steps had shrunk to nothing could be
+  reported as converged well short of the maximum. Such fits now return
+  `converged = FALSE`.
+* Every model class returns `convergence.reason`, which says why fitting
+  stopped (for example `"converged"`, `"converged_boundary"`,
+  `"iteration_limit"`, or `"step_halving_failed"`).
+* The default starting values are the intercept-only fit, so identity-link
+  Poisson and Gamma models no longer need user-supplied starting values.
+* This applies to dense, sparse, `big.matrix`, and streamed fits, and to the
+  negative binomial, hurdle, truncated, zero-inflated, and ordinal models.
+* Sparse and streamed fits fall back to a QR decomposition when the Cholesky
+  factorization fails on a full-rank design.
 
-## Boundary optima
+## Estimates on the boundary
 
-* The boundary step releases a held row when its Karush-Kuhn-Tucker
-  multiplier, computed from the deviance gradient, has the wrong sign. Rows
-  were held whenever the scoring step pushed them out of the valid region,
-  which does not show that holding them is optimal: in one simulated
-  square-root negative binomial data set a dense fit held two rows on the
-  boundary and was reported converged 0.042 log-likelihood units below the
-  maximum, which holds one.
-* Streamed fits with an offset now have an intercept-only fallback start
-  (previously only without an offset), so an invalid first update can be
-  halved back into the valid region instead of stopping with an error.
-* Sparse fits whose Cholesky factorization fails although the design has
-  full rank (working weights near the boundary of the valid region) are refit
-  with a dense copy and pivoted QR, with a warning, when the copy has at most
-  1e8 entries; streamed fits with the default method refit with the streaming
-  QR decomposition. Singular designs, and explicitly requested Cholesky
-  methods for streamed fits, still stop with an error.
-* Fisher scoring converges only linearly for non-canonical links, more slowly
-  as fitted means approach a bound; such fits can need more than the default
-  `maxit` and are then reported as not converged.
+* Models whose maximum lies on the edge of the valid parameter space now reach
+  it: for example a fitted mean of zero under an identity or square-root link,
+  a fitted probability of one under a log-binomial model, or touching
+  cumulative probabilities in a partial proportional odds model. Previously
+  these fits stopped short and were reported as not converged.
+* Such fits report `convergence.reason = "converged_boundary"` with a warning,
+  because Wald standard errors and tests are not reliable there.
+* Bias-reduced fits (`firth = TRUE`) do not handle such boundary estimates and
+  report them as not converged.
 
-* Sparse (`dgCMatrix`) designs now use the convergence rule of dense fits
-  (deviance change confirmed by the Fisher decrement, with step-halving until
-  the deviance does not increase) and the boundary step. Earlier 0.1.5
-  development builds applied the new rule to dense, big.matrix, and streamed
-  fits only; sparse fits used the deviance-change rule of 0.1.4 and could
-  report convergence away from the optimum (a Poisson model with a
-  square-root link was reported as converged at deviance 654.32 against an
-  optimum of 652.39). Sparse and dense fits now agree to rounding error on
-  the boundary designs used in development.
-* Partial proportional odds models (`fastglm_ordinal()` with `nonparallel`)
-  now reach maxima on the ordering boundary, where cumulative probabilities
-  touch at some rows. When the scoring step would bring a row's cumulative
-  predictors to cross, the row-pair reached first is held at half its gap
-  (or where it is, once the gap is below 1e-10) and the step is recomputed
-  on the remaining directions; convergence there is certified by that
-  constrained step and reported as `convergence.reason = "converged_boundary"`
-  with a warning that Wald inference is not reliable. Previously such fits
-  stopped as `"ordering_boundary"`, not converged, up to 8.1 log-likelihood
-  units below the constrained maximum (68 units in one test design), and
-  three boundary maxima in 480 simulated fits were reported with an ordinary
-  convergence reason and ordinary standard errors, because the expected
-  information diverges as a category probability tends to zero. In those
-  simulations, 83 of 85 fits with a boundary maximum now converge there (none
-  did before), with dense and streamed fits agreeing; proportional odds fits
-  are unchanged.
-* Bias-reduced fits (`firth = TRUE`) keep their coefficient-change rule but
-  no longer count a step that was halved: at the boundary of the valid
-  region such steps shrink to nothing, and the rule could report convergence
-  wherever the iteration stalled (an identity-link Poisson fit was reported
-  as converged at deviance 913.601, above the optimum 913.487). Bias-reduced
-  fits whose estimate lies on that boundary (identity or square-root links,
-  log-binomial) are now reported as not converged; the boundary step is not
-  used for them.
-* `fastglm_zi()` and `fastglm_nb()`: where the log likelihood is flat in
-  `log(theta)` (large `theta`), the `theta` information need not be positive;
-  convergence is then certified on the other parameters when the `theta`
-  score on the log scale is below the tolerance. The zero-inflated Newton
-  finish works on `log(theta)` and allows up to 50 steps. Sparse and streamed
-  negative binomial fits report `convergence.reason = "iteration_limit"` when
-  the outer loop does not converge (previously the last inner fit's reason).
-* `fastglm_zi()`: the negative binomial `theta` score is computed with the
-  cancellation-free series used by `fastglm_nb()`. The direct form lost its
-  sign to rounding error near `theta = 1e8`, which pushed `theta` to that
-  bound, and the EM rule then reported convergence at the zero-inflated
-  Poisson fit (in 17 of 40 simulated weakly identified data sets, up to 5.1
-  log-likelihood units below the maximum). EM is now followed by safeguarded
-  Newton steps, and convergence is reported only when the Newton decrement is
-  small (returned as `em.decrement`), so a stalled EM is not reported as
-  converged and a slow one finishes. SQUAREM extrapolates `theta` on the log
-  scale, the zero-model fits use the pivoted QR decomposition (the Cholesky
-  factorization failed when the zero-inflation probability approached 0), and
-  results carry `convergence.reason`. In those simulations false convergences
-  fell from 21 to 6 of 400; the remaining 6 are local maxima other than the
-  best one found (certified stationary, with positive definite information).
-* The zero-truncated count solver (`fastglm_hurdle()`, `fastglm_truncated()`)
-  also confirms convergence with the Fisher decrement and halves until the
-  deviance does not increase.
+## Negative binomial and zero-inflated models
 
-* Fits whose optimum lies on the boundary of the family's valid region (a
-  fitted mean of zero under an identity or square-root link, a fitted
-  probability of one under a log link) now converge to that optimum. When the
-  full update leaves the region, the row that leaves first is held halfway to
-  its bound and the weighted least squares problem is solved again over the
-  remaining directions; the step is used only if it is a descent direction
-  for the deviance. Previously, halving the whole step stalled such fits above
-  the optimum (for a Poisson model with a square-root link, 0.07% to 1% above
-  the optimal deviance in every one of 100 simulated data sets), reported as
-  not converged. Applies to dense and streamed fits, with identical results.
-* These fits report `convergence.reason = "converged_boundary"` and a warning
-  that Wald standard errors and tests are not reliable at such an estimate;
-  `print()` notes convergence on the boundary.
-* Streamed fits make at most `maxit` coefficient updates in total, as dense
-  fits do; previously the first update from the starting means was not
-  counted against `maxit`.
+* `fastglm_nb()` converges in cases where it previously stopped at the
+  iteration limit (very small `theta`, outliers), and the outer convergence
+  measure is returned as `outer.decrement`.
+* `fastglm_nb()` checks the Poisson limit (`poisson.limit = TRUE`). When the
+  likelihood is highest there, it returns `theta = Inf` with the Poisson fit,
+  `convergence.reason = "theta_infinite"`, and a warning.
+* `fastglm_nb()` with square-root and identity links now fits data whose
+  maximum is on the boundary; previously it usually stopped with an error.
+* `fastglm_zi()` with `dist = "negbin"` no longer drifts to `theta = 1e8`
+  because of a rounding error, and confirms convergence with Newton steps
+  (`em.decrement`). It still finds a local maximum; the likelihood can have
+  others.
+* Hurdle and truncated negative binomial fits converge more reliably when
+  `theta` is small.
 
-## Negative binomial convergence
+## Streaming
 
-* New vignette `stability-fastglm`: how fits are certified as converged,
-  with a prespecified simulation study across generalized linear, negative
-  binomial, hurdle, zero-inflated, and ordinal models against `glm.fit()`,
-  glm2, `MASS::glm.nb()`, pscl, and ordinal, and the twelve negative binomial
-  scenarios of the former stability benchmark. It replaces the
-  `nb-stability-fastglm` vignette.
-* `fastglm_nb()` with `link = "sqrt"` or `"identity"` now fits data whose
-  optimum lies on the boundary `eta = 0`; previously it usually stopped with
-  "no valid set of coefficients" (in 63 of 80 simulated data sets). An invalid
-  least-squares start is halved toward the intercept-only fit, the boundary
-  step also applies to the warm-started coefficient fit after each `theta`
-  update, the outer decrement uses the coefficient update actually taken
-  (which tends to zero at a boundary optimum, unlike the score), a Cholesky
-  failure refits with the QR decomposition, and a boundary fit reports
-  `convergence.reason = "converged_boundary"` with a warning. In 80 simulated
-  data sets every fit converges, within 7e-7 of the maximum log likelihood
-  found by an active-set constrained optimizer. With a sparse design, the
-  identity link can still stop when the sparse Cholesky factorization is
-  ill-conditioned (1 of 20 simulated data sets), because no QR fallback is
-  available for sparse designs.
+* `fastglm_streaming()` uses the same convergence rules and starting values as
+  dense fits, and agrees with them to rounding error.
+* Streamed fits read the data fewer times and no longer copy each block. For
+  a logistic model of 7.3 million rows read from Parquet files, peak memory
+  fell from 4.1 to 3.0 GB and fitting time from 96 to 58 seconds.
+* `iter` counts coefficient updates as dense fits do, and `passes` counts
+  reads of the data.
 
-* The `nb-convergence-fastglm` vignette is merged into `nb-stability-fastglm`,
-  which now compares log-likelihoods and theta estimates with
-  `MASS::glm.nb()` across all twelve scenarios where both converge (both
-  evaluated with `dnbinom()`, since `logLik()` for `glm.nb` loses precision
-  at very large theta).
-
-* `fastglm_nb()` decides outer-loop convergence by the joint Fisher
-  decrement of the coefficients and `theta` (the deviance decrease predicted
-  by one more scoring step, relative to the deviance), the rule the IRLS
-  solver uses, instead of the raw change in the coefficients plus the
-  relative change in `theta`. The old rule could not be met when the
-  likelihood is flat in some direction of the coefficients (very small
-  `theta`, outliers): the coefficients kept moving by about 1e-5 per outer
-  iteration while the log-likelihood changed by 1e-9, and the fit stopped at
-  `outer.maxit` as not converged. Two polishing rounds after the rule is met
-  keep coefficients and `theta` within about 5e-8 (relative) of a tightly
-  converged reference, as before. On the 600 simulated data sets of the
-  nb-stability vignette, 599 fits now converge (563 before), with a median of
-  2 outer iterations (9 before). `outer.tol` keeps its default and now
-  applies to the decrement, which is returned as `outer.decrement`.
-* `fastglm_nb()` checks the `theta = Inf` limit, the Poisson model
-  (`poisson.limit = TRUE`, the default). The profile likelihood of `theta`
-  need not be unimodal, and the fit could stop at a finite local maximum
-  below the Poisson likelihood (17 log-likelihood units below it in one
-  simulated data set) or at the cap `theta = 1e8`, short of the Poisson
-  limit when fitted means are large. When the Poisson likelihood is higher,
-  the fit is restarted from the Poisson coefficients if the data show
-  overdispersion there, and otherwise the Poisson limit is returned with
-  `theta = Inf`, `convergence.reason = "theta_infinite"`, the Poisson family,
-  and a warning. In the nb-stability simulations this applies to 78 of 600
-  data sets, all with no overdispersion at the Poisson fit.
-* The zero-truncated negative binomial models (`fastglm_hurdle()`,
-  `fastglm_truncated()`, dense and source-backed) use the same decrement
-  rule, with a joint Newton step in the coefficients and `log(theta)` in
-  every outer iteration: under truncation the two are coupled, and
-  alternation alone could creep. In simulated hurdle models with
-  `theta = 0.05` and `0.2`, 39 and 40 of 40 fits converge (10 and 11
-  before), with log-likelihoods never lower than before.
-
-## Streaming fits
-
-* `fastglm_streaming()` uses the same convergence check, step-halving rule,
-  and starting values as dense fits: convergence is confirmed by the Fisher
-  decrement, an exhausted step search ends with
-  `convergence.reason = "step_halving_failed"` instead of an error or a
-  false convergence, and an invalid first step is halved toward the
-  intercept-only fit. Gamma models with a square-root link and Poisson
-  models with an identity link that previously stopped with "invalid linear
-  predictor" or "invalid mean" now fit. Streamed and dense fits agree to
-  rounding error.
-* Streamed LLT and LDLT fits read the data fewer times: the totals come from
-  the validation pass, and the deviance, Pearson statistic, and null
-  deviance are accumulated in the last iteration's pass instead of a
-  separate final pass (a typical logistic fit reads the data 6 times instead
-  of 8). QR streaming fits now do the same.
-* Streamed fits no longer copy each block of rows: the C++ reader uses the
-  block returned by the source in place, and the weighted cross products are
-  accumulated over row sub-blocks instead of from a weighted copy of the
-  block (also in the validation pass, through a new internal
-  `weighted_crossprod()`). For a logistic model of 7.3 million flights read
-  from 12 Parquet files (61 coefficients), peak memory fell from 4.1 to
-  3.0 GB and fitting time from 96 to 58 seconds.
-
-* Streamed fits count `iter` as dense fits and `glm.fit()` do (coefficient
-  updates, including the first update from the usual starting means), for
-  both `covariance` settings. `passes` reports reads of the data.
-* `?fastglm` has a new section, "Convergence and starting values", and the
-  documentation of `method = "auto"` states that dense designs are rescaled
-  column by column before the Cholesky factorization.
-
-## Speed
-
-* For LLT and LDLT fits the Fisher decrement is computed from X'WX, so the
-  convergence check does not add a pass over the design.
-* AIC for the standard binomial, Poisson, and Gamma families, the residuals,
-  Pearson statistic, and null deviance for natively evaluated families, the
-  binomial `initialize` step, and input validation are computed in C++, with
-  the same values as before. A logistic fit with n = 300,000 and p = 10 takes
-  about 15 percent less time.
-* Family-name checks use `startsWith()` instead of regular expressions, and
-  the stats reference families used to detect native families are cached.
-
-## Interfaces
-
-* `fastglm_nb()` accepts a model formula with `data`, `subset`, `weights`,
-  `offset`, and `na.action`, and supports `predict(newdata = )`.
-* `sandwich::vcovHC()` defaults to HC0 for count models, for which leverage
-  corrections are not defined, and has methods for truncated, hurdle, and
-  zero-inflated fits. Clustered covariance for these models is available
-  through `fastglm_vcov(cluster = )`.
-
-## Two-part model labels (breaking change)
-
-* Coefficients of the positive (Gamma) part of `fastglm_twopart()` models are
-  now named `positive_*` instead of `count_*`, in `coef()`, `vcov()`, and
-  printed summaries. Code that indexes two-part coefficients by the old names
-  must use the new ones. Hurdle and zero-inflated models keep `count_*`.
-* For two-part models, `coef()`, `vcov()`, `predict()`, and `model.matrix()`
-  accept `"positive"` and `"binary"` as well as `"count"` and `"zero"`, as
-  `fastglm_wald_test(component = )` already did.
-
-## Covariance convention
+## Other changes
 
 * New argument `covariance` in `fastglm()`, `fastglmPure()`,
-  `fastglm_control()` (for `glm(method = fastglm_fit)`), and
-  `fastglm_streaming()`. The default, `"estimate"`, evaluates the information
-  matrix at the reported coefficients. `"previous"` uses the factorization from
-  the final iteration, the convention of `glm.fit()`: it saves one pass over
-  the data (roughly 10 percent of the fitting time for large data) and changes
-  standard errors by a relative amount of order 1e-6 at the default
-  tolerance.
+  `fastglm_control()`, and `fastglm_streaming()`. The default, `"estimate"`,
+  computes the covariance at the reported coefficients; `"previous"` follows
+  `glm.fit()` and saves one pass over the data.
+* `fastglm_nb()` accepts a formula with `data`, `subset`, `weights`,
+  `offset`, and `na.action`, and supports `predict(newdata = )`.
+* `sandwich::vcovHC()` defaults to HC0 for count models and has methods for
+  truncated, hurdle, and zero-inflated fits.
+* More post-fit calculations (AIC, residuals, null deviance) run in C++, so
+  ordinary fits are somewhat faster.
+* New vignette `stability-fastglm`, a simulation study of convergence against
+  `glm.fit()`, glm2, `MASS::glm.nb()`, pscl, and ordinal. It replaces the
+  `nb-stability-fastglm` and `nb-convergence-fastglm` vignettes.
+* `?fastglm` has a new section, "Convergence and starting values".
+
+## Breaking change
+
+* Coefficients of the positive (Gamma) part of `fastglm_twopart()` models are
+  named `positive_*` instead of `count_*`. Code that uses the old names must
+  be updated. Hurdle and zero-inflated models keep `count_*`. The two-part
+  accessors accept `"positive"` and `"binary"` as well as `"count"` and
+  `"zero"`.
 
 # fastglm 0.1.4
 

@@ -234,9 +234,9 @@ zi_data <- data.frame(y=ifelse(extra_zero==1, 0L, rpois(n, lambda)), x1=x1, x2=x
 f_zi <- fastglm_zi(y ~ x1+x2, data=zi_data, dist="poisson")
 coef(f_zi)
 #> count_(Intercept)          count_x1          count_x2  zero_(Intercept) 
-#>         0.6647396         0.3965153        -0.3407168        -0.3750258 
+#>         0.6646176         0.3965804        -0.3407816        -0.3753900 
 #>           zero_x1           zero_x2 
-#>         0.4512788         0.1819040
+#>         0.4515887         0.1817268
 ```
 
 Count-model predictions distinguish the overall response mean, the
@@ -637,11 +637,11 @@ data.frame(method=c("fastglm", "glm"),
            iterations=c(gfit_fast$iter, gfit_base$iter),
            log_likelihood=c(as.numeric(logLik(gfit_fast)), as.numeric(logLik(gfit_base))))
 #>    method converged iterations log_likelihood
-#> 1 fastglm      TRUE         20      -16046.66
+#> 1 fastglm      TRUE         18      -16046.66
 #> 2     glm     FALSE        100      -16068.27
 ```
 
-*fastglm* converged in 20 iterations, while glm reached its limit of 100
+*fastglm* converged in 18 iterations, while glm reached its limit of 100
 iterations without convergence.
 
 Convergence status matters when comparing likelihoods or runtimes: an
@@ -788,15 +788,17 @@ expected-information calculation behind the reported covariance.
 `VGAM::vglm` was not run above 30 categories because it would need about
 160 GB of memory at 1,000.
 
-For threshold-specific slopes with 1,000 observations, *fastglm*
-reported nonconvergence because the best fit with ordered cumulative
-probabilities at every row lies on the ordering boundary, so there is no
-time comparison at that size. `ordinal::clm` reported convergence with a
-higher log likelihood, but its cumulative predictors cross at 3 of the
-1,000 rows, which is not a valid probability model at those rows. At
-100,000 observations, `ordinal::clm` took 78.9 seconds and reported that
-it had not converged, although its log likelihood agreed with *fastglm*,
-so it is omitted there as well.
+For threshold-specific slopes with 1,000 observations, the best fit with
+ordered cumulative probabilities at every row lies on the ordering
+boundary, and *fastglm* reports convergence there with
+`convergence.reason = "converged_boundary"`. There is no time comparison
+at that size: `ordinal::clm` reported convergence with a higher log
+likelihood, but its cumulative predictors cross at 3 of the 1,000 rows,
+which is not a valid probability model at those rows, and `VGAM::vglm`
+returned an undefined log likelihood. At 100,000 observations,
+`ordinal::clm` took 87.9 seconds and reported that it had not converged,
+although its log likelihood agreed with *fastglm*, so it is omitted
+there as well.
 
 None of these packages fits mean bias-reduced cumulative-link models or
 reads ordinal data in blocks. The last column compares each streamed fit

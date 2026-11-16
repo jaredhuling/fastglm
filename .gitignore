@@ -39,3 +39,6 @@ Rprof.out
 
 # testthat writes extracts of failing tests here
 tests/testthat/_problems/
+
+# rmarkdown preview of the README
+README.html

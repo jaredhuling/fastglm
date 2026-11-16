@@ -655,7 +655,7 @@ knitr::kable(data.frame(Link = largest$link, Method = paste0("`", largest$method
 
 The table shows 100,000 observations and 5 categories. The ratio is the comparison time divided by the *fastglm* time. `rms::orm` was timed for logit and probit only. For cloglog, `VGAM::vglm` warned about intersecting predictors and returned a different fit, so it has no ratio.
 
-The threshold-specific panel has no comparison at 1,000 observations, because the *fastglm* fit reported nonconvergence for that design: the best fit with ordered cumulative probabilities at every row lies on the ordering boundary. `ordinal::clm` reported convergence with a higher log likelihood, but its cumulative predictors cross at 3 of the 1,000 rows. At 100,000 observations, `ordinal::clm` reported that it had not converged, so it is omitted there as well.
+The threshold-specific panel has no comparison at 1,000 observations. For that data set, the best fit with ordered cumulative probabilities at every row lies on the ordering boundary, and *fastglm* reports convergence there with `convergence.reason = "converged_boundary"`. `ordinal::clm` reported convergence with a log likelihood higher by about 0.74, but its cumulative predictors cross at 3 of the 1,000 rows, so its fit is outside the model. `VGAM::vglm` warned that some fitted probabilities were close to 0 or 1 and returned an undefined log likelihood. At 100,000 observations, `ordinal::clm` reported that it had not converged, so it is omitted there as well.
 
 With 20,000 observations, `rms::orm` overtakes *fastglm* between 30 and 300 categories:
 
