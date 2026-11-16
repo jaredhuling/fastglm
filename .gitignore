@@ -15,19 +15,17 @@ inst/doc
 *.Rcheck/
 *.tar.gz
 
-# Benchmark raw results are stored outside the repository; see STORAGE.md.
-# Only code, documentation, study-level summaries, and README inputs are tracked.
+# Benchmark raw results are regenerable and are not tracked. Only code,
+# study-level summaries, and README inputs are tracked.
 /benchmarks/*/**
 !/benchmarks/*/**/
 !/benchmarks/**/*.R
 !/benchmarks/**/*.py
 !/benchmarks/**/*.sh
-!/benchmarks/**/*.md
 !/benchmarks/**/*.Rmd
 !/benchmarks/*/*.txt
 !/benchmarks/*/*.csv
 !/benchmarks/readme-results/**
-/benchmarks/ordinal-endpoint-bootstrap-development/regression-raw.csv
 
 # revdepcheck output (regenerable; not in package build either)
 revdep/
@@ -38,3 +36,6 @@ vignettes/figure/
 
 # R profiling output
 Rprof.out
+
+# testthat writes extracts of failing tests here
+tests/testthat/_problems/

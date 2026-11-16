@@ -4,8 +4,6 @@
 ^.*\.Rhistory$
 ^cran-comments.md$
 README.Rmd
-README.html
-^\.travis\.yml$
 ^/\.gitattributes$
 ^.*\docs$
 ^\_pkgdown\.yml$
@@ -24,6 +22,6 @@ docs
 ^.*\.Rcheck$
 ^.*\.tar\.gz$
 ^benchmarks$
-^STORAGE\.md$
 ^CRAN-SUBMISSION$
 ^vignettes/stability-data$
+^tests/testthat/_problems$

@@ -136,8 +136,8 @@ test_that("partial observed curvature uses stable tails and refuses unresolved s
     }
     evaluate <- function(alpha,link,counts) fastglm:::.ordinal_partial_sandwich_block(
         object(alpha,link),matrix(0,1L,1L),0,integer(),matrix(counts,1L),1)
-    # Independent 90-digit continued-fraction reference (NIST DLMF 7.9.1),
-    # reproduced by benchmarks/ordinal-partial-sandwich/normal-tail-reference.py.
+    # Independent 90-digit continued-fraction reference values for the normal
+    # tail (NIST DLMF 7.9.1).
     tail <- evaluate(-40,"probit",c(1,0))
     expect_equal(tail$score[1L],40.024968847207263723,tolerance=1e-11)
     expect_equal(tail$information[1L,1L],.9993773316214086112,tolerance=2e-8)
