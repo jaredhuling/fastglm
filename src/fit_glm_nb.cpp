@@ -98,21 +98,14 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
     solver.init_parms(beta0, mu0, eta0);
 
     // Joint Fisher decrement (deviance units) at beta and theta; see (c).
-    auto joint_decrement = [&](const VectorXd& b, const VectorXd& mu, double th) {
+    // The coefficient block is the decrement of the IRLS update the solver
+    // would take at the updated theta (glm::trial_decrement): g' I^{-1} g at
+    // an interior point, and the decrement of the constrained update at a
+    // boundary optimum (sqrt and identity links), where g is not zero.
+    auto joint_decrement = [&](const VectorXd& mu, double th) {
         fglm::FamilyParams fp; fp.theta = th;
-        const ArrayXd eta = (X * b + Off).array();
-        ArrayXd me(n), v(n);
-        fglm::mu_eta(fam_code, fp, eta, me);
-        fglm::variance(fam_code, fp, ArrayXd(mu.array()), v);
-        const VectorXd gw = (W.array() * (Y.array() - mu.array()) * me / v).matrix();
-        const VectorXd g = X.adjoint() * gw;
-        const VectorXd sw = (W.array() * me.square() / v).sqrt().matrix();
-        const MatrixXd Xs = sw.asDiagonal() * X;
-        MatrixXd I = MatrixXd::Zero(X.cols(), X.cols());
-        I.selfadjointView<Eigen::Lower>().rankUpdate(Xs.adjoint());
-        Eigen::LDLT<MatrixXd> ld(I.selfadjointView<Eigen::Lower>());
-        if (ld.info() != Eigen::Success) return std::numeric_limits<double>::infinity();
-        const double lam_b = g.dot(ld.solve(g));
+        solver.set_fam_params(fp);
+        const double lam_b = solver.trial_decrement();
         const ArrayXd ya = Y.array(), ma = mu.array().max(1e-12), wa = W.array();
         const double st = fglm::nb::score_theta(th, ya, ma, wa);
         const double it = fglm::nb::info_theta(th, ya, ma, wa);
@@ -161,7 +154,7 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         // flat in some direction of beta (e.g. very small theta): beta then
         // moves by 1e-5 per outer iteration while the log-likelihood changes
         // by 1e-9.
-        last_decrement = joint_decrement(beta_now, mu_hat, theta);
+        last_decrement = joint_decrement(mu_hat, theta);
         if (last_decrement / (0.1 + std::abs(solver.get_dev())) < outer_tol) {
             outer_conv = true;
             // Polish: two more (beta, theta) rounds. Each inner solve takes
@@ -185,6 +178,7 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
             solver.set_fam_params(fp_final);
             VectorXd eta_now = solver.get_eta();
             inner_iters += solver.solve(maxit);
+            inner_conv_last = solver.get_converged();
             break;
         }
 
@@ -238,6 +232,11 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         _["theta"]             = theta,
         _["SE.theta"]          = se_th,
         _["twologlik"]         = twolog,
-        _["outer.decrement"]   = last_decrement
+        _["outer.decrement"]   = last_decrement,
+        // "converged_boundary" when the final coefficient fit held rows near
+        // a bound of the sqrt or identity link; otherwise the outer result.
+        _["convergence.reason"] = (outer_conv && inner_conv_last && solver.get_stop_reason() == "converged_boundary")
+                                   ? std::string("converged_boundary")
+                                   : std::string(outer_conv && inner_conv_last ? "converged" : "iteration_limit")
     );
 }

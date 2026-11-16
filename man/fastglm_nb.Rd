@@ -114,6 +114,15 @@ fit is restarted from the Poisson coefficients with the moment estimate of
 Poisson limit is returned: `theta = Inf`, the Poisson coefficients and
 covariance, the Poisson family, `SE.theta = NA`,
 `convergence.reason = "theta_infinite"`, and a warning.
+
+With `link = "sqrt"` or `"identity"` the optimum can lie on the boundary
+`eta = 0` of the valid region. The coefficient fits then use the boundary
+step described in [fastglm()] (Convergence and starting values), and a fit
+that converges there reports `convergence.reason = "converged_boundary"`
+with a warning that Wald inference is not reliable. If the Cholesky
+factorization of a dense design is ill-conditioned near the boundary, the
+fit is repeated with the QR decomposition; sparse designs have no such
+fallback.
 }
 \examples{
 set.seed(1)

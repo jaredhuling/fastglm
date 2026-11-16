@@ -62,6 +62,15 @@
 #' covariance, the Poisson family, `SE.theta = NA`,
 #' `convergence.reason = "theta_infinite"`, and a warning.
 #'
+#' With `link = "sqrt"` or `"identity"` the optimum can lie on the boundary
+#' `eta = 0` of the valid region. The coefficient fits then use the boundary
+#' step described in [fastglm()] (Convergence and starting values), and a fit
+#' that converges there reports `convergence.reason = "converged_boundary"`
+#' with a warning that Wald inference is not reliable. If the Cholesky
+#' factorization of a dense design is ill-conditioned near the boundary, the
+#' fit is repeated with the QR decomposition; sparse designs have no such
+#' fallback.
+#'
 #' @returns A list of class `c("fastglm_nb", "fastglm")` with the usual
 #'   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
 #'   `twologlik` (twice the maximized NB log-likelihood).
@@ -153,6 +162,7 @@ fastglm_nb <- function(x, y = NULL,
     .validate_glm_data(x, y, weights, offset)
     .check_iterations(tol, maxit); .check_iterations(outer.tol, outer.maxit)
     .check_iterations(theta.tol, theta.maxit)
+    method.supplied <- !missing(method)
     method <- .solver_method(method)
     if (!is.null(start) && (length(start) != ncol(x) || any(!is.finite(start)))) stop("invalid starting coefficients", call. = FALSE)
     if (!is.null(start)) {
@@ -175,6 +185,28 @@ fastglm_nb <- function(x, y = NULL,
         beta_init <- .lm.fit(x, eta_init - offset)$coefficients
         beta_init[is.na(beta_init)] <- 0
         eta_init  <- as.numeric(x %*% beta_init + offset)
+        # Under the sqrt and identity links the least-squares start can give
+        # invalid linear predictors (eta <= 0), from which the first IRLS step
+        # cannot be halved back into the valid region. Halve it toward the
+        # intercept-only fit, which is valid when the design has an intercept,
+        # as fastglm() does for an invalid first update.
+        pfam <- poisson(link = link)
+        valid_eta <- function(e) isTRUE(pfam$valideta(e)) && isTRUE(pfam$validmu(pfam$linkinv(e)))
+        if (!valid_eta(eta_init)) {
+            anchor <- .feasible_start(x, y, weights, offset, pfam, pfam$valideta, pfam$validmu,
+                                      .intercept_columns(x))
+            if (any(anchor != 0) && valid_eta(as.numeric(x %*% anchor + offset))) {
+                for (k in seq_len(60L)) {
+                    beta_init <- 0.5 * (beta_init + anchor)
+                    eta_init  <- as.numeric(x %*% beta_init + offset)
+                    if (valid_eta(eta_init)) break
+                }
+                if (!valid_eta(eta_init)) {
+                    beta_init <- anchor
+                    eta_init  <- as.numeric(x %*% beta_init + offset)
+                }
+            }
+        }
         mu_init   <- as.numeric(lnk$linkinv(eta_init))
     }
 
@@ -200,7 +232,7 @@ fastglm_nb <- function(x, y = NULL,
                  "sqrt"     = 18L,
                  "identity" = 19L)
 
-    res <- fit_glm_nb(
+    run_nb <- function(type) fit_glm_nb(
         x       = x,
         y       = as.numeric(y),
         weights = weights,
@@ -214,7 +246,7 @@ fastglm_nb <- function(x, y = NULL,
         dev_resids_fun  = fam_dummy$dev.resids,
         valideta_fun    = fam_dummy$valideta,
         validmu_fun     = fam_dummy$validmu,
-        type        = as.integer(method),
+        type        = as.integer(type),
         tol         = as.double(tol),
         maxit       = as.integer(maxit),
         fam_code    = fc,
@@ -224,6 +256,18 @@ fastglm_nb <- function(x, y = NULL,
         outer_maxit = as.integer(outer.maxit),
         outer_tol   = as.double(outer.tol)
     )
+    # A row held near the bound of the sqrt or identity link can carry a
+    # working weight near 1 / mu, which makes the Cholesky factorization
+    # ill-conditioned; refit with the column-pivoted QR decomposition, as
+    # fastglm() does (with a warning when a Cholesky method was requested).
+    res <- tryCatch(run_nb(method), error = function(e) {
+        if (!(method %in% 2:3) || !grepl("Cholesky factorization is singular", conditionMessage(e))) stop(e)
+        if (method.supplied)
+            warning("Cholesky factorization is singular or ill-conditioned; refitting with method = 'qr'",
+                    call. = FALSE)
+        method <<- 0L
+        run_nb(0L)
+    })
 
     # Cosmetic post-processing
     cnames <- colnames(x)
@@ -265,8 +309,8 @@ fastglm_nb <- function(x, y = NULL,
         outer.tol=outer.tol,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
     class(res) <- c("fastglm_nb", "fastglm")
     if (poisson.limit) {
-        pois <- fastglm(x, y, family = poisson(link = link), weights = weights, offset = offset,
-                        method = method, tol = tol, maxit = maxit)
+        pois <- suppressWarnings(fastglm(x, y, family = poisson(link = link), weights = weights,
+                                         offset = offset, method = method, tol = tol, maxit = maxit))
         keep <- weights > 0
         pois_ll <- sum(weights[keep] * dpois(y[keep], pois$fitted.values[keep], log = TRUE))
         refit <- function(theta0) {
@@ -284,6 +328,8 @@ fastglm_nb <- function(x, y = NULL,
                                  musq = sum(weights[keep] * mu[keep]^2), link, refit)
     }
     if (!res$converged) warning("negative-binomial fit did not converge", call. = FALSE)
+    if (identical(res$convergence.reason, "converged_boundary"))
+        warning("negative-binomial fit: ", BOUNDARY_WARNING, call. = FALSE)
     res
 }
 

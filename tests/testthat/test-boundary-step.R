@@ -147,3 +147,20 @@ test_that("streamed fits make at most maxit coefficient updates, as dense fits d
         expect_equal(unname(coef(sf)), unname(coef(df)), tolerance = 1e-10)
     }
 })
+
+test_that("sparse designs use the decrement rule and the boundary step", {
+    # Until 0.1.5 the sparse solver used the deviance-change rule only and
+    # reported this fit as converged at deviance 654.32, above the optimum
+    # 652.3875188 (see the convex-solver reference above).
+    set.seed(20261116L); n <- 600L
+    z <- matrix(runif(n * 3), n, 3)
+    y <- rpois(n, pmax(0.3 + drop(z %*% c(1.5, 1.0, -0.8)), 0.05)^2)
+    x <- cbind(1, z)
+    dense <- suppressWarnings(fastglm(x, y, family = poisson("sqrt"), method = "llt"))
+    for (m in c("llt", "ldlt")) {
+        f <- suppressWarnings(fastglm(as(x, "dgCMatrix"), y, family = poisson("sqrt"), method = m))
+        expect_identical(f$convergence.reason, "converged_boundary")
+        expect_lt(abs(f$deviance - 652.3875188) / (1 + 652.3875188), 1e-6)
+        expect_equal(unname(coef(f)), unname(coef(dense)), tolerance = 1e-8)
+    }
+})

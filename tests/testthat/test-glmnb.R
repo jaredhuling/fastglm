@@ -158,3 +158,35 @@ test_that("a local maximum of the profile likelihood is replaced by the Poisson 
     expect_equal(as.numeric(logLik(f)), sum(dpois(d$y, pf$fitted.values, log = TRUE)), tolerance = 1e-9)
     expect_lt(as.numeric(logLik(suppressWarnings(fastglm_nb(d$X, d$y, poisson.limit = FALSE)))), -324)
 })
+
+nb_link_data <- function(link, seed) {
+    set.seed(seed); n <- 600
+    z <- matrix(runif(n * 2), n, 2)
+    mu <- if (link == "sqrt") pmax(0.4 + drop(z %*% c(1.6, -1.0)), 0.05)^2
+          else pmax(0.5 + drop(z %*% c(3, -2.2)), 0.02)
+    list(x = cbind(1, z), y = MASS::rnegbin(n, mu = mu, theta = 2))
+}
+
+test_that("sqrt and identity links converge to the constrained optimum", {
+    # Until 0.1.5 these fits stopped with "no valid set of coefficients":
+    # the least-squares start gave invalid linear predictors, and the optimum
+    # lies on the boundary eta = 0. References: the maximum log likelihood
+    # under X beta >= 0 from an active-set method (nloptr SLSQP over beta and
+    # log theta, from fastglm's solution and an intercept-only start;
+    # fastglm-jss dev/nb/run_nb_links.R).
+    refs <- list(sqrt = list(seed = 910001, ll = -579.211328491),
+                 identity = list(seed = 915001, ll = -810.944379883))
+    for (lk in names(refs)) {
+        d <- nb_link_data(lk, refs[[lk]]$seed)
+        expect_warning(f <- fastglm_nb(d$x, d$y, link = lk), "boundary of the valid region")
+        expect_true(f$converged)
+        expect_identical(f$convergence.reason, "converged_boundary")
+        ll <- sum(dnbinom(d$y, size = f$theta, mu = f$fitted.values, log = TRUE))
+        expect_lt(abs(ll - refs[[lk]]$ll), 1e-6)
+    }
+    d <- nb_link_data("sqrt", 910001)
+    sparse <- suppressWarnings(fastglm_nb(as(d$x, "dgCMatrix"), d$y, link = "sqrt"))
+    expect_true(sparse$converged)
+    expect_lt(abs(sum(dnbinom(d$y, size = sparse$theta, mu = sparse$fitted.values, log = TRUE)) -
+                  (-579.211328491)), 1e-6)
+})

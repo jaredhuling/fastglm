@@ -415,19 +415,38 @@ protected:
     {
         (void) iterr;
         int halves = 0;
-        while ((!std::isfinite(dev) || dev > devold + tol * (0.1 + std::abs(devold))) && halves < maxit) {
+        halving_exhausted_ = false;
+        // Rule 0 (fastglm 0.1.4) accepts a deviance increase below tol; the
+        // decrement rules halve until the deviance does not increase, as in
+        // the dense solver (glm.h), and leave the convergence decision to the
+        // decrement.
+        const double rounding = 64 * std::numeric_limits<double>::epsilon() * (1 + std::abs(devold));
+        auto too_high = [&]() {
+            return conv_rule == 0 ? dev > devold + tol * (0.1 + std::abs(devold))
+                                  : !(dev <= devold + rounding);
+        };
+        while ((!std::isfinite(dev) || too_high()) && halves < maxit) {
             step_halve();
             update_dev_resids_dont_update_old();
             ++halves;
         }
+        if (halves >= maxit && (!std::isfinite(dev) || too_high())) halving_exhausted_ = true;
         if (!std::isfinite(dev)) Rcpp::stop("truncated-count iteration could not find a finite likelihood");
     }
 
-    // ||Δβ||_∞ < tol -- matches the prior trunc IRLS criterion.
+    // ||Δβ||_∞ < tol -- the prior trunc IRLS criterion. Under the decrement
+    // rules (GlmBase::solve) it only triggers the check; convergence is
+    // reported when the Fisher decrement at the estimate confirms it, so a
+    // step halved to nothing is not reported as converged.
     virtual bool converged() override
     {
         return (beta - beta_prev).cwiseAbs().maxCoeff() < tol;
     }
+
+    bool halving_exhausted_ = false;
+    bool supports_decrement() const override { return true; }
+    bool halving_was_exhausted() const override { return halving_exhausted_; }
+    bool fit_is_valid() override { return mu.allFinite() && lambda_.allFinite(); }
 
     // LLT-only WLS; the full glm.h dispatch table is overkill for the
     // truncated-count consumer, which only ever asks for type=2.

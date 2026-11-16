@@ -5,6 +5,7 @@
 #include "families.h"
 #include "bias_reduction.h"
 #include "chunk_source.h"
+#include "boundary_step.h"
 
 #include <Eigen/SparseCore>
 #include <Eigen/SparseCholesky>
@@ -269,10 +270,11 @@ protected:
             return;
         }
         const bool firth_skip = firth_;
+        halving_exhausted_ = false;
         if (!std::isfinite(dev)) {
             int itrr = 0;
             while (!std::isfinite(dev)) {
-                if (++itrr > maxit) break;
+                if (++itrr > maxit) { halving_exhausted_ = true; break; }
                 step_halve();
                 update_dev_resids_dont_update_old();
             }
@@ -280,18 +282,88 @@ protected:
         if (!(valideta_check() && validmu_check())) {
             int itrr = 0;
             while (!(valideta_check() && validmu_check())) {
-                if (++itrr > maxit) break;
+                if (++itrr > maxit) { halving_exhausted_ = true; break; }
                 step_halve();
             }
             update_dev_resids_dont_update_old();
         }
         if (!firth_skip && (dev - devold) / (0.1 + std::abs(dev)) >= tol && iterr > 0) {
             int itrr = 0;
-            while ((dev - devold) / (0.1 + std::abs(dev)) >= -tol) {
-                if (++itrr > maxit) break;
+            // As in the dense solver (glm.h): rule 0 (fastglm 0.1.4) halves
+            // until the deviance falls by more than tol; the decrement rules
+            // halve until it does not increase and leave the convergence
+            // decision to the decrement.
+            const double rounding = 64*std::numeric_limits<double>::epsilon()*(1+std::abs(devold));
+            while (conv_rule == 0 ? (dev - devold) / (0.1 + std::abs(dev)) >= -tol
+                                  : !(dev <= devold + rounding)) {
+                if (++itrr > maxit) { halving_exhausted_ = true; break; }
                 step_halve();
                 update_dev_resids_dont_update_old();
             }
+        }
+    }
+
+    // Decrement-based convergence (GlmBase::solve), as in the dense solver;
+    // bias-reduced fits keep their own rule.
+    bool halving_exhausted_ = false;
+    bool supports_decrement() const override { return !firth_; }
+    bool halving_was_exhausted() const override { return halving_exhausted_; }
+    bool fit_is_valid() override { return valideta_check() && validmu_check(); }
+
+    bool rows_valid(const Eigen::VectorXd& e, const std::vector<int>& idx)
+    {
+        const int k = idx.size();
+        if (fam_code >= 0) {
+            Eigen::ArrayXd s(k), m(k);
+            for (int j = 0; j < k; ++j) s[j] = e[idx[j]];
+            if (!fglm::valideta(fam_code, fam_params, s)) return false;
+            fglm::linkinv(fam_code, fam_params, s, m);
+            return fglm::validmu(fam_code, fam_params, m);
+        }
+        Rcpp::NumericVector s(k);
+        for (int j = 0; j < k; ++j) s[j] = e[idx[j]];
+        if (!Rcpp::as<bool>(valideta(s))) return false;
+        Rcpp::NumericVector m = linkinv(s);
+        return Rcpp::as<bool>(validmu(m));
+    }
+
+    // Boundary-aware step (boundary_step.h), as in the dense solver. The
+    // sparse design is passed in dense row blocks of at most about 2e6
+    // entries; the reduced problem uses the blocked normal equations, as the
+    // sparse solver's Cholesky factorizations do.
+    void apply_boundary_step(int iter) override
+    {
+        boundary_held = 0;
+        if (firth_ || conv_rule == 0 || !fglm::bounded_domain(fam_code) ||
+            get_rank() < nvars || !beta.allFinite()) return;
+        fglm::RowValidity valid = [this](const Eigen::VectorXd& e, const std::vector<int>& idx) {
+            return rows_valid(e, idx);
+        };
+        if (iter == 0) {
+            if (!beta_prev.allFinite()) return;
+            const Eigen::VectorXd e0 = X * beta_prev + offset;
+            const double scale = 1 + eta.cwiseAbs().maxCoeff();
+            if (!((e0 - eta).cwiseAbs().maxCoeff() <= 1e-10 * scale)) return;
+            std::vector<int> all(nobs);
+            for (int i = 0; i < nobs; ++i) all[i] = i;
+            if (!rows_valid(eta, all)) return;
+        }
+        const Eigen::VectorXd off = offset;
+        const int B = std::max(1, std::min(nobs, (int) (2e6 / std::max(1, nvars))));
+        fglm::BlockSource blocks = [&](const fglm::BlockFn& fn, bool need_working) {
+            for (int s0 = 0; s0 < nobs; s0 += B) {
+                const int nb = std::min(B, nobs - s0);
+                const Eigen::MatrixXd Xb = Eigen::MatrixXd(X.middleRows(s0, nb));
+                const Eigen::VectorXd ob = off.segment(s0, nb);
+                if (need_working) {
+                    const Eigen::VectorXd zb = z.segment(s0, nb), wb = w.segment(s0, nb);
+                    fn(s0, Xb, ob, &zb, &wb);
+                } else fn(s0, Xb, ob, nullptr, nullptr);
+            }
+        };
+        Eigen::VectorXd b = beta; int held = 0;
+        if (fglm::boundary_step(blocks, nvars, beta_prev, b, valid, true, held)) {
+            beta = b; boundary_held = held;
         }
     }
 

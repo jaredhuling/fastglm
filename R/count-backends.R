@@ -366,10 +366,14 @@
     list(decrement=sum(g[seq_len(m)]*step[seq_len(m)]),loglik=v$loglik,step=step)
 }
 
-.count_backend_nb_decrement <- function(reader,beta,theta,link) {
+.count_backend_nb_decrement <- function(reader,beta,theta,link,boundary=FALSE) {
     v <- .count_backend_count_summary(reader,beta,theta,FALSE,link,system=TRUE,theta.derivatives=TRUE)
     if(!is.finite(v$loglik)) return(Inf)
-    lb <- tryCatch(sum(v$score*solve(v$information,v$score)),error=function(e) Inf)
+    # beta was just fitted to convergence at this theta. When that fit held
+    # rows near a bound of the sqrt or identity link, the score is not zero
+    # at its (constrained) optimum, and the fit's own convergence certifies
+    # the coefficient block; only the theta block remains.
+    lb <- if(boundary) 0 else tryCatch(sum(v$score*solve(v$information,v$score)),error=function(e) Inf)
     st <- v$theta.score;it <- v$theta.information
     lt <- if(it>0) st^2/it else if(st==0) 0 else Inf
     if((theta>=1e8*(1-1e-12) && st>0) || (theta<=1e-6*(1+1e-12) && st<0)) lt <- 0
@@ -403,7 +407,8 @@
         # (src/fit_glm_nb.cpp): the coefficient block g' I^{-1} g plus the
         # theta block s^2 / I_theta (on the log scale, which leaves it
         # unchanged), omitted at the cap when the score points beyond it.
-        decrement <- .count_backend_nb_decrement(reader,beta,theta,link)
+        decrement <- .count_backend_nb_decrement(reader,beta,theta,link,
+                                                 identical(fit$convergence.reason,"converged_boundary"))
         if(fit$converged && th$converged && decrement/(0.1+abs(fit$deviance))<outer.tol) {
             # Two polishing rounds, as in the dense driver.
             for(polish in 1:2) th <- step()

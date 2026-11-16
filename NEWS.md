@@ -23,6 +23,19 @@
 
 ## Boundary optima
 
+* Sparse (`dgCMatrix`) designs now use the convergence rule of dense fits
+  (deviance change confirmed by the Fisher decrement, with step-halving until
+  the deviance does not increase) and the boundary step. Earlier 0.1.5
+  development builds applied the new rule to dense, big.matrix, and streamed
+  fits only; sparse fits used the deviance-change rule of 0.1.4 and could
+  report convergence away from the optimum (a Poisson model with a
+  square-root link was reported as converged at deviance 654.32 against an
+  optimum of 652.39). Sparse and dense fits now agree to rounding error on
+  the boundary designs used in development.
+* The zero-truncated count solver (`fastglm_hurdle()`, `fastglm_truncated()`)
+  also confirms convergence with the Fisher decrement and halves until the
+  deviance does not increase.
+
 * Fits whose optimum lies on the boundary of the family's valid region (a
   fitted mean of zero under an identity or square-root link, a fitted
   probability of one under a log link) now converge to that optimum. When the
@@ -41,6 +54,21 @@
   counted against `maxit`.
 
 ## Negative binomial convergence
+
+* `fastglm_nb()` with `link = "sqrt"` or `"identity"` now fits data whose
+  optimum lies on the boundary `eta = 0`; previously it usually stopped with
+  "no valid set of coefficients" (in 63 of 80 simulated data sets). An invalid
+  least-squares start is halved toward the intercept-only fit, the boundary
+  step also applies to the warm-started coefficient fit after each `theta`
+  update, the outer decrement uses the coefficient update actually taken
+  (which tends to zero at a boundary optimum, unlike the score), a Cholesky
+  failure refits with the QR decomposition, and a boundary fit reports
+  `convergence.reason = "converged_boundary"` with a warning. In 80 simulated
+  data sets every fit converges, within 7e-7 of the maximum log likelihood
+  found by an active-set constrained optimizer. With a sparse design, the
+  identity link can still stop when the sparse Cholesky factorization is
+  ill-conditioned (1 of 20 simulated data sets), because no QR fallback is
+  available for sparse designs.
 
 * The `nb-convergence-fastglm` vignette is merged into `nb-stability-fastglm`,
   which now compares log-likelihoods and theta estimates with

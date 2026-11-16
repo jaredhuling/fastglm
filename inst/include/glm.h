@@ -334,14 +334,27 @@ protected:
     void apply_boundary_step(int iter) override
     {
         boundary_held = 0;
-        // Maximum likelihood fits under the decrement rules, after the first
-        // iteration (eta is then X beta_prev + offset and valid), for families
-        // with a bounded domain and a full-rank design.
-        if (firth_ || conv_rule == 0 || iter == 0 || !fglm::bounded_domain(fam_code) ||
+        // Maximum likelihood fits under the decrement rules, for families
+        // with a bounded domain and a full-rank design, when the current eta
+        // is X beta_prev + offset and valid. That holds after the first
+        // iteration, and at the first iteration when the solver was started
+        // from coefficients (a user-supplied start, or a warm start such as
+        // each theta update of fastglm_nb()); it does not hold when the first
+        // update is computed from the family's starting means.
+        if (firth_ || conv_rule == 0 || !fglm::bounded_domain(fam_code) ||
             get_rank() < nvars || !beta.allFinite()) return;
         fglm::RowValidity valid = [this](const VectorXd& e, const std::vector<int>& idx) {
             return rows_valid(e, idx);
         };
+        if (iter == 0) {
+            if (!beta_prev.allFinite()) return;
+            const VectorXd e0 = X * beta_prev + offset;
+            const double scale = 1 + eta.cwiseAbs().maxCoeff();
+            if (!((e0 - eta).cwiseAbs().maxCoeff() <= 1e-10 * scale)) return;
+            std::vector<int> all(nobs);
+            for (int i = 0; i < nobs; ++i) all[i] = i;
+            if (!rows_valid(eta, all)) return;
+        }
         // Row blocks of the design with the current working values (z and w
         // are at beta_prev, from this iteration's weighted least squares).
         const VectorXd off = offset;
@@ -1319,6 +1332,27 @@ public:
     
     
     // must set params to starting vals
+    // Fisher decrement sum_i (w_i x_i' delta)^2 of the IRLS update the
+    // solver would take next from the current beta (including the boundary
+    // step), without taking it. At an interior point this equals g' I^{-1} g;
+    // at a boundary optimum, where the score is not zero, it is the
+    // decrement of the constrained step and tends to zero. Requires eta and
+    // mu at the current beta; beta and eta are restored.
+    double trial_decrement()
+    {
+        const VectorXd b0 = beta, e0 = eta;
+        update_var_mu(); update_mu_eta(); update_z(); update_w();
+        solve_wls(1);
+        apply_boundary_step(1);
+        double lam = std::numeric_limits<double>::infinity();
+        if (beta.allFinite()) {
+            const VectorXd d = X * (beta - b0);
+            lam = (w.array() * d.array()).square().sum();
+        }
+        beta = b0; beta_prev = b0; eta = e0; boundary_held = 0;
+        return lam;
+    }
+
     void init_parms(const Map<VectorXd> & start_,
                     const Map<VectorXd> & mu_,
                     const Map<VectorXd> & eta_) override
