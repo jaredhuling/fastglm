@@ -190,7 +190,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         if(is.null(family$valideta)) function(x) TRUE else family$valideta,
         if(is.null(family$validmu)) function(x) TRUE else family$validmu,
         as.numeric(start),family_params(family),firth,pmax(abs(low),abs(high)),
-        anchor, c(sumwy, sumw, nobs))
+        anchor, c(sumwy, sumw, nobs), as.integer(!firth && start.from.means))
     if(!firth && start.from.means) res$iter <- res$iter + 1L
     cn <- state$columns
     if(is.null(cn)) { cn <- paste0("X",seq_len(p)); cn[is.int] <- paste0("(Intercept)",if(sum(is.int)>1) seq_len(sum(is.int)) else "") }
@@ -249,6 +249,8 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     }
     res$passes <- state$passes; res$chunk.reads <- state$reads
     if(!res$converged) warning("streaming GLM did not converge",call.=FALSE)
+    if(identical(res$convergence.reason,"converged_boundary"))
+        warning("streaming GLM: ",BOUNDARY_WARNING,call.=FALSE)
     class(res) <- c("fastglm_stream",if(firth) "fastglm_firth","fastglm")
     res
 }

@@ -483,6 +483,8 @@ fastglmPure <- function(x, y,
     {
         warning("fit_glm: algorithm did not converge", call. = FALSE)
     }
+    if (identical(res$convergence.reason, "converged_boundary"))
+        warning("fit_glm: ", BOUNDARY_WARNING, call. = FALSE)
 
     eps <- 10*.Machine$double.eps
     if (family$family == "binomial")
@@ -575,8 +577,8 @@ fastglmPure <- function(x, y,
 #' \item{fitted.values}{the vector of fitted values}
 #' \item{iter}{the number of coefficient updates, counted as in [stats::glm.fit()]}
 #' \item{converged}{whether convergence was confirmed (see Convergence)}
-#' \item{convergence.reason}{`"converged"`, `"iteration_limit"`, or
-#'   `"step_halving_failed"`}
+#' \item{convergence.reason}{`"converged"`, `"converged_boundary"`,
+#'   `"iteration_limit"`, or `"step_halving_failed"`}
 #' @section Convergence and starting values:
 #' Each iteration solves a weighted least squares problem (iteratively
 #' reweighted least squares). A step that gives invalid fitted values or
@@ -588,6 +590,26 @@ fastglmPure <- function(x, y,
 #' fit from one whose steps were halved to nothing; in the latter case the fit
 #' is reported with `converged = FALSE` and
 #' `convergence.reason = "step_halving_failed"`.
+#'
+#' Some models have their optimum on the boundary of the family's valid
+#' region: a fitted mean of zero under an identity or square-root link for
+#' Poisson data, or a fitted probability of one under a log link for binomial
+#' data. There, the full update keeps pushing some rows outside the region,
+#' and halving the whole step stalls the fit above the optimum. For such
+#' families (those whose valid linear predictors are bounded, and families
+#' supplied as R functions), when the full update is invalid the row that
+#' leaves the region first is held halfway to its bound and the weighted least
+#' squares problem is solved again over the remaining directions, repeating
+#' until the update is valid. A row whose optimum is on the bound then
+#' approaches it over the iterations while the other coefficients keep
+#' converging. A fit that converges with rows held in this way is reported
+#' with `convergence.reason = "converged_boundary"` and a warning: the score
+#' is not zero at such an estimate, so Wald standard errors and tests do not
+#' have their usual justification. The reason records that rows were held; an
+#' update can also land on the boundary to rounding error without holding any
+#' row (for example, in a one-way layout with a group of zeros), in which case
+#' the reason is `"converged"` and the usual warnings about fitted values
+#' numerically 0 or 1 apply.
 #'
 #' Without `start`, the first update is the weighted least squares fit from
 #' the family's usual starting means, as in [stats::glm.fit()]. If that update

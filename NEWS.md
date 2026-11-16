@@ -21,6 +21,25 @@
   estimate, so covariance no longer requires a separate pass over the data.
 * Dense and `big.matrix` fits return `convergence.reason`.
 
+## Boundary optima
+
+* Fits whose optimum lies on the boundary of the family's valid region (a
+  fitted mean of zero under an identity or square-root link, a fitted
+  probability of one under a log link) now converge to that optimum. When the
+  full update leaves the region, the row that leaves first is held halfway to
+  its bound and the weighted least squares problem is solved again over the
+  remaining directions; the step is used only if it is a descent direction
+  for the deviance. Previously, halving the whole step stalled such fits above
+  the optimum (for a Poisson model with a square-root link, 0.07% to 1% above
+  the optimal deviance in every one of 100 simulated data sets), reported as
+  not converged. Applies to dense and streamed fits, with identical results.
+* These fits report `convergence.reason = "converged_boundary"` and a warning
+  that Wald standard errors and tests are not reliable at such an estimate;
+  `print()` notes convergence on the boundary.
+* Streamed fits make at most `maxit` coefficient updates in total, as dense
+  fits do; previously the first update from the starting means was not
+  counted against `maxit`.
+
 ## Streaming fits
 
 * `fastglm_streaming()` uses the same convergence check, step-halving rule,

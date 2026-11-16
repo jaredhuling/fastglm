@@ -293,3 +293,10 @@
     covariance <- match.arg(covariance, c("estimate", "previous"))
     if (covariance == "previous") 2L else 1L
 }
+
+# Warning for fits that converge with rows held near a bound of the family's
+# valid region (see inst/include/boundary_step.h). The score is not zero at
+# such an estimate, so the usual Wald inference does not apply.
+BOUNDARY_WARNING <- paste("the estimate is on the boundary of the valid region for this family and link",
+                          "(convergence.reason = 'converged_boundary');",
+                          "Wald standard errors and tests are not reliable")

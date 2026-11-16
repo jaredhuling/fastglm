@@ -52,6 +52,7 @@
     detail <- character()
     if(!is.null(iterations)) detail <- paste(iterations,if(iterations==1) "iteration" else "iterations")
     if(!isTRUE(converged) && length(reason) && nzchar(reason)) detail <- c(detail,gsub("_"," ",reason,fixed=TRUE))
+    if(isTRUE(converged) && identical(reason,"converged_boundary")) detail <- c(detail,"on the boundary of the valid region")
     .fastglm_print_field("Convergence",paste0(status,if(length(detail)) paste0(" (",paste(detail,collapse="; "),")")))
 }
 

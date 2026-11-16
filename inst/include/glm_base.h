@@ -54,6 +54,12 @@ protected:
     // delta' X'WX delta for delta = beta - beta_prev, when the solver holds
     // X'WX; NaN otherwise.
     virtual double fisher_decrement() { return std::numeric_limits<double>::quiet_NaN(); }
+    // Boundary-aware step (boundary_step.h): called after the weighted least
+    // squares solve; may replace beta by a constrained update when the full
+    // update leaves the valid domain. Sets boundary_held to the number of rows
+    // held near their bound (0 when the step was not used).
+    virtual void apply_boundary_step(int iter) { boundary_held = 0; }
+    int boundary_held = 0;
     virtual void restore_previous()
     {
         beta = beta_prev;
@@ -221,6 +227,7 @@ public:
             update_z();
             update_w();
             solve_wls(i);
+            apply_boundary_step(i);
             // The decrement from the factorization (p x p work) when the
             // solver holds X'WX; otherwise from the change in eta.
             double lambda2 = fisher_decrement();
@@ -290,6 +297,11 @@ public:
 
             if (conv_rule == 1 && converged()) pending = true;
         }
+
+        // Converged with rows held near a bound of the valid domain: the score
+        // is not zero there, and the information-based covariance does not
+        // have its usual interpretation.
+        if (conv && boundary_held > 0) stop_reason = "converged_boundary";
 
         if (inference) {
             if (info_current && can_reuse_factorization()) save_vcov();

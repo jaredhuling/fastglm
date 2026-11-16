@@ -7,6 +7,7 @@
 #include "../inst/include/bias_reduction.h"
 #include "../inst/include/streaming_qr.h"
 #include "../inst/include/conv_rule.h"
+#include "../inst/include/boundary_step.h"
 
 #include <stdexcept>
 #include <string>
@@ -741,6 +742,43 @@ List streaming_qr_finish(List state)
     return List::create(_["coefficients"]=qr.solve(),_["qr"]=qr.factor());
 }
 
+// Boundary-aware step (inst/include/boundary_step.h) over the chunks: beta is
+// the current, valid estimate and beta_new the unconstrained update, replaced
+// by the constrained update when the latter leaves the valid domain. Returns
+// the number of rows held near their bound (0 when the step was not used).
+// The working values are recomputed per chunk at beta, as in the pass that
+// produced beta_new.
+static int streaming_boundary_step(Function& callback, int n_chunks, int p, const VectorXd& beta,
+                                   VectorXd& beta_new, const FamilyOps& fam, bool normal_equations)
+{
+    if (!fglm::bounded_domain(fam.code) || !beta_new.allFinite()) return 0;
+    fglm::RowValidity valid = [&fam](const VectorXd& e, const std::vector<int>& idx) {
+        ArrayXd s(idx.size()), m;
+        for (int j = 0; j < (int)idx.size(); ++j) s[j] = e[idx[j]];
+        if (!fam.valideta(s)) return false;
+        fam.linkinv(s, m);
+        return fam.validmu(m);
+    };
+    fglm::BlockSource blocks = [&](const fglm::BlockFn& fn, bool need_working) {
+        long start = 0;
+        for (int k = 1; k <= n_chunks; ++k) {
+            Chunk c = pull_chunk(callback, k, p);
+            const int n_k = c.y.size();
+            if (need_working) {
+                ArrayXd eta = (c.X * beta).array() + c.off.array(), mu, dmu, va;
+                fam.linkinv(eta, mu); fam.mu_eta(eta, dmu); fam.variance(mu, va);
+                VectorXd sw = (c.w.array() * dmu.square() / va).sqrt().matrix();
+                VectorXd z = (eta - c.off.array() + (c.y.array() - mu) / dmu).matrix();
+                for (int i = 0; i < n_k; ++i) if (c.w[i] == 0) { sw[i] = 0; z[i] = 0; }
+                fn(start, c.X, c.off, &z, &sw);
+            } else fn(start, c.X, c.off, nullptr, nullptr);
+            start += n_k;
+        }
+    };
+    int held = 0;
+    return fglm::boundary_step(blocks, p, beta, beta_new, valid, normal_equations, held) ? held : 0;
+}
+
 // [[Rcpp::export]]
 List fit_streaming_glm(Function chunk_callback,
                        int      n_chunks,
@@ -760,8 +798,13 @@ List fit_streaming_glm(Function chunk_callback,
                        bool     firth = false,
                        Nullable<NumericVector> column_maxabs = R_NilValue,
                        Nullable<NumericVector> anchor = R_NilValue,
-                       Nullable<NumericVector> totals = R_NilValue)
+                       Nullable<NumericVector> totals = R_NilValue,
+                       int      iteration_offset = 0)
 {
+    // iteration_offset: coefficient updates already made by the caller (1
+    //   when the start is the weighted least squares fit from the usual
+    //   starting means), so that maxit bounds the total number of updates,
+    //   as in the dense solver.
     // anchor: coefficients of a valid fit (the intercept-only fit) toward
     //   which an invalid starting step is halved.
     // totals: c(sum(w * y), sum(w), number of positive weights) from the
@@ -872,6 +915,7 @@ List fit_streaming_glm(Function chunk_callback,
         return false;
     };
     bool pending_confirm = false;     // deviance rule fired; confirm with the decrement
+    int boundary_held = 0;            // rows held near a bound in the latest step
     int accepted_steps = 0;           // coefficient updates (rules 1 and 2), reported as iter
     // Maximum likelihood fits with caller-supplied totals collect the final
     // statistics in every pass (rules 1 and 2).
@@ -924,7 +968,7 @@ List fit_streaming_glm(Function chunk_callback,
                 qr_stationarity_current=false;
                 Rcpp::checkUserInterrupt();
             }
-        } else for(iter=1;iter<=maxit;++iter) {
+        } else for(iter=1;iter<=maxit-iteration_offset;++iter) {
             double phi_new=phi_prev;
             if(firth) {
                 const bool current_information=fglm::bounded_firth_predictors(fam.code);
@@ -971,7 +1015,9 @@ List fit_streaming_glm(Function chunk_callback,
                 if(change<tol) {converged=true;stop_reason="converged";break;}
             } else {
                 // Rules 1 and 2: Fisher decrement from the factor at the
-                // current estimate, ||R (scaled, permuted delta)||^2.
+                // current estimate, ||R (scaled, permuted delta)||^2, of the
+                // step taken (after the boundary step, if any).
+                boundary_held=streaming_boundary_step(chunk_callback,n_chunks,p,beta,proposed,fam,false);
                 const double lambda2=qr.coefficient_coordinates(proposed-beta).squaredNorm();
                 const bool small=std::isfinite(lambda2) && lambda2/(0.1+std::abs(dev_curr))<tol;
                 if(small && pending_confirm) {converged=true;stop_reason="converged";break;}
@@ -1080,7 +1126,7 @@ List fit_streaming_glm(Function chunk_callback,
         }
     }
 
-    if (type!=0 && !safeguarded_gamma) for (iter = 1; iter <= maxit; ++iter) {
+    if (type!=0 && !safeguarded_gamma) for (iter = 1; iter <= maxit - iteration_offset; ++iter) {
         double std_dev, phi_new = phi_prev;
         const bool current_information=firth && fglm::bounded_firth_predictors(fam.code);
         if (firth) {
@@ -1172,6 +1218,7 @@ List fit_streaming_glm(Function chunk_callback,
         } else {
             // Rules 1 and 2. XtWX and Xtwz are at the current estimate, so
             // the Fisher decrement needs no pass over the data.
+            boundary_held = streaming_boundary_step(chunk_callback, n_chunks, p, beta, beta_new, fam, true);
             const VectorXd delta = beta_new - beta;
             const double lambda2 = delta.dot(XtWX * delta);
             const bool small = std::isfinite(lambda2) &&
@@ -1235,6 +1282,7 @@ List fit_streaming_glm(Function chunk_callback,
     // adds the first update when it computed the start from the usual
     // starting means.
     if (!firth && conv_rule >= 1) iter = accepted_steps;
+    if (converged && boundary_held > 0) stop_reason = "converged_boundary";
 
     // Changing working weights require information at the reported beta.
     // Constant information is already exact there; reuse it without a pass.

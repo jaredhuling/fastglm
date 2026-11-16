@@ -6,6 +6,7 @@
 #include "bias_reduction.h"
 #include "chunk_source.h"
 #include "prepared_glm.h"
+#include "boundary_step.h"
 
 using Eigen::ArrayXd;
 using Eigen::FullPivHouseholderQR;
@@ -311,6 +312,54 @@ protected:
             XtWX_buf.rows() != nvars) return std::numeric_limits<double>::quiet_NaN();
         const VectorXd delta = beta - beta_prev;
         return delta.dot(XtWX_buf.selfadjointView<Lower>() * delta);
+    }
+
+    bool rows_valid(const VectorXd& e, const std::vector<int>& idx)
+    {
+        const int k = idx.size();
+        if (fam_code >= 0) {
+            Eigen::ArrayXd s(k), m(k);
+            for (int j = 0; j < k; ++j) s[j] = e[idx[j]];
+            if (!fglm::valideta(fam_code, fam_params, s)) return false;
+            fglm::linkinv(fam_code, fam_params, s, m);
+            return fglm::validmu(fam_code, fam_params, m);
+        }
+        NumericVector s(k);
+        for (int j = 0; j < k; ++j) s[j] = e[idx[j]];
+        if (!as<bool>(valideta(s))) return false;
+        NumericVector m = linkinv(s);
+        return as<bool>(validmu(m));
+    }
+
+    void apply_boundary_step(int iter) override
+    {
+        boundary_held = 0;
+        // Maximum likelihood fits under the decrement rules, after the first
+        // iteration (eta is then X beta_prev + offset and valid), for families
+        // with a bounded domain and a full-rank design.
+        if (firth_ || conv_rule == 0 || iter == 0 || !fglm::bounded_domain(fam_code) ||
+            get_rank() < nvars || !beta.allFinite()) return;
+        fglm::RowValidity valid = [this](const VectorXd& e, const std::vector<int>& idx) {
+            return rows_valid(e, idx);
+        };
+        // Row blocks of the design with the current working values (z and w
+        // are at beta_prev, from this iteration's weighted least squares).
+        const VectorXd off = offset;
+        fglm::BlockSource blocks = [&](const fglm::BlockFn& fn, bool need_working) {
+            const int B = 4096;
+            for (int s0 = 0; s0 < nobs; s0 += B) {
+                const int nb = std::min(B, nobs - s0);
+                const VectorXd ob = off.segment(s0, nb);
+                if (need_working) {
+                    const VectorXd zb = z.segment(s0, nb), wb = w.segment(s0, nb);
+                    fn(s0, X.middleRows(s0, nb), ob, &zb, &wb);
+                } else fn(s0, X.middleRows(s0, nb), ob, nullptr, nullptr);
+            }
+        };
+        VectorXd b = beta; int held = 0;
+        if (fglm::boundary_step(blocks, nvars, beta_prev, b, valid, type == 2 || type == 3, held)) {
+            beta = b; boundary_held = held;
+        }
     }
 
     bool converged() override
