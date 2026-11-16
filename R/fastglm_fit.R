@@ -15,6 +15,15 @@
 #' @param fastmethod `integer`; the method used for fitting. Allowable values include 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition, 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, and 5 for the Bidiagonal Divide and Conquer SVD. Default is 0. Can also be supplied as `method` when not supplied directly as an argument from `glm()` (see Examples).
 #' @param tol `numeric`; threshold tolerance for convergence.
 #' @param maxit `integer`; the maximum number of IRLS iterations.
+#' @param covariance where the information matrix behind the standard errors
+#'   is evaluated. `"estimate"` (default) evaluates it at the reported
+#'   coefficients, which takes one more pass over the data after convergence.
+#'   `"previous"` uses the factorization from the final iteration, the
+#'   convention of [stats::glm.fit()]; it saves that pass (roughly 10 percent
+#'   of the fitting time for large data) and changes standard errors by a
+#'   relative amount of order 1e-6 at the default tolerance. Coefficients agree
+#'   to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
+#'   are not affected.
 #' @param firth `logical`; if `TRUE` apply the Kosmidis--Firth mean
 #'   bias-reducing adjusted score (AS_mean) to the IRLS iteration.  Supported
 #'   for all standard GLM families on dense `x`.
@@ -130,7 +139,7 @@ fastglm_fit <- function(x, y,
                       if (is.null(weights)) rep(1, NROW(y)) else weights,
                       if (is.null(offset)) rep(0, NROW(y)) else offset,
                       start, etastart, mustart, control$method, control$tol,
-                      control$maxit, firth = firth)
+                      control$maxit, firth = firth, covariance = control$covariance)
     if (!singular.ok && res$rank < ncol(x)) stop("singular fit encountered", call. = FALSE)
     res <- .finish_glm(res, if (is.null(offset)) rep(0, NROW(y)) else offset, intercept)
     res$class <- "fastglmFit"
@@ -139,7 +148,9 @@ fastglm_fit <- function(x, y,
 
 #' @export
 #' @rdname fastglm_fit
-fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = FALSE, ...) {
+fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = FALSE,
+                            covariance = c("estimate", "previous"), ...) {
+    covariance <- match.arg(covariance)
     if (...length() > 0L && "method" %in% ...names() && identical(fastmethod, 0L)) {
         fastmethod <- ...elt(which(...names() == "method")[1L])
         fastmethod_name <- "method"
@@ -151,7 +162,7 @@ fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = F
     if (!identical(fastmethod, "auto")) fastmethod <- .solver_method(fastmethod)
     .check_iterations(tol, maxit)
 
-    list(method = fastmethod, tol = tol, maxit = maxit, firth = firth)
+    list(method = fastmethod, tol = tol, maxit = maxit, firth = firth, covariance = covariance)
 }
 
 #' @exportS3Method stats::vcov fastglmFit

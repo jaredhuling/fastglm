@@ -10,19 +10,30 @@
 #'   falls back to pivoted QR for a singular or ill-conditioned dense design.
 #' @param tol,maxit convergence tolerance and iteration limit.
 #' @param firth use mean bias reduction.
+#' @param covariance where the information matrix behind the standard errors
+#'   is evaluated. `"estimate"` (default) evaluates it at the reported
+#'   coefficients, which takes one more pass over the data after convergence.
+#'   `"previous"` uses the factorization from the final iteration, the
+#'   convention of [stats::glm.fit()]; it saves that pass (roughly 10 percent
+#'   of the fitting time for large data) and changes standard errors by a
+#'   relative amount of order 1e-6 at the default tolerance. Coefficients agree
+#'   to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
+#'   are not affected.
 #' @param ... additional arguments to [stats::glm()].
 #' @returns A fitted model inheriting from `fastglmFit`, `glm`, and `lm`.
 #' @export
 fastglm.formula <- function(x, data, family = gaussian(), subset, na.action,
                             weights, offset, contrasts = NULL, method = 0L,
-                            tol = 1e-8, maxit = 100L, firth = FALSE, ...) {
+                            tol = 1e-8, maxit = 100L, firth = FALSE,
+                            covariance = c("estimate", "previous"), ...) {
+    covariance <- match.arg(covariance)
     cl <- match.call(expand.dots = TRUE)
     cl[[1L]] <- quote(stats::glm)
     cl$formula <- cl$x
     cl$x <- TRUE
     cl$method <- quote(fastglm::fastglm_fit)
-    cl$tol <- cl$maxit <- cl$firth <- NULL
-    cl$control <- list(fastmethod = method, tol = tol, maxit = maxit, firth = firth)
+    cl$tol <- cl$maxit <- cl$firth <- cl$covariance <- NULL
+    cl$control <- list(fastmethod = method, tol = tol, maxit = maxit, firth = firth, covariance = covariance)
     out <- eval(cl, parent.frame())
     out$call <- match.call()
     out$call[[1L]] <- quote(fastglm::fastglm)

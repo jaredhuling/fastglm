@@ -285,3 +285,11 @@
         cache[[key]]
     }
 })
+
+# Convergence rule for the IRLS solvers selected by `covariance`:
+# "estimate" (rule 1) or "previous" (rule 2; see inst/include/conv_rule.h).
+# The rule is set for the duration of one fit and restored on exit.
+.covariance_rule <- function(covariance) {
+    covariance <- match.arg(covariance, c("estimate", "previous"))
+    if (covariance == "previous") 2L else 1L
+}

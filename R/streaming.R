@@ -32,6 +32,15 @@
 #'   fitted linear predictors, a small joint information-scaled adjusted score
 #'   per positive-weight row, and dispersion stationarity where applicable.
 #' @param maxit maximum number of IRLS iterations.
+#' @param covariance where the information matrix behind the standard errors
+#'   is evaluated. `"estimate"` (default) evaluates it at the reported
+#'   coefficients, which takes one more pass over the data after convergence.
+#'   `"previous"` uses the factorization from the final iteration, the
+#'   convention of [stats::glm.fit()]; it saves that pass (roughly 10 percent
+#'   of the fitting time for large data) and changes standard errors by a
+#'   relative amount of order 1e-6 at the default tolerance. Coefficients agree
+#'   to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
+#'   are not affected.
 #' @param firth logical; if `TRUE` apply Firth bias reduction using
 #'   lagged leverages from the previous IRLS iteration. At convergence,
 #'   the fit solves the same adjusted-score equations as the dense path.
@@ -111,7 +120,10 @@
 #' @export
 fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
                               family = gaussian(), start = NULL, method = 2L,
-                              tol = 1e-8, maxit = 100L, firth = FALSE) {
+                              tol = 1e-8, maxit = 100L, firth = FALSE,
+                              covariance = c("estimate", "previous")) {
+    old.rule <- set_conv_rule(.covariance_rule(covariance))
+    on.exit(set_conv_rule(old.rule), add = TRUE)
     source <- if (inherits(chunk_callback, "fastglm_source")) chunk_callback else
         fastglm_source(chunk_callback, n_chunks)
     if(!is.null(source$schema$terms) && !inherits(source$schema$terms,"terms"))

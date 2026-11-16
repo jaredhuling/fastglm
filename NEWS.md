@@ -69,12 +69,16 @@
   accept `"positive"` and `"binary"` as well as `"count"` and `"zero"`, as
   `fastglm_wald_test(component = )` already did.
 
-## Internal
+## Covariance convention
 
-* `fastglm:::set_conv_rule(2L)` selects an experimental rule that stops where
-  `glm.fit()` stops and takes the covariance from the last iteration's
-  factorization (the `glm.fit()` convention), saving one pass; the default
-  (rule 1) uses the information at the reported estimate.
+* New argument `covariance` in `fastglm()`, `fastglmPure()`,
+  `fastglm_control()` (for `glm(method = fastglm_fit)`), and
+  `fastglm_streaming()`. The default, `"estimate"`, evaluates the information
+  matrix at the reported coefficients. `"previous"` uses the factorization from
+  the final iteration, the convention of `glm.fit()`: it saves one pass over
+  the data (roughly 10 percent of the fitting time for large data) and changes
+  standard errors by a relative amount of order 1e-6 at the default
+  tolerance.
 
 # fastglm 0.1.4
 

@@ -137,3 +137,29 @@ test_that("streamed fits match dense fits and skip the separate totals and final
         expect_lte(sf$passes, df$iter + 2 + 1)
     }
 })
+
+test_that("covariance = 'previous' follows glm.fit and leaves estimates unchanged", {
+    set.seed(8812L); n <- 3000L; x <- cbind(1, matrix(rnorm(n * 5), n))
+    y <- rpois(n, exp(drop(x %*% c(0.3, 0.2, -0.2, 0.1, 0, 0.1))))
+    g <- glm.fit(x, y, family = poisson(), control = list(epsilon = 1e-8))
+    vg <- summary.glm(structure(g, class = c("glm", "lm")))$cov.unscaled
+    fe <- fastglm(x, y, poisson())
+    fp <- fastglm(x, y, poisson(), covariance = "previous")
+    expect_equal(unname(coef(fp)), unname(coef(g)), tolerance = 1e-12)
+    expect_equal(unname(fp$cov.unscaled), unname(vg), tolerance = 1e-10)
+    expect_equal(unname(coef(fp)), unname(coef(fe)), tolerance = 1e-12)
+    expect_equal(unname(fp$se), unname(fe$se), tolerance = 1e-4)
+    d <- data.frame(y, x[, -1])
+    expect_equal(unname(fastglm(y ~ ., data = d, family = poisson(), covariance = "previous")$se), unname(fp$se))
+    gm <- glm(y ~ ., data = d, family = poisson(), method = fastglm_fit, control = list(covariance = "previous"))
+    expect_equal(unname(sqrt(diag(vcov(gm, refit = FALSE)))), unname(fp$se))
+    sp <- stream_fit(x, y, poisson())
+    expect_equal(unname(sp$se), unname(fe$se), tolerance = 1e-10)
+    rows <- split(seq_len(n), rep(1:4, each = n / 4))
+    sp2 <- fastglm_streaming(function(k) list(X = x[rows[[k]], ], y = y[rows[[k]]]), 4, poisson(),
+                             covariance = "previous")
+    expect_equal(unname(sp2$se), unname(fp$se), tolerance = 1e-10)
+    # The setting applies to one fit only.
+    expect_equal(unname(fastglm(x, y, poisson())$se), unname(fe$se))
+    expect_error(fastglm(x, y, poisson(), covariance = "other"))
+})

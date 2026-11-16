@@ -12,7 +12,8 @@ fastglm_streaming(
   method = 2L,
   tol = 1e-08,
   maxit = 100L,
-  firth = FALSE
+  firth = FALSE,
+  covariance = c("estimate", "previous")
 )
 }
 \arguments{
@@ -52,6 +53,16 @@ per positive-weight row, and dispersion stationarity where applicable.}
 \item{firth}{logical; if \code{TRUE} apply Firth bias reduction using
 lagged leverages from the previous IRLS iteration. At convergence,
 the fit solves the same adjusted-score equations as the dense path.}
+
+\item{covariance}{where the information matrix behind the standard errors
+is evaluated. \code{"estimate"} (default) evaluates it at the reported
+coefficients, which takes one more pass over the data after convergence.
+\code{"previous"} uses the factorization from the final iteration, the
+convention of \code{\link[stats:glm]{stats::glm.fit()}}; it saves that pass (roughly 10 percent
+of the fitting time for large data) and changes standard errors by a
+relative amount of order 1e-6 at the default tolerance. Coefficients agree
+to within the convergence tolerance. Bias-reduced fits (\code{firth = TRUE})
+are not affected.}
 }
 \value{
 An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing

@@ -17,7 +17,8 @@ fastglmPure(
   tol = 1e-07,
   maxit = 100L,
   firth = FALSE,
-  inference = c("full", "diagonal", "none")
+  inference = c("full", "diagonal", "none"),
+  covariance = c("estimate", "previous")
 )
 }
 \arguments{
@@ -71,6 +72,16 @@ suffice for convergence.}
 
 \item{inference}{retain full covariance, diagonal standard errors, or no inference.
 The no-inference option skips the final covariance calculation.}
+
+\item{covariance}{where the information matrix behind the standard errors
+is evaluated. `"estimate"` (default) evaluates it at the reported
+coefficients, which takes one more pass over the data after convergence.
+`"previous"` uses the factorization from the final iteration, the
+convention of [stats::glm.fit()]; it saves that pass (roughly 10 percent
+of the fitting time for large data) and changes standard errors by a
+relative amount of order 1e-6 at the default tolerance. Coefficients agree
+to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
+are not affected.}
 }
 \value{
 A list with the elements
