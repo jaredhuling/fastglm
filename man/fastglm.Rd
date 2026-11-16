@@ -53,7 +53,12 @@ This should be a numeric vector of length equal to the number of cases}
   `qr_full`, `svd`, or `auto`) or an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 2 for the LLT Cholesky, or 3 for the LDLT Cholesky. For a dense design whose
 Cholesky factorization is singular or ill-conditioned, methods 2 and 3 refit
-with the column-pivoted QR decomposition and warn; `auto` does so silently.}
+with the column-pivoted QR decomposition and warn. `auto` uses the LLT
+Cholesky after dividing each column of a dense design by its largest
+absolute value, which improves the conditioning of \eqn{X'WX}; coefficients
+and standard errors are returned on the original scale. If that
+factorization is singular or ill-conditioned, `auto` refits with the
+column-pivoted QR decomposition without a warning.}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
 
@@ -89,12 +94,42 @@ A list with the elements
 \item{residuals}{the vector of residuals}
 \item{s}{a numeric scalar - the root mean square for residuals}
 \item{fitted.values}{the vector of fitted values}
+\item{iter}{the number of coefficient updates, counted as in [stats::glm.fit()]}
+\item{converged}{whether convergence was confirmed (see Convergence)}
+\item{convergence.reason}{`"converged"`, `"iteration_limit"`, or
+  `"step_halving_failed"`}
 }
 \description{
 Fast generalized linear model fitting
 
 bigLm default
 }
+\section{Convergence and starting values}{
+
+Each iteration solves a weighted least squares problem (iteratively
+reweighted least squares). A step that gives invalid fitted values or
+increases the deviance is halved until the fit is valid and the deviance
+does not increase (Marschner, 2011). A fit is reported as converged when
+the relative change in deviance is below `tol` and the Fisher decrement,
+the deviance decrease predicted by one more full step, is also below `tol`
+relative to the deviance. The second condition distinguishes a converged
+fit from one whose steps were halved to nothing; in the latter case the fit
+is reported with `converged = FALSE` and
+`convergence.reason = "step_halving_failed"`.
+
+Without `start`, the first update is the weighted least squares fit from
+the family's usual starting means, as in [stats::glm.fit()]. If that update
+gives invalid fitted values, it is halved toward the intercept-only fit
+(the weighted mean response), which is valid for every family when the
+design has an intercept column. This lets identity-link Poisson and Gamma
+models, for example, be fit without user-supplied starting values.
+Bias-reduced fits (`firth = TRUE`) use their own convergence criteria.
+
+Marschner, I. C. (2011). glm2: Fitting generalized linear models with
+convergence problems. *The R Journal*, 3(2), 12--15.
+\doi{10.32614/RJ-2011-012}
+}
+
 \examples{
 
 x <- matrix(rnorm(10000 * 100), ncol = 100)

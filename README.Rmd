@@ -361,7 +361,7 @@ The [benchmarks](#benchmarks) compare scaling across model classes.
 
 ## Stability
 
-Fitting can become difficult when a proposed coefficient update produces invalid fitted means or moves to a poorer likelihood value. For ordinary GLMs, *fastglm* uses a step-halving safeguard following Marschner (2011): an unsuccessful update is shortened until an acceptable step is found. Its initialization and solver choices also affect the subsequent iterations.
+Fitting can become difficult when a proposed coefficient update produces invalid fitted means or moves to a poorer likelihood value. For ordinary GLMs, *fastglm* uses a step-halving safeguard following Marschner (2011): an unsuccessful update is shortened until the fit is valid and the deviance does not increase. Convergence is reported only when the Fisher decrement, the deviance decrease predicted by one more full step, is also small, so a fit whose steps were halved to nothing is reported as not converged (`convergence.reason = "step_halving_failed"`). Without user-supplied starting values, an invalid first update is halved toward the intercept-only fit, which allows, for example, identity-link Poisson and Gamma models to be fit without starting values.
 
 A Gamma model using a square-root link provides one example. The simulated response is highly skewed, and the fitted mean uses a different functional form from the generating model. The calculation below uses the same iteration limit and nominal tolerance for both fitting methods:
 

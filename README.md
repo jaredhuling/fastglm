@@ -608,9 +608,14 @@ The [benchmarks](#benchmarks) compare scaling across model classes.
 Fitting can become difficult when a proposed coefficient update produces
 invalid fitted means or moves to a poorer likelihood value. For ordinary
 GLMs, *fastglm* uses a step-halving safeguard following Marschner
-(2011): an unsuccessful update is shortened until an acceptable step is
-found. Its initialization and solver choices also affect the subsequent
-iterations.
+(2011): an unsuccessful update is shortened until the fit is valid and
+the deviance does not increase. Convergence is reported only when the
+Fisher decrement, the deviance decrease predicted by one more full step,
+is also small, so a fit whose steps were halved to nothing is reported
+as not converged (`convergence.reason = "step_halving_failed"`). Without
+user-supplied starting values, an invalid first update is halved toward
+the intercept-only fit, which allows, for example, identity-link Poisson
+and Gamma models to be fit without starting values.
 
 A Gamma model using a square-root link provides one example. The
 simulated response is highly skewed, and the fitted mean uses a
@@ -632,11 +637,11 @@ data.frame(method=c("fastglm", "glm"),
            iterations=c(gfit_fast$iter, gfit_base$iter),
            log_likelihood=c(as.numeric(logLik(gfit_fast)), as.numeric(logLik(gfit_base))))
 #>    method converged iterations log_likelihood
-#> 1 fastglm      TRUE         19      -16046.66
+#> 1 fastglm      TRUE         20      -16046.66
 #> 2     glm     FALSE        100      -16068.27
 ```
 
-*fastglm* converged in 19 iterations, while glm reached its limit of 100
+*fastglm* converged in 20 iterations, while glm reached its limit of 100
 iterations without convergence.
 
 Convergence status matters when comparing likelihoods or runtimes: an

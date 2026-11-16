@@ -123,7 +123,10 @@ struct FamilyOps {
 };
 
 struct Chunk {
-    MatrixXd X;
+    // The design is a view of the R matrix returned by the callback (Xr keeps
+    // it protected), so a block is not copied when it is read.
+    NumericMatrix Xr;
+    Map<const MatrixXd> X{nullptr, 0, 0};
     VectorXd y;
     VectorXd w;       // prior weights, all 1 if not supplied
     VectorXd off;     // offset, all 0 if not supplied
@@ -153,7 +156,8 @@ static Chunk pull_chunk(Function& callback, int k, int expected_p)
     if (expected_p > 0 && p_k != expected_p)
         Rcpp::stop("chunk$X has unexpected number of columns");
 
-    c.X = Map<MatrixXd>(Xs.begin(), n_k, p_k);
+    c.Xr = Xs;
+    new (&c.X) Map<const MatrixXd>(c.Xr.begin(), n_k, p_k);
     c.y = Map<VectorXd>(ys.begin(), n_k);
 
     c.has_weights = L.containsElementNamed("weights") && !Rf_isNull(L["weights"]);
@@ -217,6 +221,7 @@ static double stream_pass(Function& callback,
     int n_total = 0;
     const bool collect = stats != nullptr && stats->enabled;
     double pearson_sum = 0.0, null_sum = 0.0;
+    MatrixXd work_block; VectorXd work_vec;   // reused across blocks
 
     if (accumulate) {
         XtWX_out->setZero();
@@ -265,15 +270,12 @@ static double stream_pass(Function& callback,
                 w2=binomial.weight.array();z=eta-c.off.array();
             }
 
-            // XtWX += X^T diag(w2) X using Eigen's rank-update.
-            // Build sqrt(w2) * X once and rank-update.
-            MatrixXd Xw = c.X.array().colwise() * w2.sqrt();
-            XtWX_out->selfadjointView<Eigen::Lower>().rankUpdate(Xw.adjoint());
-
-            // Xtwz += X^T (w2 * z)
-            VectorXd wz = (w2 * z).matrix();
-            if(stable_binomial) wz+=binomial.score;
-            (*Xtwz_out).noalias() += c.X.adjoint() * wz;
+            // XtWX += X' diag(w2) X and Xtwz += X' (w2 * z), accumulated over
+            // row sub-blocks so that no weighted copy of the block is formed.
+            const VectorXd sw = w2.sqrt().matrix();
+            fglm::add_xtwx_xtwz_blocked(c.X, sw, z.matrix(), *XtWX_out, *Xtwz_out,
+                                        work_block, work_vec, -1);
+            if(stable_binomial) (*Xtwz_out).noalias() += c.X.adjoint() * binomial.score;
         }
 
         if (intercept_mask) {
@@ -489,8 +491,11 @@ static double stream_qr_pass(Function& callback,int n_chunks,int p,
     const VectorXd& beta,const FamilyOps& fam,fglm::StreamingQR& current,
     const fglm::StreamingQR* previous,const VectorXd* previous_beta,
     bool firth,double phi,double* phi_out,VectorXd* gamma_adjustment,
-    std::vector<bool>* intercept_mask=nullptr,int* n_total_out=nullptr,bool exact_binomial=false)
+    std::vector<bool>* intercept_mask=nullptr,int* n_total_out=nullptr,bool exact_binomial=false,
+    PassStats* stats=nullptr)
 {
+    const bool collect=stats!=nullptr && stats->enabled;
+    double pearson_sum=0,null_sum=0;
     const bool gamma=fam.code==fglm::FAM_GAMMA_LOG;
     const bool stable_binomial=fglm::bounded_firth_predictors(fam.code) && (firth || exact_binomial);
     const bool constant=gamma || fam.code==fglm::FAM_GAUSSIAN_IDENTITY;
@@ -511,6 +516,13 @@ static double stream_qr_pass(Function& callback,int n_chunks,int p,
         fam.mu_eta(eta,dmu); fam.variance(mu,variance);
         dev+=stable_binomial ? fglm::binomial_firth_deviance(fam.code,eta.matrix(),c.y,c.w) :
             fam.dev_resids_sum(c.y.array(),mu,c.w.array());
+        if(collect) {
+            pearson_sum+=(c.w.array()*(c.y.array()-mu).square()/variance).sum();
+            ArrayXd mu0(c.y.size());
+            if(stats->has_intercept) mu0.setConstant(stats->null_mean);
+            else { ArrayXd off_arr=c.off.array(); fam.linkinv(off_arr,mu0); }
+            null_sum+=fam.dev_resids_sum(c.y.array(),mu0,c.w.array());
+        }
         VectorXd working=constant ? c.w : (c.w.array()*dmu.square()/variance).matrix();
         VectorXd z=(eta-c.off.array()+(c.y.array()-mu)/dmu).matrix();
         fglm::BinomialFirthWorking binomial;
@@ -554,6 +566,7 @@ static double stream_qr_pass(Function& callback,int n_chunks,int p,
     current.finish();
     if(firth && gamma && previous) current.qty.noalias()+=phi*(*gamma_adjustment);
     if(n_total_out) *n_total_out=n_total;
+    if(collect) { stats->pearson=pearson_sum; stats->null_dev=null_sum; stats->dev=dev; stats->beta=beta; }
     if(phi_out) {
         *phi_out=1;
         if(firth && !fam.is_unit_dispersion()) {
@@ -672,6 +685,27 @@ static QRStationarity stream_qr_stationarity(Function& callback,int n_chunks,int
 
 }  // anonymous namespace
 
+
+// crossprod(x, w * x) without forming w * x: the lower triangle is
+// accumulated over row sub-blocks, then mirrored. Used by the validation pass
+// of fastglm_streaming().
+// [[Rcpp::export]]
+NumericMatrix weighted_crossprod(NumericMatrix x, NumericVector w)
+{
+    const int n = x.nrow(), p = x.ncol();
+    if (w.size() != n) Rcpp::stop("length(w) must equal nrow(x)");
+    Map<const MatrixXd> X(x.begin(), n, p);
+    VectorXd sw(n);
+    for (int i = 0; i < n; ++i) {
+        if (!(w[i] >= 0)) Rcpp::stop("weights must be nonnegative");
+        sw[i] = std::sqrt(w[i]);
+    }
+    MatrixXd out = MatrixXd::Zero(p, p); VectorXd rhs = VectorXd::Zero(p), z = VectorXd::Zero(n);
+    MatrixXd wb; VectorXd wv;
+    fglm::add_xtwx_xtwz_blocked(X, sw, z, out, rhs, wb, wv, -1);
+    out.triangularView<Eigen::Upper>() = out.adjoint();
+    return Rcpp::wrap(out);
+}
 
 // [[Rcpp::export]]
 NumericVector streaming_qr_eta(NumericMatrix x,NumericVector beta,NumericVector offset)
@@ -838,10 +872,11 @@ List fit_streaming_glm(Function chunk_callback,
         return false;
     };
     bool pending_confirm = false;     // deviance rule fired; confirm with the decrement
-    // Maximum likelihood fits with LLT/LDLT and caller-supplied totals collect
-    // the final statistics in every pass (rules 1 and 2).
+    int accepted_steps = 0;           // coefficient updates (rules 1 and 2), reported as iter
+    // Maximum likelihood fits with caller-supplied totals collect the final
+    // statistics in every pass (rules 1 and 2).
     PassStats pass_stats;
-    if (!firth && type != 0 && conv_rule >= 1 && totals.isNotNull() &&
+    if (!firth && conv_rule >= 1 && totals.isNotNull() &&
         NumericVector(totals.get()).size() == 3) {
         NumericVector tv(totals.get());
         pass_stats.enabled = true;
@@ -951,7 +986,7 @@ List fit_streaming_glm(Function chunk_callback,
                     bool ok=false;
                     try {
                         dev_new=stream_qr_pass(chunk_callback,n_chunks,p,proposed,fam,qr,nullptr,nullptr,
-                            false,1,nullptr,&gamma_adjustment);
+                            false,1,nullptr,&gamma_adjustment,nullptr,nullptr,false,&pass_stats);
                         ok=std::isfinite(dev_new) && (halves==0 ?
                             (dev_new-dev_curr)/(0.1+std::abs(dev_new))<tol : dev_new<=dev_curr+rounding);
                     } catch(const std::domain_error&) {}
@@ -967,6 +1002,7 @@ List fit_streaming_glm(Function chunk_callback,
                 }
                 const double change=std::abs(dev_new-dev_curr)/(0.1+std::abs(dev_new));
                 beta=proposed;dev_curr=dev_new;
+                ++accepted_steps;
                 if(conv_rule==2 && small && halves_used==0 && change<tol) {
                     qr=current; converged=true; stop_reason="converged"; break;   // glm.fit convention
                 }
@@ -1187,6 +1223,7 @@ List fit_streaming_glm(Function chunk_callback,
             const double rel = std::abs(dev_new - dev_curr) / (0.1 + std::abs(dev_new));
             beta     = beta_new;
             dev_curr = dev_new;
+            ++accepted_steps;
             if (conv_rule == 2 && small && halves_used == 0 && rel < tol) {
                 XtWX = XtWX_current; converged = true; stop_reason = "converged"; break;
             }
@@ -1194,6 +1231,10 @@ List fit_streaming_glm(Function chunk_callback,
         }
     }
     if (iter > maxit) iter = maxit;
+    // Rules 1 and 2 report coefficient updates, as dense fits do; the caller
+    // adds the first update when it computed the start from the usual
+    // starting means.
+    if (!firth && conv_rule >= 1) iter = accepted_steps;
 
     // Changing working weights require information at the reported beta.
     // Constant information is already exact there; reuse it without a pass.

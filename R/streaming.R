@@ -48,7 +48,11 @@
 #' @returns An object with classes `"fastglm_stream"` and `"fastglm"` containing
 #'   coefficient estimates and model summaries as in
 #'   [fastglm()], including `coefficients`, `cov.unscaled`, `deviance`,
-#'   `iter`, and `converged`. The object retains the function used to read
+#'   `iter`, `converged`, and `convergence.reason`. Convergence and starting
+#'   values follow [fastglm()] (see its Convergence section); `iter` counts
+#'   coefficient updates as there, and `passes` counts reads of the data,
+#'   which include validation and initialization passes. The object retains
+#'   the function used to read
 #'   the observations. Prediction and [fastglm_vcov()] call that function
 #'   again, so the data must remain accessible and unchanged. QR fits also
 #'   retain a `qr` list containing a triangular matrix `R`, column permutation
@@ -166,6 +170,9 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     p <- state$p
     if(nobs <= p) stop("streaming requires more positive-weight observations than coefficients",call.=FALSE)
     is.int <- low == high & low != 0
+    # When the start is the weighted least squares fit from the usual starting
+    # means, that solve is the first coefficient update (as in fastglm()).
+    start.from.means <- is.null(start)
     if(method==0L) {
         initial.qr <- streaming_qr_finish(qr.state)
         if(is.null(start)) start <- initial.qr$coefficients
@@ -184,6 +191,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         if(is.null(family$validmu)) function(x) TRUE else family$validmu,
         as.numeric(start),family_params(family),firth,pmax(abs(low),abs(high)),
         anchor, c(sumwy, sumw, nobs))
+    if(!firth && start.from.means) res$iter <- res$iter + 1L
     cn <- state$columns
     if(is.null(cn)) { cn <- paste0("X",seq_len(p)); cn[is.int] <- paste0("(Intercept)",if(sum(is.int)>1) seq_len(sum(is.int)) else "") }
     names(res$coefficients) <- cn; dimnames(res$cov.unscaled) <- list(cn,cn)

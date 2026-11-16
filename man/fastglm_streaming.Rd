@@ -68,7 +68,11 @@ are not affected.}
 An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing
 coefficient estimates and model summaries as in
 \code{\link[=fastglm]{fastglm()}}, including \code{coefficients}, \code{cov.unscaled}, \code{deviance},
-\code{iter}, and \code{converged}. The object retains the function used to read
+\code{iter}, \code{converged}, and \code{convergence.reason}. Convergence and starting
+values follow \code{\link[=fastglm]{fastglm()}} (see its Convergence section); \code{iter} counts
+coefficient updates as there, and \code{passes} counts reads of the data,
+which include validation and initialization passes. The object retains
+the function used to read
 the observations. Prediction and \code{\link[=fastglm_vcov]{fastglm_vcov()}} call that function
 again, so the data must remain accessible and unchanged. QR fits also
 retain a \code{qr} list containing a triangular matrix \code{R}, column permutation

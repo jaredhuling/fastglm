@@ -45,6 +45,13 @@
   from 12 Parquet files (61 coefficients), peak memory fell from 4.1 to
   3.0 GB and fitting time from 96 to 58 seconds.
 
+* Streamed fits count `iter` as dense fits and `glm.fit()` do (coefficient
+  updates, including the first update from the usual starting means), for
+  both `covariance` settings. `passes` reports reads of the data.
+* `?fastglm` has a new section, "Convergence and starting values", and the
+  documentation of `method = "auto"` states that dense designs are rescaled
+  column by column before the Cholesky factorization.
+
 ## Speed
 
 * For LLT and LDLT fits the Fisher decrement is computed from X'WX, so the

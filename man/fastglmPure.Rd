@@ -46,7 +46,11 @@ This should be a numeric vector of length equal to the number of cases}
 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and
 Conquer SVD. For a dense design whose Cholesky factorization is singular or
 ill-conditioned, methods 2 and 3 refit with the column-pivoted QR decomposition
-and warn; `auto` does so silently.}
+and warn. `auto` uses the LLT Cholesky after dividing each column of a dense
+design by its largest absolute value, which improves the conditioning of
+\eqn{X'WX}; coefficients and standard errors are returned on the original
+scale. If that factorization is singular or ill-conditioned, `auto` refits
+with the column-pivoted QR decomposition without a warning.}
 
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
 
