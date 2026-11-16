@@ -91,4 +91,4 @@ articles:
   navbar: Performance and stability
   contents:
   - benchmarks-fastglm
-  - nb-stability-fastglm
+  - stability-fastglm

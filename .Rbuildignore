@@ -26,3 +26,4 @@ docs
 ^benchmarks$
 ^STORAGE\.md$
 ^CRAN-SUBMISSION$
+^vignettes/stability-data$

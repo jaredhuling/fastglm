@@ -120,6 +120,12 @@
 
 ## Negative binomial convergence
 
+* New vignette `stability-fastglm`: how fits are certified as converged,
+  with a prespecified simulation study across generalized linear, negative
+  binomial, hurdle, zero-inflated, and ordinal models against `glm.fit()`,
+  glm2, `MASS::glm.nb()`, pscl, and ordinal, and the twelve negative binomial
+  scenarios of the former stability benchmark. It replaces the
+  `nb-stability-fastglm` vignette.
 * `fastglm_nb()` with `link = "sqrt"` or `"identity"` now fits data whose
   optimum lies on the boundary `eta = 0`; previously it usually stopped with
   "no valid set of coefficients" (in 63 of 80 simulated data sets). An invalid
