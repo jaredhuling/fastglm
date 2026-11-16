@@ -289,25 +289,34 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     out
 }
 
+# Component labels. Two-part models describe a positive (Gamma) part and a
+# binary part; hurdle and zero-inflated models a count part and a zero part.
+# Internally both use the components "count" and "zero"; coefficient names use
+# the model's own labels, and selectors accept either vocabulary.
+.component_label <- function(object, component)
+    if (inherits(object, "fastglm_twopart") && identical(component, "count")) "positive" else component
+.component_selector <- function(component)
+    switch(component, positive = "count", binary = "zero", component)
+
 #' @export
-coef.fastglm_hurdle <- function(object, model = c("full", "count", "zero"), ...)
+coef.fastglm_hurdle <- function(object, model = c("full", "count", "zero", "positive", "binary"), ...)
 {
-    model <- match.arg(model)
+    model <- .component_selector(match.arg(model))
     if (model == "full") {
         cn <- names(object$coefficients$count)
         zn <- names(object$coefficients$zero)
         out <- c(object$coefficients$count, object$coefficients$zero)
-        names(out) <- c(paste0("count_", cn), paste0("zero_", zn))
+        names(out) <- c(paste0(.component_label(object, "count"), "_", cn), paste0("zero_", zn))
         return(out)
     }
     object$coefficients[[model]]
 }
 
 #' @export
-vcov.fastglm_hurdle <- function(object, model = c("full", "count", "zero"), full = FALSE,
+vcov.fastglm_hurdle <- function(object, model = c("full", "count", "zero", "positive", "binary"), full = FALSE,
                                type=NULL,cluster=NULL,...)
 {
-    model <- match.arg(model)
+    model <- .component_selector(match.arg(model))
     if(!is.null(type) || !is.null(cluster)) {
         v <- fastglm_vcov(object,if(is.null(type)) "HC0" else type,cluster=cluster,full=full,...)
         if(model=="full") return(v)

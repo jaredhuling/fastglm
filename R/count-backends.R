@@ -463,7 +463,7 @@
     bz <- coef(binary);pc <- length(bc);pz <- length(bz);pp <- pc+pz
     if(any(!is.finite(c(bc,bz)))) stop("two-component fits require full-rank identifiable designs",call.=FALSE)
     names(bc) <- reader$columns$count;names(bz) <- reader$columns$zero
-    cn <- c(paste0("count_",names(bc)),paste0("zero_",names(bz)))
+    cn <- c(paste0(if(continuous) "positive_" else "count_",names(bc)),paste0("zero_",names(bz)))
     vc <- if(continuous) vcov(positive) else positive$vcov.full[seq_len(pc),seq_len(pc),drop=FALSE]
     vz <- vcov(binary);v <- matrix(0,pp,pp,dimnames=list(cn,cn))
     v[seq_len(pc),seq_len(pc)] <- vc;v[pc+seq_len(pz),pc+seq_len(pz)] <- vz

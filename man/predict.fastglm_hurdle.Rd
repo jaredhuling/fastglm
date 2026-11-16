@@ -8,7 +8,7 @@
 \method{predict}{fastglm_hurdle}(
   object,
   newdata = NULL,
-  type = c("response", "count", "zero", "prob", "link"),
+  type = c("response", "count", "zero", "prob", "link", "positive", "binary"),
   se.fit = FALSE,
   at = 0:10,
   sink = NULL,
@@ -18,7 +18,7 @@
 \method{predict}{fastglm_zi}(
   object,
   newdata = NULL,
-  type = c("response", "count", "zero", "prob", "link"),
+  type = c("response", "count", "zero", "prob", "link", "positive", "binary"),
   se.fit = FALSE,
   at = 0:10,
   sink = NULL,
@@ -33,7 +33,9 @@ and `zero`, optionally with `offset=list(count=...,zero=...)`. With a
 streaming model, omitting it rereads the fitted source.}
 
 \item{type}{prediction scale: marginal response, count-component mean,
-zero probability, probability masses, or component linear predictors.}
+zero probability, probability masses, or component linear predictors.
+For two-part models `"positive"` and `"binary"` are the same as
+`"count"` (mean given a positive outcome) and `"zero"`.}
 
 \item{se.fit}{return delta-method standard errors.}
 

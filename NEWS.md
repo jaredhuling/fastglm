@@ -1,4 +1,25 @@
-# fastglm (development version)
+# fastglm 0.1.5
+
+## Convergence and starting values
+
+* A GLM fit is reported as converged only when the Fisher decrement at the
+  estimate, the deviance decrease predicted by a full scoring step, is below
+  the tolerance. Previously a step halved to nothing could satisfy the
+  deviance-change rule anywhere, so a fit could report convergence at a
+  poor estimate: for one Gamma model with a square-root link, fastglm 0.1.4
+  reported convergence at deviance 5293 when the optimum is 1787.
+  Unsuccessful step searches now end with `converged = FALSE` and
+  `convergence.reason = "step_halving_failed"`.
+* Step-halving after an increase in deviance now stops once the deviance no
+  longer increases (Marschner 2011), instead of requiring a decrease larger
+  than the tolerance, which cannot occur near the optimum.
+* The default starting coefficients are the intercept-only fit instead of
+  zeros, so an invalid first step is halved back toward a valid fit. Poisson
+  and Gamma models with identity links, which previously stopped with
+  "cannot find valid starting values", now fit without user-supplied starts.
+* The convergence pass supplies the information matrix at the reported
+  estimate, so covariance no longer requires a separate pass over the data.
+* Dense and `big.matrix` fits return `convergence.reason`.
 
 ## Streaming fits
 
@@ -38,35 +59,22 @@
   zero-inflated fits. Clustered covariance for these models is available
   through `fastglm_vcov(cluster = )`.
 
+## Two-part model labels (breaking change)
+
+* Coefficients of the positive (Gamma) part of `fastglm_twopart()` models are
+  now named `positive_*` instead of `count_*`, in `coef()`, `vcov()`, and
+  printed summaries. Code that indexes two-part coefficients by the old names
+  must use the new ones. Hurdle and zero-inflated models keep `count_*`.
+* For two-part models, `coef()`, `vcov()`, `predict()`, and `model.matrix()`
+  accept `"positive"` and `"binary"` as well as `"count"` and `"zero"`, as
+  `fastglm_wald_test(component = )` already did.
+
 ## Internal
 
 * `fastglm:::set_conv_rule(2L)` selects an experimental rule that stops where
   `glm.fit()` stops and takes the covariance from the last iteration's
   factorization (the `glm.fit()` convention), saving one pass; the default
   (rule 1) uses the information at the reported estimate.
-
-# fastglm 0.1.5
-
-## Convergence and starting values
-
-* A GLM fit is reported as converged only when the Fisher decrement at the
-  estimate, the deviance decrease predicted by a full scoring step, is below
-  the tolerance. Previously a step halved to nothing could satisfy the
-  deviance-change rule anywhere, so a fit could report convergence at a
-  poor estimate: for one Gamma model with a square-root link, fastglm 0.1.4
-  reported convergence at deviance 5293 when the optimum is 1787.
-  Unsuccessful step searches now end with `converged = FALSE` and
-  `convergence.reason = "step_halving_failed"`.
-* Step-halving after an increase in deviance now stops once the deviance no
-  longer increases (Marschner 2011), instead of requiring a decrease larger
-  than the tolerance, which cannot occur near the optimum.
-* The default starting coefficients are the intercept-only fit instead of
-  zeros, so an invalid first step is halved back toward a valid fit. Poisson
-  and Gamma models with identity links, which previously stopped with
-  "cannot find valid starting values", now fit without user-supplied starts.
-* The convergence pass supplies the information matrix at the reported
-  estimate, so covariance no longer requires a separate pass over the data.
-* Dense and `big.matrix` fits return `convergence.reason`.
 
 # fastglm 0.1.4
 

@@ -121,6 +121,8 @@
 #'   streaming model, omitting it rereads the fitted source.
 #' @param type prediction scale: marginal response, count-component mean,
 #'   zero probability, probability masses, or component linear predictors.
+#'   For two-part models `"positive"` and `"binary"` are the same as
+#'   `"count"` (mean given a positive outcome) and `"zero"`.
 #' @param se.fit return delta-method standard errors.
 #' @param at nonnegative integer counts for `type = "prob"`.
 #' @param sink optional function of `(value, chunk_index)` for a streaming fit.
@@ -131,9 +133,9 @@
 #'   `se.fit`; see \link{fastglm-prediction-methods} for printing and table extraction.
 #' @export
 predict.fastglm_hurdle <- function(object, newdata = NULL,
-                                   type = c("response", "count", "zero", "prob", "link"),
+                                   type = c("response", "count", "zero", "prob", "link", "positive", "binary"),
                                    se.fit = FALSE, at = 0:10, sink=NULL, ...) {
-    type <- match.arg(type)
+    type <- .component_selector(match.arg(type))
     if (any(!is.finite(at) | at < 0 | at != floor(at))) stop("'at' must contain nonnegative integers", call. = FALSE)
     if(is.null(newdata) && !is.null(object$source) && is.function(object$fetch)) {
         if(!is.null(sink) && !is.function(sink)) stop("'sink' must be a function",call.=FALSE)
@@ -195,8 +197,8 @@ nobs.fastglm_hurdle <- function(object, ...) if(!is.null(object$nobs)) object$no
 #' @export
 nobs.fastglm_zi <- nobs.fastglm_hurdle
 #' @export
-model.matrix.fastglm_hurdle <- function(object, model = c("count", "zero"), ...) {
-    .count_design(object)$x[[match.arg(model)]]
+model.matrix.fastglm_hurdle <- function(object, model = c("count", "zero", "positive", "binary"), ...) {
+    .count_design(object)$x[[.component_selector(match.arg(model))]]
 }
 #' @export
 model.matrix.fastglm_zi <- model.matrix.fastglm_hurdle

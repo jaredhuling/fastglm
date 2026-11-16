@@ -53,7 +53,7 @@ fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
     pc <- length(coef(fit)); pz <- length(coef(binary))
     v <- matrix(0, pc+pz, pc+pz); v[seq_len(pc),seq_len(pc)] <- vcov(fit)
     v[pc+seq_len(pz),pc+seq_len(pz)] <- vcov(binary)
-    cn <- c(paste0("count_", names(coef(fit))),paste0("zero_", names(coef(binary))))
+    cn <- c(paste0("positive_", names(coef(fit))),paste0("zero_", names(coef(binary))))
     dimnames(v) <- list(cn,cn)
     out <- list(coefficients=list(count=coef(fit),zero=coef(binary)),
         vcov=v, vcov.full=v, positive=fit, binary=binary,

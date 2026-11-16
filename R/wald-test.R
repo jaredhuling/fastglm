@@ -24,7 +24,7 @@
                 stop("formula term tests require retained design assignments; supply a named 'contrast'",call.=FALSE)
             take <- which(assignment %in% (match(local,c("(Intercept)",labels[[j]]))-1L))
         } else take <- match(local,names)
-        index <- c(index,match(paste0(k,"_",names[take]),columns))
+        index <- c(index,match(paste0(.component_label(object,k),"_",names[take]),columns))
     }
     list(index=index,terms=if(is.null(requested)) terms else requested)
 }
@@ -100,7 +100,7 @@
         if(anyNA(rownames(L)) || any(!nzchar(rownames(L))) || anyDuplicated(rownames(L)))
             stop("contrast row names must be distinct and nonmissing",call.=FALSE)
         if(.count_two_component(object) && component!="all") {
-            allowed <- paste0(component,"_",names(object$coefficients[[component]]))
+            allowed <- paste0(.component_label(object,component),"_",names(object$coefficients[[component]]))
             if(any(L[,!columns %in% allowed,drop=FALSE]!=0))
                 stop("the contrast includes coefficients outside the selected component",call.=FALSE)
         }
