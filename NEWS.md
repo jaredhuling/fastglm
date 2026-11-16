@@ -42,6 +42,12 @@
 
 ## Negative binomial convergence
 
+* The `nb-convergence-fastglm` vignette is merged into `nb-stability-fastglm`,
+  which now compares log-likelihoods and theta estimates with
+  `MASS::glm.nb()` across all twelve scenarios where both converge (both
+  evaluated with `dnbinom()`, since `logLik()` for `glm.nb` loses precision
+  at very large theta).
+
 * `fastglm_nb()` decides outer-loop convergence by the joint Fisher
   decrement of the coefficients and `theta` (the deviance decrease predicted
   by one more scoring step, relative to the deviance), the rule the IRLS

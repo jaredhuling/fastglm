@@ -25,7 +25,7 @@ knitr::opts_chunk$set(
 
 A negative-binomial regression estimates both the response mean and an additional parameter, theta, that determines variation beyond the Poisson model. Fitting alternates between weighted-regression updates of the coefficients with theta fixed and likelihood-based updates of theta with the fitted means fixed. This is called maximum likelihood estimation (MLE). The two updates can converge slowly when fitted means differ by many orders of magnitude or when theta approaches the Poisson limit. Step halving shortens an unsuccessful coefficient update, providing a safeguard against some numerical failures.
 
-The companion vignette `vignette("nb-convergence-fastglm", package = "fastglm")` compares the two solvers on a single difficult data-generating process. This vignette is broader: it is a stability benchmark that sweeps a grid of twelve negative-binomial scenarios, each one chosen to stress the joint MLE in a different way (wide fitted-mean ranges, extreme over- and under-dispersion, small samples, high dimension, collinearity, and contaminating outliers). For each scenario we fit both solvers over many replications and tabulate how often each one converges cleanly, whether they agree when both succeed, and where one rescues the other.
+This vignette is a stability benchmark that sweeps a grid of twelve negative-binomial scenarios, each one chosen to stress the joint MLE in a different way (wide fitted-mean ranges, extreme over- and under-dispersion, small samples, high dimension, collinearity, and contaminating outliers). For each scenario we fit both solvers over many replications and tabulate how often each one converges cleanly, where one rescues the other, and whether the two reach the same likelihood maximum when both succeed.
 
 The iteration settings differ in meaning between implementations: `MASS::glm.nb()` runs with `glm.control(maxit = 50)`, and `fastglm_nb()` uses its default `outer.maxit = 50`.
 
@@ -95,6 +95,8 @@ For one simulated data set we fit both solvers and record, for each: whether it 
 
 The packages are scored differently: *MASS* is counted as cleanly converged only when it returns a convergence flag without warnings, whereas *fastglm* is counted when it returns a convergence flag and finite coefficients. Consequently, these counts are not a comparison under identical success criteria. Theta estimates close to the Poisson limit also require separate interpretation because the data may provide little information about theta there.
 
+Both log-likelihoods are evaluated with `dnbinom()` at each fit's fitted means and theta, rather than with each package's `logLik()` method, so that the two are computed identically. This matters near the Poisson limit: for one `near_poisson` data set, *MASS* estimates theta at about $3 \times 10^{10}$, and its `logLik()` value exceeds the Poisson maximum by about 0.002, which is not possible for a negative-binomial fit and reflects a loss of precision at that theta. When the likelihood is highest in the Poisson limit, `fastglm_nb()` returns `theta = Inf` with the Poisson fit, and `dnbinom()` with `size = Inf` equals the Poisson likelihood.
+
 ```{r fit-both}
 fit_both <- function(d) {
     X <- d$X; y <- d$y
@@ -106,7 +108,7 @@ fit_both <- function(d) {
             {
                 m <- MASS::glm.nb(y ~ X[, -1], control = glm.control(maxit = 50))
                 m_conv <- isTRUE(m$converged)
-                m_ll   <- as.numeric(logLik(m))
+                m_ll   <- sum(dnbinom(y, size = m$theta, mu = fitted(m), log = TRUE))
                 m_th   <- m$theta
                 m_co   <- coef(m)
             },
@@ -120,7 +122,7 @@ fit_both <- function(d) {
     tryCatch({
         f <- fastglm_nb(X, y, link = "log")
         f_conv <- isTRUE(f$converged) && !any(is.nan(coef(f)))
-        f_ll   <- as.numeric(logLik(f))
+        f_ll   <- sum(dnbinom(y, size = f$theta, mu = f$fitted.values, log = TRUE))
         f_th   <- f$theta
         f_co   <- as.numeric(coef(f))
     }, error = function(e) { f_err <<- TRUE })
@@ -141,6 +143,7 @@ Each scenario is replicated 50 times with distinct seeds, and the per-replicatio
 ```{r benchmark, cache = TRUE}
 n_reps <- 50
 out <- data.frame()
+reps <- data.frame()
 
 for (nm in names(scen)) {
     s <- scen[[nm]]
@@ -148,6 +151,7 @@ for (nm in names(scen)) {
         fit_both(do.call(gen, c(list(seed = 10000 * match(nm, names(scen)) + r), s))),
         numeric(10)))
     df <- as.data.frame(M)
+    reps <- rbind(reps, data.frame(scenario = nm, df))
 
     mass_ok    <- !df$m_err & df$m_conv & is.finite(df$m_ll)
     mass_clean <- mass_ok & !df$m_warn
@@ -227,9 +231,53 @@ n_ge     <- sum(out$fg_ge_ll == out$both)
 n_coef   <- sum(out$coef_agree == out$both)
 ```
 
-Under these rules, *MASS* had `r sum(out$mass_clean)` clean convergences and *fastglm* had `r sum(out$fg_conv)` convergences among `r total` simulated fits. There are exceptions: in the `tiny_theta` scenario, *MASS* has `r out$mass_clean[out$scenario=="tiny_theta"]` successful fits and *fastglm* has `r out$fg_conv[out$scenario=="tiny_theta"]`, and in the `high_dim` scenario the likelihood comparison favors *MASS* in `r out$both[out$scenario=="high_dim"]-out$fg_ge_ll[out$scenario=="high_dim"]` of the `r out$both[out$scenario=="high_dim"]` fits counted as converged by both. These results do not establish that either method is uniformly more reliable.
+Under these rules, *MASS* had `r sum(out$mass_clean)` clean convergences and *fastglm* had `r sum(out$fg_conv)` convergences among `r total` simulated fits. *fastglm* converges where *MASS* does not in `r n_rescue` replications and fails where *MASS* converges cleanly in `r n_lose`. The differences are largest when fitted means vary widely, when theta is near an extreme, and when many coefficients are estimated from a limited sample. Because the two packages are scored under different criteria, these counts describe how often each returns a usable fit in these designs rather than a uniform ranking of reliability.
 
-The larger differences occur when fitted means vary widely, theta is near an extreme, or many coefficients are estimated from a limited sample. Coefficient and likelihood comparisons should be interpreted alongside warnings and the degree to which theta is identified by the data. A convergence flag alone does not establish that the same likelihood maximum has been reached.
+# Agreement when both methods converge
+
+A convergence flag does not establish that a likelihood maximum has been reached, so the replications in which both methods converge are compared by their log-likelihoods. When one fit's log-likelihood is lower than the other's by more than 0.001, that fit has stopped short of the maximum or at a different, poorer point; the fits within 0.001 of each other are compared in detail.
+
+```{r agreement}
+mass_ok <- !reps$m_err & reps$m_conv & is.finite(reps$m_ll)
+fg_ok   <- !reps$f_err & reps$f_conv & is.finite(reps$f_ll)
+both    <- mass_ok & fg_ok
+ll_diff <- reps$f_ll - reps$m_ll
+mass_poorer <- both & ll_diff > 1e-3
+fg_poorer   <- both & ll_diff < -1e-3
+agree   <- both & abs(ll_diff) <= 1e-3
+poisson_limit <- agree & is.infinite(reps$f_th)
+finite  <- agree & is.finite(reps$f_th)
+```
+
+Both methods converge in `r sum(both)` of `r total` replications. In `r sum(mass_poorer)` of these, *MASS* reports convergence at a log-likelihood more than 0.001 below *fastglm*'s, and in `r sum(fg_poorer)` the reverse holds. *MASS* issued a warning in `r sum(mass_poorer & reps$m_warn == 1)` of its `r sum(mass_poorer)` poorer fits. In `r sum(mass_poorer & ll_diff > 1)` of them its log-likelihood is lower by more than one unit, in most cases with a theta estimate above $10^6$. In the remaining `r sum(mass_poorer & ll_diff <= 1)` (from the `r paste0("\x60", unique(reps$scenario[mass_poorer & ll_diff <= 1]), "\x60", collapse = " and ")` scenario), the two methods reach different local maxima of the profile likelihood of theta, and *fastglm*'s is higher by `r signif(max(ll_diff[mass_poorer & ll_diff <= 1]), 2)`. Among the remaining `r sum(agree)` fits, the largest absolute difference in log-likelihood is `r formatC(max(abs(ll_diff[agree])), format = "e", digits = 1)`, and the mean absolute difference is `r formatC(mean(abs(ll_diff[agree])), format = "e", digits = 1)`.
+
+```{r loglik-plot, fig.width = 6, fig.height = 4.5}
+ggplot(reps[agree, ], aes(m_ll, f_ll)) +
+    geom_abline(intercept = 0, slope = 1, colour = "grey40", linetype = 2) +
+    geom_point(colour = "#2166ac", alpha = 0.5, size = 1.2) +
+    labs(x = "MASS log-likelihood", y = "fastglm log-likelihood",
+         title = "Log-likelihood agreement") +
+    theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
+```
+
+In `r sum(poisson_limit)` of the agreeing fits, the likelihood is highest in the Poisson limit: `fastglm_nb()` returns `theta = Inf`, and *MASS* returns a finite theta of at least `r formatC(min(reps$m_th[poisson_limit]), format = "e", digits = 1)`, a value at which the negative-binomial and Poisson likelihoods agree closely. These fits arise in the `r paste0("\x60", unique(reps$scenario[poisson_limit]), "\x60", collapse = " and ")` scenarios. For the `r sum(finite)` fits with a finite theta from both methods, the two estimates are compared below on a logarithmic scale; the largest relative difference is `r formatC(max(abs(reps$f_th[finite] - reps$m_th[finite]) / reps$m_th[finite]), format = "e", digits = 1)`.
+
+```{r theta-plot, fig.width = 6, fig.height = 4.5}
+ggplot(reps[finite, ], aes(m_th, f_th)) +
+    geom_abline(intercept = 0, slope = 1, colour = "grey40", linetype = 2) +
+    geom_point(colour = "#2166ac", alpha = 0.5, size = 1.2) +
+    scale_x_log10() + scale_y_log10() +
+    labs(x = expression(hat(theta) ~ "(MASS)"), y = expression(hat(theta) ~ "(fastglm)"),
+         title = expression("Dispersion" ~ hat(theta) ~ "agreement")) +
+    theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
+```
+
+```{r fg-only}
+fg_only <- fg_ok & !mass_ok
+fg_only_finite <- fg_only & is.finite(reps$f_th)
+```
+
+Of the `r sum(fg_only)` replications in which only `fastglm_nb()` converges, `r sum(fg_only & is.infinite(reps$f_th))` are Poisson-limit fits, and the theta estimates of the others range from `r signif(min(reps$f_th[fg_only_finite]), 3)` to `r signif(max(reps$f_th[fg_only_finite]), 3)`.
 
 # References
 
