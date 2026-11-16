@@ -2,7 +2,12 @@
 # Run from the repository root:
 # Rscript benchmarks/benchmark-ordinal-comparison.R --library=/path/to/library
 # Options: --extra-library=dir --output=dir --summary=dir --figure=file --quick
-#          --merge-only --plot-only --budget=seconds
+#          --merge-only --plot-only --budget=seconds --panels=name[,name]
+#
+# --panels reruns only the named panels (e.g. "Threshold-specific slopes")
+# and replaces their rows in an existing summary, keeping the other panels'
+# rows and skipping the internal streaming comparison. Use it after a change
+# that affects only some solvers; metadata.csv records the panels rerun.
 #
 # Each cell runs in its own process, one at a time, and writes one results file,
 # so an interrupted study resumes where it stopped. A reference time is compared
@@ -24,6 +29,7 @@ figure_file <- argument("figure", if (quick) tempfile(fileext = ".png") else "ma
 plot_only <- "--plot-only" %in% args
 raw_dir <- argument("output", file.path(summary_dir, "raw"))
 budget <- as.numeric(argument("budget", if (quick) "120" else "1800"))
+panels <- strsplit(argument("panels", ""), ",", fixed = TRUE)[[1L]]
 dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
 Sys.setenv(OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1")
 
@@ -158,6 +164,7 @@ CELLS <- rbind(
                             link = "logit", nonparallel = FALSE, stringsAsFactors = FALSE),
     expand.grid(design = "DGP2", panel = "Threshold-specific slopes", n = sizes, p = 10L, K = 5L,
                 link = "logit", nonparallel = TRUE, stringsAsFactors = FALSE))
+if (length(panels)) CELLS <- CELLS[CELLS$panel %in% panels, , drop = FALSE]
 
 # Run in a forked child so a time limit also stops compiled code.
 isolated <- function(work, seconds) {
@@ -297,6 +304,12 @@ merge_results <- function() {
     names(base)[5L] <- "fastglm_seconds"
     summary <- merge(summary, base, sort = FALSE)
     summary$speedup <- ifelse(summary$agrees, summary$median_seconds / summary$fastglm_seconds, NA_real_)
+    previous <- file.path(summary_dir, "summary.csv")
+    if (length(panels) && file.exists(previous)) {
+        old <- read.csv(previous, stringsAsFactors = FALSE)
+        summary <- summary[summary$panel %in% panels, , drop = FALSE]
+        summary <- rbind(old[!old$panel %in% panels, names(summary), drop = FALSE], summary)
+    }
     summary <- summary[order(summary$panel, summary$link, summary$n, summary$K, summary$method), ]
     dir.create(summary_dir, recursive = TRUE, showWarnings = FALSE)
     write.csv(summary, file.path(summary_dir, "summary.csv"), row.names = FALSE)
@@ -321,10 +334,11 @@ merge_results <- function() {
     writeLines(capture.output(sessionInfo()), file.path(summary_dir, "session-info.txt"))
     # The fingerprint identifies the measured package source even before it is committed.
     files <- system2("git", c("ls-files", "-co", "--exclude-standard", "R", "src", "inst/include"), stdout = TRUE)
-    write.csv(data.frame(item = c("commit", "package_source_md5", "system_load", "date_utc"),
+    write.csv(data.frame(item = c("commit", "package_source_md5", "system_load", "date_utc", "panels_rerun"),
         value = c(system2("git", c("rev-parse", "HEAD"), stdout = TRUE),
                   tools::md5sum(bytes = unlist(lapply(sort(files), function(f) readBin(f, "raw", file.size(f))))),
-                  system2("uptime", stdout = TRUE), format(Sys.time(), tz = "UTC"))),
+                  system2("uptime", stdout = TRUE), format(Sys.time(), tz = "UTC"),
+                  if (length(panels)) paste(panels, collapse = ",") else "all")),
         file.path(summary_dir, "metadata.csv"), row.names = FALSE)
     display <- summary[, c("panel", "link", "n", "K", "method", "status", "median_seconds",
                            "speedup", "loglik_difference", "slope_error", "agrees")]
@@ -356,7 +370,7 @@ if (!merge_only) {
         run_cell(CELLS[i, ])
         gc(FALSE)
     }
-    run_internal()
+    if (!length(panels)) run_internal()
 }
 merge_results()
 if (requireNamespace("ggplot2", quietly = TRUE)) plot_results()
