@@ -157,7 +157,7 @@ fastglm_batch <- function(design, y, family = gaussian(), weights = NULL,
     canonical.initialize<-tryCatch(identical(family$initialize,
         get(family$family,asNamespace("stats"))(link=family$link)$initialize),error=function(e) FALSE)
     eligible<-canonical.initialize && code %in% (if(firth) c(0L,9L,10L) else 0L)
-    if(firth && (grepl("^quasi",family$family) || code<0L || code>=20L))
+    if(firth && (startsWith(family$family, "quasi") || code<0L || code>=20L))
         stop("mean bias reduction currently requires an unmodified supported family",call.=FALSE)
     if(firth && code %in% c(0:2,10:16) && !is.null(family$dispersion) && is.finite(family$dispersion))
         stop("mean bias reduction with an externally fixed dispersion is not implemented for this family",call.=FALSE)

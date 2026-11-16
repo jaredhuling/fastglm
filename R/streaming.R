@@ -123,7 +123,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     if (!(method %in% c(0L,2L,3L))) stop("streaming requires method 'qr', 'llt', or 'ldlt'",call.=FALSE)
     fc <- family_code(family)
     if (firth && fc %in% c(0:2,10:16) && !is.null(family$dispersion) && is.finite(family$dispersion)) stop("mean bias reduction with externally fixed dispersion is not implemented for this family",call.=FALSE)
-    if (firth && (fc < 0 || fc >= 20 || grepl("^quasi",family$family)))
+    if (firth && (fc < 0 || fc >= 20 || startsWith(family$family, "quasi")))
         stop("mean bias reduction requires a supported likelihood family",call.=FALSE)
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth)) stop("'firth' must be TRUE or FALSE",call.=FALSE)
     state <- new.env(parent=emptyenv()); state$passes <- 0L; state$reads <- 0L
@@ -159,11 +159,19 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         if(is.null(start)) start <- initial.qr$coefficients
     } else if(is.null(start)) start <- tryCatch(drop(solve(a,rhs)),error=function(e) stop("streaming design is rank deficient",call.=FALSE))
     if(length(start)!=p || any(!is.finite(start))) stop("invalid starting coefficients",call.=FALSE)
+    # Intercept-only fit as the fallback for an invalid starting step (as in
+    # fastglm()), and the totals from this validation pass, which spare the
+    # C++ fitter a pass of its own.
+    anchor <- if (!has.offset) .feasible_start(matrix(low, 1L), sumwy / sumw, 1, 0, family,
+        if(is.null(family$valideta)) function(x) TRUE else family$valideta,
+        if(is.null(family$validmu)) function(x) TRUE else family$validmu, is.int) else NULL
+    if (!is.null(anchor) && all(anchor == 0)) anchor <- NULL
     res <- fit_streaming_glm(fetch,n_chunks,as.integer(p),method,tol,as.integer(maxit),fc,
         family$variance,family$mu.eta,family$linkinv,family$dev.resids,
         if(is.null(family$valideta)) function(x) TRUE else family$valideta,
         if(is.null(family$validmu)) function(x) TRUE else family$validmu,
-        as.numeric(start),family_params(family),firth,pmax(abs(low),abs(high)))
+        as.numeric(start),family_params(family),firth,pmax(abs(low),abs(high)),
+        anchor, c(sumwy, sumw, nobs))
     cn <- state$columns
     if(is.null(cn)) { cn <- paste0("X",seq_len(p)); cn[is.int] <- paste0("(Intercept)",if(sum(is.int)>1) seq_len(sum(is.int)) else "") }
     names(res$coefficients) <- cn; dimnames(res$cov.unscaled) <- list(cn,cn)

@@ -15,7 +15,7 @@ family_code <- function(family) {
     if (famname == "quasipoisson")  famname <- "poisson"
 
     # MASS::negative.binomial(theta) sets family$family to "Negative Binomial(K)".
-    if (grepl("^Negative Binomial", famname)) famname <- "negbin"
+    if (startsWith(famname, "Negative Binomial")) famname <- "negbin"
 
     # statmod::tweedie() uses a generic "power" link; map to the standard four.
     # var.power / link.power are not direct slots on the family object — they
@@ -73,7 +73,7 @@ family_params <- function(family) {
     # Negative binomial: theta is encoded in the family$family string,
     # e.g. "Negative Binomial(2.34)".  family$theta is also set by
     # MASS::negative.binomial() / fastglm's negbin().
-    if (grepl("^Negative Binomial", fam)) {
+    if (startsWith(fam, "Negative Binomial")) {
         if (!is.null(family$theta) && is.finite(family$theta) && family$theta > 0) {
             out["theta"] <- family$theta
         } else {
@@ -119,7 +119,7 @@ tweedie_link_power <- function(family) {
     if (!is.null(e) && exists("link.power", envir = e, inherits = FALSE))
         return(get("link.power", envir = e, inherits = FALSE))
     # Fallback: parse the link string.  statmod sets it to e.g. "mu^0".
-    if (!is.null(family$link) && grepl("^mu\\^", family$link)) {
+    if (!is.null(family$link) && startsWith(family$link, "mu^")) {
         v <- suppressWarnings(as.numeric(sub("^mu\\^", "", family$link)))
         if (is.finite(v)) return(v)
     }
@@ -344,7 +344,15 @@ fastglmPure <- function(x, y,
     validmu     <- unless.null(family$validmu,  function(mu)  TRUE)
 
 
-    if(is.null(mustart))
+    if(is.null(mustart) && is.numeric(y) && is.null(dim(y)) && identical(family$family, "binomial") &&
+       identical(family$initialize, .reference_family("binomial", "logit")$initialize))
+    {
+        ## stats::binomial()$initialize for a response vector, in one C++ pass
+        init <- binomial_initialize_vector(as.double(y), as.double(weights))
+        if (init$status == 1L) stop("y values must be 0 <= y <= 1")
+        if (init$status == 2L) warning(gettextf("non-integer #successes in a %s glm!", "binomial"), domain = NA)
+        y <- init$y; mustart <- init$mustart; n <- rep.int(1, nobs)
+    } else if(is.null(mustart))
     {
         ## calculates mustart and may change y and weights and set n (!)
         eval(family$initialize)
@@ -390,7 +398,7 @@ fastglmPure <- function(x, y,
     fp <- family_params(family)
     if (firth && fc %in% c(0:2,10:16) && !is.null(family$dispersion) && is.finite(family$dispersion))
         stop("mean bias reduction with an externally fixed dispersion is not implemented for this family", call. = FALSE)
-    if (firth && (fc < 0L || fc >= 20L || grepl("^quasi", family$family)))
+    if (firth && (fc < 0L || fc >= 20L || startsWith(family$family, "quasi")))
         stop("mean bias reduction currently requires an unmodified binomial, Poisson, Gaussian, Gamma, inverse Gaussian, or fixed-theta negative-binomial family", call. = FALSE)
 
     res <- tryCatch({
@@ -495,6 +503,7 @@ fastglmPure <- function(x, y,
     }
     res$inference <- inference
     res$x <- original.x
+    attr(res, "family_code") <- fc
     res
 }
 

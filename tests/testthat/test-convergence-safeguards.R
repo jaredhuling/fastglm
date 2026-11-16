@@ -95,3 +95,45 @@ test_that("easy fits keep their estimates and iteration counts under the default
         expect_equal(unname(f$cov.unscaled), unname(unscaled), tolerance = 1e-10)
     }
 })
+
+stream_fit <- function(x, y, family, method = "llt", K = 4L) {
+    rows <- split(seq_len(nrow(x)), cut(seq_len(nrow(x)), K, labels = FALSE))
+    reads <- 0L
+    fit <- fastglm_streaming(function(k) {
+        reads <<- reads + 1L
+        list(X = x[rows[[k]], , drop = FALSE], y = y[rows[[k]]])
+    }, n_chunks = K, family = family, method = method)
+    fit$passes <- reads / K
+    fit
+}
+
+test_that("streamed fits halve an invalid first step toward a valid start", {
+    d <- gamma_sqrt_data(1400784547L)
+    for (m in c("llt", "qr")) {
+        sf <- suppressWarnings(stream_fit(d$x, d$y, Gamma("sqrt"), m))
+        df <- suppressWarnings(fastglm(d$x, d$y, family = Gamma("sqrt"), method = m))
+        expect_true(sf$converged)
+        expect_lt(sf$deviance, 1786.78)
+        expect_equal(unname(coef(sf)), unname(coef(df)), tolerance = 1e-10)
+    }
+    set.seed(9301L); n <- 1000L
+    z <- matrix(runif(n * 2), n, 2); x <- cbind(1, z)
+    y <- rpois(n, 0.2 + drop(z %*% c(2, 1.5)))
+    sf <- stream_fit(x, y, poisson("identity"))
+    expect_true(sf$converged)
+    expect_equal(sf$deviance, fastglm(x, y, family = poisson("identity"))$deviance, tolerance = 1e-12)
+})
+
+test_that("streamed fits match dense fits and skip the separate totals and final passes", {
+    set.seed(6603L); x <- cbind(1, matrix(rnorm(40000 * 9), 40000)); eta <- drop(x %*% c(0.2, rep(0.15, 9)))
+    for (fam in list(binomial(), poisson())) {
+        y <- if (fam$family == "binomial") rbinom(40000, 1, plogis(eta)) else rpois(40000, exp(eta))
+        sf <- stream_fit(x, y, fam, "llt")
+        df <- fastglm(x, y, family = fam, method = "llt")
+        expect_equal(unname(coef(sf)), unname(coef(df)), tolerance = 1e-12)
+        expect_equal(unname(sf$se), unname(df$se), tolerance = 1e-10)
+        # Validation pass, initial pass, and one pass per iteration; 0.1.4
+        # also read the data for the totals and for the final statistics.
+        expect_lte(sf$passes, df$iter + 2 + 1)
+    }
+})

@@ -7,11 +7,16 @@
 #' fits alternate the existing GLM solver with size updates accumulated over
 #' row blocks, without loading the full design into a dense matrix.
 #'
-#' @param x numeric matrix, `dgCMatrix`, or [fastglm_source()] supplying rows
-#'   on demand. A source must supply its own responses, weights, and offsets.
-#' @param y non-negative integer response vector; omitted for a data source.
-#' @param weights optional prior weights vector of length `length(y)`.
-#' @param offset optional offset vector of length `length(y)`.
+#' @param x a model formula, numeric matrix, `dgCMatrix`, or [fastglm_source()]
+#'   supplying rows on demand. A source must supply its own responses,
+#'   weights, and offsets.
+#' @param y non-negative integer response vector; omitted for a formula or a
+#'   data source.
+#' @param weights optional prior weights: a vector of length `length(y)`, or
+#'   for a formula, a variable in `data`.
+#' @param offset optional offset: a vector of length `length(y)`, or for a
+#'   formula, a variable in `data`. A formula may also contain `offset()`
+#'   terms.
 #' @param start optional starting values for `beta`.
 #' @param init.theta optional starting value for `theta`. If `NULL`, dense
 #'   fits use a moment initializer; sparse and source fits start at one after
@@ -27,6 +32,8 @@
 #' @param theta.maxit max iterations for the inner theta MLE.
 #' @param block.size maximum rows processed together for sparse-model size
 #'   estimation and joint inference. A source determines its own block sizes.
+#' @param data,subset,na.action,contrasts model-frame arguments used when `x`
+#'   is a formula, as in [stats::glm()].
 #'
 #' @returns A list of class `c("fastglm_nb", "fastglm")` with the usual
 #'   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
@@ -45,6 +52,10 @@
 #'   y   <- MASS::rnegbin(n, mu = mu, theta = 2)
 #'   fit <- fastglm_nb(x, y)
 #'   c(theta = fit$theta, fit$coefficients)
+#'
+#'   # Formula interface
+#'   d <- data.frame(y = y, x1 = x[, 2], x2 = x[, 3])
+#'   coef(fastglm_nb(y ~ x1 + x2, data = d))
 #' }
 #'
 #' @export
@@ -61,9 +72,38 @@ fastglm_nb <- function(x, y = NULL,
                        outer.tol   = 1e-7,
                        theta.tol   = 1e-8,
                        theta.maxit = 100L,
-                       block.size  = 8192L)
+                       block.size  = 8192L,
+                       data        = NULL,
+                       subset, na.action, contrasts = NULL)
 {
     link <- match.arg(link)
+    if (inherits(x, "formula")) {
+        # Build the design from the formula, fit with the matrix interface,
+        # and keep what predict() and model.matrix() need.
+        mc <- match.call(expand.dots = FALSE)
+        keep <- match(c("x", "data", "subset", "weights", "na.action", "offset"), names(mc), 0L)
+        mf <- mc[c(1L, keep)]
+        names(mf)[names(mf) == "x"] <- "formula"
+        if (is.null(mf$data)) mf$data <- quote(environment(x))
+        mf$drop.unused.levels <- TRUE
+        mf[[1L]] <- quote(stats::model.frame)
+        mf <- eval(mf, parent.frame())
+        mt <- attr(mf, "terms")
+        yy <- stats::model.response(mf, "numeric")
+        X <- stats::model.matrix(mt, mf, contrasts)
+        w <- as.vector(stats::model.weights(mf))
+        off <- as.vector(stats::model.offset(mf))
+        fit <- fastglm_nb(X, yy, weights = w, offset = off, start = start, init.theta = init.theta,
+                          link = link, method = method, tol = tol, maxit = maxit,
+                          outer.maxit = outer.maxit, outer.tol = outer.tol, theta.tol = theta.tol,
+                          theta.maxit = theta.maxit, block.size = block.size)
+        fit$terms <- mt
+        fit$model <- mf
+        fit$xlevels <- stats::.getXlevels(mt, mf)
+        fit$contrasts <- attr(X, "contrasts")
+        fit$call <- match.call()
+        return(fit)
+    }
     if(inherits(x,"dgCMatrix") || inherits(x,"fastglm_source")) {
         out <- .count_backend_nb(x,y,weights,offset,start,init.theta,link,method,tol,maxit,
                                  outer.maxit,outer.tol,theta.tol,theta.maxit,block.size)

@@ -41,6 +41,18 @@ count_block_nb_information <- function(x, y, weights, offset, beta, theta, link)
     .Call(`_fastglm_count_block_nb_information`, x, y, weights, offset, beta, theta, link)
 }
 
+family_aic_cpp <- function(code, y, n, mu, wt, dev) {
+    .Call(`_fastglm_family_aic_cpp`, code, y, n, mu, wt, dev)
+}
+
+finish_glm_native <- function(code, params, y, mu, eta, w, offset, null_mean, want_weights) {
+    .Call(`_fastglm_finish_glm_native`, code, params, y, mu, eta, w, offset, null_mean, want_weights)
+}
+
+binomial_initialize_vector <- function(y, weights) {
+    .Call(`_fastglm_binomial_initialize_vector`, y, weights)
+}
+
 firth_profile_evaluate <- function(x, y, weights, offset, coefficients) {
     .Call(`_fastglm_firth_profile_evaluate`, x, y, weights, offset, coefficients)
 }
@@ -149,8 +161,8 @@ streaming_qr_finish <- function(state) {
     .Call(`_fastglm_streaming_qr_finish`, state)
 }
 
-fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start = NULL, fam_params = NULL, firth = FALSE, column_maxabs = NULL) {
-    .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs)
+fit_streaming_glm <- function(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start = NULL, fam_params = NULL, firth = FALSE, column_maxabs = NULL, anchor = NULL, totals = NULL) {
+    .Call(`_fastglm_fit_streaming_glm`, chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs, anchor, totals)
 }
 
 ordinal_stream_native_fit <- function(fetch, n_chunks, predictors, categories, start, firth = FALSE, score_tol = 1e-8, step_tol = 1e-8, maxit = 200L, block_size = 2048L, max_step = 4, max_halves = 35L, condition_tol = 1e-14, trace = FALSE, link = 0L, observed = TRUE) {
@@ -167,5 +179,9 @@ ordinal_partial_stream_native_fit <- function(fetch, n_chunks, common_predictors
 
 prepare_glm_constant <- function(x, weights, leverage, code) {
     .Call(`_fastglm_prepare_glm_constant`, x, weights, leverage, code)
+}
+
+validate_glm_vectors <- function(y, weights, offset) {
+    .Call(`_fastglm_validate_glm_vectors`, y, weights, offset)
 }
 

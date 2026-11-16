@@ -144,6 +144,53 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// family_aic_cpp
+double family_aic_cpp(int code, Rcpp::NumericVector y, Rcpp::NumericVector n, Rcpp::NumericVector mu, Rcpp::NumericVector wt, double dev);
+RcppExport SEXP _fastglm_family_aic_cpp(SEXP codeSEXP, SEXP ySEXP, SEXP nSEXP, SEXP muSEXP, SEXP wtSEXP, SEXP devSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type code(codeSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type n(nSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type wt(wtSEXP);
+    Rcpp::traits::input_parameter< double >::type dev(devSEXP);
+    rcpp_result_gen = Rcpp::wrap(family_aic_cpp(code, y, n, mu, wt, dev));
+    return rcpp_result_gen;
+END_RCPP
+}
+// finish_glm_native
+Rcpp::List finish_glm_native(int code, Rcpp::NumericVector params, Rcpp::NumericVector y, Rcpp::NumericVector mu, Rcpp::NumericVector eta, Rcpp::NumericVector w, Rcpp::NumericVector offset, double null_mean, bool want_weights);
+RcppExport SEXP _fastglm_finish_glm_native(SEXP codeSEXP, SEXP paramsSEXP, SEXP ySEXP, SEXP muSEXP, SEXP etaSEXP, SEXP wSEXP, SEXP offsetSEXP, SEXP null_meanSEXP, SEXP want_weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type code(codeSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type params(paramsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type w(wSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< double >::type null_mean(null_meanSEXP);
+    Rcpp::traits::input_parameter< bool >::type want_weights(want_weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(finish_glm_native(code, params, y, mu, eta, w, offset, null_mean, want_weights));
+    return rcpp_result_gen;
+END_RCPP
+}
+// binomial_initialize_vector
+Rcpp::List binomial_initialize_vector(Rcpp::NumericVector y, Rcpp::NumericVector weights);
+RcppExport SEXP _fastglm_binomial_initialize_vector(SEXP ySEXP, SEXP weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(binomial_initialize_vector(y, weights));
+    return rcpp_result_gen;
+END_RCPP
+}
 // firth_profile_evaluate
 Rcpp::List firth_profile_evaluate(Rcpp::NumericMatrix x, Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset, Rcpp::NumericVector coefficients);
 RcppExport SEXP _fastglm_firth_profile_evaluate(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP coefficientsSEXP) {
@@ -745,8 +792,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_streaming_glm
-List fit_streaming_glm(Function chunk_callback, int n_chunks, int p, int type, double tol, int maxit, int fam_code, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, Nullable<NumericVector> start, Nullable<NumericVector> fam_params, bool firth, Nullable<NumericVector> column_maxabs);
-RcppExport SEXP _fastglm_fit_streaming_glm(SEXP chunk_callbackSEXP, SEXP n_chunksSEXP, SEXP pSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP startSEXP, SEXP fam_paramsSEXP, SEXP firthSEXP, SEXP column_maxabsSEXP) {
+List fit_streaming_glm(Function chunk_callback, int n_chunks, int p, int type, double tol, int maxit, int fam_code, Function var, Function mu_eta, Function linkinv, Function dev_resids, Function valideta, Function validmu, Nullable<NumericVector> start, Nullable<NumericVector> fam_params, bool firth, Nullable<NumericVector> column_maxabs, Nullable<NumericVector> anchor, Nullable<NumericVector> totals);
+RcppExport SEXP _fastglm_fit_streaming_glm(SEXP chunk_callbackSEXP, SEXP n_chunksSEXP, SEXP pSEXP, SEXP typeSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP fam_codeSEXP, SEXP varSEXP, SEXP mu_etaSEXP, SEXP linkinvSEXP, SEXP dev_residsSEXP, SEXP validetaSEXP, SEXP validmuSEXP, SEXP startSEXP, SEXP fam_paramsSEXP, SEXP firthSEXP, SEXP column_maxabsSEXP, SEXP anchorSEXP, SEXP totalsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -767,7 +814,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type fam_params(fam_paramsSEXP);
     Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type column_maxabs(column_maxabsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_streaming_glm(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs));
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type anchor(anchorSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type totals(totalsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_streaming_glm(chunk_callback, n_chunks, p, type, tol, maxit, fam_code, var, mu_eta, linkinv, dev_resids, valideta, validmu, start, fam_params, firth, column_maxabs, anchor, totals));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -858,6 +907,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// validate_glm_vectors
+Rcpp::NumericVector validate_glm_vectors(Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset);
+RcppExport SEXP _fastglm_validate_glm_vectors(SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offset(offsetSEXP);
+    rcpp_result_gen = Rcpp::wrap(validate_glm_vectors(y, weights, offset));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 RcppExport SEXP colmax_big(SEXP);
 RcppExport SEXP colmin_big(SEXP);
@@ -877,6 +939,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_set_conv_rule", (DL_FUNC) &_fastglm_set_conv_rule, 1},
     {"_fastglm_count_block_summary", (DL_FUNC) &_fastglm_count_block_summary, 10},
     {"_fastglm_count_block_nb_information", (DL_FUNC) &_fastglm_count_block_nb_information, 7},
+    {"_fastglm_family_aic_cpp", (DL_FUNC) &_fastglm_family_aic_cpp, 6},
+    {"_fastglm_finish_glm_native", (DL_FUNC) &_fastglm_finish_glm_native, 9},
+    {"_fastglm_binomial_initialize_vector", (DL_FUNC) &_fastglm_binomial_initialize_vector, 2},
     {"_fastglm_firth_profile_evaluate", (DL_FUNC) &_fastglm_firth_profile_evaluate, 5},
     {"_fastglm_fit_glm", (DL_FUNC) &_fastglm_fit_glm, 19},
     {"_fastglm_fit_big_glm", (DL_FUNC) &_fastglm_fit_big_glm, 20},
@@ -904,11 +969,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_streaming_qr_eta", (DL_FUNC) &_fastglm_streaming_qr_eta, 3},
     {"_fastglm_streaming_qr_update", (DL_FUNC) &_fastglm_streaming_qr_update, 4},
     {"_fastglm_streaming_qr_finish", (DL_FUNC) &_fastglm_streaming_qr_finish, 1},
-    {"_fastglm_fit_streaming_glm", (DL_FUNC) &_fastglm_fit_streaming_glm, 17},
+    {"_fastglm_fit_streaming_glm", (DL_FUNC) &_fastglm_fit_streaming_glm, 19},
     {"_fastglm_ordinal_stream_native_fit", (DL_FUNC) &_fastglm_ordinal_stream_native_fit, 16},
     {"_fastglm_ordinal_partial_stream_native_evaluate", (DL_FUNC) &_fastglm_ordinal_partial_stream_native_evaluate, 10},
     {"_fastglm_ordinal_partial_stream_native_fit", (DL_FUNC) &_fastglm_ordinal_partial_stream_native_fit, 17},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
+    {"_fastglm_validate_glm_vectors", (DL_FUNC) &_fastglm_validate_glm_vectors, 3},
     {"colmax_big",         (DL_FUNC) &colmax_big,         1},
     {"colmin_big",         (DL_FUNC) &colmin_big,         1},
     {"colsums_big",        (DL_FUNC) &colsums_big,        1},

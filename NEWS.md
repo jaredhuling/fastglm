@@ -1,3 +1,50 @@
+# fastglm (development version)
+
+## Streaming fits
+
+* `fastglm_streaming()` uses the same convergence check, step-halving rule,
+  and starting values as dense fits: convergence is confirmed by the Fisher
+  decrement, an exhausted step search ends with
+  `convergence.reason = "step_halving_failed"` instead of an error or a
+  false convergence, and an invalid first step is halved toward the
+  intercept-only fit. Gamma models with a square-root link and Poisson
+  models with an identity link that previously stopped with "invalid linear
+  predictor" or "invalid mean" now fit. Streamed and dense fits agree to
+  rounding error.
+* Streamed LLT and LDLT fits read the data fewer times: the totals come from
+  the validation pass, and the deviance, Pearson statistic, and null
+  deviance are accumulated in the last iteration's pass instead of a
+  separate final pass (a typical logistic fit reads the data 6 times instead
+  of 8).
+
+## Speed
+
+* For LLT and LDLT fits the Fisher decrement is computed from X'WX, so the
+  convergence check does not add a pass over the design.
+* AIC for the standard binomial, Poisson, and Gamma families, the residuals,
+  Pearson statistic, and null deviance for natively evaluated families, the
+  binomial `initialize` step, and input validation are computed in C++, with
+  the same values as before. A logistic fit with n = 300,000 and p = 10 takes
+  about 15 percent less time.
+* Family-name checks use `startsWith()` instead of regular expressions, and
+  the stats reference families used to detect native families are cached.
+
+## Interfaces
+
+* `fastglm_nb()` accepts a model formula with `data`, `subset`, `weights`,
+  `offset`, and `na.action`, and supports `predict(newdata = )`.
+* `sandwich::vcovHC()` defaults to HC0 for count models, for which leverage
+  corrections are not defined, and has methods for truncated, hurdle, and
+  zero-inflated fits. Clustered covariance for these models is available
+  through `fastglm_vcov(cluster = )`.
+
+## Internal
+
+* `fastglm:::set_conv_rule(2L)` selects an experimental rule that stops where
+  `glm.fit()` stops and takes the covariance from the last iteration's
+  factorization (the `glm.fit()` convention), saving one pass; the default
+  (rule 1) uses the information at the reported estimate.
+
 # fastglm 0.1.5
 
 ## Convergence and starting values

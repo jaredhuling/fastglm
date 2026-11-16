@@ -30,18 +30,24 @@
     n <- NROW(y)
     if (n < 1L || nrow(x) != n) stop("'x' and 'y' must have the same positive number of rows", call. = FALSE)
     if (!is.numeric(y) && !is.factor(y)) stop("'y' must be numeric or a binomial factor", call. = FALSE)
-    if (anyNA(y) || (is.numeric(y) && any(!is.finite(y)))) stop("non-finite response", call. = FALSE)
+    if (is.factor(y) && anyNA(y)) stop("non-finite response", call. = FALSE)
     for (nm in c("weights", "offset")) {
         z <- get(nm)
-        if (!is.numeric(z) || length(z) != n || any(!is.finite(z)))
+        if (!is.numeric(z) || length(z) != n)
             stop(sprintf("'%s' must contain one finite number per observation", nm), call. = FALSE)
     }
-    if (any(weights < 0) || !any(weights > 0)) stop("weights must be nonnegative with positive total weight", call. = FALSE)
+    # Finiteness and weight checks in one pass (src/validate_glm.cpp).
+    status <- validate_glm_vectors(if (is.numeric(y)) as.double(y) else numeric(0),
+                                   as.double(weights), as.double(offset))
+    if (status[1L] == 1) stop("non-finite response", call. = FALSE)
+    if (status[1L] == 2) stop("'weights' must contain one finite number per observation", call. = FALSE)
+    if (status[1L] == 3) stop("'offset' must contain one finite number per observation", call. = FALSE)
+    if (status[1L] == 4) stop("weights must be nonnegative with positive total weight", call. = FALSE)
     if (is.matrix(x) && (!is.numeric(x) || !all_finite_dense(x))) stop("'x' must contain finite numeric values", call. = FALSE)
     values <- if (inherits(x, "sparseMatrix")) x@x else NULL
     if (!is.null(values) && (!is.numeric(values) || any(!is.finite(values))))
         stop("'x' must contain finite numeric values", call. = FALSE)
-    if (ncol(x) > sum(weights > 0))
+    if (ncol(x) > status[2L])
         stop("more coefficients than positive-weight observations", call. = FALSE)
 }
 
@@ -65,7 +71,7 @@
 
 .fixed_dispersion <- function(family) {
     if (!is.null(family$dispersion) && is.finite(family$dispersion)) return(family$dispersion)
-    if (family$family %in% c("poisson", "binomial") || grepl("^Negative Binomial", family$family)) return(1)
+    if (family$family %in% c("poisson", "binomial") || startsWith(family$family, "Negative Binomial")) return(1)
     NA_real_
 }
 
@@ -81,6 +87,9 @@
 
 .finish_glm <- function(res, offset, intercept = res$intercept, null = TRUE) {
     fam <- res$family; y <- res$y; w <- res$prior.weights
+    # Family code supplied by fastglmPure() (attribute removed below); NULL
+    # for other callers, which use the R path throughout.
+    fc <- attr(res, "family_code"); attr(res, "family_code") <- NULL
     positive <- w > 0
     if (anyNA(res$coefficients) && !is.null(res$x)) {
         good <- !is.na(res$coefficients)
@@ -98,12 +107,28 @@
     res$df.residual <- res$nobs - res$rank
     res$df.null <- res$nobs - as.integer(intercept)
     binomial.code <- .stable_binomial_code(res)
+    # Natively evaluated families: residuals, working weights, Pearson
+    # statistic, and null deviance in one C++ pass (src/finish_glm.cpp).
+    varying.offset <- intercept && any(offset != offset[1L])
+    native <- !is.null(fc) && fc >= 0L && binomial.code < 0L && is.numeric(y) && is.null(dim(y)) &&
+        length(res$linear.predictors) == length(y)
+    if (native) {
+        null.mean <- if (intercept) sum(w * y) / sum(w) else NA_real_
+        fast <- finish_glm_native(fc, as.numeric(family_params(fam)), as.numeric(y), res$fitted.values,
+                                  res$linear.predictors, as.numeric(w), as.numeric(offset),
+                                  null.mean, identical(res$inference, "none"))
+    }
     if(binomial.code>=0L) {
         moments <- binomial_firth_summary(res$linear.predictors,as.numeric(y),w,res$n,binomial.code)
         res$weights <- moments$working
         res$residuals <- moments$residuals
         names(res$residuals) <- names(y)
         res$deviance <- moments$deviance
+    } else if (native) {
+        res$residuals <- fast$residuals
+        names(res$residuals) <- names(y)
+        if (identical(res$inference, "none")) res$weights <- fast$weights
+        res$weights[!positive] <- 0
     } else {
         derivative <- fam$mu.eta(res$linear.predictors)
         res$residuals <- (y - res$fitted.values) / derivative
@@ -114,7 +139,10 @@
     }
     disp <- .fixed_dispersion(fam)
     res$estimated.dispersion <- is.na(disp)
-    if (is.na(disp)) disp <- if (res$df.residual > 0) sum(w * (y - res$fitted.values)^2 / fam$variance(res$fitted.values)) / res$df.residual else NaN
+    if (is.na(disp)) disp <- if (res$df.residual > 0) {
+        if (native) fast$pearson / res$df.residual
+        else sum(w * (y - res$fitted.values)^2 / fam$variance(res$fitted.values)) / res$df.residual
+    } else NaN
     if (isTRUE(res$firth) && !is.null(res$bias.dispersion)) disp <- res$bias.dispersion
     res$dispersion <- disp
     if (length(res$cov.unscaled)) {
@@ -133,6 +161,8 @@
                                      control = stats::glm.control(maxit = 100))
                 res$null.deviance <- nf$deviance
             }
+        } else if (native) {
+            res$null.deviance <- fast$null.deviance
         } else {
             mu0 <- if (intercept) sum(w * y) / sum(w) else fam$linkinv(offset)
             res$null.deviance <- sum(fam$dev.resids(y, mu0, w))
@@ -166,7 +196,29 @@
         }
         if(standard) return(-2*sum(weights*dnbinom(y,mu=mu,size=theta,log=TRUE)))
     }
+    code <- .standard_aic_code(family)
+    if (code > 0L)
+        return(family_aic_cpp(code, as.numeric(y), as.numeric(rep_len(n, length(y))),
+                              as.numeric(mu), as.numeric(weights), as.numeric(dev)))
     family$aic(y,n,mu,weights,dev)
+}
+
+# AIC kernels of the unmodified stats families, computed in C++ by
+# family_aic_cpp() with the same densities and expressions. A family whose
+# aic function differs from the stats definition keeps its R function.
+.aic_reference <- local({
+    bodies <- NULL
+    function() {
+        if (is.null(bodies)) bodies <<- list(binomial = body(stats::binomial()$aic),
+                                             poisson = body(stats::poisson()$aic),
+                                             Gamma = body(stats::Gamma()$aic))
+        bodies
+    }
+})
+.standard_aic_code <- function(family) {
+    code <- switch(family$family, binomial = 1L, poisson = 2L, Gamma = 3L, 0L)
+    if (code == 0L || !is.function(family$aic)) return(0L)
+    if (identical(body(family$aic), .aic_reference()[[family$family]])) code else 0L
 }
 
 # Compare kernel definitions and the closure variables they actually reference.
@@ -186,8 +238,8 @@
     name <- family$family
     ref <- tryCatch({
         if (name %in% c("gaussian", "binomial", "quasibinomial", "poisson", "quasipoisson", "Gamma", "inverse.gaussian")) {
-            get(name, asNamespace("stats"))(link = family$link)
-        } else if (grepl("^Negative Binomial", name)) {
+            .reference_family(name, family$link)
+        } else if (startsWith(name, "Negative Binomial")) {
             theta <- unname(family_params(family)["theta"])
             if (.same_kernel(family$variance, negbin(theta)$variance)) negbin(theta, family$link)
             else if (requireNamespace("MASS", quietly = TRUE)) MASS::negative.binomial(theta, family$link)
@@ -222,3 +274,14 @@
     start[j] <- b / cval
     start
 }
+
+# stats family objects used as references by .native_family(). They do not
+# change within a session, so each name and link is constructed once.
+.reference_family <- local({
+    cache <- new.env(parent = emptyenv())
+    function(name, link) {
+        key <- paste0(name, ":", link)
+        if (is.null(cache[[key]])) cache[[key]] <- get(name, asNamespace("stats"))(link = link)
+        cache[[key]]
+    }
+})

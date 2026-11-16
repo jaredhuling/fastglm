@@ -19,18 +19,27 @@ fastglm_nb(
   outer.tol = 1e-07,
   theta.tol = 1e-08,
   theta.maxit = 100L,
-  block.size = 8192L
+  block.size = 8192L,
+  data = NULL,
+  subset,
+  na.action,
+  contrasts = NULL
 )
 }
 \arguments{
-\item{x}{numeric matrix, `dgCMatrix`, or [fastglm_source()] supplying rows
-on demand. A source must supply its own responses, weights, and offsets.}
+\item{x}{a model formula, numeric matrix, `dgCMatrix`, or [fastglm_source()]
+supplying rows on demand. A source must supply its own responses,
+weights, and offsets.}
 
-\item{y}{non-negative integer response vector; omitted for a data source.}
+\item{y}{non-negative integer response vector; omitted for a formula or a
+data source.}
 
-\item{weights}{optional prior weights vector of length `length(y)`.}
+\item{weights}{optional prior weights: a vector of length `length(y)`, or
+for a formula, a variable in `data`.}
 
-\item{offset}{optional offset vector of length `length(y)`.}
+\item{offset}{optional offset: a vector of length `length(y)`, or for a
+formula, a variable in `data`. A formula may also contain `offset()`
+terms.}
 
 \item{start}{optional starting values for `beta`.}
 
@@ -57,6 +66,9 @@ sup-norm of the beta update plus the relative change in `theta`.}
 
 \item{block.size}{maximum rows processed together for sparse-model size
 estimation and joint inference. A source determines its own block sizes.}
+
+\item{data, subset, na.action, contrasts}{model-frame arguments used when `x`
+is a formula, as in [stats::glm()].}
 }
 \value{
 A list of class `c("fastglm_nb", "fastglm")` with the usual
@@ -84,6 +96,10 @@ if (requireNamespace("MASS", quietly = TRUE)) {
   y   <- MASS::rnegbin(n, mu = mu, theta = 2)
   fit <- fastglm_nb(x, y)
   c(theta = fit$theta, fit$coefficients)
+
+  # Formula interface
+  d <- data.frame(y = y, x1 = x[, 2], x2 = x[, 3])
+  coef(fastglm_nb(y ~ x1 + x2, data = d))
 }
 
 }

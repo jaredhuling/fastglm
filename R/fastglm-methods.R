@@ -190,6 +190,9 @@ NULL
 #' @exportS3Method sandwich::vcovHC fastglm
 vcovHC.fastglm <- function(object, type = c("HC3", "HC2", "HC1", "HC0"), ...)
 {
+    # Leverage corrections (HC2, HC3) are not defined for count models, so
+    # their default is HC0, as in fastglm_vcov().
+    if (missing(type) && .count_inference_model(object)) return(fastglm_vcov(object, "HC0"))
     type <- match.arg(type)
     fastglm_vcov(object, type)
 }

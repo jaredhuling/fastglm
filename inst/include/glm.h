@@ -116,6 +116,8 @@ protected:
     VectorXd                     wz;     // w .* z
     MatrixXd                     XtWX_buf;
     VectorXd                     Xtwz_buf; // for streaming accumulation
+    MatrixXd                     block_buf;    // row-block workspace for the fused X'WX kernel
+    VectorXd                     wz_block_buf;
     bool                         use_streaming;
     bool                         constant_weights;
     bool                         factor_ready = false;
@@ -302,6 +304,13 @@ protected:
     bool can_reuse_factorization() override
     {
         return !firth_ && !prepared_info && get_rank() == nvars;
+    }
+    double fisher_decrement() override
+    {
+        if (firth_ || prepared_info || !(type == 2 || type == 3) ||
+            XtWX_buf.rows() != nvars) return std::numeric_limits<double>::quiet_NaN();
+        const VectorXd delta = beta - beta_prev;
+        return delta.dot(XtWX_buf.selfadjointView<Lower>() * delta);
     }
 
     bool converged() override
@@ -905,7 +914,7 @@ protected:
         // never materialize the n*p product W*X.  Instead accumulate
         // X'W^2 X and X'W^2 z directly in row blocks.
         if (use_streaming) {
-            fglm::accumulate_xtwx_xtwz_fused(X, w, z, XtWX_buf, Xtwz_buf);
+            fglm::accumulate_xtwx_xtwz_fused(X, w, z, XtWX_buf, Xtwz_buf, block_buf, wz_block_buf);
             if (type == 2) {
                 Ch.compute(XtWX_buf.selfadjointView<Lower>());
                 if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
@@ -921,28 +930,11 @@ protected:
             return;
         }
 
-        // Cholesky methods: accumulate X'WX and X'Wz over cache-sized row
-        // blocks in one pass, without writing the n x p weighted design.
-        if (type == 2 || type == 3) {
-            fglm::accumulate_xtwx_xtwz_fused(X, w, z, XtWX_buf, Xtwz_buf);
-            if (type == 2) {
-                Ch.compute(XtWX_buf.selfadjointView<Lower>());
-                if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
-                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
-                beta = Ch.solve(Xtwz_buf);
-            } else {
-                ChD.compute(XtWX_buf.selfadjointView<Lower>());
-                if (fglm::ldlt_unusable(ChD))
-                    Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
-                Dplus(ChD.vectorD());  // sets rank
-                beta = ChD.solve(Xtwz_buf);
-            }
-            return;
-        }
-
-        // QR and SVD methods decompose the weighted design itself.
-        // noalias() avoids a temporary; both buffers are sized in the
-        // constructor.
+        // Pre-multiply once per iteration into pre-allocated buffers,
+        // then feed them to every decomposition.  noalias() avoids a
+        // temporary; both buffers are sized in the constructor. (A blocked
+        // kernel that avoids forming WX was slower for small p and moderate
+        // n, and only about 6 percent faster at n = 1e6, p = 50.)
         WX.noalias() = w.asDiagonal() * X;
         wz.noalias() = w.cwiseProduct(z);
 
@@ -1061,7 +1053,7 @@ protected:
         update_mu_eta();
         update_w();
         if (!(constant_weights && factor_ready)) {
-            if (use_streaming || !firth_) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
+            if (use_streaming) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
             else {
                 WX.noalias() = w.asDiagonal() * X;
                 update_XtWX();

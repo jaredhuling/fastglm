@@ -41,7 +41,7 @@ inline void accumulate_xtwx_streamed(
     const Eigen::Index p = X.cols();
     out.setZero();
 
-    Eigen::MatrixXd WB(chunk_rows, p);
+    Eigen::MatrixXd WB(std::min<Eigen::Index>(chunk_rows, std::max<Eigen::Index>(n, 1)), p);
     for (Eigen::Index r = 0; r < n; r += chunk_rows) {
         Eigen::Index k = std::min<Eigen::Index>(chunk_rows, n - r);
         // WB_k = diag(w_k) * X_k  (no copy of X required outside this small block)
@@ -54,12 +54,16 @@ inline void accumulate_xtwx_streamed(
 // xtwz = X' diag(w^2) z, both from the same weighted row block while it is in
 // cache. Replaces the two separate passes of accumulate_xtwx_streamed and
 // accumulate_xtwz_streamed, and never forms the n x p weighted design.
+// `block` and `wzb` are workspaces reused across calls; they are resized
+// only when too small, so repeated IRLS iterations do not allocate.
 inline void accumulate_xtwx_xtwz_fused(
     const Eigen::Ref<const Eigen::MatrixXd>& X,
     const Eigen::Ref<const Eigen::VectorXd>& w,
     const Eigen::Ref<const Eigen::VectorXd>& z,
     Eigen::MatrixXd& xtwx,
     Eigen::VectorXd& xtwz,
+    Eigen::MatrixXd& WB,
+    Eigen::VectorXd& wzb,
     int chunk_rows = -1)
 {
     if (chunk_rows <= 0) chunk_rows = default_chunk_rows();
@@ -68,8 +72,8 @@ inline void accumulate_xtwx_xtwz_fused(
     xtwx.setZero(p, p);
     xtwz.setZero(p);
     const Eigen::Index rows = std::min<Eigen::Index>(chunk_rows, std::max<Eigen::Index>(n, 1));
-    Eigen::MatrixXd WB(rows, p);
-    Eigen::VectorXd wzb(rows);
+    if (WB.rows() < rows || WB.cols() != p) WB.resize(rows, p);
+    if (wzb.size() < rows) wzb.resize(rows);
     for (Eigen::Index r = 0; r < n; r += chunk_rows) {
         Eigen::Index k = std::min<Eigen::Index>(chunk_rows, n - r);
         WB.topRows(k).noalias() = w.segment(r, k).asDiagonal() * X.middleRows(r, k);

@@ -214,7 +214,7 @@ simulate.fastglm <- function(object, nsim = 1L, seed = NULL, ...) {
             }
             size[size==0] <- 1
             rbinom(n, size, mu) / size
-        } else if (grepl("^Negative Binomial", fam)) rnbinom(n, mu = mu, size = family_params(object$family)["theta"])
+        } else if (startsWith(fam, "Negative Binomial")) rnbinom(n, mu = mu, size = family_params(object$family)["theta"])
         else if (fam == "gaussian") rnorm(n, mu, sqrt(object$dispersion / w))
         else if (fam == "Gamma") rgamma(n, shape = w / object$dispersion, scale = mu * object$dispersion / w)
         else stop("simulation is unavailable for this family", call. = FALSE)

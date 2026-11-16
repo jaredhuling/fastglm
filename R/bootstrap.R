@@ -230,7 +230,7 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
         return(if(object$dist=="poisson") qpois(u,mu,lower.tail=FALSE) else qnbinom(u,mu=mu,size=object$theta,lower.tail=FALSE))
     }
     mu<-object$family$linkinv(eta);fam<-object$family$family
-    if(inherits(object,"fastglm_nb") || grepl("^Negative Binomial",fam)) {
+    if(inherits(object,"fastglm_nb") || startsWith(fam, "Negative Binomial")) {
         theta<-if(inherits(object,"fastglm_nb")) object$theta else family_params(object$family)[1]
         return(rnbinom(n,mu=mu,size=theta))
     }

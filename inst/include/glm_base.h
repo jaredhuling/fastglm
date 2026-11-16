@@ -4,6 +4,7 @@
 #include <Rcpp.h>
 #include <RcppEigen.h>
 #include <string>
+#include <limits>
 
 using namespace Rcpp;
 using namespace std;
@@ -11,10 +12,7 @@ using namespace std;
 using Eigen::Map;
 
 
-// Process-wide default convergence rule for new solvers (see
-// GlmBase::solve). 1 is the package default; set_conv_rule() in
-// src/conv_rule.cpp changes it for experiments.
-inline int& fastglm_conv_rule_default() { static int rule = 1; return rule; }
+#include "conv_rule.h"
 
 template<typename VecTypeX, typename MatTypeX>
 class GlmBase
@@ -53,6 +51,9 @@ protected:
     virtual bool halving_was_exhausted() const { return false; }
     virtual bool fit_is_valid() { return true; }
     virtual bool can_reuse_factorization() { return false; }
+    // delta' X'WX delta for delta = beta - beta_prev, when the solver holds
+    // X'WX; NaN otherwise.
+    virtual double fisher_decrement() { return std::numeric_limits<double>::quiet_NaN(); }
     virtual void restore_previous()
     {
         beta = beta_prev;
@@ -220,29 +221,50 @@ public:
             update_z();
             update_w();
             solve_wls(i);
-            eta_before = eta;
-            update_eta();
-            const double lambda2 = (w.array() * (eta - eta_before).array()).square().sum();
+            // The decrement from the factorization (p x p work) when the
+            // solver holds X'WX; otherwise from the change in eta.
+            double lambda2 = fisher_decrement();
+            const bool from_factor = std::isfinite(lambda2);
+            if (!from_factor) {
+                eta_before = eta;
+                update_eta();
+                lambda2 = (w.array() * (eta - eta_before).array()).square().sum();
+            }
             const bool small = i > 0 && std::isfinite(lambda2) &&
                 lambda2 / (0.1 + std::abs(dev)) < tol;
 
-            if (small && (pending || conv_rule == 2)) {
-                if (conv_rule == 2) {
-                    // Final step from the converged estimate; keep it only if
-                    // the fit stays valid and the deviance does not increase.
-                    update_mu();
-                    update_dev_resids();
-                    if (std::isfinite(dev) && fit_is_valid() &&
-                        dev <= devold * (1 + 1e-12) + 1e-12) ++updates;
-                    else restore_previous();
-                } else {
-                    // Only eta has moved in this pass; mu and the deviance
-                    // are still those of the estimate being confirmed.
-                    beta = beta_prev;
-                    eta.swap(eta_before);
-                }
+            if (small && pending) {
+                // Rule 1: the decrement confirms the deviance rule. mu and the
+                // deviance are still those of the estimate being confirmed.
+                beta = beta_prev;
+                if (!from_factor) eta.swap(eta_before);
                 conv = true; info_current = true; stop_reason = "converged";
                 break;
+            }
+            if (from_factor) { eta_before = eta; update_eta(); }
+            if (small && conv_rule == 2) {
+                // Rule 2: the decrement is small, so take this step and stop
+                // if its deviance change is below tol, which is where glm.fit
+                // stops; the information from this pass (at the preceding
+                // iterate, as in glm.fit) gives the covariance without another
+                // pass. Otherwise the step is an ordinary accepted step.
+                update_mu();
+                update_dev_resids();
+                // Accepted as in run_step_halving: valid, and the deviance
+                // does not rise by tol or more.
+                const bool ok = std::isfinite(dev) && fit_is_valid() &&
+                    (dev - devold) / (0.1 + std::abs(dev)) < tol;
+                if (!ok) {
+                    restore_previous();
+                    conv = true; info_current = true; stop_reason = "converged";
+                    break;
+                }
+                ++updates;
+                if (std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol) {
+                    conv = true; info_current = true; stop_reason = "converged";
+                    break;
+                }
+                continue;
             }
             pending = false;
             if (i == maxit) { beta = beta_prev; eta.swap(eta_before); break; }   // confirmation failed at the limit

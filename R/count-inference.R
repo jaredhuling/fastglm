@@ -405,3 +405,33 @@ vcov.fastglm_nb <- function(object,dispersion=1,full=FALSE,type=NULL,cluster=NUL
     dimnames(v)<-rep(list(names(coef(object))),2L)
     v
 }
+
+#' Robust covariance for count models through sandwich
+#'
+#' Methods for `sandwich::vcovHC()` for truncated, hurdle, and zero-inflated
+#' count models; they call [fastglm_vcov()]. Only HC0 and HC1 are available
+#' because leverage corrections are not defined for these models; HC0 is the
+#' default. For clustered covariance use
+#' `fastglm_vcov(object, cluster = ...)`: `sandwich::vcovCL()` is not a
+#' generic and requires `estfun()` methods, which these classes do not have.
+#'
+#' @param object a fitted `fastglm_truncated`, `fastglm_hurdle`, or
+#'   `fastglm_zi` model.
+#' @param type `"HC0"` (default) or `"HC1"`.
+#' @param ... passed to [fastglm_vcov()] (for example `full = TRUE`).
+#' @returns A covariance matrix.
+#' @name vcovHC.fastglm_count
+NULL
+
+#' @rdname vcovHC.fastglm_count
+#' @exportS3Method sandwich::vcovHC fastglm_hurdle
+vcovHC.fastglm_hurdle <- function(object, type = c("HC0", "HC1"), ...)
+    fastglm_vcov(object, match.arg(type), ...)
+#' @rdname vcovHC.fastglm_count
+#' @exportS3Method sandwich::vcovHC fastglm_zi
+vcovHC.fastglm_zi <- function(object, type = c("HC0", "HC1"), ...)
+    fastglm_vcov(object, match.arg(type), ...)
+#' @rdname vcovHC.fastglm_count
+#' @exportS3Method sandwich::vcovHC fastglm_truncated
+vcovHC.fastglm_truncated <- function(object, type = c("HC0", "HC1"), ...)
+    fastglm_vcov(object, match.arg(type), ...)

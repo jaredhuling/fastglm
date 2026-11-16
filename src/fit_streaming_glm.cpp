@@ -6,6 +6,7 @@
 #include "../inst/include/chunk_source.h"
 #include "../inst/include/bias_reduction.h"
 #include "../inst/include/streaming_qr.h"
+#include "../inst/include/conv_rule.h"
 
 #include <stdexcept>
 #include <string>
@@ -178,6 +179,18 @@ static Chunk pull_chunk(Function& callback, int k, int expected_p)
     return c;
 }
 
+// Statistics that the final pass would otherwise compute. When supplied to
+// stream_pass, the Pearson statistic and the null deviance are accumulated
+// at the pass's beta, so a fit that stops at the beta of its last pass needs
+// no final pass.
+struct PassStats {
+    bool enabled = false;
+    bool has_intercept = false;
+    double null_mean = 0.0;           // weighted mean response (intercept models)
+    double pearson = 0.0, null_dev = 0.0, dev = 0.0;
+    VectorXd beta;                    // beta of the last pass that filled these
+};
+
 // One streaming pass at the supplied beta.
 //
 //   accumulate     : if true, also build XtWX and Xtwz at this beta.
@@ -197,10 +210,13 @@ static double stream_pass(Function& callback,
                           VectorXd* Xtwz_out,
                           std::vector<bool>* intercept_mask,
                           int* n_total_out,
-                          bool stable_binomial=false)
+                          bool stable_binomial=false,
+                          PassStats* stats=nullptr)
 {
     double dev_sum = 0.0;
     int n_total = 0;
+    const bool collect = stats != nullptr && stats->enabled;
+    double pearson_sum = 0.0, null_sum = 0.0;
 
     if (accumulate) {
         XtWX_out->setZero();
@@ -225,6 +241,14 @@ static double stream_pass(Function& callback,
         ArrayXd wa = c.w.array();
         dev_sum += stable_binomial ? fglm::binomial_firth_deviance(fam.code,eta.matrix(),c.y,c.w) :
             fam.dev_resids_sum(ya, mu, wa);
+        if (collect) {
+            ArrayXd vs; fam.variance(mu, vs);
+            pearson_sum += (wa * (ya - mu).square() / vs).sum();
+            ArrayXd mu0(n_k);
+            if (stats->has_intercept) mu0.setConstant(stats->null_mean);
+            else { ArrayXd off_arr = c.off.array(); fam.linkinv(off_arr, mu0); }
+            null_sum += fam.dev_resids_sum(ya, mu0, wa);
+        }
 
         if (accumulate) {
             ArrayXd dmu, va;
@@ -271,6 +295,10 @@ static double stream_pass(Function& callback,
     }
 
     if (n_total_out) *n_total_out = n_total;
+    if (collect) {
+        stats->pearson = pearson_sum; stats->null_dev = null_sum; stats->dev = dev_sum;
+        stats->beta = beta;
+    }
     return dev_sum;
 }
 
@@ -696,8 +724,17 @@ List fit_streaming_glm(Function chunk_callback,
                        Nullable<NumericVector> start = R_NilValue,
                        Nullable<NumericVector> fam_params = R_NilValue,
                        bool     firth = false,
-                       Nullable<NumericVector> column_maxabs = R_NilValue)
+                       Nullable<NumericVector> column_maxabs = R_NilValue,
+                       Nullable<NumericVector> anchor = R_NilValue,
+                       Nullable<NumericVector> totals = R_NilValue)
 {
+    // anchor: coefficients of a valid fit (the intercept-only fit) toward
+    //   which an invalid starting step is halved.
+    // totals: c(sum(w * y), sum(w), number of positive weights) from the
+    //   caller's validation pass; when supplied, the separate pass that
+    //   computed them is skipped.
+    const int conv_rule = fastglm_conv_rule_default();
+    std::string stop_reason = "iteration_limit";
     if (n_chunks < 1) Rcpp::stop("n_chunks must be >= 1");
     if (type != 0 && type != 2 && type != 3)
         Rcpp::stop("for streaming fits, 'method' must be 0 (QR), 2 (LLT), or 3 (LDLT).");
@@ -729,11 +766,35 @@ List fit_streaming_glm(Function chunk_callback,
     fglm::StreamingQR qr;
     VectorXd initial_adjustment;
     int n_total = 0;
-    double dev_curr = type==0 ? stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,
-        false,1,nullptr,&initial_adjustment,&intercept_mask,&n_total,firth && fglm::bounded_firth_predictors(fam.code)) : stream_pass(chunk_callback, n_chunks, p, beta, fam,
+    auto initial_pass = [&]() {
+        std::fill(intercept_mask.begin(), intercept_mask.end(), true);
+        return type==0 ? stream_qr_pass(chunk_callback,n_chunks,p,beta,fam,qr,nullptr,nullptr,
+            false,1,nullptr,&initial_adjustment,&intercept_mask,&n_total,firth && fglm::bounded_firth_predictors(fam.code)) : stream_pass(chunk_callback, n_chunks, p, beta, fam,
                                   /*accumulate=*/!firth,
                                   /*XtWX_out=*/&XtWX, /*Xtwz_out=*/&Xtwz,
                                   &intercept_mask, &n_total);
+    };
+    double dev_curr = 0.0;
+    {
+        // An invalid starting step is halved toward the anchor, a valid fit,
+        // as in the dense solver.
+        VectorXd anchor_beta;
+        if (anchor.isNotNull()) {
+            NumericVector a(anchor.get());
+            if ((int)a.size() == p) anchor_beta = Map<VectorXd>(a.begin(), p);
+        }
+        int halves = 0;
+        while (true) {
+            try { dev_curr = initial_pass(); if (std::isfinite(dev_curr)) break; }
+            catch (const std::domain_error&) {
+                if (anchor_beta.size() != p || ++halves > maxit) throw;
+                beta = 0.5 * (beta + anchor_beta);
+                continue;
+            }
+            if (anchor_beta.size() != p || ++halves > maxit) break;
+            beta = 0.5 * (beta + anchor_beta);
+        }
+    }
 
     bool converged = false;
     int  iter      = 0;
@@ -776,6 +837,17 @@ List fit_streaming_glm(Function chunk_callback,
         if(fraction<1) {proposed=beta+fraction*delta;++firth_step_reductions;return true;}
         return false;
     };
+    bool pending_confirm = false;     // deviance rule fired; confirm with the decrement
+    // Maximum likelihood fits with LLT/LDLT and caller-supplied totals collect
+    // the final statistics in every pass (rules 1 and 2).
+    PassStats pass_stats;
+    if (!firth && type != 0 && conv_rule >= 1 && totals.isNotNull() &&
+        NumericVector(totals.get()).size() == 3) {
+        NumericVector tv(totals.get());
+        pass_stats.enabled = true;
+        for (int j = 0; j < p; ++j) if (intercept_mask[j]) pass_stats.has_intercept = true;
+        pass_stats.null_mean = tv[1] > 0 ? tv[0] / tv[1] : NA_REAL;
+    }
     QRStationarity qr_stationarity;
     bool qr_stationarity_current=false;
     const bool safeguarded_gamma = firth && fam.code == fglm::FAM_GAMMA_LOG;
@@ -845,7 +917,8 @@ List fit_streaming_glm(Function chunk_callback,
                 previous=qr; leverage_beta=beta;
                 beta=proposed;phi_prev=phi_new;
                 qr_stationarity_current=false;
-            } else {
+            } else if(conv_rule==0) {
+                // Rule 0: behavior of fastglm 0.1.4.
                 double dev_new=0; bool valid=false; int halves=0;
                 do {
                     try {
@@ -860,7 +933,44 @@ List fit_streaming_glm(Function chunk_callback,
                 if(!valid || dev_new>dev_curr*(1+tol)) Rcpp::stop("streaming QR step halving failed");
                 const double change=std::abs(dev_new-dev_curr)/(0.1+std::abs(dev_new));
                 beta=proposed;dev_curr=dev_new;
-                if(change<tol) {converged=true;break;}
+                if(change<tol) {converged=true;stop_reason="converged";break;}
+            } else {
+                // Rules 1 and 2: Fisher decrement from the factor at the
+                // current estimate, ||R (scaled, permuted delta)||^2.
+                const double lambda2=qr.coefficient_coordinates(proposed-beta).squaredNorm();
+                const bool small=std::isfinite(lambda2) && lambda2/(0.1+std::abs(dev_curr))<tol;
+                if(small && pending_confirm) {converged=true;stop_reason="converged";break;}
+                pending_confirm=false;
+                const fglm::StreamingQR current=qr;
+                const double rounding=64*std::numeric_limits<double>::epsilon()*(1+std::abs(dev_curr));
+                double dev_new=std::numeric_limits<double>::infinity(); bool accepted=false;
+                int halves_used=0; bool stop_here=false;
+                for(int halves=0;halves<=maxit;++halves) {
+                    if(halves>0) proposed=0.5*(proposed+beta);
+                    halves_used=halves;
+                    bool ok=false;
+                    try {
+                        dev_new=stream_qr_pass(chunk_callback,n_chunks,p,proposed,fam,qr,nullptr,nullptr,
+                            false,1,nullptr,&gamma_adjustment);
+                        ok=std::isfinite(dev_new) && (halves==0 ?
+                            (dev_new-dev_curr)/(0.1+std::abs(dev_new))<tol : dev_new<=dev_curr+rounding);
+                    } catch(const std::domain_error&) {}
+                    if(ok) {accepted=true;break;}
+                    if(halves==0 && conv_rule==2 && small) {stop_here=true;break;}
+                }
+                if(stop_here) {qr=current;converged=true;stop_reason="converged";break;}
+                if(!accepted) {
+                    qr=current;   // factor at the current estimate
+                    if(small) {converged=true;stop_reason="converged";}
+                    else stop_reason="step_halving_failed";
+                    break;
+                }
+                const double change=std::abs(dev_new-dev_curr)/(0.1+std::abs(dev_new));
+                beta=proposed;dev_curr=dev_new;
+                if(conv_rule==2 && small && halves_used==0 && change<tol) {
+                    qr=current; converged=true; stop_reason="converged"; break;   // glm.fit convention
+                }
+                if(conv_rule==1 && change<tol) pending_confirm=true;
             }
             Rcpp::checkUserInterrupt();
         }
@@ -992,8 +1102,8 @@ List fit_streaming_glm(Function chunk_callback,
             double beta_change = (beta_new - beta).cwiseAbs().maxCoeff();
             beta = beta_new;
             if (!limited && beta_change < tol && phi_change < tol) { converged = true; break; }
-        } else {
-            // Deviance at proposed beta (no accumulation).
+        } else if (conv_rule == 0) {
+            // Rule 0: behavior of fastglm 0.1.4.
             double dev_new;
             bool   pass_ok;
             try {
@@ -1004,8 +1114,6 @@ List fit_streaming_glm(Function chunk_callback,
                 dev_new = std::numeric_limits<double>::infinity();
                 pass_ok = false;
             }
-
-            // Step-halving (Marschner 2011).
             int halv = 0;
             while ((!pass_ok || !std::isfinite(dev_new) ||
                     dev_new > dev_curr * (1.0 + tol)) && halv < 25) {
@@ -1020,12 +1128,69 @@ List fit_streaming_glm(Function chunk_callback,
                 }
                 ++halv;
             }
-
             if (!pass_ok || !std::isfinite(dev_new)) Rcpp::stop("streaming step halving failed");
             double rel = std::abs(dev_new - dev_curr) / (0.1 + std::abs(dev_new));
             beta     = beta_new;
             dev_curr = dev_new;
-            if (rel < tol) { converged = true; break; }
+            if (rel < tol) { converged = true; stop_reason = "converged"; break; }
+        } else {
+            // Rules 1 and 2. XtWX and Xtwz are at the current estimate, so
+            // the Fisher decrement needs no pass over the data.
+            const VectorXd delta = beta_new - beta;
+            const double lambda2 = delta.dot(XtWX * delta);
+            const bool small = std::isfinite(lambda2) &&
+                lambda2 / (0.1 + std::abs(dev_curr)) < tol;
+            if (small && pending_confirm) { converged = true; stop_reason = "converged"; break; }
+            pending_confirm = false;
+            // Rule 2 keeps the information at the current estimate: if the
+            // next step is full and its deviance change is below tol, the fit
+            // stops there, as glm.fit does, with this covariance.
+            MatrixXd XtWX_current;
+            if (conv_rule == 2 && small) XtWX_current = XtWX;
+
+            // Step-halving until the fit is valid and the deviance does not
+            // increase (Marschner 2011). Each trial pass also accumulates the
+            // next weighted least squares system.
+            const double rounding = 64*std::numeric_limits<double>::epsilon()*(1+std::abs(dev_curr));
+            double dev_new = std::numeric_limits<double>::infinity();
+            bool accepted = false;
+            // As in the dense solver: a full step is accepted unless the
+            // deviance rises by tol or more; halved steps must not increase it.
+            int halves_used = 0;
+            bool stop_here = false;
+            for (int halv = 0; halv <= maxit; ++halv) {
+                if (halv > 0) beta_new = 0.5 * (beta_new + beta);
+                halves_used = halv;
+                bool ok = false;
+                try {
+                    dev_new = stream_pass(chunk_callback, n_chunks, p, beta_new, fam,
+                                          true, &XtWX, &Xtwz, nullptr, nullptr, false, &pass_stats);
+                    ok = std::isfinite(dev_new) && (halv == 0 ?
+                        (dev_new - dev_curr) / (0.1 + std::abs(dev_new)) < tol : dev_new <= dev_curr + rounding);
+                } catch (const std::domain_error&) {}
+                if (ok) { accepted = true; break; }
+                if (halv == 0 && conv_rule == 2 && small) { stop_here = true; break; }
+            }
+            if (stop_here) {
+                // Rule 2: the decrement is small and the full step is not
+                // acceptable; the current estimate is converged.
+                XtWX = XtWX_current; converged = true; stop_reason = "converged"; break;
+            }
+            if (!accepted) {
+                // No acceptable step: restore the information at the current
+                // estimate (the trial passes overwrote it).
+                stream_pass(chunk_callback, n_chunks, p, beta, fam, true, &XtWX, &Xtwz, nullptr, nullptr, false, &pass_stats);
+                if (small) { converged = true; stop_reason = "converged"; }
+                else stop_reason = "step_halving_failed";
+                break;
+            }
+            const double rel = std::abs(dev_new - dev_curr) / (0.1 + std::abs(dev_new));
+            beta     = beta_new;
+            dev_curr = dev_new;
+            if (conv_rule == 2 && small && halves_used == 0 && rel < tol) {
+                XtWX = XtWX_current; converged = true; stop_reason = "converged"; break;
+            }
+            if (conv_rule == 1 && rel < tol) pending_confirm = true;
         }
     }
     if (iter > maxit) iter = maxit;
@@ -1045,7 +1210,10 @@ List fit_streaming_glm(Function chunk_callback,
 
     double sum_wy = 0.0, sum_w = 0.0;
     int n_ok = 0;
-    {
+    if (totals.isNotNull() && NumericVector(totals.get()).size() == 3) {
+        NumericVector tv(totals.get());
+        sum_wy = tv[0]; sum_w = tv[1]; n_ok = (int)tv[2];
+    } else {
         for (int k = 1; k <= n_chunks; ++k) {
             Chunk c = pull_chunk(chunk_callback, k, p);
             const int n_k = c.y.size();
@@ -1061,7 +1229,11 @@ List fit_streaming_glm(Function chunk_callback,
     double pearson    = 0.0;
     VectorXd adjusted_score = VectorXd::Zero(p);
     fglm::GammaDispersionTerms final_dispersion_terms;
-    {
+    const bool skip_final_pass = pass_stats.enabled && pass_stats.beta.size() == p &&
+        (pass_stats.beta - beta).cwiseAbs().maxCoeff() == 0.0;
+    if (skip_final_pass) {
+        dev_final = pass_stats.dev; null_dev = pass_stats.null_dev; pearson = pass_stats.pearson;
+    } else {
         for (int k = 1; k <= n_chunks; ++k) {
             Chunk c = pull_chunk(chunk_callback, k, p);
             const int n_k = c.y.size();
@@ -1153,6 +1325,7 @@ List fit_streaming_glm(Function chunk_callback,
     );
 
     if(type==0) out["qr"]=qr.factor();
+    if (!firth) out["convergence.reason"] = stop_reason;
     if (firth) {
         out["penalized.deviance"] = dev_final - log_det_XtWX;
         out["log.det.XtWX"]       = log_det_XtWX;
