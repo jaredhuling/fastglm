@@ -32,7 +32,7 @@ struct QRAccurateScalar {
 
 // A compensated dot product prevents large, cancelling coefficients from
 // injecting avoidable rounding noise into deviance-based step acceptance.
-inline Eigen::VectorXd qr_linear_predictor(const Eigen::MatrixXd& X,
+inline Eigen::VectorXd qr_linear_predictor(const Eigen::Ref<const Eigen::MatrixXd>& X,
     const Eigen::VectorXd& beta,const Eigen::VectorXd& offset)
 {
     Eigen::VectorXd eta(X.rows());
@@ -68,7 +68,7 @@ public:
     void project_with(const StreamingQR& factor) {
         *this=factor; qty.setZero(); projection=true;
     }
-    void add(const Eigen::MatrixXd& X, const Eigen::VectorXd& z,
+    void add(const Eigen::Ref<const Eigen::MatrixXd>& X, const Eigen::VectorXd& z,
              const Eigen::VectorXd& weights) {
         const int p=X.cols(), n=X.rows();
         if(!weights.allFinite() || (weights.array()<0).any())
@@ -119,12 +119,12 @@ public:
         return (pivot*b).cwiseQuotient(scale);
     }
     // X / scale, with the QR column permutation, times R^{-1}.
-    Eigen::MatrixXd row_basis(const Eigen::MatrixXd& X) const {
+    Eigen::MatrixXd row_basis(const Eigen::Ref<const Eigen::MatrixXd>& X) const {
         Eigen::MatrixXd scaled=X*scale.cwiseInverse().asDiagonal()*pivot;
         Eigen::MatrixXd t=R.transpose().template triangularView<Eigen::Lower>().solve(scaled.transpose());
         return t.transpose();
     }
-    Eigen::MatrixXd accurate_row_basis(const Eigen::MatrixXd& X) const {
+    Eigen::MatrixXd accurate_row_basis(const Eigen::Ref<const Eigen::MatrixXd>& X) const {
         const int p=X.cols();
         Eigen::MatrixXd basis(X.rows(),p);
         std::vector<QRAccurateScalar> row(p);

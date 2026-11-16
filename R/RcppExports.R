@@ -149,6 +149,10 @@ ordinal_partial_observed_evaluate <- function(x, z, y, counts, weights, offset, 
     .Call(`_fastglm_ordinal_partial_observed_evaluate`, x, z, y, counts, weights, offset, categories, coefficients, block_size, link)
 }
 
+weighted_crossprod <- function(x, w) {
+    .Call(`_fastglm_weighted_crossprod`, x, w)
+}
+
 streaming_qr_eta <- function(x, beta, offset) {
     .Call(`_fastglm_streaming_qr_eta`, x, beta, offset)
 }

@@ -54,6 +54,16 @@ inline void accumulate_xtwx_streamed(
 // xtwz = X' diag(w^2) z, both from the same weighted row block while it is in
 // cache. Replaces the two separate passes of accumulate_xtwx_streamed and
 // accumulate_xtwz_streamed, and never forms the n x p weighted design.
+inline void add_xtwx_xtwz_blocked(
+    const Eigen::Ref<const Eigen::MatrixXd>& X,
+    const Eigen::Ref<const Eigen::VectorXd>& w,
+    const Eigen::Ref<const Eigen::VectorXd>& z,
+    Eigen::MatrixXd& xtwx,
+    Eigen::VectorXd& xtwz,
+    Eigen::MatrixXd& WB,
+    Eigen::VectorXd& wzb,
+    int chunk_rows);
+
 // `block` and `wzb` are workspaces reused across calls; they are resized
 // only when too small, so repeated IRLS iterations do not allocate.
 inline void accumulate_xtwx_xtwz_fused(
@@ -66,11 +76,27 @@ inline void accumulate_xtwx_xtwz_fused(
     Eigen::VectorXd& wzb,
     int chunk_rows = -1)
 {
-    if (chunk_rows <= 0) chunk_rows = default_chunk_rows();
-    const Eigen::Index n = X.rows();
     const Eigen::Index p = X.cols();
     xtwx.setZero(p, p);
     xtwz.setZero(p);
+    add_xtwx_xtwz_blocked(X, w, z, xtwx, xtwz, WB, wzb, chunk_rows);
+}
+
+// As accumulate_xtwx_xtwz_fused, but adds to xtwx (lower triangle) and xtwz
+// instead of overwriting them, for accumulation across data blocks.
+inline void add_xtwx_xtwz_blocked(
+    const Eigen::Ref<const Eigen::MatrixXd>& X,
+    const Eigen::Ref<const Eigen::VectorXd>& w,
+    const Eigen::Ref<const Eigen::VectorXd>& z,
+    Eigen::MatrixXd& xtwx,
+    Eigen::VectorXd& xtwz,
+    Eigen::MatrixXd& WB,
+    Eigen::VectorXd& wzb,
+    int chunk_rows)
+{
+    if (chunk_rows <= 0) chunk_rows = default_chunk_rows();
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
     const Eigen::Index rows = std::min<Eigen::Index>(chunk_rows, std::max<Eigen::Index>(n, 1));
     if (WB.rows() < rows || WB.cols() != p) WB.resize(rows, p);
     if (wzb.size() < rows) wzb.resize(rows);

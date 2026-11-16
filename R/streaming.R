@@ -159,7 +159,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         ww[w==0] <- 0
         zz <- eta-z$offset+(z$y-mu)/dm; zz[w==0] <- 0
         if(method==0L) qr.state <- streaming_qr_update(x,zz,ww,qr.state)
-        else { a <- a+crossprod(x,ww*x); rhs <- rhs+drop(crossprod(x,ww*zz)) }
+        else { a <- a+weighted_crossprod(x,ww); rhs <- rhs+drop(crossprod(x,ww*zz)) }
         nobs <- nobs+sum(w>0); sumw <- sumw+sum(w); sumwy <- sumwy+sum(w*z$y)
         if(fc==10L) gamma.null.total <- .gamma_log_null_total(z$y,w,z$offset,gamma.null.total)
     }

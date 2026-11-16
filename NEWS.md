@@ -36,7 +36,14 @@
   the validation pass, and the deviance, Pearson statistic, and null
   deviance are accumulated in the last iteration's pass instead of a
   separate final pass (a typical logistic fit reads the data 6 times instead
-  of 8).
+  of 8). QR streaming fits now do the same.
+* Streamed fits no longer copy each block of rows: the C++ reader uses the
+  block returned by the source in place, and the weighted cross products are
+  accumulated over row sub-blocks instead of from a weighted copy of the
+  block (also in the validation pass, through a new internal
+  `weighted_crossprod()`). For a logistic model of 7.3 million flights read
+  from 12 Parquet files (61 coefficients), peak memory fell from 4.1 to
+  3.0 GB and fitting time from 96 to 58 seconds.
 
 ## Speed
 

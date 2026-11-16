@@ -753,6 +753,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// weighted_crossprod
+NumericMatrix weighted_crossprod(NumericMatrix x, NumericVector w);
+RcppExport SEXP _fastglm_weighted_crossprod(SEXP xSEXP, SEXP wSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type w(wSEXP);
+    rcpp_result_gen = Rcpp::wrap(weighted_crossprod(x, w));
+    return rcpp_result_gen;
+END_RCPP
+}
 // streaming_qr_eta
 NumericVector streaming_qr_eta(NumericMatrix x, NumericVector beta, NumericVector offset);
 RcppExport SEXP _fastglm_streaming_qr_eta(SEXP xSEXP, SEXP betaSEXP, SEXP offsetSEXP) {
@@ -966,6 +978,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_ordinal_partial_constrained_native", (DL_FUNC) &_fastglm_ordinal_partial_constrained_native, 19},
     {"_fastglm_ordinal_partial_domain_values", (DL_FUNC) &_fastglm_ordinal_partial_domain_values, 4},
     {"_fastglm_ordinal_partial_observed_evaluate", (DL_FUNC) &_fastglm_ordinal_partial_observed_evaluate, 10},
+    {"_fastglm_weighted_crossprod", (DL_FUNC) &_fastglm_weighted_crossprod, 2},
     {"_fastglm_streaming_qr_eta", (DL_FUNC) &_fastglm_streaming_qr_eta, 3},
     {"_fastglm_streaming_qr_update", (DL_FUNC) &_fastglm_streaming_qr_update, 4},
     {"_fastglm_streaming_qr_finish", (DL_FUNC) &_fastglm_streaming_qr_finish, 1},
