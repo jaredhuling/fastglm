@@ -17,7 +17,11 @@ fastglm_batch(
   workers = 1L,
   inference = c("full", "diagonal", "none"),
   retain.data = TRUE,
-  firth = NULL
+  firth = NULL,
+  model = c("glm", "negbin", "truncated", "hurdle", "zeroinfl", "twopart"),
+  z = NULL,
+  dist = c("negbin", "poisson"),
+  link = "logit"
 )
 }
 \arguments{
@@ -41,7 +45,24 @@ standard errors, and `"none"` omits inference from the result.}
 \item{retain.data}{retain the design and response on each model.}
 
 \item{firth}{apply mean bias reduction; `NULL` uses the prepared design's
-default, or `FALSE` for a matrix supplied directly.}
+default, or `FALSE` for a matrix supplied directly. For count models it is
+available for `model = "twopart"` only.}
+
+\item{model}{the model fitted to each response: a GLM with `family`
+(default), or a negative binomial ([fastglm_nb()]), zero-truncated
+([fastglm_truncated()]), hurdle ([fastglm_hurdle()]), zero-inflated
+([fastglm_zi()]), or two-part ([fastglm_twopart()]) model. `design` then
+gives the count (or positive-outcome) predictors, which may be dense,
+sparse, or a file-backed `big.matrix`.}
+
+\item{z}{for hurdle, zero-inflated, and two-part models, the design of the
+binary or inflation part: a matrix or an object from [fastglm_prepare()];
+defaults to `design`. Its offset is the binary-part offset.}
+
+\item{dist}{count distribution for truncated, hurdle, and zero-inflated
+models: `"negbin"` or `"poisson"`.}
+
+\item{link}{link of the binary or inflation part of two-component models.}
 }
 \value{
 A named list of fitted models.
@@ -55,4 +76,12 @@ weights rebuild this setup; offsets and responses can vary independently.
 Other families and decompositions use the ordinary fitting routine.
 Sequential fits may use the preceding converged fit as a starting value.
 Independent fits can run in separate R processes.
+}
+\details{
+For count models, `offset` applies to the count (or positive)
+  part, `inference` must be `"full"`, `method` and `retain.data` apply only
+  to GLMs, and `warm.start` starts each negative binomial fit from the
+  preceding converged coefficients. A prepared formula design (and
+  prepared `z`) is recorded on each fit, so predictions can use new data
+  frames.
 }

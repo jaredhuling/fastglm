@@ -124,15 +124,40 @@ fastglm_prepare <- function(x, data = NULL, weights = NULL, offset = NULL, firth
 #'   standard errors, and `"none"` omits inference from the result.
 #' @param retain.data retain the design and response on each model.
 #' @param firth apply mean bias reduction; `NULL` uses the prepared design's
-#'   default, or `FALSE` for a matrix supplied directly.
+#'   default, or `FALSE` for a matrix supplied directly. For count models it is
+#'   available for `model = "twopart"` only.
+#' @param model the model fitted to each response: a GLM with `family`
+#'   (default), or a negative binomial ([fastglm_nb()]), zero-truncated
+#'   ([fastglm_truncated()]), hurdle ([fastglm_hurdle()]), zero-inflated
+#'   ([fastglm_zi()]), or two-part ([fastglm_twopart()]) model. `design` then
+#'   gives the count (or positive-outcome) predictors, which may be dense,
+#'   sparse, or a file-backed `big.matrix`.
+#' @param z for hurdle, zero-inflated, and two-part models, the design of the
+#'   binary or inflation part: a matrix or an object from [fastglm_prepare()];
+#'   defaults to `design`. Its offset is the binary-part offset.
+#' @param dist count distribution for truncated, hurdle, and zero-inflated
+#'   models: `"negbin"` or `"poisson"`.
+#' @param link link of the binary or inflation part of two-component models.
+#' @details For count models, `offset` applies to the count (or positive)
+#'   part, `inference` must be `"full"`, `method` and `retain.data` apply only
+#'   to GLMs, and `warm.start` starts each negative binomial fit from the
+#'   preceding converged coefficients. A prepared formula design (and
+#'   prepared `z`) is recorded on each fit, so predictions can use new data
+#'   frames.
 #' @returns A named list of fitted models.
 #' @export
 fastglm_batch <- function(design, y, family = gaussian(), weights = NULL,
                           offset = NULL, method = "auto", tol = 1e-8,
                           maxit = 100L, warm.start = TRUE, workers = 1L,
                           inference = c("full", "diagonal", "none"), retain.data = TRUE,
-                          firth = NULL) {
+                          firth = NULL,
+                          model = c("glm", "negbin", "truncated", "hurdle", "zeroinfl", "twopart"),
+                          z = NULL, dist = c("negbin", "poisson"), link = "logit") {
+    model <- match.arg(model)
     if (!inherits(design,"fastglm_design")) design <- fastglm_prepare(design)
+    if (model != "glm")
+        return(.count_batch(design, y, model, z, match.arg(dist), link, weights, offset, tol, maxit,
+                            warm.start, workers, match.arg(inference), firth))
     if(is.matrix(design$x) && is.integer(design$x))
         storage.mode(design$x)<-"double"
     if(is.null(firth)) firth<-isTRUE(design$firth)
@@ -222,6 +247,82 @@ fastglm_batch <- function(design, y, family = gaussian(), weights = NULL,
         for(j in seq_along(y)) {
             out[[j]] <- one(j,b)
             b<-if(warm.start && out[[j]]$converged && all(is.finite(coef(out[[j]])))) coef(out[[j]]) else NULL
+        }
+    }
+    names(out) <- names(y); out
+}
+
+# Repeated count-model fits on a shared design; see fastglm_batch().
+.count_batch <- function(design,y,model,z,dist,link,weights,offset,tol,maxit,warm.start,workers,
+                         inference,firth) {
+    if(inference!="full") stop("count-model batches retain full inference; use inference = \"full\"",call.=FALSE)
+    if(is.null(firth)) firth <- isTRUE(design$firth) && model=="twopart"
+    if(!is.logical(firth) || length(firth)!=1L || is.na(firth)) stop("'firth' must be TRUE or FALSE",call.=FALSE)
+    if(firth && model!="twopart") stop("mean bias reduction in a count batch is available for two-part models",call.=FALSE)
+    two <- model %in% c("hurdle","zeroinfl","twopart")
+    if(two) {
+        if(is.null(z)) z <- design else if(!inherits(z,"fastglm_design")) z <- fastglm_prepare(z)
+        if(NROW(z$x)!=NROW(design$x)) stop("'z' must have one row per design row",call.=FALSE)
+    } else if(!is.null(z)) stop("'z' applies only to hurdle, zero-inflated, and two-part models",call.=FALSE)
+    .check_iterations(tol,maxit)
+    if (!is.list(y)) {
+        if (is.null(dim(y))) y <- matrix(y,ncol=1L)
+        yy <- lapply(seq_len(ncol(y)),function(j) y[,j]); names(yy) <- colnames(y); y <- yy
+    }
+    if (!length(y)) return(list())
+    if (length(workers)!=1L || !is.finite(workers) || workers<1 || workers!=as.integer(workers))
+        stop("'workers' must be a positive integer",call.=FALSE)
+    if (is.null(weights)) weights <- design$weights
+    if (is.null(offset)) offset <- design$offset
+    if(is.matrix(weights) && ncol(weights)!=length(y)) stop("weights must have one column per response",call.=FALSE)
+    if(is.matrix(offset) && ncol(offset)!=length(y)) stop("offset must have one column per response",call.=FALSE)
+    take <- function(v,j) if (is.matrix(v)) v[,j] else v
+    n <- NROW(design$x)
+    one <- function(j,start=NULL) {
+        w <- take(weights,j); off <- take(offset,j); response <- y[[j]]
+        if(!is.numeric(response) || length(response)!=n || any(!is.finite(response)))
+            stop("responses must contain one finite value per design row",call.=FALSE)
+        for(v in list(w,off)) if(!is.numeric(v) || length(v)!=n || any(!is.finite(v)))
+            stop("weights and offsets must contain one finite value per design row",call.=FALSE)
+        fit <- switch(model,
+            negbin=fastglm_nb(design$x,response,weights=w,offset=off,start=start,tol=tol,maxit=maxit),
+            truncated=fastglm_truncated(design$x,response,dist=dist,weights=w,offset=off,tol=tol,maxit=maxit),
+            hurdle=fastglm_hurdle(design$x,response=response,z=z$x,weights=w,offset=cbind(off,z$offset),
+                dist=dist,link=link,tol=tol,maxit=maxit),
+            zeroinfl=fastglm_zi(design$x,response=response,z=z$x,weights=w,offset=cbind(off,z$offset),
+                dist=dist,link=link,tol=tol,maxit=maxit),
+            twopart=fastglm_twopart(design$x,response=response,z=z$x,weights=w,offset=cbind(off,z$offset),
+                link=link,tol=tol,maxit=maxit,firth=firth))
+        # Record the prepared formula information for prediction from data
+        # frames. Offsets come from the prepared designs (formula offsets are
+        # recomputed from the terms), so the call's offset is not re-evaluated.
+        fit$call$offset <- NULL
+        if(two && !is.null(design$terms) && !is.null(z$terms)) {
+            fit$terms <- list(count=delete.response(design$terms),zero=delete.response(z$terms))
+            fit$levels <- c(design$xlevels,z$xlevels[setdiff(names(z$xlevels),names(design$xlevels))])
+            fit$contrasts <- list(count=design$contrasts,zero=z$contrasts)
+        } else if(!two && !is.null(design$terms)) {
+            fit$terms <- delete.response(design$terms); fit$xlevels <- design$xlevels; fit$contrasts <- design$contrasts
+        }
+        fit
+    }
+    workers <- min(as.integer(workers),length(y))
+    if (workers > 1L) {
+        if (.Platform$OS.type == "windows") {
+            cl <- parallel::makeCluster(workers); on.exit(parallel::stopCluster(cl))
+            initialize <- function(paths) {.libPaths(paths);loadNamespace("fastglm");NULL}
+            environment(initialize) <- baseenv()
+            parallel::clusterCall(cl,initialize,.libPaths())
+            out <- parallel::parLapply(cl,seq_along(y),one)
+        } else out <- parallel::mclapply(seq_along(y),one,mc.cores=workers)
+        bad <- vapply(out,inherits,logical(1),"try-error")
+        if (any(bad)) stop("a batch worker failed: ",out[[which(bad)[1L]]],call.=FALSE)
+    } else {
+        out <- vector("list",length(y)); b <- NULL
+        for(j in seq_along(y)) {
+            out[[j]] <- one(j,if(model=="negbin") b)
+            b <- if(warm.start && isTRUE(out[[j]]$converged) && all(is.finite(coef(out[[j]]))))
+                unname(coef(out[[j]])) else NULL
         }
     }
     names(out) <- names(y); out

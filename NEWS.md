@@ -94,6 +94,11 @@
   tests, and `fastglm_score_test()` gives score tests; these match
   `stats::confint()` and `stats::anova()`.
 * `fastglm_bootstrap()` supports partial proportional odds models.
+* `fastglm_batch()` fits negative binomial, zero-truncated, hurdle,
+  zero-inflated, and two-part models to many responses on a shared design
+  (`model` argument, with a prepared binary-part design `z`).
+* Predictions of hurdle, zero-inflated, and two-part models from new data no
+  longer warn about factors that appear in only one component.
 * `predict()`, `residuals()`, and `simulate()` work for hurdle and two-part
   models fit to sparse matrices; they previously stopped with an error.
 * Sparse and streamed hurdle models no longer report convergence when the

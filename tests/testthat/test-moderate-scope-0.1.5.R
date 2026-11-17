@@ -122,3 +122,37 @@ test_that("sparse hurdle and two-part fits predict", {
     ts <- fastglm_twopart(as(z$X, "dgCMatrix"), response = pos, z = as(z$Z, "dgCMatrix"))
     expect_equal(predict(ts), predict(fastglm_twopart(z$X, response = pos, z = z$Z)), tolerance = 1e-10)
 })
+
+test_that("fastglm_batch fits count models on a shared design", {
+    set.seed(51); n <- 600
+    d <- data.frame(x = rnorm(n), g = factor(sample(c("a", "b", "c"), n, TRUE)), w = rnorm(n))
+    mu <- exp(0.4 + 0.3 * d$x + 0.2 * (d$g == "b"))
+    Y <- cbind(y1 = MASS::rnegbin(n, mu, 1.5), y2 = MASS::rnegbin(n, 1.5 * mu, 3))
+    Y[runif(n) < plogis(-0.5 + 0.5 * d$w), ] <- 0
+    P <- fastglm_prepare(~ x + g, data = d); PZ <- fastglm_prepare(~ w, data = d)
+    nb <- fastglm_batch(P, Y, model = "negbin")
+    expect_named(nb, c("y1", "y2"))
+    d$y1 <- Y[, "y1"]; d$y2 <- Y[, "y2"]
+    expect_equal(coef(nb$y2), coef(fastglm_nb(y2 ~ x + g, data = d)), tolerance = 1e-7)
+    h <- fastglm_batch(P, Y, model = "hurdle", z = PZ)
+    hs <- fastglm_hurdle(y1 ~ x + g | w, data = d, dist = "negbin")
+    expect_equal(coef(h$y1), coef(hs), tolerance = 1e-10)
+    nd <- d[1:4, ]
+    expect_equal(predict(h$y1, newdata = nd), predict(hs, newdata = nd), tolerance = 1e-10)
+    zi <- fastglm_batch(P, Y, model = "zeroinfl", z = PZ, dist = "poisson")
+    expect_equal(coef(zi$y1), coef(fastglm_zi(y1 ~ x + g | w, data = d, dist = "poisson")), tolerance = 1e-8)
+    cost <- ifelse(Y > 0, Y * 10 + 0.5, 0)
+    tp <- fastglm_batch(P, cost, model = "twopart", z = PZ)
+    d$c1 <- cost[, 1]
+    expect_equal(coef(tp[[1]]), coef(fastglm_twopart(c1 ~ x + g | w, data = d)), tolerance = 1e-10)
+    expect_error(fastglm_batch(P, Y, model = "negbin", inference = "none"), "full")
+    expect_error(fastglm_batch(P, Y, model = "negbin", z = PZ), "applies only")
+})
+
+test_that("two-component predictions from new data do not warn about the other component's factors", {
+    set.seed(52); n <- 400
+    d <- data.frame(x = rnorm(n), g = factor(sample(c("a", "b"), n, TRUE)), w = rnorm(n))
+    d$y <- ifelse(runif(n) < plogis(0.3 + 0.5 * d$w), rpois(n, exp(0.5 + 0.3 * d$x + 0.4 * (d$g == "b"))), 0)
+    fit <- fastglm_hurdle(y ~ x + g | w, data = d)
+    expect_no_warning(predict(fit, newdata = d[1:5, ]))
+})

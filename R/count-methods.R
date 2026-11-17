@@ -47,10 +47,17 @@
             stop("prediction designs must match the fitted component columns and share row counts",call.=FALSE)
         return(list(x=list(count=z$X,zero=z$Z),offset=z$offset))
     }
+    # Each component receives only the factor levels and contrasts of its own
+    # variables; levels of the other component's factors make model.frame()
+    # and model.matrix() warn.
     frames <- lapply(object$terms, function(tt) model.frame(delete.response(tt), newdata,
-                        xlev = object$levels, na.action = na.pass))
-    x <- lapply(names(frames), function(k) model.matrix(delete.response(object$terms[[k]]), frames[[k]],
-                contrasts.arg = object$contrasts[[k]]))
+                        xlev = object$levels[intersect(names(object$levels), all.vars(tt))],
+                        na.action = na.pass))
+    x <- lapply(names(frames), function(k) {
+        ca <- object$contrasts[[k]]
+        if (!is.null(ca)) ca <- ca[intersect(names(ca), names(frames[[k]]))]
+        model.matrix(delete.response(object$terms[[k]]), frames[[k]], contrasts.arg = ca)
+    })
     names(x) <- names(frames)
     off <- lapply(names(frames), function(k) {
         z <- model.offset(frames[[k]])
