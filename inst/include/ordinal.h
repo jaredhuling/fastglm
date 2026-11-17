@@ -93,21 +93,111 @@ struct OrdinalData {
 struct OrdinalRow {
     VectorXd eta,g,cdf,survival,logp,left,right,neighbor,gprime,logg,logcdf,logsurvival,location,logden;
     VectorXd loggap,inverse_gap,neighbor_gap;
+    // Logit link without per-pair logarithms (evaluate(..., need_logs=false)):
+    // expo holds exp(-|eta|); exp(+-alpha) and the gap probabilities
+    // 1 - exp(-(alpha_s - alpha_{s-1})) are computed once per parameter value.
+    VectorXd expo,exp_alpha,exp_neg_alpha,gap_probability,inverse_scratch,left_gap,right_gap;
+    bool products_ok=false;
     int link=0;
     explicit OrdinalRow(const VectorXd& alpha) : eta(alpha.size()),g(alpha.size()),cdf(alpha.size()),
         survival(alpha.size()),logp(alpha.size()+1),left(alpha.size()),right(alpha.size()),neighbor(alpha.size()),
         gprime(alpha.size()),logg(alpha.size()),logcdf(alpha.size()),logsurvival(alpha.size()),
-        location(alpha.size()+1),logden(alpha.size()),loggap(alpha.size()),inverse_gap(alpha.size()),neighbor_gap(alpha.size()) {
+        location(alpha.size()+1),logden(alpha.size()),loggap(alpha.size()),inverse_gap(alpha.size()),neighbor_gap(alpha.size()),
+        expo(alpha.size()),exp_alpha(alpha.size()),exp_neg_alpha(alpha.size()),gap_probability(alpha.size()),
+        inverse_scratch(alpha.size()),left_gap(VectorXd::Zero(alpha.size())),right_gap(VectorXd::Zero(alpha.size())) {
         for(int s=1;s<alpha.size();++s) {
             const double gap=alpha[s]-alpha[s-1];
             loggap[s]=ordinal_log1mexp(-gap);inverse_gap[s]=1/std::expm1(gap);
+            gap_probability[s]=-std::expm1(-gap);
         }
         for(int s=1;s+1<alpha.size();++s)
             neighbor_gap[s]=-std::expm1(alpha[s-1]-alpha[s+1]);
+        // exp(-|alpha_s - l|) = exp(-alpha_s) exp(l) or exp(alpha_s) exp(-l). With
+        // |alpha_s| and |l| at most 300 neither factor overflows or underflows.
+        // left = survival + left_gap and right = cdf + right_gap, as below.
+        for(int s=1;s<alpha.size();++s) { left_gap[s]=inverse_gap[s];right_gap[s-1]=inverse_gap[s]; }
+        products_ok=alpha.size()==0 || alpha.cwiseAbs().maxCoeff()<=300;
+        if(products_ok) { exp_alpha=alpha.array().exp();exp_neg_alpha=(-alpha.array()).exp(); }
     }
-    void evaluate(const VectorXd& alpha,double linear,int link_code=0) {
+    // Log cumulative and survival probabilities and the log category
+    // probability for the logit link, from eta and expo; the same expressions
+    // as the full evaluation below.
+    double logit_log_cdf(int s) const { const double d=std::log1p(expo[s]);return eta[s]>=0 ? -d : eta[s]-d; }
+    double logit_log_survival(int s) const { const double d=std::log1p(expo[s]);return eta[s]>=0 ? -eta[s]-d : -d; }
+    double logit_logp(int k) const {
+        const int q=eta.size();
+        if(k==0) return logit_log_cdf(0);
+        if(k==q) return logit_log_survival(q-1);
+        return logit_log_cdf(k)+logit_log_survival(k-1)+loggap[k];
+    }
+    // The smallest log category probability. The category is located on the
+    // probability scale, P_s = F_s (1 - F_{s-1}) (1 - exp(-gap_s)), and its
+    // logarithm evaluated once; near underflow every category is evaluated.
+    double logit_min_logp() const {
+        const int q=eta.size();
+        int best=0;double v=cdf[0];
+        if(q>1) {
+            Eigen::Index at;
+            const double interior=(cdf.tail(q-1).array()*survival.head(q-1).array()*
+                gap_probability.tail(q-1).array()).minCoeff(&at);
+            if(interior<v) { v=interior;best=static_cast<int>(at)+1; }
+        }
+        if(survival[q-1]<v) { v=survival[q-1];best=q; }
+        if(v>1e-280 && std::isfinite(v)) return logit_logp(best);
+        double m=std::numeric_limits<double>::infinity();
+        for(int k=0;k<=q;++k) m=std::min(m,logit_logp(k));
+        return m;
+    }
+    void evaluate(const VectorXd& alpha,double linear,int link_code=0,bool need_logs=true) {
         link=link_code;
         const int q=alpha.size();
+        if(link==0 && !need_logs) {
+            // The information pass needs no logarithms except at the observed
+            // categories (logit_logp) and the smallest probability.
+            const bool products=products_ok && std::abs(linear)<=300;
+            for(int s=0;s<q;++s) eta[s]=alpha[s]-linear;
+            if(products) {
+                // The thresholds increase, so eta changes sign once: below
+                // `split` eta < 0 and exp(-|eta|) = exp(alpha) exp(-l), from
+                // `split` on eta >= 0 and exp(-|eta|) = exp(-alpha) exp(l).
+                const double el=std::exp(linear),enl=std::exp(-linear);
+                int split=0;
+                while(split<q && eta[split]<0) ++split;
+                // Array expressions over each range so that they vectorize.
+                if(split>0) {
+                    expo.head(split).array()=exp_alpha.head(split).array()*enl;
+                    inverse_scratch.head(split).array()=(1+expo.head(split).array()).inverse();
+                    cdf.head(split).array()=expo.head(split).array()*inverse_scratch.head(split).array();
+                    survival.head(split)=inverse_scratch.head(split);
+                }
+                if(split<q) {
+                    const int m=q-split;
+                    expo.tail(m).array()=exp_neg_alpha.tail(m).array()*el;
+                    inverse_scratch.tail(m).array()=(1+expo.tail(m).array()).inverse();
+                    cdf.tail(m)=inverse_scratch.tail(m);
+                    survival.tail(m).array()=expo.tail(m).array()*inverse_scratch.tail(m).array();
+                }
+                g.array()=expo.array()*inverse_scratch.array().square();
+            } else {
+                for(int s=0;s<q;++s) {
+                    const double e=std::exp(-std::abs(eta[s])),inverse=1/(1+e);
+                    expo[s]=e;
+                    cdf[s]=eta[s]>=0 ? inverse : e*inverse;
+                    survival[s]=eta[s]>=0 ? e*inverse : inverse;
+                    g[s]=e*inverse*inverse;
+                }
+            }
+            left=survival+left_gap;right=cdf+right_gap;
+            if(q==1) neighbor[0]=1;
+            else {
+                neighbor[0]=cdf[1];neighbor[q-1]=survival[q-2];
+                if(q>2) neighbor.segment(1,q-2).array()=cdf.tail(q-2).array()*survival.head(q-2).array()*
+                    neighbor_gap.segment(1,q-2).array();
+            }
+            if(!left.allFinite() || !right.allFinite())
+                throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
+            return;
+        }
         if(link!=0) {
             for(int s=0;s<q;++s) {
                 eta[s]=alpha[s]-linear;
@@ -203,39 +293,58 @@ inline void ordinal_add_information(const OrdinalData& data,const VectorXd& para
     for(int first=0;first<data.n;first+=data.block) {
         Rcpp::checkUserInterrupt();
         const int length=std::min(data.block,data.n-first);
-        MatrixXd rowsums=MatrixXd::Zero(length,q);
+        // Per-row threshold terms are stored threshold-major (column r holds
+        // row r), and the tridiagonal information is accumulated in vectors:
+        // writing the diagonal of the dense information for every row and
+        // threshold touches a new cache line each time.
+        MatrixXd rowsums=MatrixXd::Zero(q,length);
+        VectorXd diagonal_sum=VectorXd::Zero(q),off_sum=VectorXd::Zero(std::max(q-1,0));
         VectorXd slope_score=VectorXd::Zero(length),slope_weight=VectorXd::Zero(length);
         for(int r=0;r<length;++r) {
             const int i=first+r;const double m=data.totals[i];
             if(m==0) continue;
-            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link);
-            result.min_logp=std::min(result.min_logp,row.logp.minCoeff());
+            // For the logit link the row is evaluated without per-pair
+            // logarithms; log probabilities are formed only where needed.
+            const bool lean=data.link==0;
+            row.evaluate(alpha,data.linear(i,beta)+data.offset[i],data.link,!lean);
+            const double row_min=lean ? row.logit_min_logp() : row.logp.minCoeff();
+            if(!std::isfinite(row_min))
+                throw OrdinalEvaluationError("non-finite ordinal probabilities or derivatives");
+            result.min_logp=std::min(result.min_logp,row_min);
             if(data.grouped) {
                 for(int k=0;k<data.K;++k) {
                     const double y=data.weights[i]*data.counts(i,k);
-                    result.loglik+=y*row.logp[k];
+                    if(lean) { if(y!=0) result.loglik+=y*row.logit_logp(k); }
+                    else result.loglik+=y*row.logp[k];
                     slope_score[r]-=y*row.location_score(k);
                     if(k<q) result.ordinary[k]+=y*row.left[k];
                     if(k>0) result.ordinary[k-1]-=y*row.right[k-1];
                 }
             } else {
                 const int k=data.codes[i]-1;
-                result.loglik+=m*row.logp[k];
+                result.loglik+=m*(lean ? row.logit_logp(k) : row.logp[k]);
                 slope_score[r]=-m*row.location_score(k);
                 if(k<q) result.ordinary[k]+=m*row.left[k];
                 if(k>0) result.ordinary[k-1]-=m*row.right[k-1];
             }
+            double* terms=rowsums.col(r).data();
+            double weight=0;
             for(int s=0;s<q;++s) {
-                result.information(s,s)+=m*row.g[s]*(row.left[s]+row.right[s]);
-                rowsums(r,s)=m*row.g[s]*row.neighbor[s];
-                slope_weight[r]+=rowsums(r,s);
-                if(s+1<q) result.information(s,s+1)-=m*row.g[s+1]*row.right[s];
+                diagonal_sum[s]+=m*row.g[s]*(row.left[s]+row.right[s]);
+                terms[s]=m*row.g[s]*row.neighbor[s];
+                weight+=terms[s];
+                if(s+1<q) off_sum[s]-=m*row.g[s+1]*row.right[s];
             }
+            slope_weight[r]+=weight;
+        }
+        for(int s=0;s<q;++s) {
+            result.information(s,s)+=diagonal_sum[s];
+            if(s+1<q) result.information(s,s+1)+=off_sum[s];
         }
         if(p) {
             const auto xx=data.x.middleRows(first,length);
             result.ordinary.tail(p).noalias()+=xx.transpose()*slope_score;
-            result.information.topRightCorner(q,p).noalias()-=rowsums.transpose()*xx;
+            result.information.topRightCorner(q,p).noalias()-=rowsums*xx;
             MatrixXd weighted=slope_weight.asDiagonal()*xx;
             result.information.bottomRightCorner(p,p).noalias()+=xx.transpose()*weighted;
         }
