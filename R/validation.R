@@ -85,7 +85,7 @@
     largest+log(sum(exp(terms-largest)))
 }
 
-.finish_glm <- function(res, offset, intercept = res$intercept, null = TRUE) {
+.finish_glm <- function(res, offset, intercept = res$intercept, null = TRUE, aic = TRUE) {
     fam <- res$family; y <- res$y; w <- res$prior.weights
     # Family code supplied by fastglmPure() (attribute removed below); NULL
     # for other callers, which use the R path throughout.
@@ -168,7 +168,10 @@
             res$null.deviance <- sum(fam$dev.resids(y, mu0, w))
         }
     }
-    if(binomial.code>=0L) {
+    # aic = FALSE: the caller sets res$aic itself (fastglm_nb() does, from
+    # the negative binomial log likelihood).
+    if (!aic) {
+    } else if(binomial.code>=0L) {
         res$aic <- moments$aic+2*res$rank
     } else if (all(positive)) {
         res$aic <- .family_aic(fam,y, res$n, res$fitted.values, w, res$deviance) + 2 * res$rank

@@ -285,7 +285,11 @@ fastglm_nb <- function(x, y = NULL,
     res$y <- as.numeric(y); res$x <- x; res$n <- n
     res$prior.weights <- weights
     res$intercept <- any(.intercept_columns(x))
-    res <- .finish_glm(res, offset)
+    # The native family code lets .finish_glm() compute residuals, the
+    # Pearson statistic, and the null deviance in one C++ pass; the AIC is
+    # set below from the negative binomial log likelihood.
+    attr(res, "family_code") <- fc
+    res <- .finish_glm(res, offset, aic = FALSE)
     keep <- weights>0
     res$twologlik <- 2*sum(weights[keep]*dnbinom(y[keep],mu=res$fitted.values[keep],size=res$theta,log=TRUE))
     res$aic <- -res$twologlik+2*(res$rank+1L)
@@ -309,10 +313,25 @@ fastglm_nb <- function(x, y = NULL,
         outer.tol=outer.tol,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
     class(res) <- c("fastglm_nb", "fastglm")
     if (poisson.limit) {
-        pois <- suppressWarnings(fastglm(x, y, family = poisson(link = link), weights = weights,
-                                         offset = offset, method = method, tol = tol, maxit = maxit))
+        # The Poisson fit starts from the negative binomial coefficients, which
+        # estimate the same mean model, so it needs few iterations; if that
+        # start fails (for example a row held at the boundary of the sqrt or
+        # identity link), it uses its default start. The comparison needs only
+        # the fitted values, so the light fastglmPure() fit is used, and the
+        # full fastglm() object is built only when the Poisson limit is higher
+        # and may be returned.
+        fit_poisson <- function(start, fitter) suppressWarnings(fitter(x, y, family = poisson(link = link),
+            weights = weights, offset = offset, start = start, method = method, tol = tol, maxit = maxit))
+        pstart <- if (all(is.finite(res$coefficients))) unname(res$coefficients)
+        pois <- if (!is.null(pstart)) tryCatch(fit_poisson(pstart, fastglmPure), error = function(e) NULL)
+        if (is.null(pois) || !isTRUE(pois$converged)) { pstart <- NULL; pois <- fit_poisson(NULL, fastglmPure) }
         keep <- weights > 0
         pois_ll <- sum(weights[keep] * dpois(y[keep], pois$fitted.values[keep], log = TRUE))
+        if (isTRUE(pois$converged) && is.finite(pois_ll) && pois_ll > res$twologlik / 2)
+        {
+            pois <- fit_poisson(pstart, fastglm)
+            pois_ll <- sum(weights[keep] * dpois(y[keep], pois$fitted.values[keep], log = TRUE))
+        }
         refit <- function(theta0) {
             f <- tryCatch(suppressWarnings(fastglm_nb(x, y, weights = weights, offset = offset,
                 start = unname(coef(pois)), init.theta = theta0, link = link, method = method,
