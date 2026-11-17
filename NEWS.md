@@ -79,6 +79,16 @@
   positive outcome, the quantity the binary part models.
 * `fastglm_diagnostics()` supports truncated, hurdle, zero-inflated, and
   two-part fits, and `broom::tidy()` and `broom::glance()` support them too.
+* `fastglm_marginal_effects()` supports GLMs and the count and two-part models,
+  not only ordinal models.
+* A file-backed `big.matrix` can be used with `fastglm_nb()`,
+  `fastglm_truncated()`, `fastglm_hurdle()`, `fastglm_twopart()`, and
+  `fastglm_ordinal()`; the matrix is read in blocks of rows.
+* `fastglm_truncated()` accepts sparse matrices and data sources, and
+  `fastglm_zi()` accepts design matrices (`response` and `z` arguments, as in
+  `fastglm_hurdle()`).
+* Sparse and streamed hurdle models no longer report convergence when the
+  count-part step was halved to almost nothing.
 * Data sources print a short summary, and count model summaries print `theta`
   and the log-likelihood with more digits.
 * More post-fit calculations (AIC, residuals, null deviance) run in C++, so

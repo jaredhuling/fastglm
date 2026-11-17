@@ -12,7 +12,7 @@
 #' supplied in blocks use the same likelihood with blockwise score updates.
 #' The latter permits repeated passes over data that need not fit in memory.
 #'
-#' @param formula a numeric matrix, `dgCMatrix`, [fastglm_source()], or a
+#' @param formula a numeric matrix, `dgCMatrix`, `big.matrix`, [fastglm_source()], or a
 #'   [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 #'   where the right-hand side after `|` specifies the zero-model design.
 #'   If `|` is absent, the same RHS is used for both parts.
@@ -101,7 +101,7 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     dist      <- match.arg(dist)
     link      <- match.arg(link)
     zero.dist <- match.arg(zero.dist, choices = "binomial")
-    if(is.matrix(formula) || inherits(formula,c("dgCMatrix","fastglm_source"))) {
+    if(is.matrix(formula) || inherits(formula,c("dgCMatrix","big.matrix","fastglm_source"))) {
         if(!missing(subset) || !missing(na.action))
             stop("subset and na.action apply only to formula fits; prepare matrix or source rows first",call.=FALSE)
         out <- .count_backend_hurdle(formula,response,z,

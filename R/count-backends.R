@@ -24,8 +24,8 @@
             stop("a data source must supply its own responses, designs, weights, and offsets",call.=FALSE)
         source <- x
     } else {
-        if(!(is.matrix(x) || inherits(x,"dgCMatrix")))
-            stop("design must be a numeric matrix, dgCMatrix, or fastglm_source",call.=FALSE)
+        if(!(is.matrix(x) || inherits(x,c("dgCMatrix","big.matrix"))))
+            stop("design must be a numeric matrix, dgCMatrix, big.matrix, or fastglm_source",call.=FALSE)
         if(is.null(response)) stop("supply 'response' with a matrix design",call.=FALSE)
         if(is.matrix(x) && is.integer(x)) storage.mode(x)<-"double"
         if(is.matrix(z) && is.integer(z)) storage.mode(z)<-"double"
@@ -36,6 +36,8 @@
         original <- list(x=list(count=x,zero=z),y=response,weights=weights,offset=offset)
         if(n<1L) stop("a design must contain at least one row",call.=FALSE)
         # A dense design is already in memory, so one block avoids copying its rows.
+        # Sparse and memory-mapped designs are read in row blocks; a block of a
+        # big.matrix is an ordinary dense matrix.
         source <- if(is.matrix(x) && is.matrix(z))
             fastglm_source(function(k) list(X=x,Z=z,y=response,weights=weights,offset=offset),1L) else
             fastglm_source(function(k) {
@@ -492,7 +494,9 @@
         }
         if(!accepted) break
         change <- max(abs(candidate-beta));beta <- candidate;current <- nextvalue
-        if(change<tol*(1+max(abs(beta)))) {converged<-TRUE;break}
+        # A small change certifies convergence only for a full Newton step; a
+        # step halved toward zero changes little wherever the iteration stalls.
+        if(half==0L && change<tol*(1+max(abs(beta)))) {converged<-TRUE;break}
     }
     list(coefficients=beta,loglik=current$loglik,converged=converged,iter=iter)
 }
@@ -637,4 +641,55 @@
     positive <- .count_backend_glm(reader,"count",Gamma("log"),positive=TRUE,method=method,tol=tol,maxit=maxit,firth=firth)
     controls <- list(link=link,method=method,tol=tol,maxit=maxit,firth=firth,block.size=block.size)
     .count_backend_model(reader,positive,binary,"Gamma",link,controls,continuous=TRUE,firth=firth)
+}
+
+# Zero-truncated regression from sparse, memory-mapped, or streamed designs,
+# using the block-reading count fitter of hurdle models.
+.count_backend_truncated_model <- function(x,y,weights,offset,dist,theta,tol,maxit,
+                                           outer.tol,outer.maxit,block.size=8192L) {
+    reader <- .count_backend_reader(x,y,weights=weights,offset=offset,block.size=block.size)
+    if(reader$state$npositive!=reader$state$nobs)
+        stop("truncated counts must be positive integers",call.=FALSE)
+    if(!is.null(theta) && (length(theta)!=1L || !is.finite(theta) || theta<=0))
+        stop("'theta' must be positive",call.=FALSE)
+    estimated <- dist=="negbin" && is.null(theta)
+    if(estimated) {
+        fit <- .count_backend_truncated(reader,dist,tol,maxit,NULL,outer.tol,outer.maxit)
+    } else {
+        fixed <- if(dist=="negbin") theta else NULL
+        fit <- .count_backend_trunc_beta(reader,fixed,tol=tol,maxit=maxit)
+        fit$theta.boundary <- FALSE
+        fit$vcov.full <- .count_backend_joint(reader,fit$coefficients,fixed,TRUE,theta.estimated=FALSE)
+    }
+    # Exact indexing: for Poisson there is no theta, and fit$theta would
+    # partially match fit$theta.boundary.
+    theta.value <- if(estimated) fit[["theta"]] else if(dist=="negbin") theta else NULL
+    cn <- reader$columns$count
+    beta <- fit$coefficients; names(beta) <- cn
+    rn <- c(cn,if(estimated) "theta")
+    vfull <- fit$vcov.full; dimnames(vfull) <- list(rn,rn)
+    v <- vfull[cn,cn,drop=FALSE]
+    loglik <- .count_backend_count_summary(reader,beta,theta.value,TRUE,"log")$loglik
+    out <- list(coefficients=beta,se=sqrt(diag(v)),cov.unscaled=v,vcov.full=vfull,
+        loglik=loglik,theta=theta.value,
+        SE.theta=if(estimated) sqrt(vfull["theta","theta"]) else NULL,
+        converged=isTRUE(fit[["converged"]]),
+        convergence.reason=if(isTRUE(fit[["converged"]])) "converged" else "iteration_limit",
+        iter=fit[["iter"]],outer.iter=fit[["outer.iter"]],outer.decrement=fit[["outer.decrement"]],
+        dist=dist,theta.estimated=estimated,theta.boundary=isTRUE(fit[["theta.boundary"]]),
+        rank=length(cn),nobs=reader$state$nobs,df.residual=reader$state$nobs-length(rn),
+        dispersion=1,aic=-2*loglik+2*length(rn))
+    if(reader$streaming) {
+        out$source <- reader$source; out$state <- reader$state
+        out$fetch <- function(k) {a<-reader$fetch(k);list(X=a$X,y=a$y,weights=a$weights,offset=a$offset$count)}
+        out$passes <- reader$state$passes; out$chunk.reads <- reader$state$reads
+    } else {
+        o <- reader$original
+        out$x <- o$x$count; out$y <- o$y; out$prior.weights <- o$weights; out$offset <- o$offset$count
+    }
+    class(out) <- "fastglm_truncated"
+    if(out$theta.boundary) { out$SE.theta <- NA_real_; out$vcov.full[,] <- NA_real_
+        out$vcov.full[cn,cn] <- v }
+    if(!out$converged) warning("truncated-count model did not converge",call.=FALSE)
+    out
 }

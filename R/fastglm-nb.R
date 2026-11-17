@@ -7,7 +7,8 @@
 #' fits alternate the existing GLM solver with size updates accumulated over
 #' row blocks, without loading the full design into a dense matrix.
 #'
-#' @param x a model formula, numeric matrix, `dgCMatrix`, or [fastglm_source()]
+#' @param x a model formula, numeric matrix, `dgCMatrix`, file-backed
+#'   `big.matrix` (read in row blocks), or [fastglm_source()]
 #'   supplying rows on demand. A source must supply its own responses,
 #'   weights, and offsets.
 #' @param y non-negative integer response vector; omitted for a formula or a
@@ -141,7 +142,7 @@ fastglm_nb <- function(x, y = NULL,
         fit$call <- match.call()
         return(fit)
     }
-    if(inherits(x,"dgCMatrix") || inherits(x,"fastglm_source")) {
+    if(inherits(x,c("dgCMatrix","big.matrix","fastglm_source"))) {
         out <- .count_backend_nb(x,y,weights,offset,start,init.theta,link,method,tol,maxit,
                                  outer.maxit,outer.tol,theta.tol,theta.maxit,block.size,poisson.limit)
         out$call <- match.call()

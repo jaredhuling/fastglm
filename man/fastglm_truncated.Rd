@@ -20,7 +20,9 @@ fastglm_truncated(
 )
 }
 \arguments{
-\item{x}{numeric model matrix or model formula.}
+\item{x}{numeric model matrix, model formula, `dgCMatrix`, file-backed
+`big.matrix`, or [fastglm_source()]. Sparse, mapped, and source designs
+are read in row blocks.}
 
 \item{y}{positive integer response for a matrix design.}
 

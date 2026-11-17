@@ -20,7 +20,8 @@
 #'
 #' @param formula a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 #'   where the right-hand side after `|` specifies the inflation design.
-#'   If `|` is absent, the same RHS is used for both parts.
+#'   If `|` is absent, the same RHS is used for both parts. Alternatively, a
+#'   numeric count-design matrix, with `response` and optionally `z`.
 #' @param data optional data frame / environment.
 #' @param subset,na.action standard model-frame arguments.
 #' @param weights optional non-negative prior weights.
@@ -38,6 +39,9 @@
 #'   the inner theta MLE (only used when `dist = "negbin"`).
 #' @param model logical; keep the model frame on the result.
 #' @param y,x logical; keep the response / design matrices on the result.
+#' @param response non-negative integer response for a matrix design.
+#' @param z optional inflation-design matrix for a matrix fit; defaults to the
+#'   count design.
 #'
 #' @returns A list of class `c("fastglm_zi", "fastglm")` with elements
 #'   `coefficients` (a list with `count` and `zero`), `se` (likewise),
@@ -87,7 +91,8 @@ fastglm_zi <- function(formula, data, subset, na.action,
                        maxit       = 100L,
                        theta.tol   = 1e-8,
                        theta.maxit = 100L,
-                       model = TRUE, y = TRUE, x = FALSE)
+                       model = TRUE, y = TRUE, x = FALSE,
+                       response = NULL, z = NULL)
 {
     if (!requireNamespace("Formula", quietly = TRUE))
         stop("Package 'Formula' is required for fastglm_zi(); install it.",
@@ -97,6 +102,31 @@ fastglm_zi <- function(formula, data, subset, na.action,
     link <- match.arg(link)
 
     cl <- match.call()
+    matrix.fit <- is.matrix(formula)
+    if (matrix.fit) {
+        # Design matrices supplied directly: the count design is 'formula',
+        # the inflation design is 'z' (defaulting to the count design).
+        if (!missing(subset) || !missing(na.action))
+            stop("subset and na.action apply only to formula fits; prepare matrix rows first", call. = FALSE)
+        X_count <- formula
+        Z_zero <- if (is.null(z)) X_count else z
+        if (!is.matrix(Z_zero)) stop("'z' must be a numeric matrix", call. = FALSE)
+        if (is.integer(X_count)) storage.mode(X_count) <- "double"
+        if (is.integer(Z_zero)) storage.mode(Z_zero) <- "double"
+        if (is.null(response)) stop("supply 'response' with a matrix design", call. = FALSE)
+        Y_resp <- response
+        if (!is.numeric(Y_resp) || !is.null(dim(Y_resp)) || any(Y_resp < 0))
+            stop("'response' must be a non-negative numeric vector.", call. = FALSE)
+        n <- length(Y_resp)
+        if (nrow(X_count) != n || nrow(Z_zero) != n)
+            stop("designs and response must have the same number of rows", call. = FALSE)
+        if (ncol(X_count) == 0L || ncol(Z_zero) == 0L) stop("both components require at least one coefficient", call. = FALSE)
+        wt <- if (missing(weights) || is.null(weights)) rep(1, n) else weights
+        if (!is.numeric(wt) || length(wt) != n || any(wt < 0))
+            stop("'weights' must be non-negative, one per row.", call. = FALSE)
+        offsets <- .count_backend_offsets(if (missing(offset)) NULL else offset, n)
+        f <- NULL; mt_count <- mt_zero <- NULL; mf <- NULL
+    } else {
     if (missing(data)) data <- environment(formula)
     f  <- Formula::Formula(formula)
     has_two_rhs <- length(f)[2] >= 2
@@ -128,6 +158,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
         stop("'weights' must be non-negative.", call. = FALSE)
 
     offsets <- .component_offsets(mf, list(count = mt_count, zero = mt_zero))
+    }
     off_count <- offsets$count; off_zero <- offsets$zero
     .validate_glm_data(X_count, Y_resp, wt, off_count)
     .validate_glm_data(Z_zero, Y_resp, wt, off_zero)
@@ -233,10 +264,10 @@ fastglm_zi <- function(formula, data, subset, na.action,
         dist           = dist,
         link           = link,
         formula        = f,
-        terms          = list(count = mt_count, zero = mt_zero),
+        terms          = if (!matrix.fit) list(count = mt_count, zero = mt_zero),
         assign         = list(count=attr(X_count,"assign"),zero=attr(Z_zero,"assign")),
-        levels         = lapply(mf[vapply(mf, is.factor, logical(1))], levels),
-        na.action      = attr(mf, "na.action"),
+        levels         = if (!matrix.fit) lapply(mf[vapply(mf, is.factor, logical(1))], levels),
+        na.action      = if (!matrix.fit) attr(mf, "na.action"),
         contrasts      = list(count = attr(X_count, "contrasts"),
                               zero  = attr(Z_zero,  "contrasts")),
         weights        = wt,
@@ -250,9 +281,11 @@ fastglm_zi <- function(formula, data, subset, na.action,
     out$vcov <- out$vcov[seq_len(p_c + p_z), seq_len(p_c + p_z), drop = FALSE]
     if (!out$converged) warning("two-component model did not converge", call. = FALSE)
     if (any(!is.finite(diag(out$vcov)))) warning("observed information is not positive definite; covariance is unavailable", call. = FALSE)
-    if (model) out$model <- mf
+    if (model && !matrix.fit) out$model <- mf
     if (y)     out$y     <- Y_resp
-    if (x)     out$x     <- list(count = X_count, zero = Z_zero)
+    # A matrix fit has no terms, so its designs are kept for prediction and
+    # inference.
+    if (x || matrix.fit) out$x <- list(count = X_count, zero = Z_zero)
     class(out) <- "fastglm_zi"
     out$theta.estimated <- dist=="negbin"
     out$theta.boundary <- .count_theta_boundary(out)

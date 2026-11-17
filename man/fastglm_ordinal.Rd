@@ -4,6 +4,7 @@
 \alias{fastglm_ordinal.fastglm_ordinal_design}
 \alias{fastglm_ordinal}
 \alias{fastglm_ordinal.default}
+\alias{fastglm_ordinal.big.matrix}
 \alias{fastglm_ordinal.formula}
 \title{Fit a cumulative-link model for ordered outcomes}
 \usage{
@@ -38,6 +39,23 @@ fastglm_ordinal(x, ...)
   control = list(),
   link = "logit",
   nonparallel = NULL,
+  ...
+)
+
+\method{fastglm_ordinal}{big.matrix}(
+  x,
+  y,
+  weights = NULL,
+  offset = NULL,
+  levels = NULL,
+  firth = FALSE,
+  tol = 1e-08,
+  maxit = 200L,
+  block.size = 2048L,
+  control = list(),
+  link = "logit",
+  nonparallel = NULL,
+  chunk.size = 65536L,
   ...
 )
 
@@ -111,6 +129,11 @@ supply distinct column names or indices. \code{NULL} or an empty selection
 retains the common-slope model and its existing fitting path.}
 
 \item{...}{additional arguments to the default or formula method.}
+
+\item{chunk.size}{for a file-backed `big.matrix`, the number of rows read
+into memory at a time. The fit then uses [fastglm_ordinal_streaming()],
+rereading the matrix in blocks of this many rows, and returns a
+`fastglm_ordinal_stream` object.}
 
 \item{data, subset, na.action, contrasts}{formula and model-frame arguments.}
 

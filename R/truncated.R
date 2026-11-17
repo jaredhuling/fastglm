@@ -4,7 +4,9 @@
 #' positive response. The linear predictor describes the mean of the
 #' underlying untruncated distribution; response predictions describe the
 #' conditional mean among positive observations.
-#' @param x numeric model matrix or model formula.
+#' @param x numeric model matrix, model formula, `dgCMatrix`, file-backed
+#'   `big.matrix`, or [fastglm_source()]. Sparse, mapped, and source designs
+#'   are read in row blocks.
 #' @param y positive integer response for a matrix design.
 #' @param data data frame for a formula.
 #' @param dist `"poisson"` or `"negbin"`.
@@ -31,6 +33,12 @@ fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "neg
         frame <- eval(mc, parent.frame()); tt <- attr(frame, "terms")
         x <- model.matrix(tt, frame); y <- model.response(frame)
         weights <- model.weights(frame); offset <- model.offset(frame)
+    }
+    if (inherits(x, c("dgCMatrix", "big.matrix", "fastglm_source"))) {
+        out <- .count_backend_truncated_model(x, y, weights, offset, dist, theta, tol, maxit,
+                                              outer.tol, outer.maxit)
+        out$call <- cl
+        return(out)
     }
     if (is.null(weights)) weights <- rep(1, length(y))
     if (is.null(offset)) offset <- rep(0, length(y))

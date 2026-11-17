@@ -22,13 +22,16 @@ fastglm_zi(
   theta.maxit = 100L,
   model = TRUE,
   y = TRUE,
-  x = FALSE
+  x = FALSE,
+  response = NULL,
+  z = NULL
 )
 }
 \arguments{
 \item{formula}{a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 where the right-hand side after `|` specifies the inflation design.
-If `|` is absent, the same RHS is used for both parts.}
+If `|` is absent, the same RHS is used for both parts. Alternatively, a
+numeric count-design matrix, with `response` and optionally `z`.}
 
 \item{data}{optional data frame / environment.}
 
@@ -58,6 +61,11 @@ the inner theta MLE (only used when `dist = "negbin"`).}
 \item{model}{logical; keep the model frame on the result.}
 
 \item{y, x}{logical; keep the response / design matrices on the result.}
+
+\item{response}{non-negative integer response for a matrix design.}
+
+\item{z}{optional inflation-design matrix for a matrix fit; defaults to the
+count design.}
 }
 \value{
 A list of class `c("fastglm_zi", "fastglm")` with elements

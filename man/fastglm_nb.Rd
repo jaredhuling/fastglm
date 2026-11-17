@@ -28,7 +28,8 @@ fastglm_nb(
 )
 }
 \arguments{
-\item{x}{a model formula, numeric matrix, `dgCMatrix`, or [fastglm_source()]
+\item{x}{a model formula, numeric matrix, `dgCMatrix`, file-backed
+`big.matrix` (read in row blocks), or [fastglm_source()]
 supplying rows on demand. A source must supply its own responses,
 weights, and offsets.}
 

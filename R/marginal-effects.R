@@ -1,14 +1,17 @@
-#' Average marginal effects for ordinal probabilities
+#' Average marginal effects
 #'
-#' Estimates the average rate of change in each category probability as a
-#' continuous predictor changes. Uncertainty uses the delta method, conditional
+#' Estimates the average rate of change of a prediction as a continuous
+#' predictor changes: the fitted mean of a generalized linear model, the mean,
+#' count-component mean, or zero probability of a count or two-part model, or
+#' each category probability of an ordinal model. Uncertainty uses the delta method, conditional
 #' on the supplied predictor values and averaging weights.
-#' @param object a converged \code{fastglm_ordinal} fit, with common or
-#'   threshold-specific slopes.
+#' @param object a converged GLM (\code{fastglm()}), negative binomial,
+#'   zero-truncated, hurdle, zero-inflated, two-part, or ordinal fit.
 #' @param variable name of one continuous numeric variable. For a formula fit,
 #'   this names the original variable in the data; interactions and smooth
 #'   transformations are differentiated together. For a matrix fit, this names
-#'   one location-design column, with the other columns held fixed.
+#'   one design column, with the other columns held fixed; for two-component
+#'   count models the column is changed in both component designs where present.
 #' @param newdata data frame for a formula fit, or location-design matrix for a
 #'   matrix fit. Defaults to retained fitting data. Supply the original variables
 #'   explicitly when they cannot be recovered from the retained model frame.
@@ -17,15 +20,19 @@
 #' @param vcov. optional full coefficient covariance matrix, as in
 #'   \code{fastglm_average()}.
 #' @param level confidence level for separate normal intervals.
-#' @param type category probabilities (\code{"response"} or
-#'   \code{"probability"}) or \code{"cumulative"} probabilities.
+#' @param type prediction target. For GLMs, \code{"response"} (the mean).
+#'   For count and two-part models, \code{"response"}, \code{"count"}, or
+#'   \code{"zero"}, as in \code{fastglm_average()}. For ordinal models, category
+#'   probabilities (\code{"response"} or \code{"probability"}) or
+#'   \code{"cumulative"} probabilities.
 #' @param eps positive absolute step for numerical differentiation of formula
 #'   terms. The default is \code{.Machine$double.eps^(1/3) * pmax(1, abs(x))}
-#'   for the selected variable. Matrix-column derivatives are exact and do not
-#'   use this argument.
-#' @param offset optional replacement prediction offset. All offsets are held
-#'   fixed when differentiating, including formula offsets involving
-#'   \code{variable}.
+#'   for the selected variable. For ordinal matrix fits the derivative is exact
+#'   and does not use this argument; GLM and count models use centered
+#'   differences for matrix columns as well.
+#' @param offset optional replacement prediction offset (GLM and ordinal fits).
+#'   All offsets are held fixed when differentiating, including formula offsets
+#'   involving \code{variable}.
 #' @details A marginal effect is a derivative, measured in probability units
 #'   per unit of the continuous predictor. It describes a local rate of change;
 #'   a finite change can give a different probability difference. Use
@@ -52,8 +59,16 @@
 #'   Evaluation rows must lie within the fitted model's valid predictor domain.
 #'   Supplied covariance, including cluster covariance, retains covariance among
 #'   thresholds, common slopes, and threshold-specific slopes.
-#' @returns A data frame with \code{variable}, \code{category}, \code{estimate},
-#'   \code{std.error}, \code{conf.low}, and \code{conf.high}. Category effects
+#'
+#'   For GLM and count models, each row's derivative is the centered difference
+#'   of its prediction at the variable plus and minus the step, with every other
+#'   predictor and every offset held fixed, and the standard error uses the
+#'   parameter gradient of that same difference with the model covariance
+#'   (including theta for count models when it is estimated). Streaming fits
+#'   require \code{newdata}.
+#' @returns A data frame with \code{variable}, \code{estimate}, \code{std.error},
+#'   \code{conf.low}, and \code{conf.high}, and for ordinal models also
+#'   \code{category}, with one row per category. Ordinal category effects
 #'   sum to zero. Removed categories have zero effects and unavailable standard
 #'   errors; inference otherwise refers to the reduced category model.
 #' @examples
@@ -62,12 +77,16 @@
 #' d$y <- ordered(cut(.5*d$x + rlogis(150), c(-Inf,-.5,.7,Inf)))
 #' fit <- fastglm_ordinal(y ~ x, data=d, firth=TRUE)
 #' fastglm_marginal_effects(fit, "x")
+#'
+#' # Logistic regression: average change in probability per unit of x
+#' d$z <- rbinom(150, 1, plogis(-0.5 + 0.8 * d$x))
+#' fastglm_marginal_effects(fastglm(z ~ x, data = d, family = binomial()), "x")
 #' @export
 fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
                                      vcov.=NULL,level=.95,type="response",
                                      eps=NULL,offset=NULL) {
     if(!inherits(object,"fastglm_ordinal"))
-        stop("marginal effects currently require a fastglm_ordinal fit",call.=FALSE)
+        return(.response_marginal_effects(object,variable,newdata,weights,vcov.,level,type,eps,offset))
     .ordinal_check_inference(object)
     if(!is.character(variable) || length(variable)!=1L || is.na(variable) || !nzchar(variable))
         stop("'variable' must name one continuous numeric predictor",call.=FALSE)
@@ -177,4 +196,144 @@ fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
     out <- cbind(variable=variable,out)
     attr(out,"covariance.scope") <- if(object$boundary) "reduced category model" else "full model"
     out
+}
+
+# Formula predictors that a marginal effect can differentiate: an unclassed
+# numeric variable entering only through rowwise terms.
+.marginal_formula_variable <- function(terms_list,data,variable) {
+    needed <- unique(unlist(lapply(terms_list,function(tt) all.vars(delete.response(tt)))))
+    if(!variable%in%needed)
+        stop("'variable' must name an unclassed continuous numeric formula predictor; use contrasts for factors",call.=FALSE)
+    if(!is.data.frame(data) || !all(needed%in%names(data)))
+        stop("supply 'newdata' containing the original formula predictors",call.=FALSE)
+    x <- data[[variable]]
+    if(!variable%in%needed || !is.numeric(x) || is.complex(x) || !is.null(dim(x)) || is.object(x))
+        stop("'variable' must name an unclassed continuous numeric formula predictor; use contrasts for factors",call.=FALSE)
+    reducers <- c("mean","median","sd","var","cov","sum","prod","min","max","range","quantile",
+                  "rank","order","sort","cumsum","cumprod","cummin","cummax")
+    check <- function(expr) {
+        if(!is.call(expr)) return(invisible(NULL))
+        head <- expr[[1L]]
+        name <- if(is.symbol(head)) as.character(head) else if(is.call(head) &&
+            as.character(head[[1L]])%in%c("::",":::")) as.character(head[[3L]]) else ""
+        if(name%in%reducers && any(all.vars(expr)%in%needed))
+            stop("marginal effects require rowwise formula terms; compute sample summaries before fitting",call.=FALSE)
+        for(arg in as.list(expr)[-1L]) check(arg)
+        invisible(NULL)
+    }
+    for(tt in terms_list) check(attr(delete.response(tt),"predvars"))
+    x
+}
+
+# Average marginal effects for GLM, count, and two-part fits by centered
+# differences of each row's prediction; see fastglm_marginal_effects().
+.response_marginal_effects <- function(object,variable,newdata,weights,vcov.,level,type,eps,offset,
+                                       block.size=8192L) {
+    if(!is.character(variable) || length(variable)!=1L || is.na(variable) || !nzchar(variable))
+        stop("'variable' must name one continuous numeric predictor",call.=FALSE)
+    if(!is.numeric(level) || length(level)!=1L || !is.finite(level) || level<=0 || level>=1)
+        stop("'level' must lie strictly between zero and one",call.=FALSE)
+    if(!is.null(eps) && (!is.numeric(eps) || length(eps)!=1L || !is.finite(eps) || eps<=0))
+        stop("'eps' must be a positive finite number",call.=FALSE)
+    if(!isTRUE(object$converged)) stop("marginal effects require a converged model",call.=FALSE)
+    count <- .count_inference_model(object)
+    two <- count && .count_two_component(object)
+    if(!count && !inherits(object,c("fastglm","fastglmFit","fastglm_stream")))
+        stop("marginal effects support GLM, count, two-part, and ordinal fits",call.=FALSE)
+    if(count) {
+        type <- match.arg(type,c("response","count","zero"))
+        if(!two && type=="zero") stop("zero probabilities are a target only for two-component models",call.=FALSE)
+        if(!is.null(offset)) stop("replacement offsets are not supported for count models; include them in newdata",call.=FALSE)
+        pars <- .count_parameters(object,FALSE)
+        if(is.null(vcov.)) vcov. <- .count_default_vcov(object)
+    } else {
+        if(!identical(type,"response")) stop("GLM marginal effects use type = 'response'",call.=FALSE)
+        if(anyNA(coef(object))) stop("marginal effects require a full-rank fit",call.=FALSE)
+        pars <- coef(object)
+        if(is.null(vcov.)) vcov. <- vcov(object)
+    }
+    if(!identical(dim(vcov.),c(length(pars),length(pars))))
+        stop("'vcov.' must be the full covariance of the model parameters, including theta when estimated",call.=FALSE)
+    streaming <- !is.null(object$source) && is.function(object$fetch)
+    if(streaming && is.null(newdata)) stop("marginal effects for a streaming fit require 'newdata'",call.=FALSE)
+    terms_list <- if(is.null(object$terms)) NULL else if(inherits(object$terms,"terms")) list(object$terms) else object$terms
+    formula.fit <- !is.null(terms_list) && (is.null(newdata) || is.data.frame(newdata))
+    # Design, offsets, and the variable for a set of data rows.
+    design_of <- function(dat) {
+        if(two) {
+            d <- .count_design(object,dat)
+            return(list(X=d$x$count,Z=d$x$zero,offset=d$offset))
+        }
+        d <- if(count) .prediction_design(object,dat) else .prediction_design(object,dat,offset)
+        list(X=d$x,offset=d$offset)
+    }
+    if(formula.fit) {
+        data <- if(is.null(newdata)) object$model else newdata
+        x <- .marginal_formula_variable(terms_list,data,variable)
+        n <- nrow(data)
+    } else {
+        base <- if(is.null(newdata)) {
+            if(two) { d <- .count_design(object); list(X=d$x$count,Z=d$x$zero,offset=d$offset) }
+            else { d <- .prediction_design(object); list(X=d$x,offset=d$offset) }
+        } else design_of(newdata)
+        cols <- c(colnames(base$X),if(two) colnames(base$Z))
+        if(!variable%in%cols) stop("'variable' must name a fitted design column",call.=FALSE)
+        x <- if(variable%in%colnames(base$X)) base$X[,variable] else base$Z[,variable]
+        n <- nrow(base$X)
+    }
+    if(!is.null(weights) && (!is.numeric(weights) || length(weights)!=n || any(!is.finite(weights)|weights<0)))
+        stop("invalid averaging weights",call.=FALSE)
+    total <- if(is.null(weights)) n else sum(weights)
+    if(!is.finite(total) || total<=0) stop("averaging weights must have positive finite total",call.=FALSE)
+    predict_at <- function(z) {
+        if(count) {
+            zz <- .count_normalize_block(list(X=z$X,Z=z$Z,offset=z$offset),two)
+            list(value=.count_prediction_parameters(object,zz,pars,type),
+                 gradient=.count_prediction_gradient(object,zz,pars,type))
+        } else {
+            eta <- .model_eta(z$X,object,z$offset)
+            list(value=object$family$linkinv(eta),gradient=as.matrix(z$X)*.glm_mu_eta(object,eta))
+        }
+    }
+    estimate <- 0; gradient <- numeric(length(pars))
+    for(start in seq(1L,n,by=block.size)) {
+        i <- start:min(n,start+block.size-1L)
+        w <- if(is.null(weights)) rep(1,length(i)) else weights[i]
+        keep <- w>0; i <- i[keep]; w <- w[keep]
+        if(!length(i)) next
+        h <- if(is.null(eps)) .Machine$double.eps^(1/3)*pmax(1,abs(x[i])) else rep(eps,length(i))
+        if(formula.fit) {
+            rows <- data[i,,drop=FALSE]
+            fixed <- design_of(rows)$offset
+            upper <- lower <- rows
+            upper[[variable]] <- x[i]+h; lower[[variable]] <- x[i]-h
+            width <- upper[[variable]]-lower[[variable]]
+            hi <- design_of(upper); lo <- design_of(lower)
+            hi$offset <- lo$offset <- fixed
+        } else {
+            sub <- function(m) if(is.null(m)) NULL else m[i,,drop=FALSE]
+            rows <- list(X=sub(base$X),Z=sub(base$Z),
+                offset=if(is.list(base$offset)) lapply(base$offset,`[`,i) else base$offset[i])
+            shift <- function(z,delta) {
+                if(variable%in%colnames(z$X)) z$X[,variable] <- z$X[,variable]+delta
+                if(!is.null(z$Z) && variable%in%colnames(z$Z)) z$Z[,variable] <- z$Z[,variable]+delta
+                z
+            }
+            hi <- shift(rows,h); lo <- shift(rows,-h)
+            width <- (x[i]+h)-(x[i]-h)
+        }
+        if(any(!is.finite(width) | width<=0)) stop("'eps' cannot produce finite distinct predictor values",call.=FALSE)
+        a <- predict_at(hi); b <- predict_at(lo)
+        value <- (a$value-b$value)/width
+        g <- (a$gradient-b$gradient)/width
+        if(any(!is.finite(value)) || any(!is.finite(g)))
+            stop("marginal effect or parameter derivative is nonfinite; check transformation domains and 'eps'",call.=FALSE)
+        estimate <- estimate+sum(w*value); gradient <- gradient+colSums(w*g)
+    }
+    estimate <- estimate/total; gradient <- gradient/total
+    active <- which(gradient!=0)
+    variance <- if(length(active)) drop(crossprod(gradient[active],vcov.[active,active,drop=FALSE]%*%gradient[active])) else 0
+    if(!is.finite(variance) || variance<0) stop("invalid covariance for the requested marginal effect",call.=FALSE)
+    se <- sqrt(variance); q <- stats::qnorm((1+level)/2)
+    data.frame(variable=variable,estimate=estimate,std.error=se,conf.low=estimate-q*se,conf.high=estimate+q*se)
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/marginal-effects.R
 \name{fastglm_marginal_effects}
 \alias{fastglm_marginal_effects}
-\title{Average marginal effects for ordinal probabilities}
+\title{Average marginal effects}
 \usage{
 fastglm_marginal_effects(
   object,
@@ -17,13 +17,14 @@ fastglm_marginal_effects(
 )
 }
 \arguments{
-\item{object}{a converged \code{fastglm_ordinal} fit, with common or
-threshold-specific slopes.}
+\item{object}{a converged GLM (\code{fastglm()}), negative binomial,
+zero-truncated, hurdle, zero-inflated, two-part, or ordinal fit.}
 
 \item{variable}{name of one continuous numeric variable. For a formula fit,
 this names the original variable in the data; interactions and smooth
 transformations are differentiated together. For a matrix fit, this names
-one location-design column, with the other columns held fixed.}
+one design column, with the other columns held fixed; for two-component
+count models the column is changed in both component designs where present.}
 
 \item{newdata}{data frame for a formula fit, or location-design matrix for a
 matrix fit. Defaults to retained fitting data. Supply the original variables
@@ -37,27 +38,34 @@ Fitting frequency weights are not reused automatically.}
 
 \item{level}{confidence level for separate normal intervals.}
 
-\item{type}{category probabilities (\code{"response"} or
-\code{"probability"}) or \code{"cumulative"} probabilities.}
+\item{type}{prediction target. For GLMs, \code{"response"} (the mean).
+For count and two-part models, \code{"response"}, \code{"count"}, or
+\code{"zero"}, as in \code{fastglm_average()}. For ordinal models, category
+probabilities (\code{"response"} or \code{"probability"}) or
+\code{"cumulative"} probabilities.}
 
 \item{eps}{positive absolute step for numerical differentiation of formula
 terms. The default is \code{.Machine$double.eps^(1/3) * pmax(1, abs(x))}
-for the selected variable. Matrix-column derivatives are exact and do not
-use this argument.}
+for the selected variable. For ordinal matrix fits the derivative is exact
+and does not use this argument; GLM and count models use centered
+differences for matrix columns as well.}
 
-\item{offset}{optional replacement prediction offset. All offsets are held
-fixed when differentiating, including formula offsets involving
-\code{variable}.}
+\item{offset}{optional replacement prediction offset (GLM and ordinal fits).
+All offsets are held fixed when differentiating, including formula offsets
+involving \code{variable}.}
 }
 \value{
-A data frame with \code{variable}, \code{category}, \code{estimate},
-  \code{std.error}, \code{conf.low}, and \code{conf.high}. Category effects
+A data frame with \code{variable}, \code{estimate}, \code{std.error},
+  \code{conf.low}, and \code{conf.high}, and for ordinal models also
+  \code{category}, with one row per category. Ordinal category effects
   sum to zero. Removed categories have zero effects and unavailable standard
   errors; inference otherwise refers to the reduced category model.
 }
 \description{
-Estimates the average rate of change in each category probability as a
-continuous predictor changes. Uncertainty uses the delta method, conditional
+Estimates the average rate of change of a prediction as a continuous
+predictor changes: the fitted mean of a generalized linear model, the mean,
+count-component mean, or zero probability of a count or two-part model, or
+each category probability of an ordinal model. Uncertainty uses the delta method, conditional
 on the supplied predictor values and averaging weights.
 }
 \details{
@@ -87,6 +95,13 @@ A marginal effect is a derivative, measured in probability units
   Evaluation rows must lie within the fitted model's valid predictor domain.
   Supplied covariance, including cluster covariance, retains covariance among
   thresholds, common slopes, and threshold-specific slopes.
+
+  For GLM and count models, each row's derivative is the centered difference
+  of its prediction at the variable plus and minus the step, with every other
+  predictor and every offset held fixed, and the standard error uses the
+  parameter gradient of that same difference with the model covariance
+  (including theta for count models when it is estimated). Streaming fits
+  require \code{newdata}.
 }
 \examples{
 set.seed(91)
@@ -94,4 +109,8 @@ d <- data.frame(x=rnorm(150))
 d$y <- ordered(cut(.5*d$x + rlogis(150), c(-Inf,-.5,.7,Inf)))
 fit <- fastglm_ordinal(y ~ x, data=d, firth=TRUE)
 fastglm_marginal_effects(fit, "x")
+
+# Logistic regression: average change in probability per unit of x
+d$z <- rbinom(150, 1, plogis(-0.5 + 0.8 * d$x))
+fastglm_marginal_effects(fastglm(z ~ x, data = d, family = binomial()), "x")
 }

@@ -3,7 +3,7 @@
 #' Fits a binomial model for a positive outcome and a Gamma model with a log
 #' link among positive outcomes. The marginal mean is the product of the
 #' probability of a positive outcome and the conditional positive mean.
-#' @param formula numeric matrix, `dgCMatrix`, [fastglm_source()], or a formula
+#' @param formula numeric matrix, `dgCMatrix`, `big.matrix`, [fastglm_source()], or a formula
 #'   with one or two right-hand sides, as in [fastglm_hurdle()].
 #' @param data,subset,na.action,weights,offset model-frame arguments. A vector
 #'   offset applies to the positive component; a two-column matrix supplies
@@ -23,7 +23,7 @@ fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
                             link = "logit", method = "auto", tol = 1e-8,
                             maxit = 100L, firth = FALSE,
                             response = NULL, z = NULL, block.size = 8192L) {
-    if(is.matrix(formula) || inherits(formula,c("dgCMatrix","fastglm_source"))) {
+    if(is.matrix(formula) || inherits(formula,c("dgCMatrix","big.matrix","fastglm_source"))) {
         if(!missing(subset) || !missing(na.action))
             stop("subset and na.action apply only to formula fits; prepare matrix or source rows first",call.=FALSE)
         out <- .count_backend_twopart(formula,response,z,

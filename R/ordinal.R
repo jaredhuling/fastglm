@@ -122,6 +122,43 @@ fastglm_ordinal.default <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
     fit
 }
 
+#' @rdname fastglm_ordinal
+#' @param chunk.size for a file-backed `big.matrix`, the number of rows read
+#'   into memory at a time. The fit then uses [fastglm_ordinal_streaming()],
+#'   rereading the matrix in blocks of this many rows, and returns a
+#'   `fastglm_ordinal_stream` object.
+#' @export
+fastglm_ordinal.big.matrix <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
+                                       firth=FALSE,tol=1e-8,maxit=200L,
+                                       block.size=2048L,control=list(),link="logit",nonparallel=NULL,
+                                       chunk.size=65536L,...) {
+    if(length(list(...))) stop("unused ordinal fitting arguments",call.=FALSE)
+    if(missing(y)) stop("an ordinal response is required",call.=FALSE)
+    .check_iterations(1e-8,chunk.size)
+    n <- nrow(x)
+    if(NROW(y)!=n) stop("the response must have one entry per row of 'x'",call.=FALSE)
+    for(a in list(weights,offset)) if(!is.null(a) && length(a)!=n)
+        stop("weights and offsets must have one entry per row of 'x'",call.=FALSE)
+    if(is.factor(y) && !is.ordered(y) && is.null(levels))
+        stop("use an ordered response factor or supply its category order in 'levels'",call.=FALSE)
+    if(is.null(levels) && is.factor(y)) levels <- base::levels(y)
+    columns <- colnames(x)
+    if(is.null(columns)) columns <- paste0("x",seq_len(ncol(x)))
+    reader <- function(k) {
+        i <- seq.int((k-1L)*chunk.size+1L,min(n,k*chunk.size))
+        X <- x[i,,drop=FALSE]; colnames(X) <- columns
+        out <- list(X=X,y=y[i])
+        if(!is.null(weights)) out$weights <- weights[i]
+        if(!is.null(offset)) out$offset <- offset[i]
+        out
+    }
+    fit <- fastglm_ordinal_streaming(reader,ceiling(n/chunk.size),levels=levels,firth=firth,
+        link=link,tol=tol,maxit=maxit,block.size=block.size,control=control,nonparallel=nonparallel)
+    fit$call <- match.call()
+    fit$call[[1L]] <- quote(fastglm::fastglm_ordinal)
+    fit
+}
+
 .ordinal_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache=NULL,link="logit",nonparallel=NULL) {
     if(!is.matrix(x) || !is.numeric(x))
         stop("ordinal fitting currently requires a dense numeric matrix or formula",call.=FALSE)

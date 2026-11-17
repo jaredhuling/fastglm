@@ -31,7 +31,7 @@ fastglm_hurdle(
 )
 }
 \arguments{
-\item{formula}{a numeric matrix, `dgCMatrix`, [fastglm_source()], or a
+\item{formula}{a numeric matrix, `dgCMatrix`, `big.matrix`, [fastglm_source()], or a
 [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 where the right-hand side after `|` specifies the zero-model design.
 If `|` is absent, the same RHS is used for both parts.}
