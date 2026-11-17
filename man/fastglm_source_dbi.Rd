@@ -10,7 +10,8 @@ fastglm_source_dbi(
   formula,
   prototype,
   weights = NULL,
-  offset = NULL
+  offset = NULL,
+  cache = FALSE
 )
 }
 \arguments{
@@ -18,7 +19,7 @@ fastglm_source_dbi(
 
 \item{queries}{character vector of read-only SELECT queries, one per chunk.}
 
-\item{formula, prototype, weights, offset}{passed to [fastglm_source()].}
+\item{formula, prototype, weights, offset, cache}{passed to [fastglm_source()].}
 }
 \value{
 A resettable `fastglm_source`.

@@ -156,3 +156,51 @@ test_that("two-component predictions from new data do not warn about the other c
     fit <- fastglm_hurdle(y ~ x + g | w, data = d)
     expect_no_warning(predict(fit, newdata = d[1:5, ]))
 })
+
+test_that("streamed fits of standard families need no final summary pass", {
+    set.seed(61); n <- 3000
+    X <- cbind("(Intercept)" = 1, x1 = rnorm(n), x2 = rnorm(n)); w <- sample(1:3, n, TRUE)
+    eta <- drop(X %*% c(0.2, 0.3, -0.2))
+    cases <- list(list(binomial(), rbinom(n, 1, plogis(eta))), list(poisson(), rpois(n, exp(eta))),
+                  list(gaussian(), eta + rnorm(n)), list(Gamma("log"), rgamma(n, 2, 2 / exp(eta))),
+                  list(inverse.gaussian("log"), 1 / rgamma(n, 4, 4 * exp(eta))))
+    for (cs in cases) {
+        fam <- cs[[1]]; y <- cs[[2]]
+        reader <- function(k) { i <- which(rep_len(1:4, n) == k); list(X = X[i, ], y = y[i], weights = w[i]) }
+        s <- fastglm_streaming(reader, 4, family = fam)
+        d <- fastglm(X, y, family = fam, weights = w)
+        expect_equal(s$aic, d$aic, tolerance = 1e-10, label = fam$family)
+        expect_equal(s$null.deviance, d$null.deviance, tolerance = 1e-10, label = fam$family)
+        expect_equal(s$pearson, sum(residuals(d, "pearson")^2), tolerance = 1e-10, label = fam$family)
+        # One pass per coefficient update plus one that confirms convergence.
+        expect_equal(s$passes, s$iter + 1L, label = fam$family)
+    }
+})
+
+test_that("the opt-in block cache gives the same fits and reads each block from the source once", {
+    set.seed(71); n <- 2000
+    d <- data.frame(x = rnorm(n), g = factor(sample(c("a", "b"), n, TRUE)))
+    d$y <- rbinom(n, 1, plogis(0.3 + 0.6 * d$x))
+    d$count <- ifelse(runif(n) < 0.3, 0, rpois(n, exp(0.4 + 0.3 * d$x)))
+    calls <- 0L
+    reader <- function(k) { calls <<- calls + 1L; d[rep_len(1:4, n) == k, ] }
+    plain <- fastglm_streaming(fastglm_source(reader, 4L, formula = y ~ x + g, prototype = d), family = binomial())
+    calls <- 0L
+    src <- fastglm_source(reader, 4L, formula = y ~ x + g, prototype = d, cache = TRUE)
+    cached <- fastglm_streaming(src, family = binomial())
+    expect_identical(coef(cached), coef(plain))
+    expect_identical(cached$se, plain$se)
+    expect_equal(calls, 4L)
+    expect_true(dir.exists(src$cache))
+    expect_equal(length(list.files(src$cache)), 4L)
+    # The cache serves later fits and post-fit calculations, including other models.
+    fastglm_vcov(cached, type = "HC0")
+    expect_equal(calls, 4L)
+    h_src <- fastglm_source(function(k) d[rep_len(1:4, n) == k, ], 4L, formula = count ~ x | g, prototype = d,
+                            cache = TRUE)
+    expect_equal(coef(fastglm_hurdle(h_src)), coef(fastglm_hurdle(count ~ x | g, data = d)), tolerance = 1e-8)
+    directory <- src$cache
+    rm(src, cached); invisible(gc()); invisible(gc())
+    expect_false(dir.exists(directory))
+    expect_error(fastglm_source(reader, 4L, cache = 3), "cache")
+})

@@ -25,11 +25,22 @@
 #' @param weights,offset optional column names in data-frame blocks. For
 #'   a two-component formula, two offset column names supply count/positive
 #'   and binary offsets, respectively.
+#' @param cache `FALSE` (default) reads every block from `callback` on every
+#'   pass. `TRUE`, or the path of a directory, writes each block, after the
+#'   formula has been applied, to an uncompressed file the first time it is
+#'   read, and later passes read that file instead. This helps when a block is
+#'   costly to obtain, as from a database query or a Parquet file, because
+#'   fitting reads the data several times. Memory use is unchanged (one block
+#'   at a time); the files take about as much disk space as the design matrix.
+#'   A cache in a temporary directory (`TRUE`) is deleted when the source is
+#'   garbage collected or the session ends; a named directory is kept. The
+#'   cached blocks are those of the first pass, so later passes see the same
+#'   data even if the underlying source changes.
 #' @returns A `fastglm_source` object for [fastglm_streaming()],
 #'   [fastglm_ordinal_streaming()], or the count and two-part fitting functions.
 #' @export
 fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
-                           prototype = NULL, weights = NULL, offset = NULL) {
+                           prototype = NULL, weights = NULL, offset = NULL, cache = FALSE) {
     .check_iterations(1e-8,n_chunks)
     if (!is.function(callback) || (!is.null(reset) && !is.function(reset))) stop("callback and reset must be functions",call.=FALSE)
     if(!is.null(weights) && (!is.character(weights) || length(weights)!=1L || is.na(weights)))
@@ -86,7 +97,33 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
         out$weights <- if(!is.null(weights)) column(weights)
         out
     }
-    structure(list(callback=fetch,n_chunks=as.integer(n_chunks),schema=schema),class="fastglm_source")
+    cached <- .source_cache(fetch,as.integer(n_chunks),cache)
+    structure(list(callback=cached$fetch,n_chunks=as.integer(n_chunks),schema=schema,
+                   cache=cached$directory),class="fastglm_source")
+}
+
+# Wrap a block reader so that each block, as returned, is written to an
+# uncompressed file on its first read and read from that file afterwards.
+# Only one block is held in memory at a time.
+.source_cache <- function(fetch,n_chunks,cache) {
+    if(isFALSE(cache)) return(list(fetch=fetch,directory=NULL))
+    temporary <- isTRUE(cache)
+    if(!temporary && !(is.character(cache) && length(cache)==1L && !is.na(cache) && nzchar(cache)))
+        stop("'cache' must be TRUE, FALSE, or a directory path",call.=FALSE)
+    directory <- if(temporary) tempfile("fastglm-cache-") else cache
+    dir.create(directory,recursive=TRUE,showWarnings=FALSE)
+    if(!dir.exists(directory)) stop("cannot create the cache directory",call.=FALSE)
+    files <- file.path(directory,sprintf("block-%07d.rds",seq_len(n_chunks)))
+    state <- new.env(parent=emptyenv()); state$cached <- logical(n_chunks)
+    if(temporary) reg.finalizer(state,function(e) unlink(directory,recursive=TRUE),onexit=TRUE)
+    cached.fetch <- function(k) {
+        if(state$cached[k]) return(readRDS(files[k]))
+        z <- fetch(k)
+        saveRDS(z,files[k],compress=FALSE)
+        state$cached[k] <- TRUE
+        z
+    }
+    list(fetch=cached.fetch,directory=directory)
 }
 
 #' Create a source from indexed database queries
@@ -95,15 +132,15 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
 #' The database snapshot must remain unchanged throughout fitting and inference.
 #' @param connection a DBI connection.
 #' @param queries character vector of read-only SELECT queries, one per chunk.
-#' @param formula,prototype,weights,offset passed to [fastglm_source()].
+#' @param formula,prototype,weights,offset,cache passed to [fastglm_source()].
 #' @returns A resettable `fastglm_source`.
 #' @export
 fastglm_source_dbi <- function(connection, queries, formula, prototype,
-                               weights = NULL, offset = NULL) {
+                               weights = NULL, offset = NULL, cache = FALSE) {
     if (!requireNamespace("DBI",quietly=TRUE)) stop("install DBI to use database sources",call.=FALSE)
     if (!is.character(queries) || !length(queries) || any(!grepl("^\\s*(SELECT|WITH)\\b",queries,ignore.case=TRUE))) stop("queries must be read-only SELECT statements",call.=FALSE)
     out <- fastglm_source(function(k) DBI::dbGetQuery(connection,queries[[k]]),length(queries),
-                    formula=formula,prototype=prototype,weights=weights,offset=offset)
+                    formula=formula,prototype=prototype,weights=weights,offset=offset,cache=cache)
     out$origin <- "database queries (DBI)"
     out
 }
@@ -113,14 +150,14 @@ fastglm_source_dbi <- function(connection, queries, formula, prototype,
 #' Each file is one bounded chunk. The formula schema is supplied explicitly
 #' so that factor contrasts and transformations remain fixed across files.
 #' @param files character vector of Parquet paths.
-#' @param formula,prototype,weights,offset passed to [fastglm_source()].
+#' @param formula,prototype,weights,offset,cache passed to [fastglm_source()].
 #' @returns A `fastglm_source`.
 #' @export
-fastglm_source_arrow <- function(files, formula, prototype, weights=NULL, offset=NULL) {
+fastglm_source_arrow <- function(files, formula, prototype, weights=NULL, offset=NULL, cache=FALSE) {
     if (!requireNamespace("arrow",quietly=TRUE)) stop("install arrow to use Parquet sources",call.=FALSE)
     if (!is.character(files) || !length(files)) stop("supply at least one Parquet file",call.=FALSE)
     out <- fastglm_source(function(k) as.data.frame(arrow::read_parquet(files[[k]])),length(files),
-                    formula=formula,prototype=prototype,weights=weights,offset=offset)
+                    formula=formula,prototype=prototype,weights=weights,offset=offset,cache=cache)
     out$origin <- "Parquet files (arrow)"
     out
 }
@@ -141,5 +178,6 @@ print.fastglm_source <- function(x, ...) {
         } else .fastglm_print_field("Design columns",length(s$columns))
         .fastglm_print_field("Offset columns",s$offset)
     }
+    .fastglm_print_field("Block cache",if(is.null(x$cache)) "none" else x$cache)
     invisible(x)
 }

@@ -4,12 +4,19 @@
 \alias{fastglm_source_arrow}
 \title{Create a source from Parquet partitions}
 \usage{
-fastglm_source_arrow(files, formula, prototype, weights = NULL, offset = NULL)
+fastglm_source_arrow(
+  files,
+  formula,
+  prototype,
+  weights = NULL,
+  offset = NULL,
+  cache = FALSE
+)
 }
 \arguments{
 \item{files}{character vector of Parquet paths.}
 
-\item{formula, prototype, weights, offset}{passed to [fastglm_source()].}
+\item{formula, prototype, weights, offset, cache}{passed to [fastglm_source()].}
 }
 \value{
 A `fastglm_source`.

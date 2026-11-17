@@ -56,13 +56,13 @@ the fit solves the same adjusted-score equations as the dense path.}
 
 \item{covariance}{where the information matrix behind the standard errors
 is evaluated. \code{"estimate"} (default) evaluates it at the reported
-coefficients, which takes one more pass over the data after convergence.
-\code{"previous"} uses the factorization from the final iteration, the
-convention of \code{\link[stats:glm]{stats::glm.fit()}}; it saves that pass (roughly 10 percent
-of the fitting time for large data) and changes standard errors by a
-relative amount of order 1e-6 at the default tolerance. Coefficients agree
-to within the convergence tolerance. Bias-reduced fits (\code{firth = TRUE})
-are not affected.}
+coefficients. \code{"previous"} uses the factorization from the final
+iteration, the convention of \code{\link[stats:glm]{stats::glm.fit()}}, and changes standard
+errors by a relative amount of order 1e-6 at the default tolerance.
+For streamed fits both read the data the same number of times, because
+the information at the reported coefficients is accumulated in the pass
+that evaluates them. Coefficients agree to within the convergence
+tolerance. Bias-reduced fits (\code{firth = TRUE}) are not affected.}
 }
 \value{
 An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing

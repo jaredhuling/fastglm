@@ -11,7 +11,8 @@ fastglm_source(
   formula = NULL,
   prototype = NULL,
   weights = NULL,
-  offset = NULL
+  offset = NULL,
+  cache = FALSE
 )
 }
 \arguments{
@@ -34,6 +35,18 @@ and transformations; it need not contain all observations.}
 \item{weights, offset}{optional column names in data-frame blocks. For
 a two-component formula, two offset column names supply count/positive
 and binary offsets, respectively.}
+
+\item{cache}{`FALSE` (default) reads every block from `callback` on every
+pass. `TRUE`, or the path of a directory, writes each block, after the
+formula has been applied, to an uncompressed file the first time it is
+read, and later passes read that file instead. This helps when a block is
+costly to obtain, as from a database query or a Parquet file, because
+fitting reads the data several times. Memory use is unchanged (one block
+at a time); the files take about as much disk space as the design matrix.
+A cache in a temporary directory (`TRUE`) is deleted when the source is
+garbage collected or the session ends; a named directory is kept. The
+cached blocks are those of the first pass, so later passes see the same
+data even if the underlying source changes.}
 }
 \value{
 A `fastglm_source` object for [fastglm_streaming()],

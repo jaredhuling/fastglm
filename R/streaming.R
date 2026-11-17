@@ -34,13 +34,13 @@
 #' @param maxit maximum number of IRLS iterations.
 #' @param covariance where the information matrix behind the standard errors
 #'   is evaluated. `"estimate"` (default) evaluates it at the reported
-#'   coefficients, which takes one more pass over the data after convergence.
-#'   `"previous"` uses the factorization from the final iteration, the
-#'   convention of [stats::glm.fit()]; it saves that pass (roughly 10 percent
-#'   of the fitting time for large data) and changes standard errors by a
-#'   relative amount of order 1e-6 at the default tolerance. Coefficients agree
-#'   to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
-#'   are not affected.
+#'   coefficients. `"previous"` uses the factorization from the final
+#'   iteration, the convention of [stats::glm.fit()], and changes standard
+#'   errors by a relative amount of order 1e-6 at the default tolerance.
+#'   For streamed fits both read the data the same number of times, because
+#'   the information at the reported coefficients is accumulated in the pass
+#'   that evaluates them. Coefficients agree to within the convergence
+#'   tolerance. Bias-reduced fits (`firth = TRUE`) are not affected.
 #' @param firth logical; if `TRUE` apply Firth bias reduction using
 #'   lagged leverages from the previous IRLS iteration. At convergence,
 #'   the fit solves the same adjusted-score equations as the dense path.
@@ -151,6 +151,10 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     a <- rhs <- low <- high <- qr.state <- NULL; nobs <- sumw <- sumwy <- 0; has.offset <- FALSE
     off.lo <- Inf; off.hi <- -Inf; sumwo <- 0
     gamma.null.total <- -Inf
+    # Data-only terms of the log likelihood, so that the final likelihood
+    # follows from the final deviance without another pass (see below).
+    closed.loglik <- .stream_closed_loglik(family, firth)
+    saturated <- 0; sum.log.w <- 0; sum.w.log.y <- 0
     for(k in seq_len(n_chunks)) {
         z <- fetch(k); x <- z$X; w <- z$weights
         has.offset <- has.offset || any(z$offset != 0)
@@ -170,6 +174,14 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         else { a <- a+weighted_crossprod(x,ww); rhs <- rhs+drop(crossprod(x,ww*zz)) }
         nobs <- nobs+sum(w>0); sumw <- sumw+sum(w); sumwy <- sumwy+sum(w*z$y)
         if(fc==10L) gamma.null.total <- .gamma_log_null_total(z$y,w,z$offset,gamma.null.total)
+        if(closed.loglik) {
+            keep <- w>0
+            if(family$family %in% c("binomial","poisson"))
+                saturated <- saturated-.family_aic(family,z$y,z$trials,z$y,w,0)/2
+            sum.log.w <- sum.log.w+sum(log(w[keep]))
+            if(family$family %in% c("Gamma","inverse.gaussian"))
+                sum.w.log.y <- sum.w.log.y+sum(w[keep]*log(z$y[keep]))
+        }
     }
     p <- state$p
     if(nobs <= p) stop("streaming requires more positive-weight observations than coefficients",call.=FALSE)
@@ -232,8 +244,33 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     # and Gamma likelihood normalizers depend on global dispersion, so they
     # are accumulated explicitly rather than summing per-chunk AIC estimates.
     ll <- 0; null.dev <- 0
-    if(.stable_binomial_code(res)>=0L) res$pearson <- 0
-    for(k in seq_len(n_chunks)) {
+    # For the standard families the log likelihood is a function of the
+    # deviance and of data-only totals from the validation pass, and the C++
+    # fitter returns the null deviance and Pearson statistic of its last pass,
+    # so no further pass over the data is needed:
+    #   binomial, Poisson:  l = -D/2 + l(saturated)
+    #   Gaussian:           l = -(n/2) (log(2 pi D/n) + 1) + (1/2) sum log w
+    #   Gamma (a = sum w/D): l = sum w (a log a - lgamma a) + (a - 1) sum w log y
+    #                            - a (D/2 + sum w log y + sum w)
+    #   inverse Gaussian:   l = -(1/2) (sum w (1 + log(2 pi D/sum w)) + 3 sum w log y)
+    # These equal the expressions of the final pass below; the Gamma form uses
+    # D = 2 sum w (log mu - log y + y/mu - 1).
+    closed <- closed.loglik && is.finite(res$deviance) && is.finite(res$null.deviance) &&
+        is.finite(res$pearson) && is.finite(saturated)
+    if(closed) {
+        dev <- res$deviance; ff <- family$family
+        ll <- switch(ff,
+            binomial=, poisson= -dev/2+saturated,
+            gaussian= -nobs/2*(log(2*pi*dev/nobs)+1)+sum.log.w/2,
+            Gamma={a <- sumw/dev; sumw*(a*log(a)-lgamma(a))+(a-1)*sum.w.log.y-a*(dev/2+sum.w.log.y+sumw)},
+            inverse.gaussian= -.5*(sumw*(1+log(2*pi*dev/sumw))+3*sum.w.log.y))
+        null.dev <- res$null.deviance
+        # A Gamma-log null model with offsets is not the weighted mean the C++
+        # fitter uses; that case keeps the final pass.
+        if(res$intercept && fc==10L && has.offset) { closed <- FALSE; ll <- 0; null.dev <- 0 }
+    }
+    if(!closed && .stable_binomial_code(res)>=0L) res$pearson <- 0
+    if(!closed) for(k in seq_len(n_chunks)) {
         z <- fetch(k)
         eta <- if(method==0L) streaming_qr_eta(z$X,res$coefficients,z$offset) else
             drop(z$X%*%res$coefficients)+z$offset
@@ -313,4 +350,15 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         z
     }
     fetch
+}
+
+# TRUE when the log likelihood of a streamed fit follows from its deviance:
+# the standard families with their unmodified likelihood (aic) functions,
+# fitted by maximum likelihood.
+.stream_closed_loglik <- function(family, firth) {
+    if(firth || !family$family %in% c("binomial","poisson","gaussian","Gamma","inverse.gaussian"))
+        return(FALSE)
+    reference <- tryCatch(get(family$family,asNamespace("stats"))(link=family$link),error=function(e) NULL)
+    !is.null(reference) && identical(deparse(family$aic),deparse(reference$aic)) &&
+        identical(deparse(family$dev.resids),deparse(reference$dev.resids))
 }

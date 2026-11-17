@@ -58,6 +58,14 @@
   fell from 4.1 to 3.0 GB and fitting time from 96 to 58 seconds.
 * `iter` counts coefficient updates as dense fits do, and `passes` counts
   reads of the data.
+* For binomial, Poisson, Gaussian, Gamma, and inverse Gaussian families,
+  streamed fits compute the log-likelihood and AIC from the final deviance
+  and so read the data one time fewer.
+* `fastglm_source()`, `fastglm_source_dbi()`, and `fastglm_source_arrow()`
+  have an opt-in block cache (`cache = TRUE`): each block is written to a
+  local file the first time it is read, and later passes read that file
+  instead of repeating the query. Memory use is unchanged; for a database
+  source it made a logistic fit about three times faster.
 
 ## Other changes
 
