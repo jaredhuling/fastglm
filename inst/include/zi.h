@@ -114,7 +114,7 @@ inline double log_f_count(int dist_code, double theta, double y, double mu)
         const double log_mu_part = (y > 0)
                                    ? y * (std::log(mu > 1e-300 ? mu : 1e-300) - std::log(tlam))
                                    : 0.0;
-        return lgamma(y + theta) - lgamma(theta) - lgamma(y + 1.0)
+        return fglm::nb::lgamma_ratio(y, theta) - lgamma(y + 1.0)
                + theta * log_c + log_mu_part;
     }
 }

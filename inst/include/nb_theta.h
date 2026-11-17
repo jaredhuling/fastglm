@@ -11,6 +11,7 @@
 
 #include <RcppEigen.h>
 #include <boost/math/special_functions/digamma.hpp>
+#include <boost/math/special_functions/gamma.hpp>
 #include <boost/math/special_functions/trigamma.hpp>
 #include <boost/math/tools/roots.hpp>
 #include "brent.h"
@@ -20,6 +21,25 @@
 #include <utility>
 
 namespace fglm { namespace nb {
+
+// lgamma(y + t) - lgamma(t) without cancellation. With Stirling's formula
+// lgamma(x) = (x - 1/2) log x - x + log(2 pi) / 2 + r(x), the difference is
+//   (t - 1/2) log1p(y / t) + y log(y + t) - y + r(y + t) - r(t),
+// where r(x) = 1/(12x) - 1/(360x^3) + 1/(1260x^5) - 1/(1680x^7) + 1/(1188x^9)
+// is accurate to about 1e-15 for x >= 15. Subtracting the two lgamma values
+// directly loses about log10(lgamma(t)) digits: near t = 1e4 each value is
+// about 8e4, leaving an absolute error near 1e-11 per observation.
+inline double lgamma_ratio(double y, double t)
+{
+    if (y == 0) return 0;
+    if (!(t >= 15)) return boost::math::lgamma(y + t) - boost::math::lgamma(t);
+    const auto r = [](double x) {
+        const double x2 = 1 / (x * x);
+        return (1.0 / 12 - x2 * (1.0 / 360 - x2 * (1.0 / 1260 - x2 * (1.0 / 1680 - x2 / 1188)))) / x;
+    };
+    const double yt = y + t;
+    return (t - 0.5) * std::log1p(y / t) + y * std::log(yt) - y + (r(yt) - r(t));
+}
 
 // The leading 1/theta terms cancel in the size score. Evaluating the
 // remaining series avoids artificial roots near the Poisson boundary.

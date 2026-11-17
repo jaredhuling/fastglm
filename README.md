@@ -171,10 +171,9 @@ c(coef(f_nb), theta=f_nb$theta)
 Sparse designs and repeatable sources are also supported.
 `vcov(f_nb, full=TRUE)` includes theta jointly with the coefficients,
 and `fastglm_confint_theta()` obtains a profile-likelihood interval by
-varying theta and refitting the coefficients. The [negative-binomial
-stability vignette](vignettes/nb-stability-fastglm.Rmd) examines
-challenging cases and the limit as the model approaches a Poisson
-distribution.
+varying theta and refitting the coefficients. The [stability
+vignette](vignettes/stability-fastglm.Rmd) examines challenging cases
+and the limit as the model approaches a Poisson distribution.
 
 ### Hurdle models
 
