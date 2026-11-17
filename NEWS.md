@@ -66,6 +66,8 @@
   `offset`, and `na.action`, and supports `predict(newdata = )`.
 * `sandwich::vcovHC()` defaults to HC0 for count models and has methods for
   truncated, hurdle, and zero-inflated fits.
+* `predict()` accepts a sparse `newdata` matrix; it previously stopped with an
+  error.
 * More post-fit calculations (AIC, residuals, null deviance) run in C++, so
   ordinary fits are somewhat faster.
 * Logit ordinal fits with many categories are about twice as fast, from a

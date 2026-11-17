@@ -100,7 +100,12 @@ fastglm.formula <- function(x, data, family = gaussian(), subset, na.action,
 
 .model_eta <- function(x, object, offset) {
     b <- coef(object)
-    if (!.has_stream_qr(object)) return(drop(x %*% b[!is.na(b)]) + offset)
+    if (!.has_stream_qr(object)) {
+        # A sparse (Matrix) design gives an S4 product, which drop() keeps.
+        eta <- x %*% b[!is.na(b)]
+        eta <- if (inherits(eta, "Matrix")) stats::setNames(as.vector(eta), rownames(x)) else drop(eta)
+        return(eta + offset)
+    }
     out <- numeric(nrow(x))
     .design_blocks(x, function(z, i) out[i] <<- streaming_qr_eta(z, b, offset[i]))
     names(out) <- rownames(x)

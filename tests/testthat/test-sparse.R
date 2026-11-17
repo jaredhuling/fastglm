@@ -34,3 +34,19 @@ test_that("one-hot encoded categorical recovery: sparse matches dense", {
     f_sparse <- fastglm(Xs, y, family = binomial(), method = 3)
     expect_equal(unname(coef(f_sparse)), unname(coef(f_dense)), tolerance = 1e-10)
 })
+
+test_that("predict() accepts a sparse newdata matrix (GitHub issue 17)", {
+    skip_if_not_installed("Matrix")
+    set.seed(17); n <- 400
+    X <- cbind(1, Matrix::rsparsematrix(n, 6, density = 0.3)); X <- as(X, "CsparseMatrix")
+    y <- rbinom(n, 1, plogis(as.numeric(X %*% c(-0.3, rnorm(6, sd = 0.5)))))
+    f <- fastglm(X, y, family = binomial(), method = "llt")
+    expect_true(f$intercept)
+    nd <- X[1:25, ]
+    eta <- as.vector(as.matrix(nd) %*% coef(f))
+    expect_equal(unname(predict(f, newdata = nd)), eta, tolerance = 1e-12)
+    expect_equal(unname(predict(f, newdata = nd, type = "response")), plogis(eta), tolerance = 1e-12)
+    se <- predict(f, newdata = nd, type = "response", se.fit = TRUE)
+    expect_equal(unname(se$fit), plogis(eta), tolerance = 1e-12)
+    expect_true(all(is.finite(se$se.fit)))
+})
