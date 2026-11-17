@@ -23,12 +23,15 @@ test_that("zero-inflated fits near the maximum are certified, including a flat t
         yc <- stats::rnbinom(n, size = 1.2, mu = exp(-0.8 + 0.4 * x))
         data.frame(y = ifelse(rbinom(n, 1, plogis(-0.6 + 0.6 * w)) == 1, 0, yc), x = x, w = w)
     }
-    # theta near 1e4 (the log likelihood is flat in log theta), and a fit that
-    # needed more than 20 Newton steps; both were reported not converged.
+    # The log likelihood is flat and not concave in log theta in the first
+    # (certification then searches over log theta), and the zero-inflation
+    # probability tends to zero in the second (Newton gains a constant
+    # fraction per step, so certification takes more than 20 steps).
     for (case in list(list(seed = 216773810, best = -405.0915936042),
                       list(seed = 216773811, best = -385.7312815860))) {
         f <- suppressWarnings(fastglm_zi(y ~ x | w, data = zinb(case$seed), dist = "negbin"))
-        expect_true(f$converged)
+        expect_true(f$converged, label = sprintf("seed %d fit converged (reason %s, %d Newton steps, theta %.6g, decrement %.3g)",
+                                                 case$seed, f$convergence.reason, f$newton.iter, f$theta, f$em.decrement))
         expect_lt(abs(as.numeric(logLik(f)) - case$best) / (1 + abs(case$best)), 1e-6)
     }
 })

@@ -568,7 +568,11 @@ List fit_glm_zi(
                               Y, mc, ez, W, tau_tmp);
         };
         bool certified = false;
-        for (int k = 0; k <= 50; ++k) {
+        // Newton steps allowed. Where the zero-inflation probability tends to
+        // zero, each step gains only a constant fraction (about exp(-1)) of
+        // the remaining log likelihood, so certification can take dozens.
+        const int newton_max = 100;
+        for (int k = 0; k <= newton_max; ++k) {
             VectorXd s = full_score(dist_code, zero_fam_code, gamma, beta,
                                     (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
             MatrixXd I = obs_info_numjac(dist_code, zero_fam_code, gamma, beta,
@@ -589,13 +593,34 @@ List fit_glm_zi(
             Eigen::Index m = (dist_code == 1 && !theta_at_bound) ? pt + 1 : pt;
             if (!s.head(m).allFinite() || !I.topLeftCorner(m, m).allFinite()) break;
             Eigen::LLT<MatrixXd> chol(I.topLeftCorner(m, m));
-            // Where the log likelihood is flat in log(theta) (large theta),
-            // the information is not positive definite only through theta.
-            // If changing log(theta) by one changes the log likelihood by
-            // less than the tolerance (|s_phi| small), hold theta and
-            // continue with the other parameters.
-            if (chol.info() != Eigen::Success && m == pt + 1 &&
-                std::abs(s[pt]) < em_tol * (0.1 + std::abs(2 * ll))) {
+            // Where the likelihood is not concave in log(theta) (it is flat
+            // there for large theta), the information is not positive definite
+            // through theta. First maximize over log(theta) with the other
+            // parameters fixed (golden section on [log(theta) - 3,
+            // log(theta) + 3] within the bounds) and continue; once that no
+            // longer raises the likelihood, theta is at a maximum along its
+            // own direction and is held while Newton continues with the other
+            // parameters. A test on the size of the theta score alone does not
+            // suffice: without concavity a larger move in log(theta) can still
+            // raise the likelihood by more than the tolerance.
+            if (chol.info() != Eigen::Success && m == pt + 1) {
+                const double rounding = 64 * std::numeric_limits<double>::epsilon() * (1 + std::abs(ll));
+                if (k < newton_max) {
+                    const double phi0 = std::log(theta);
+                    double a = std::max(std::log(th_lo), phi0 - 3), b = std::min(std::log(th_hi), phi0 + 3);
+                    const double gr = 0.5 * (std::sqrt(5.0) - 1);
+                    auto f = [&](double phi) { return loglik_at(gamma, beta, std::exp(phi)); };
+                    double c = b - gr * (b - a), d = a + gr * (b - a), fc = f(c), fd = f(d);
+                    for (int it = 0; it < 80 && b - a > 1e-10 * (1 + std::abs(phi0)); ++it) {
+                        if (fc >= fd) { b = d; d = c; fd = fc; c = b - gr * (b - a); fc = f(c); }
+                        else { a = c; c = d; fc = fd; d = a + gr * (b - a); fd = f(d); }
+                    }
+                    const double phi = fc >= fd ? c : d, lc = std::max(fc, fd);
+                    if (std::isfinite(lc) && lc > ll + rounding) {
+                        theta = std::exp(phi); ll = lc; ++newton_iter;
+                        continue;
+                    }
+                }
                 m = pt;
                 chol.compute(I.topLeftCorner(m, m));
             }
@@ -604,7 +629,7 @@ List fit_glm_zi(
             em_decrement = s.head(m).dot(step);
             const bool small = std::isfinite(em_decrement) && em_decrement / (0.1 + std::abs(2 * ll)) < em_tol;
             if (small && certified) break;      // after the polishing step below
-            if (k == 50) { certified = small; break; }
+            if (k == newton_max) { certified = small; break; }
             // Once certified, take one more (polishing) Newton step: near the
             // maximum it squares the error, which matters where the likelihood
             // is flat (e.g. in theta) and a small decrement still allows a
