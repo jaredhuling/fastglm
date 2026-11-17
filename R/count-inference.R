@@ -326,7 +326,7 @@
 .count_prediction_parameters <- function(object,z,parameters,type="response") {
     if(.count_two_component(object)) return(.count_predict(object,
         list(x=list(count=z$X,zero=z$Z),offset=z$offset),parameters,type,NULL))
-    eta<-drop(z$X%*%parameters[seq_along(coef(object))])+z$offset$count
+    eta<-as.vector(z$X%*%parameters[seq_along(coef(object))])+z$offset$count
     if(inherits(object,"fastglm_nb")) return(object$family$linkinv(eta))
     mu<-exp(eta)
     if(type=="count") return(mu)

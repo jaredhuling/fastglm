@@ -260,16 +260,22 @@
     out
 }
 
-#' Score tests for ordinal model terms and coefficient contrasts
+#' Score tests for model terms and coefficient contrasts
 #'
 #' Evaluates ordinary or mean-bias-adjusted likelihood scores under linear
 #' constraints, after re-estimating the nuisance parameters. The information
 #' matrix and, when requested, the bias adjustment refer to the full model.
+#' For a maximum-likelihood GLM from [fastglm()], the test is Rao's score test
+#' of the selected terms (or coefficients) at their `null` values, using the
+#' expected information at the restricted fit and the full model's dispersion,
+#' with a chi-square reference, as in `anova(..., test = "Rao")`; `contrast`
+#' and `null.estimation = "meanBR"` apply only to ordinal fits.
 #' @param object a converged ordinal model, including a nonparallel model,
-#'   with retained dense data and every
-#'   declared category observed.
+#'   with retained dense data and every declared category observed, or a
+#'   converged maximum-likelihood GLM with a retained design and response.
 #' @param terms formula terms, or location coefficient names for a matrix fit.
-#'   The default jointly tests all location slopes.
+#'   For ordinal fits the default jointly tests all location slopes; GLM
+#'   score tests require `terms`, which may also be coefficient names.
 #' @param contrast numeric vector or matrix of linear coefficient contrasts,
 #'   as in [fastglm_wald_test()]. Named columns may select a subset of parameters.
 #' @param null hypothesized contrast values; a scalar is repeated across rows.
@@ -332,6 +338,11 @@
 fastglm_score_test <- function(object,terms=NULL,contrast=NULL,null=0,
                                null.estimation=c("ML","meanBR"),control=list()) {
     data.name <- deparse(substitute(object));null.estimation <- match.arg(null.estimation)
+    if(!inherits(object,"fastglm_ordinal") && .glm_ml_inference_model(object)) {
+        if(!is.null(contrast)) stop("score tests of GLMs take 'terms'; linear contrasts are available for ordinal fits",call.=FALSE)
+        if(null.estimation!="ML") stop("score tests of GLMs use null.estimation = 'ML'",call.=FALSE)
+        return(.glm_ml_score_test(object,terms,null,data.name))
+    }
     setup <- .ordinal_profile_setup(object,control,profile=FALSE)
     selected <- .fastglm_wald_contrast(object,terms,contrast)
     L <- selected$contrast

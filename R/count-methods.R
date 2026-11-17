@@ -92,8 +92,9 @@
 
 .count_predict <- function(object, design, parameters, type, at) {
     pc <- length(object$coefficients$count); pz <- length(object$coefficients$zero)
-    eta <- drop(design$x$count %*% parameters[seq_len(pc)]) + design$offset$count
-    eta0 <- drop(design$x$zero %*% parameters[pc + seq_len(pz)]) + design$offset$zero
+    # as.vector(): a sparse (Matrix) design gives an S4 product, which drop() keeps.
+    eta <- as.vector(design$x$count %*% parameters[seq_len(pc)]) + design$offset$count
+    eta0 <- as.vector(design$x$zero %*% parameters[pc + seq_len(pz)]) + design$offset$zero
     mu <- exp(eta); pi <- make.link(object$link)$linkinv(eta0)
     theta <- if (object$dist == "negbin") utils::tail(parameters, 1L) else NULL
     zi <- inherits(object, "fastglm_zi")

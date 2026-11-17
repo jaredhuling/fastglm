@@ -177,7 +177,12 @@ hatvalues.fastglmFit <- hatvalues.fastglm
 
 #' Confidence intervals for GLM coefficients
 #'
-#' Returns Wald intervals by default. Binomial-logit Firth fits can instead
+#' Returns Wald intervals by default. With `method = "profile"`,
+#' maximum-likelihood fits use profile likelihood intervals: each endpoint is
+#' the root of the signed square root of the scaled deviance difference, the
+#' statistic of [stats::confint()] for `glm` fits, found by root finding
+#' rather than interpolation. An endpoint is infinite when the profile does not
+#' reach the cutoff (for example under separation). Binomial-logit Firth fits
 #' use penalized profile likelihood intervals; see [fastglm_profile_test()]
 #' for assumptions, numerical controls, and diagnostics.
 #' @param object a fitted fastglm model.

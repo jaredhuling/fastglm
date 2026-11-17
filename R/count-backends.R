@@ -693,3 +693,198 @@
     if(!out$converged) warning("truncated-count model did not converge",call.=FALSE)
     out
 }
+
+# Zero-inflated Poisson and negative binomial regression from sparse,
+# memory-mapped, or streamed designs. Each pass over the blocks either
+# evaluates the observed log likelihood or accumulates one EM (expectation
+# conditional maximization) step: the E-step posteriors and, in the same pass,
+# the complete-data scoring steps for the inflation and count coefficients and
+# log theta. EM is followed by Newton steps with the joint observed
+# information (.count_score() and .count_information_block()), and the fit is
+# reported as converged when the Newton decrement is below em.tol relative to
+# the log likelihood and the information is positive definite, the rule of
+# the dense fitter (src/fit_glm_zi.cpp).
+.zi_block_parts <- function(z,beta,gamma,theta,dist,link) {
+    keep <- z$weights>0
+    if(!any(keep)) return(NULL)
+    x <- as.matrix(z$X[keep,,drop=FALSE]);zz <- as.matrix(z$Z[keep,,drop=FALSE])
+    y <- z$y[keep];w <- z$weights[keep]
+    mu <- exp(drop(x%*%beta)+z$offset$count[keep])
+    lk <- make.link(link);eta0 <- drop(zz%*%gamma)+z$offset$zero[keep]
+    pi <- lk$linkinv(eta0)
+    nb <- dist=="negbin"
+    lp0 <- if(nb) -theta*log1p(mu/theta) else -mu
+    list(x=x,zz=zz,y=y,w=w,mu=mu,eta0=eta0,pi=pi,lp0=lp0,nb=nb,lk=lk)
+}
+# Negative binomial log probability, with lgamma(y + theta) - lgamma(theta)
+# expanded in 1/theta when theta is large, where dnbinom() loses precision.
+.nb_log_density <- function(y,mu,theta) {
+    out <- dnbinom(y,mu=mu,size=theta,log=TRUE)
+    big <- theta>1e5 & y<1e-3*theta
+    if(any(big)) {
+        yy <- y[big];m <- mu[big]
+        # sum_{j<y} log1p(j/theta) to third order in 1/theta.
+        s1 <- yy*(yy-1)/2;s2 <- (yy-1)*yy*(2*yy-1)/6;s3 <- s1^2
+        out[big] <- s1/theta-s2/(2*theta^2)+s3/(3*theta^3)-lgamma(yy+1)-
+            (theta+yy)*log1p(m/theta)+yy*log(m)
+    }
+    out
+}
+.zi_block_loglik <- function(z,beta,gamma,theta,dist,link) {
+    a <- .zi_block_parts(z,beta,gamma,theta,dist,link)
+    if(is.null(a)) return(0)
+    if(any(!is.finite(a$mu)) || any(!is.finite(a$pi)) || any(a$pi<0 | a$pi>1)) return(-Inf)
+    zero <- a$y==0;l <- numeric(length(a$y))
+    l[zero] <- log(a$pi[zero]+(1-a$pi[zero])*exp(a$lp0[zero]))
+    ld <- if(a$nb) .nb_log_density(a$y[!zero],a$mu[!zero],theta) else dpois(a$y[!zero],a$mu[!zero],log=TRUE)
+    l[!zero] <- log1p(-a$pi[!zero])+ld
+    sum(a$w*l)
+}
+.zi_block_em <- function(z,beta,gamma,theta,dist,link,acc) {
+    a <- .zi_block_parts(z,beta,gamma,theta,dist,link)
+    if(is.null(a)) return(acc)
+    zero <- a$y==0;tau <- numeric(length(a$y))
+    tau[zero] <- a$pi[zero]/(a$pi[zero]+(1-a$pi[zero])*exp(a$lp0[zero]))
+    v <- a$w*(1-tau)
+    dpi <- a$lk$mu.eta(a$eta0);den <- pmax(a$pi*(1-a$pi),.Machine$double.xmin)
+    acc$sg <- acc$sg+drop(crossprod(a$zz,a$w*(tau-a$pi)*dpi/den))
+    acc$ig <- acc$ig+crossprod(a$zz,a$zz*(a$w*dpi^2/den))
+    shrink <- if(a$nb) 1+a$mu/theta else 1
+    acc$sb <- acc$sb+drop(crossprod(a$x,v*(a$y-a$mu)/shrink))
+    acc$ib <- acc$ib+crossprod(a$x,a$x*(v*a$mu/shrink))
+    if(a$nb) {
+        # Score and curvature in log theta; the curvature by a centered
+        # difference of the analytic score within the same pass.
+        h <- .Machine$double.eps^(1/3)
+        st <- function(t) t*.count_backend_theta_score(a$y,a$mu,t)
+        acc$st <- acc$st+sum(v*st(theta))
+        acc$it <- acc$it-sum(v*(st(theta*exp(h))-st(theta*exp(-h))))/(2*h)
+    }
+    acc
+}
+.count_backend_zi <- function(x,response=NULL,z=NULL,weights=NULL,offset=NULL,dist="poisson",
+                              link="logit",init.theta=NULL,em.tol=1e-8,em.maxit=100L,
+                              tol=1e-9,maxit=100L,theta.tol=1e-8,theta.maxit=100L,block.size=8192L) {
+    .check_iterations(em.tol,em.maxit);.check_iterations(tol,maxit)
+    reader <- .count_backend_reader(x,response,z,weights,offset,block.size)
+    if(reader$state$npositive==reader$state$nobs)
+        stop("zero-inflated models require zero responses",call.=FALSE)
+    if(!is.null(init.theta) && (length(init.theta)!=1L || !is.finite(init.theta) || init.theta<=0))
+        stop("'init.theta' must be a positive finite scalar.",call.=FALSE)
+    nb <- dist=="negbin";cn <- reader$columns$count;zn <- reader$columns$zero
+    pc <- length(cn);pz <- length(zn);cap <- 1e8
+    blocks <- function(fun,init) {acc <- init;for(k in seq_len(reader$source$n_chunks)) acc <- fun(reader$fetch(k),acc);acc}
+    loglik <- function(b,g,t) blocks(function(a,s) s+.zi_block_loglik(a,b,g,t,dist,link),0)
+    # Starting values: a Poisson fit of the count design, an inflation
+    # intercept at the fitted zero excess, and theta = 1.
+    pilot <- .count_backend_glm(reader,"count",poisson(),method=2L,tol=1e-6,maxit=50L)
+    beta <- unname(coef(pilot));if(any(!is.finite(beta))) beta[!is.finite(beta)] <- 0
+    gamma <- numeric(pz)
+    theta <- if(!nb) NULL else if(is.null(init.theta)) 1 else init.theta
+    ll <- loglik(beta,gamma,theta)
+    # EM (one scoring step per conditional maximization), with step halving
+    # on the observed log likelihood.
+    em.iter <- 0L
+    for(iter in seq_len(em.maxit)) {
+        acc <- blocks(function(a,s) .zi_block_em(a,beta,gamma,theta,dist,link,s),
+            list(sg=numeric(pz),ig=matrix(0,pz,pz),sb=numeric(pc),ib=matrix(0,pc,pc),st=0,it=0))
+        dg <- tryCatch(solve(acc$ig,acc$sg),error=function(e) NULL)
+        db <- tryCatch(solve(acc$ib,acc$sb),error=function(e) NULL)
+        if(is.null(dg) || is.null(db)) break
+        dt <- if(nb && acc$it>0) acc$st/acc$it else 0
+        accepted <- FALSE
+        for(half in 0:30) {
+            f <- 2^(-half)
+            t1 <- if(nb) exp(min(log(cap),max(log(1e-6),log(theta)+f*dt))) else NULL
+            l1 <- loglik(beta+f*db,gamma+f*dg,t1)
+            if(is.finite(l1) && l1>=ll-64*.Machine$double.eps*(1+abs(ll))) {
+                beta <- beta+f*db;gamma <- gamma+f*dg;theta <- t1;accepted <- TRUE;break
+            }
+        }
+        em.iter <- iter
+        if(!accepted) break
+        change <- l1-ll;ll <- l1
+        if(abs(change)<1e-6*(0.1+abs(2*ll))) break
+    }
+    # Newton steps with the joint observed information.
+    names(beta) <- cn;names(gamma) <- zn
+    template <- function(fixed.theta) structure(list(coefficients=list(count=beta,zero=gamma),dist=dist,
+        link=link,theta=if(nb) theta else NULL,theta.estimated=nb && !fixed.theta),class="fastglm_zi")
+    boundary <- FALSE;newton.iter <- 0L;decrement <- Inf;converged <- FALSE;info <- NULL
+    certified <- 0L;rounding <- function(l) 64*.Machine$double.eps*(1+abs(l))
+    for(k in seq_len(maxit)) {
+        if(nb && !boundary && theta>=cap*(1-1e-8)) {
+            # theta at its cap: keep it there if its score points beyond
+            # (the zero-inflated Poisson limit), as in the dense fitter.
+            obj <- template(FALSE);par <- c(beta,gamma,log(theta))
+            u <- blocks(function(a,s) s+colSums(.count_score(obj,.count_normalize_block(a,TRUE),par)),numeric(length(par)))
+            if(u[length(u)]>=0) boundary <- TRUE
+        }
+        obj <- template(boundary);par <- c(beta,gamma,if(nb && !boundary) log(theta))
+        u <- blocks(function(a,s) s+colSums(.count_score(obj,.count_normalize_block(a,TRUE),par)),numeric(length(par)))
+        info <- blocks(function(a,s) s+.count_information_block(obj,.count_normalize_block(a,TRUE),par),
+            matrix(0,length(par),length(par)))
+        r <- tryCatch(chol(info),error=function(e) NULL)
+        if(is.null(r) || any(!is.finite(info))) break
+        step <- drop(chol2inv(r)%*%u);decrement <- sum(u*step)
+        if(decrement/(0.1+abs(2*ll))<em.tol) {
+            # The maximum can lie in the zero-inflated Poisson limit, where the
+            # log-theta profile is flat and increasing: try theta at its cap.
+            if(nb && !boundary && theta>1e4 && u[length(u)]>0) {
+                l1 <- loglik(beta,gamma,cap)
+                if(is.finite(l1) && l1>=ll-rounding(ll)) {theta <- cap;boundary <- TRUE;ll <- l1;certified <- 0L;next}
+            }
+            # Certified; up to two further Newton steps polish the estimate,
+            # because the rule allows a remaining gain of em.tol relative to
+            # the log likelihood, which on a flat likelihood is a visible
+            # change in the coefficients.
+            if(certified>=2L) {converged <- TRUE;break}
+            certified <- certified+1L
+        }
+        accepted <- FALSE
+        for(half in 0:30) {
+            f <- 2^(-half);p1 <- par+f*step
+            b1 <- p1[seq_len(pc)];g1 <- p1[pc+seq_len(pz)]
+            t1 <- if(nb) if(boundary) theta else exp(min(log(cap),max(log(1e-6),p1[length(p1)]))) else NULL
+            l1 <- loglik(b1,g1,t1)
+            if(is.finite(l1) && l1>=ll-64*.Machine$double.eps*(1+abs(ll))) {
+                beta[] <- b1;gamma[] <- g1;theta <- t1;ll <- l1;accepted <- TRUE;break
+            }
+        }
+        newton.iter <- k
+        if(!accepted) {if(certified>0L) converged <- TRUE;break}
+    }
+    if(!converged && certified>0L) converged <- TRUE
+    obj <- template(boundary)
+    p.all <- pc+pz+as.integer(nb)
+    rn <- c(paste0("count_",cn),paste0("zero_",zn),if(nb) "theta")
+    vfull <- matrix(NA_real_,p.all,p.all,dimnames=list(rn,rn))
+    if(converged && !boundary) {
+        v <- tryCatch(.count_natural_covariance(.count_inverse_information(info),obj),error=function(e) NULL)
+        if(!is.null(v)) vfull[,] <- v
+    }
+    # At the theta boundary regular mixture covariance is unavailable, as for
+    # the dense fit.
+    vcov <- vfull[seq_len(pc+pz),seq_len(pc+pz),drop=FALSE]
+    se <- sqrt(diag(vcov))
+    out <- list(coefficients=list(count=beta,zero=gamma),
+        se=list(count=setNames(se[seq_len(pc)],cn),zero=setNames(se[pc+seq_len(pz)],zn)),
+        vcov=vcov,vcov.full=vfull,loglik=ll,theta=if(nb) theta else NULL,
+        SE.theta=if(nb) sqrt(vfull[p.all,p.all]) else NULL,
+        em_iter=em.iter,newton.iter=newton.iter,em.decrement=decrement,converged=converged,
+        convergence.reason=if(!converged) "not_converged" else if(boundary) "theta_boundary" else "converged",
+        n=sum(reader$state$rows),nobs=reader$state$nobs,df.residual=reader$state$nobs-p.all,
+        dist=dist,link=link,theta.estimated=nb,theta.boundary=boundary)
+    out <- c(out,.count_backend_schema(reader))
+    if(reader$streaming) {
+        out$source <- reader$source;out$fetch <- reader$fetch;out$state <- reader$state
+        out$passes <- reader$state$passes;out$chunk.reads <- reader$state$reads
+    } else {
+        o <- reader$original
+        out$x <- o$x;out$y <- o$y;out$weights <- o$weights;out$offset <- o$offset
+    }
+    class(out) <- "fastglm_zi"
+    if(!converged) warning("two-component model did not converge",call.=FALSE)
+    if(boundary) warning("theta is at its upper bound: the log likelihood is highest in the zero-inflated Poisson limit (theta = Inf); regular mixture covariance is unavailable",call.=FALSE)
+    out
+}

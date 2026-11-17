@@ -48,7 +48,7 @@ test_that("nonparallel assessment uses the fitted joint category distribution", 
         expect_true(fastglm_score_test(fit)$available)
         expect_true(fastglm_profile_test(fit,1L)$available)
         expect_true(all(is.finite(fastglm_vcov(fit))))
-        expect_error(fastglm_bootstrap(fit,R=2),"nonparallel")
+        expect_s3_class(fastglm_bootstrap(fit,R=2,seed=1),"fastglm_bootstrap")
         expect_error(fastglm_marginal_effects(fit,"Infl"),"continuous numeric")
     }
 })

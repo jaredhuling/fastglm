@@ -2,7 +2,7 @@
 % Please edit documentation in R/ordinal-profile.R
 \name{fastglm_score_test}
 \alias{fastglm_score_test}
-\title{Score tests for ordinal model terms and coefficient contrasts}
+\title{Score tests for model terms and coefficient contrasts}
 \usage{
 fastglm_score_test(
   object,
@@ -15,11 +15,12 @@ fastglm_score_test(
 }
 \arguments{
 \item{object}{a converged ordinal model, including a nonparallel model,
-with retained dense data and every
-declared category observed.}
+with retained dense data and every declared category observed, or a
+converged maximum-likelihood GLM with a retained design and response.}
 
 \item{terms}{formula terms, or location coefficient names for a matrix fit.
-The default jointly tests all location slopes.}
+For ordinal fits the default jointly tests all location slopes; GLM
+score tests require \code{terms}, which may also be coefficient names.}
 
 \item{contrast}{numeric vector or matrix of linear coefficient contrasts,
 as in \code{\link[=fastglm_wald_test]{fastglm_wald_test()}}. Named columns may select a subset of parameters.}
@@ -53,6 +54,11 @@ numeric \code{as.data.frame()} extraction, and constrained-fit diagnostics.
 Evaluates ordinary or mean-bias-adjusted likelihood scores under linear
 constraints, after re-estimating the nuisance parameters. The information
 matrix and, when requested, the bias adjustment refer to the full model.
+For a maximum-likelihood GLM from \code{\link[=fastglm]{fastglm()}}, the test is Rao's score test
+of the selected terms (or coefficients) at their \code{null} values, using the
+expected information at the restricted fit and the full model's dispersion,
+with a chi-square reference, as in \code{anova(..., test = "Rao")}; \code{contrast}
+and \code{null.estimation = "meanBR"} apply only to ordinal fits.
 }
 \details{
 Let \eqn{B} span the nuisance directions allowed by the constraints,

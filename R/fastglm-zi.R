@@ -21,7 +21,11 @@
 #' @param formula a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 #'   where the right-hand side after `|` specifies the inflation design.
 #'   If `|` is absent, the same RHS is used for both parts. Alternatively, a
-#'   numeric count-design matrix, with `response` and optionally `z`.
+#'   numeric count-design matrix, with `response` and optionally `z`; a
+#'   `dgCMatrix` or file-backed `big.matrix`; or a [fastglm_source()]. Sparse,
+#'   mapped, and source designs are read in blocks of rows: each pass performs
+#'   one EM step, and the fit then takes Newton steps with the joint observed
+#'   information, with the same convergence rule as the dense fit.
 #' @param data optional data frame / environment.
 #' @param subset,na.action standard model-frame arguments.
 #' @param weights optional non-negative prior weights.
@@ -102,6 +106,15 @@ fastglm_zi <- function(formula, data, subset, na.action,
     link <- match.arg(link)
 
     cl <- match.call()
+    if (inherits(formula, c("dgCMatrix", "big.matrix", "fastglm_source"))) {
+        if (!missing(subset) || !missing(na.action))
+            stop("subset and na.action apply only to formula fits; prepare matrix or source rows first", call. = FALSE)
+        out <- .count_backend_zi(formula, response, z, if (missing(weights)) NULL else weights,
+                                 if (missing(offset)) NULL else offset, dist, link, init.theta,
+                                 em.tol, em.maxit, tol, maxit, theta.tol, theta.maxit)
+        out$call <- cl
+        return(out)
+    }
     matrix.fit <- is.matrix(formula)
     if (matrix.fit) {
         # Design matrices supplied directly: the count design is 'formula',

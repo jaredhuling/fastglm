@@ -110,8 +110,12 @@ test_that("profile constraints retain the full Jeffreys penalty", {
 test_that("unsupported fits and failed profile computations are explicit", {
     d<-data.frame(x=rep(0:1,each=10));d$y<-d$x
     f<-fastglm(y~x,d,family=binomial(),firth=TRUE,tol=1e-10,maxit=500)
-    ordinary<-f;ordinary$firth<-FALSE
-    expect_error(confint(ordinary,method="profile"),"binomial-logit Firth")
+    # Maximum-likelihood GLMs use the ordinary profile likelihood; a Firth fit
+    # outside the binomial-logit case still has no profile method.
+    set.seed(1);dd<-data.frame(x=rnorm(40));dd$y<-rbinom(40,1,plogis(dd$x))
+    ml<-fastglm(y~x,dd,family=binomial())
+    expect_equal(dim(unclass(confint(ml,method="profile"))[,1:2]),c(2L,2L))
+    expect_error(confint(fastglm(y~x,dd,family=binomial("probit"),firth=TRUE),method="profile"),"binomial-logit Firth")
     sparse<-f;sparse$x<-as(Matrix::Matrix(f$x,sparse=TRUE),"dgCMatrix")
     expect_error(confint(sparse,method="profile"),"retained dense")
     fractional<-f;fractional$prior.weights[1]<-.5

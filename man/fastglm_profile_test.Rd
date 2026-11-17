@@ -7,9 +7,9 @@
 fastglm_profile_test(object, parm, null = 0, control = list(), contrast = NULL)
 }
 \arguments{
-\item{object}{a converged binomial-logit Firth model or an ordinal
-maximum-likelihood model, with a retained dense design matrix and response
-and a full-rank design. Ordinal models require every category to be observed.}
+\item{object}{a converged binomial-logit Firth model, an ordinal
+maximum-likelihood model, or a maximum-likelihood GLM from \code{\link[=fastglm]{fastglm()}},
+with a retained design matrix and response and a full-rank design. Ordinal models require every category to be observed.}
 
 \item{parm}{coefficient names or indices. The test treats all selected
 coefficients jointly; confidence intervals profile each separately.
@@ -50,7 +50,10 @@ and failure message.
 Tests one or more coefficient values by comparing an unrestricted maximum
 with the maximum under those constraints. The remaining coefficients are
 re-estimated. Binomial-logit Firth fits use their penalized likelihood;
-ordinal maximum-likelihood fits use their ordinary likelihood. For intervals, use
+ordinal and generalized linear maximum-likelihood fits use their ordinary
+likelihood. For a maximum-likelihood GLM the test is the likelihood-ratio
+test of the restricted model, with a chi-square reference, or an F
+reference when the dispersion is estimated, as in \code{\link[stats:anova]{stats::anova()}}. For intervals, use
 \code{confint(object, method = "profile")}; the default \code{confint()} method remains
 Wald inference.
 }

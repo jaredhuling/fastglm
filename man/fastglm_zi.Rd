@@ -31,7 +31,11 @@ fastglm_zi(
 \item{formula}{a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 where the right-hand side after `|` specifies the inflation design.
 If `|` is absent, the same RHS is used for both parts. Alternatively, a
-numeric count-design matrix, with `response` and optionally `z`.}
+numeric count-design matrix, with `response` and optionally `z`; a
+`dgCMatrix` or file-backed `big.matrix`; or a [fastglm_source()]. Sparse,
+mapped, and source designs are read in blocks of rows: each pass performs
+one EM step, and the fit then takes Newton steps with the joint observed
+information, with the same convergence rule as the dense fit.}
 
 \item{data}{optional data frame / environment.}
 

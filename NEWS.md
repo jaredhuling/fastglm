@@ -84,9 +84,18 @@
 * A file-backed `big.matrix` can be used with `fastglm_nb()`,
   `fastglm_truncated()`, `fastglm_hurdle()`, `fastglm_twopart()`, and
   `fastglm_ordinal()`; the matrix is read in blocks of rows.
-* `fastglm_truncated()` accepts sparse matrices and data sources, and
-  `fastglm_zi()` accepts design matrices (`response` and `z` arguments, as in
-  `fastglm_hurdle()`).
+* `fastglm_truncated()` and `fastglm_zi()` accept sparse matrices,
+  file-backed `big.matrix` objects, and data sources, read in blocks of rows,
+  and `fastglm_zi()` also accepts dense design matrices (`response` and `z`
+  arguments, as in `fastglm_hurdle()`). Blockwise zero-inflated fits use the
+  same convergence rule as dense fits and agree with them.
+* `confint(fit, method = "profile")` gives profile likelihood intervals for
+  maximum-likelihood GLMs, `fastglm_profile_test()` gives likelihood-ratio
+  tests, and `fastglm_score_test()` gives score tests; these match
+  `stats::confint()` and `stats::anova()`.
+* `fastglm_bootstrap()` supports partial proportional odds models.
+* `predict()`, `residuals()`, and `simulate()` work for hurdle and two-part
+  models fit to sparse matrices; they previously stopped with an error.
 * Sparse and streamed hurdle models no longer report convergence when the
   count-part step was halved to almost nothing.
 * Data sources print a short summary, and count model summaries print `theta`

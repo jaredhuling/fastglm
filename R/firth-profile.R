@@ -97,6 +97,7 @@
     max(0,statistic)
 }
 .fastglm_profile_confint <- function(object,parm,level,control=list()) {
+    if(.glm_ml_inference_model(object)) return(.glm_ml_profile_confint(object,parm,level,control))
     if(length(level)!=1L || !is.finite(level) || level<=0 || level>=1) stop("'level' must lie between zero and one",call.=FALSE)
     setup<-.firth_profile_setup(object,control);parm<-.firth_profile_parameters(parm,setup$coefficients)
     full<-.firth_profile_fit(setup);target<-qchisq(level,1)
@@ -146,13 +147,16 @@
 #' Tests one or more coefficient values by comparing an unrestricted maximum
 #' with the maximum under those constraints. The remaining coefficients are
 #' re-estimated. Binomial-logit Firth fits use their penalized likelihood;
-#' ordinal maximum-likelihood fits use their ordinary likelihood. For intervals, use
+#' ordinal and generalized linear maximum-likelihood fits use their ordinary
+#' likelihood. For a maximum-likelihood GLM the test is the likelihood-ratio
+#' test of the restricted model, with a chi-square reference, or an F
+#' reference when the dispersion is estimated, as in [stats::anova()]. For intervals, use
 #' `confint(object, method = "profile")`; the default `confint()` method remains
 #' Wald inference.
 #'
-#' @param object a converged binomial-logit Firth model or an ordinal
-#'   maximum-likelihood model, with a retained dense design matrix and response
-#'   and a full-rank design. Ordinal models require every category to be observed.
+#' @param object a converged binomial-logit Firth model, an ordinal
+#'   maximum-likelihood model, or a maximum-likelihood GLM from [fastglm()],
+#'   with a retained design matrix and response and a full-rank design. Ordinal models require every category to be observed.
 #' @param parm coefficient names or indices. The test treats all selected
 #'   coefficients jointly; confidence intervals profile each separately.
 #'   Omit `parm` when supplying an ordinal `contrast` matrix.
@@ -237,6 +241,7 @@ fastglm_profile_test <- function(object,parm,null=0,control=list(),contrast=NULL
         return(.ordinal_profile_test(object,if(missing(parm)) NULL else parm,null,control,data.name,contrast=contrast))
     if(!is.null(contrast))
         stop("linear profile contrasts are currently available only for ordinal fits",call.=FALSE)
+    if(.glm_ml_inference_model(object)) return(.glm_ml_lr_test(object,parm,null,data.name))
     setup<-.firth_profile_setup(object,control);parm<-.firth_profile_parameters(parm,setup$coefficients)
     if(length(null)==1L) null<-rep(null,length(parm))
     if(!is.numeric(null) || length(null)!=length(parm) || any(!is.finite(null)))
