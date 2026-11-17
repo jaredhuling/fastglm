@@ -28,7 +28,7 @@ The *fastglm* package provides regression models for continuous, binary, count, 
 | A point mass at zero and a positive continuous amount | `fastglm_twopart()` | Binary and Gamma components, with ML or mean bias reduction. [Two-part models](semicontinuous-fastglm.html) |
 | Ordered outcome categories | `fastglm_ordinal()` | Common or selected threshold-specific slopes; logit, probit, and complementary log-log links; ML or mean bias reduction. [Ordinal models, inference, and computation](ordinal-fastglm.html#ordinal-scope) |
 
-Mean bias reduction is requested with `firth=TRUE` in the interfaces that support it. For GLMs, support depends on the family and link; a fixed-size negative-binomial family supplied through `negbin(theta)` differs from jointly estimating size with `fastglm_nb()`. The truncated, hurdle, and zero-inflated count interfaces above currently use ML. The [bias-reduction guide](firth-fastglm.html) lists the supported GLM combinations, while the ordinal and two-part guides describe their respective adjustments.
+Mean bias reduction is requested with `firth=TRUE` in the interfaces that support it. For GLMs, support depends on the family and link; a fixed-size negative-binomial family supplied through `negbin(theta)` differs from jointly estimating size with `fastglm_nb()`. The truncated, hurdle, and zero-inflated count interfaces above use ML. The [bias-reduction guide](firth-fastglm.html) lists the supported GLM combinations, while the ordinal and two-part guides describe their respective adjustments.
 
 ## Inference, prediction, and assessment
 

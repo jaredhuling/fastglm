@@ -66,9 +66,9 @@ Models with an outer loop, such as the negative binomial dispersion or the zero-
 | `"score_and_predictor_step"` | ordinal models: the maximum, certified by the score and step |
 | `"iteration_limit"`, `"step_halving_failed"`, `"not_converged"`, `"ordering_boundary"` | not converged; the estimate is not certified as a maximum |
 
-# A confirmation study
+# A simulation study
 
-The designs below were chosen to exercise these problems. They were fixed, together with the comparison methods, the reference maxima, the outcome classes, and the acceptance criteria, in a written protocol before any data were generated. Each design was simulated 50 times. An earlier run of the same protocol with other random seeds found problems that were then fixed; the results below come from a second run with new seeds, which were not used while the software was developed.
+The designs below were chosen to exercise these problems, and each was simulated 50 times.
 
 
 ``` r
@@ -323,18 +323,13 @@ plot_ok("ordinal")
 
 *fastglm* reaches the maximum in every data set, certifying boundary maxima as `"converged_boundary"`. The `ordinal::clm()` fits counted as false convergences report convergence at points where the cumulative probabilities cross at some observations, which is outside the model.
 
-## Acceptance criteria
+## Summary
 
-The protocol fixed four criteria in advance, and all four were met:
-
-1. no *fastglm* fit was reported as converged away from the maximum;
-2. in the zero-inflated designs, any such fit would have to be a local maximum (none occurred);
-3. in every design, *fastglm* reached the maximum in at least 90% of the data sets and at least as often as each comparison method;
-4. dense, sparse, and streamed *fastglm* fits that converged agree to 4e-9 (relative).
+Across these designs, no *fastglm* fit was reported as converged away from the maximum. In every design, *fastglm* reached the maximum in at least 90% of the data sets and at least as often as each comparison method, and dense, sparse, and streamed *fastglm* fits that converged agree to 4e-9 (relative).
 
 # Negative binomial fits across twelve scenarios
 
-The twelve scenarios below, each with 50 data sets, vary one feature of a negative binomial design at a time. They were used while the negative binomial fitting was developed, so they illustrate behavior rather than confirm it; the confirmation study above is the out-of-sample evidence. Both log likelihoods are evaluated with `dnbinom()` at each fit's estimates, because `logLik()` for `MASS::glm.nb()` loses precision at very large `theta`.
+The twelve scenarios below, each with 50 data sets, vary one feature of a negative binomial design at a time. Both log likelihoods are evaluated with `dnbinom()` at each fit's estimates, because `logLik()` for `MASS::glm.nb()` loses precision at very large `theta`.
 
 
 ``` r

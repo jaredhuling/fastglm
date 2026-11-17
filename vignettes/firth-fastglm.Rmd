@@ -39,7 +39,7 @@ Here $X$ is the predictor matrix, $\eta_i$ is the linear predictor, and $\mu(\et
 
 The value $h_i$ is the $i$th diagonal of $H = W^{1/2} X (X^\top W X)^{-1} X^\top W^{1/2}$. These diagonal values, called leverages, describe the relative influence of each predictor row in the weighted-regression step. They determine how strongly that row's temporary response is adjusted. For families with unknown dispersion, its estimating equation must also be adjusted. The resulting joint calculation corresponds to the `AS_mean` option in *brglm2*.
 
-The additional computation depends on the family, predictor dimension, and number of iterations. Leverage calculations use the matrix decomposition from the weighted regression. Gamma models also require solving an adjusted dispersion equation, so avoiding repeated distribution calculations is particularly useful for that family. Timings later in this vignette compare the complete fits and check agreement before reporting speed.
+The additional computation depends on the family, predictor dimension, and number of iterations. Leverage calculations use the matrix decomposition from the weighted regression. Gamma models also require solving an adjusted dispersion equation, so avoiding repeated distribution calculations is particularly useful for that family.
 
 ```{r}
 library(fastglm)
@@ -224,9 +224,9 @@ The display reports how many scoring steps were reduced and the adjusted score a
 
 Accurate probability calculations are also necessary when outcomes are almost determined by the predictors. A probability can be so close to one that ordinary floating-point subtraction loses the complementary probability, even though that small quantity still affects the bias adjustment. Replacing small probabilities and derivatives separately by numerical lower bounds can therefore change the equations being solved. Probit and complementary log-log bias reduction evaluates these quantities using logarithms of probabilities and stable tail formulas. The likelihood, residuals, covariance, and score diagnostics follow the same calculations. Displayed probabilities can still round to zero or one.
 
-These probability calculations also enter post-fit likelihood and residual summaries and prediction standard errors. The required summaries are computed together, and prediction derivatives are evaluated separately when only those derivatives are needed. This avoids repeated probability calculations and temporary vectors while preserving the adjusted equations and reported quantities. The computational benefit depends on the design and the requested calculations.
+Post-fit likelihood and residual summaries and prediction standard errors use the same probability calculations.
 
-The following example separates the binary outcomes at zero exposure. The nuisance predictor, frequency weights, and offsets remain part of the model. The adjusted-score diagnostic assesses the numerical solution directly; agreement between two coefficient vectors would not establish accuracy if both calculations used the same probability approximation.
+The following example separates the binary outcomes at zero exposure. The nuisance predictor, frequency weights, and offsets remain part of the model. The adjusted-score diagnostic assesses the numerical solution directly.
 
 ```{r}
 set.seed(112101)
@@ -241,9 +241,9 @@ summary(separated_fit)
 fastglm_diagnostics(separated_fit)
 ```
 
-Solving the adjusted equations is a numerical requirement. It does not make Wald intervals or hypothesis tests exact in small samples, and this example does not assess their coverage or rejection rates.
+Solving the adjusted equations does not make Wald intervals or hypothesis tests exact in small samples.
 
-The adjusted diagnostics are retained with supported fits, including prepared Gamma-log fits that omit their data or covariance. Ordinary scores require the original observations and predictors, and older fitted objects may not contain the stored adjusted diagnostics. An unavailable diagnostic is reported as missing rather than as a zero score.
+The adjusted diagnostics are retained with supported fits, including prepared Gamma-log fits that omit their data or covariance. Ordinary scores require the original observations and predictors. An unavailable diagnostic is reported as missing rather than as a zero score.
 
 For streaming fits using `method="qr"`, convergence also depends on the change in fitted linear predictors implied by the remaining adjusted equations. This check is useful when nearly redundant predictors have large, opposite coefficients: their individual updates may remain appreciable while their combined effect changes very little. A joint score diagnostic accounts for combinations of coefficients that separate marginal score checks can miss. The following reader supplies the same Gamma observations in blocks.
 
@@ -305,7 +305,7 @@ Profile inference currently requires a retained dense design and response from a
 
 # Speed comparison across families
 
-The following comparison uses 10,000 observations and five predictors plus an intercept. Both functions receive the same preconstructed model matrix, so formula processing is excluded from both timings. Each fit is checked for convergence and coefficient agreement before timing. The methods retain their own starting-value procedures, and iteration counts are reported because these procedures and stopping rules affect the work required. These repeated timings describe this dataset and machine; they do not establish a uniform speed advantage across families or designs.
+The following comparison uses 10,000 observations and five predictors plus an intercept. Both functions receive the same preconstructed model matrix, so formula processing is excluded from both timings. Each fit is checked for convergence and coefficient agreement before timing. The methods retain their own starting-value procedures, and iteration counts are reported because these procedures and stopping rules affect the work required. Timings depend on the data and the computer.
 
 ```{r}
 set.seed(123)
@@ -358,7 +358,7 @@ knitr::kable(timing_table,row.names=FALSE,digits=3,
                 "Largest coefficient difference"))
 ```
 
-The time ratio divides the *brglm2* time by the *fastglm* time, so values above one favor *fastglm*. Gamma bias reduction requires an additional calculation for dispersion at each fitting iteration. When observations have equal prior weights, their contributions to part of this calculation are identical. Combining those contributions avoids repeating the same special-function evaluations for every observation. A numerical root search then solves the same dispersion equation with fewer evaluations. Gamma models with distinct prior weights also benefit from the improved search, but cannot reuse identical contributions to the same extent.
+The time ratio divides the *brglm2* time by the *fastglm* time, so values above one favor *fastglm*. Gamma bias reduction requires an additional calculation for dispersion at each fitting iteration. When observations have equal prior weights, their contributions to part of this calculation are identical. Combining those contributions avoids repeating the same special-function evaluations for every observation. A numerical root search then solves the same dispersion equation with fewer evaluations. Gamma models with distinct prior weights use the same root search but cannot combine identical contributions.
 
 # References
 

@@ -367,7 +367,7 @@ The constrained optimizer preserves the ordering of cumulative probabilities at 
 
 ## Robust covariance and bootstrap uncertainty {#ordinal-robust}
 
-The expected-information standard errors above use the fitted categorical distribution to describe sampling variation. Each observation also contributes a score, which measures how its log likelihood changes as the parameters change. A sandwich covariance combines the observed sensitivity of the score equations with the variation in these individual contributions, as described by [Zeileis (2006)](https://www.jstatsoft.org/article/view/v016i09). This permits a first-order variance estimate under distributional misspecification, provided observations are independent and the fitted parameter has a regular, identifiable population target. Robust standard errors do not correct an incorrect mean or probability model. Robust covariance is the safer choice when the link is in doubt: in simulations with a misspecified link, model-based threshold intervals covered between 92% and 97.5% of the time at a nominal 95%, while robust intervals stayed close to 95%.
+The expected-information standard errors above use the fitted categorical distribution to describe sampling variation. Each observation also contributes a score, which measures how its log likelihood changes as the parameters change. A sandwich covariance combines the observed sensitivity of the score equations with the variation in these individual contributions, as described by [Zeileis (2006)](https://www.jstatsoft.org/article/view/v016i09). This permits a first-order variance estimate under distributional misspecification, provided observations are independent and the fitted parameter has a regular, identifiable population target. Robust standard errors do not correct an incorrect mean or probability model. Robust covariance is the safer choice when the link is in doubt.
 
 ```{r}
 V_robust <- fastglm_vcov(fit_br,type="HC0")
@@ -378,7 +378,7 @@ fastglm_average(fit_br,weights=housing$Freq,vcov.=V_robust)
 
 The frequencies represent individual residents. Consequently, the independent-observation calculation accumulates score variability at the resident level, including when residents with the same recorded values share a row. A row with frequency ten contributes ten individual observations to this calculation. For mean-bias-reduced fits, the sandwich uses ordinary likelihood scores and their observed derivative at the bias-reduced estimate. With a fixed number of parameters and a regular, identifiable limit, the score adjustment becomes small relative to sampling variation as the sample size increases. This first-order convention differs from differentiating the complete adjusted equations and does not supply a finite-sample coverage guarantee. The returned covariance records this convention.
 
-When observations belong to independent clusters, `cluster` supplies the cluster identifier for each fitted row. The calculation then uses the sum of score contributions within each cluster, following the construction described by [Zeileis, Köll, and Graham (2020)](https://www.jstatsoft.org/article/view/v095i01). All observations represented by a frequency row must belong to its stated cluster. A large number of independent clusters is needed for the usual approximation; repeated observations within a few clusters do not substitute for additional clusters. Cluster covariance is available through `fastglm_vcov(fit, type="HC0", cluster=cluster_id)`. The current robust interface requires positive observed frequency in every declared category.
+When observations belong to independent clusters, `cluster` supplies the cluster identifier for each fitted row. The calculation then uses the sum of score contributions within each cluster, following the construction described by [Zeileis, Köll, and Graham (2020)](https://www.jstatsoft.org/article/view/v095i01). All observations represented by a frequency row must belong to its stated cluster. A large number of independent clusters is needed for the usual approximation; repeated observations within a few clusters do not substitute for additional clusters. Cluster covariance is available through `fastglm_vcov(fit, type="HC0", cluster=cluster_id)`. The robust interface requires positive observed frequency in every declared category.
 
 Robust covariance also applies to partial fits, including streamed fits. The calculation includes the thresholds, common slopes, and all threshold-specific slopes together, so probability summaries and tests retain their cross-covariances.
 
@@ -389,7 +389,7 @@ fastglm_wald_test(fit_partial_br,contrast=contact_equality,
 fastglm_average(fit_partial_br,weights=housing$Freq,vcov.=V_partial)
 ```
 
-Refitting bootstraps currently require common-slope ordinal fits. A refitting bootstrap describes variation by constructing new response datasets and fitting the model again. In the following parametric bootstrap, predictors and offsets remain fixed, while satisfaction counts are sampled from the fitted category probabilities. The statistic records the common slopes after each refit.
+Refitting bootstraps require common-slope ordinal fits. A refitting bootstrap describes variation by constructing new response datasets and fitting the model again. In the following parametric bootstrap, predictors and offsets remain fixed, while satisfaction counts are sampled from the fitted category probabilities. The statistic records the common slopes after each refit.
 
 ```{r}
 boot_location <- fastglm_bootstrap(
@@ -578,7 +578,7 @@ restored_fit <- fastglm_ordinal(
 all.equal(coef(restored_fit),coef(repeated[[1]]),tolerance=1e-10)
 ```
 
-`saveRDS()` and `readRDS()` provide the corresponding file-based operation. Formula expressions that refer to external functions or objects still require those dependencies when constructing a new prediction design. Batch fitting currently processes a list of responses sequentially and retains the full fitted models. An individual response can be refitted with `fastglm_ordinal(prepared, response, ...)`; changing the formula requires preparing the revised design again. Preparation retains a dense design and, when standardization is used, its standardized values; its memory requirement therefore continues to grow with the number of rows and predictors.
+`saveRDS()` and `readRDS()` provide the corresponding file-based operation. Formula expressions that refer to external functions or objects still require those dependencies when constructing a new prediction design. Batch fitting processes a list of responses sequentially and retains the full fitted models. An individual response can be refitted with `fastglm_ordinal(prepared, response, ...)`; changing the formula requires preparing the revised design again. Preparation retains a dense design and, when standardization is used, its standardized values; its memory requirement therefore continues to grow with the number of rows and predictors.
 
 Preparation also records a selection of varying effects. An omitted `nonparallel` argument reuses that selection for later fits or batches; `nonparallel=NULL` explicitly requests common slopes.
 
@@ -656,9 +656,9 @@ The score test refits the requested null and combines ordinary score and informa
 
 The numerical kernel evaluates likelihoods, scores, and information in C++. It processes probability calculations in blocks and avoids constructing a separate regression-design row for each observation and threshold. The dense input design is still retained in memory. Increasing the number of predictors or categories also increases the size of the parameter information matrix.
 
-For logistic ordinal models, each fitting evaluation reuses calculations involving the differences between adjacent thresholds. Algebraic identities also reduce repeated exponential and logarithm calculations for category probabilities and their derivatives. These changes preserve the likelihood and bias-adjustment equations. The additional storage depends on the number of categories; it does not add an array of probabilities for every observation. The benefit depends on the predictor dimension, number of categories, and number of fitting evaluations.
+For logistic ordinal models, each fitting evaluation reuses calculations involving the differences between adjacent thresholds, and algebraic identities avoid most exponential and logarithm calculations for category probabilities and their derivatives. The additional storage grows with the number of categories, not with the number of observations.
 
-The current interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, offsets, and frequency data. Dense models permit common slopes or selected threshold-specific slopes. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. `fastglm_ordinal_streaming()` fits the same common-slope or partial models by repeatedly reading blocks of observations, including the complete-data information calculation required for mean bias reduction. The large-data vignette demonstrates this interface and explains which summaries can be calculated without retaining the observations. Sparse ordinal matrices require an additional implementation.
+The interface supports cumulative logit, probit, and complementary log-log links, freely estimated thresholds, offsets, and frequency data. Dense models permit common slopes or selected threshold-specific slopes. An ordered factor records individual outcomes; a count matrix records the category frequencies within each predictor row. Its columns must follow the declared category order. `fastglm_ordinal_streaming()` fits the same common-slope or partial models by repeatedly reading blocks of observations, including the complete-data information calculation required for mean bias reduction. The large-data vignette demonstrates this interface and explains which summaries can be calculated without retaining the observations. Sparse ordinal matrices are not supported.
 
 A partial model can approach a probability boundary when the data provide little information about some threshold-specific effects. Mean bias reduction does not keep every cumulative-predictor gap bounded away from zero. In such cases, a very small remaining parameter change can coexist with an adjusted score that has not converged. The fitter checks both criteria, retains the failure diagnostics, and withholds uncertainty calculations that require convergence. Dense and streamed fitting use the same checks.
 
@@ -714,7 +714,7 @@ coef(endpoint_fit,component="threshold")
 predict(endpoint_fit)
 ```
 
-Bias reduction retains finite thresholds in this example. Maximum likelihood would require an infinite threshold for the empty endpoint, which the current implementation does not estimate.
+Bias reduction retains finite thresholds in this example. Maximum likelihood would require an infinite threshold for the empty endpoint, which is not estimated.
 
 The same endpoint can be empty in a parametric bootstrap refit. This does not remove a threshold from the mean-bias-reduced model. The bootstrap can report uncertainty when the interior category remains represented in every refit:
 

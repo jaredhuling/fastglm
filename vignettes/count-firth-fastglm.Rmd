@@ -63,7 +63,7 @@ The first right-hand side specifies the count model, and the second specifies th
 
 `vcov(fit)` has one row per regression coefficient. `vcov(fit, full=TRUE)` also includes theta when it is estimated. Prediction standard errors use this full covariance to account for how a small change in each fitted parameter changes the prediction. This local approximation is called the delta method; it includes dependence between the regression coefficients and theta.
 
-For these count models, the joint information is computed from analytic likelihood derivatives and accumulated over blocks of observations. This avoids repeatedly perturbing each parameter and recalculating all score contributions to approximate the curvature. The calculation is useful when many coefficients are fitted or observations are read in blocks, while retaining the same joint uncertainty target. Numerical derivatives remain useful as an independent check of the implementation.
+For these count models, the joint information is computed from analytic likelihood derivatives and accumulated over blocks of observations, which suits fits with many coefficients or data read in blocks.
 
 # Zero-inflated counts
 
@@ -159,4 +159,4 @@ boot <- fastglm_bootstrap(hurdle,R=49,seed=547,type="cluster",cluster=cluster,
 boot
 ```
 
-The small number of repetitions keeps this example short; a substantive analysis needs enough repetitions to estimate the interval endpoints adequately. The reported percentile interval uses quantiles of the refitted statistics. Failed or nonconverged refits are recorded in `diagnostics`, and uncertainty summaries are withheld if any refit fails. The procedure keeps the original predictor coding and transformations fixed, so it does not repeat model selection or data-dependent preprocessing.
+A substantive analysis needs more repetitions than this example uses to estimate the interval endpoints adequately. The reported percentile interval uses quantiles of the refitted statistics. Failed or nonconverged refits are recorded in `diagnostics`, and uncertainty summaries are withheld if any refit fails. The procedure keeps the original predictor coding and transformations fixed, so it does not repeat model selection or data-dependent preprocessing.
