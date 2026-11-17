@@ -445,7 +445,7 @@ knitr::kable(ordinal_table, col.names=c("Link", "Method", "Seconds", "Time ratio
 
 With 100,000 observations and 5 categories, `rms::orm` is the closest comparison, at `r ordinal_ratio("Common slopes", "logit", 100000L, 5L, "rms::orm")` times the *fastglm* time for logit and `r ordinal_ratio("Common slopes", "probit", 100000L, 5L, "rms::orm")` times for probit. `rms::orm` was timed for these two links only. For cloglog, `VGAM::vglm` warned about intersecting predictors and returned a different fit, so it has no ratio.
 
-`rms::orm` is designed for outcomes with very many distinct values, and it overtakes *fastglm* between 30 and 300 categories:
+`rms::orm` is designed for outcomes with very many distinct values, and it overtakes *fastglm* between 300 and 1,000 categories:
 
 ![Ordinal fitting times against the number of outcome categories, with 20,000 observations. Lower times indicate faster fitting.](man/figures/README-ordinal-categories.png)
 
@@ -458,7 +458,7 @@ knitr::kable(ordinal_many, col.names=c("Categories", "Method", "Seconds", "Time 
     digits=c(0, 0, 3, 2), row.names=FALSE)
 ```
 
-With 20,000 observations, `rms::orm` takes `r ordinal_ratio("Many categories", "logit", 20000L, 300L, "rms::orm")` times the *fastglm* time at 300 categories and `r ordinal_ratio("Many categories", "logit", 20000L, 1000L, "rms::orm")` times at 1,000, so it is the faster choice in that range. Most of the *fastglm* time in that range is the expected-information calculation behind the reported covariance. `VGAM::vglm` was not run above 30 categories because it would need about 160 GB of memory at 1,000.
+With 20,000 observations, `rms::orm` takes `r ordinal_ratio("Many categories", "logit", 20000L, 300L, "rms::orm")` times the *fastglm* time at 300 categories and `r ordinal_ratio("Many categories", "logit", 20000L, 1000L, "rms::orm")` times at 1,000, so it is the faster choice at 1,000 categories. Most of the *fastglm* time there is the expected-information calculation behind the reported covariance, which involves every category for every observation. `VGAM::vglm` was not run above 30 categories because it would need about 160 GB of memory at 1,000.
 
 For threshold-specific slopes with 1,000 observations, the best fit with ordered cumulative probabilities at every row lies on the ordering boundary, and *fastglm* reports convergence there with `convergence.reason = "converged_boundary"`. There is no time comparison at that size: `ordinal::clm` reported convergence with a higher log likelihood, but its cumulative predictors cross at 3 of the 1,000 rows, which is not a valid probability model at those rows, and `VGAM::vglm` returned an undefined log likelihood. At 100,000 observations, `ordinal::clm` took `r ordinal_seconds("Threshold-specific slopes", "logit", 100000L, 5L, "ordinal::clm")` seconds and reported that it had not converged, although its log likelihood agreed with *fastglm*, so it is omitted there as well.
 

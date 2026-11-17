@@ -657,7 +657,7 @@ The table shows 100,000 observations and 5 categories. The ratio is the comparis
 
 The threshold-specific panel has no comparison at 1,000 observations. For that data set, the best fit with ordered cumulative probabilities at every row lies on the ordering boundary, and *fastglm* reports convergence there with `convergence.reason = "converged_boundary"`. `ordinal::clm` reported convergence with a log likelihood higher by about 0.74, but its cumulative predictors cross at 3 of the 1,000 rows, so its fit is outside the model. `VGAM::vglm` warned that some fitted probabilities were close to 0 or 1 and returned an undefined log likelihood. At 100,000 observations, `ordinal::clm` reported that it had not converged, so it is omitted there as well.
 
-With 20,000 observations, `rms::orm` overtakes *fastglm* between 30 and 300 categories:
+With 20,000 observations, `rms::orm` overtakes *fastglm* between 300 and 1,000 categories:
 
 ```{r ordinal-categories, echo = FALSE, fig.width = 8, fig.height = 4.6}
 plot_ordinal_categories(ordinal_summary)
@@ -671,7 +671,7 @@ knitr::kable(data.frame(Categories = many$K, Method = paste0("`", many$method, "
     col.names = c("Categories", "Method", "Seconds", "Time ratio"), digits = c(0, 0, 3, 2), row.names = FALSE)
 ```
 
-`rms::orm` is designed for outcomes with very many distinct values and is the faster choice in that range. `VGAM::vglm` was not run above 30 categories because it would need about 160 GB of memory at 1,000.
+`rms::orm` is designed for outcomes with very many distinct values and is the faster choice at 1,000 categories. Most of the *fastglm* time there is the expected-information calculation behind the reported covariance, which involves every category for every observation. The *fastglm* times in the common-slope and many-category panels were measured again after a change to that calculation, while the machine was more heavily loaded than when the other packages were timed, so these ratios understate *fastglm*'s speed rather than overstate it. `VGAM::vglm` was not run above 30 categories because it would need about 160 GB of memory at 1,000.
 
 None of these packages fits mean bias-reduced cumulative-link models or reads ordinal data in blocks:
 

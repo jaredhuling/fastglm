@@ -727,23 +727,23 @@ fitting.</figcaption>
 
 | Link    | Method                     | Seconds | Time ratio |
 |:--------|:---------------------------|--------:|-----------:|
-| logit   | fastglm                    |   0.067 |        1.0 |
+| logit   | fastglm                    |   0.068 |        1.0 |
 | logit   | rms::orm                   |   0.197 |        2.9 |
-| logit   | ordinal::clm               |   0.690 |       10.3 |
-| logit   | MASS::polr                 |   1.405 |       20.9 |
-| logit   | VGAM::vglm                 |   1.762 |       26.2 |
-| logit   | WeightIt::ordinal_weightit |   3.049 |       45.4 |
+| logit   | ordinal::clm               |   0.690 |       10.1 |
+| logit   | MASS::polr                 |   1.405 |       20.5 |
+| logit   | VGAM::vglm                 |   1.762 |       25.7 |
+| logit   | WeightIt::ordinal_weightit |   3.049 |       44.5 |
 | probit  | fastglm                    |   0.101 |        1.0 |
 | probit  | rms::orm                   |   0.219 |        2.2 |
 | probit  | ordinal::clm               |   0.688 |        6.8 |
-| probit  | MASS::polr                 |   1.800 |       17.9 |
-| probit  | VGAM::vglm                 |   2.007 |       20.0 |
-| probit  | WeightIt::ordinal_weightit |   6.429 |       63.9 |
+| probit  | MASS::polr                 |   1.800 |       17.8 |
+| probit  | VGAM::vglm                 |   2.007 |       19.8 |
+| probit  | WeightIt::ordinal_weightit |   6.429 |       63.4 |
 | cloglog | fastglm                    |   0.100 |        1.0 |
-| cloglog | ordinal::clm               |   0.763 |        7.7 |
-| cloglog | MASS::polr                 |   1.477 |       14.8 |
+| cloglog | ordinal::clm               |   0.763 |        7.6 |
+| cloglog | MASS::polr                 |   1.477 |       14.7 |
 | cloglog | VGAM::vglm                 |   6.579 |         NA |
-| cloglog | WeightIt::ordinal_weightit |   5.922 |       59.5 |
+| cloglog | WeightIt::ordinal_weightit |   5.922 |       59.0 |
 
 With 100,000 observations and 5 categories, `rms::orm` is the closest
 comparison, at 2.9 times the *fastglm* time for logit and 2.2 times for
@@ -752,7 +752,7 @@ probit. `rms::orm` was timed for these two links only. For cloglog,
 different fit, so it has no ratio.
 
 `rms::orm` is designed for outcomes with very many distinct values, and
-it overtakes *fastglm* between 30 and 300 categories:
+it overtakes *fastglm* between 300 and 1,000 categories:
 
 <figure>
 <img src="man/figures/README-ordinal-categories.png"
@@ -764,29 +764,30 @@ faster fitting.</figcaption>
 
 | Categories | Method                     | Seconds | Time ratio |
 |-----------:|:---------------------------|--------:|-----------:|
-|         30 | fastglm                    |   0.017 |       1.00 |
-|         30 | rms::orm                   |   0.044 |       2.56 |
-|         30 | ordinal::clm               |   0.649 |      38.06 |
-|         30 | MASS::polr                 |   0.891 |      52.25 |
-|         30 | VGAM::vglm                 |   5.443 |     319.08 |
-|         30 | WeightIt::ordinal_weightit |   2.578 |     151.13 |
-|        300 | fastglm                    |   0.098 |       1.00 |
-|        300 | rms::orm                   |   0.049 |       0.50 |
-|        300 | ordinal::clm               |  41.008 |     418.83 |
-|        300 | MASS::polr                 |  29.603 |     302.35 |
-|        300 | WeightIt::ordinal_weightit |  47.976 |     490.00 |
-|       1000 | fastglm                    |   0.316 |       1.00 |
-|       1000 | rms::orm                   |   0.085 |       0.27 |
-|       1000 | ordinal::clm               | 483.794 |    1530.82 |
-|       1000 | MASS::polr                 | 277.030 |     876.58 |
-|       1000 | WeightIt::ordinal_weightit | 330.964 |    1047.24 |
+|         30 | fastglm                    |   0.014 |       1.00 |
+|         30 | rms::orm                   |   0.044 |       3.09 |
+|         30 | ordinal::clm               |   0.649 |      45.95 |
+|         30 | MASS::polr                 |   0.891 |      63.09 |
+|         30 | VGAM::vglm                 |   5.443 |     385.23 |
+|         30 | WeightIt::ordinal_weightit |   2.578 |     182.45 |
+|        300 | fastglm                    |   0.045 |       1.00 |
+|        300 | rms::orm                   |   0.049 |       1.08 |
+|        300 | ordinal::clm               |  41.008 |     909.81 |
+|        300 | MASS::polr                 |  29.603 |     656.77 |
+|        300 | WeightIt::ordinal_weightit |  47.976 |    1064.41 |
+|       1000 | fastglm                    |   0.141 |       1.00 |
+|       1000 | rms::orm                   |   0.085 |       0.60 |
+|       1000 | ordinal::clm               | 483.794 |    3423.29 |
+|       1000 | MASS::polr                 | 277.030 |    1960.24 |
+|       1000 | WeightIt::ordinal_weightit | 330.964 |    2341.88 |
 
-With 20,000 observations, `rms::orm` takes 0.5 times the *fastglm* time
-at 300 categories and 0.3 times at 1,000, so it is the faster choice in
-that range. Most of the *fastglm* time in that range is the
-expected-information calculation behind the reported covariance.
-`VGAM::vglm` was not run above 30 categories because it would need about
-160 GB of memory at 1,000.
+With 20,000 observations, `rms::orm` takes 1.1 times the *fastglm* time
+at 300 categories and 0.6 times at 1,000, so it is the faster choice at
+1,000 categories. Most of the *fastglm* time there is the
+expected-information calculation behind the reported covariance, which
+involves every category for every observation. `VGAM::vglm` was not run
+above 30 categories because it would need about 160 GB of memory at
+1,000.
 
 For threshold-specific slopes with 1,000 observations, the best fit with
 ordered cumulative probabilities at every row lies on the ordering
@@ -814,14 +815,14 @@ faster fitting.</figcaption>
 
 | Observations | Fit | Seconds | Largest coefficient difference from dense fit |
 |:---|:---|---:|---:|
-| 100,000 | Dense ML | 0.068 | 0.0e+00 |
-| 100,000 | Dense mean bias reduction | 0.154 | 0.0e+00 |
-| 100,000 | Streamed ML | 0.157 | 2.2e-16 |
-| 100,000 | Streamed mean bias reduction | 0.362 | 1.1e-16 |
-| 1,000,000 | Dense ML | 0.673 | 0.0e+00 |
-| 1,000,000 | Dense mean bias reduction | 1.536 | 0.0e+00 |
-| 1,000,000 | Streamed ML | 1.570 | 1.1e-16 |
-| 1,000,000 | Streamed mean bias reduction | 3.540 | 3.0e-17 |
+| 100,000 | Dense ML | 0.069 | 0.0e+00 |
+| 100,000 | Dense mean bias reduction | 0.158 | 0.0e+00 |
+| 100,000 | Streamed ML | 0.178 | 2.2e-16 |
+| 100,000 | Streamed mean bias reduction | 0.482 | 2.2e-16 |
+| 1,000,000 | Dense ML | 0.689 | 0.0e+00 |
+| 1,000,000 | Dense mean bias reduction | 1.554 | 0.0e+00 |
+| 1,000,000 | Streamed ML | 1.637 | 1.1e-16 |
+| 1,000,000 | Streamed mean bias reduction | 3.768 | 2.2e-16 |
 
 Streamed fits use blocks of 10,000 rows.
 

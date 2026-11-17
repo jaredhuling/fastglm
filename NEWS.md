@@ -68,6 +68,9 @@
   truncated, hurdle, and zero-inflated fits.
 * More post-fit calculations (AIC, residuals, null deviance) run in C++, so
   ordinary fits are somewhat faster.
+* Logit ordinal fits with many categories are about twice as fast, from a
+  faster calculation of the information matrix, which involves every category
+  for every observation.
 * New vignette `stability-fastglm`, a simulation study of convergence against
   `glm.fit()`, glm2, `MASS::glm.nb()`, pscl, and ordinal. It replaces the
   `nb-stability-fastglm` and `nb-convergence-fastglm` vignettes.

@@ -194,11 +194,11 @@ Table: Median time in milliseconds
 
 |Method       | n = 1,000| n = 10,000| n = 100,000|
 |:------------|---------:|----------:|-----------:|
-|fastglm_qr   |      1.40|      12.30|      128.04|
-|fastglm_chol |      0.86|       5.07|       51.28|
-|glm.fit      |      3.14|      32.60|      387.14|
-|glm2_fit2    |      3.13|      33.48|      401.87|
-|speedglm     |      2.43|      22.28|      230.06|
+|fastglm_qr   |      1.41|      13.00|      131.11|
+|fastglm_chol |      0.88|       5.19|       52.45|
+|glm.fit      |      2.99|      34.77|      336.07|
+|glm2_fit2    |      3.13|      33.24|      420.49|
+|speedglm     |      2.27|      22.80|      240.92|
 
 
 
@@ -243,11 +243,11 @@ Table: Median time in milliseconds
 
 |Method       | n = 1,000| n = 10,000| n = 100,000|
 |:------------|---------:|----------:|-----------:|
-|fastglm_qr   |      1.46|      12.61|      131.76|
-|fastglm_chol |      0.74|       4.86|       46.83|
-|glm.fit      |      3.17|      31.07|      437.71|
-|glm2_fit2    |      3.33|      35.96|      414.05|
-|speedglm     |      2.47|      22.88|      332.32|
+|fastglm_qr   |      1.44|      12.44|      126.56|
+|fastglm_chol |      0.81|       5.52|       48.33|
+|glm.fit      |      3.35|      32.16|      418.74|
+|glm2_fit2    |      3.46|      32.51|      420.10|
+|speedglm     |      2.60|      23.33|      326.37|
 
 
 
@@ -286,8 +286,8 @@ mb_sparse <- microbenchmark(
 
 |expr           | min (ms)| median (ms)| mean (ms)| max (ms)|
 |:--------------|--------:|-----------:|---------:|--------:|
-|fastglm_dense  |   310.96|      313.82|    317.31|   331.73|
-|fastglm_sparse |    25.60|       31.99|     30.99|    33.26|
+|fastglm_dense  |   328.09|      330.56|    332.34|   339.84|
+|fastglm_sparse |    32.38|       33.13|     34.07|    38.23|
 
 
 
@@ -316,8 +316,8 @@ mb_big <- microbenchmark(
 
 |expr       | min (ms)| median (ms)| mean (ms)| max (ms)|
 |:----------|--------:|-----------:|---------:|--------:|
-|dense      |   173.29|      175.99|    175.43|   177.02|
-|big.matrix |   211.75|      215.18|    219.80|   232.47|
+|dense      |   183.39|      190.39|    195.27|   212.03|
+|big.matrix |   221.94|      222.41|    225.40|   231.85|
 
 
 
@@ -363,8 +363,8 @@ Table: Median time in milliseconds
 
 |Method     | n = 1,000| n = 10,000| n = 100,000| n = 500,000|
 |:----------|---------:|----------:|-----------:|-----------:|
-|fastglm_nb |      2.13|      16.88|      148.93|      727.45|
-|glm.nb     |      8.83|      67.38|      615.65|     2472.56|
+|fastglm_nb |      2.30|      18.37|      146.81|      760.42|
+|glm.nb     |      9.39|      73.18|      597.86|     2519.96|
 
 
 
@@ -418,9 +418,9 @@ Table: Heinze-Schemper sex2 data, n = 239
 
 |expr    | min (ms)| median (ms)| mean (ms)| max (ms)|
 |:-------|--------:|-----------:|---------:|--------:|
-|fastglm |     0.62|        0.74|      0.75|     0.89|
-|logistf |     7.43|        7.95|      8.04|     9.44|
-|brglm2  |     2.73|        3.05|      3.28|     5.84|
+|fastglm |     0.63|        0.82|      0.88|     1.52|
+|logistf |     8.04|        8.42|      8.64|    10.55|
+|brglm2  |     3.02|        3.35|      3.55|     6.11|
 
 
 
@@ -477,14 +477,14 @@ firth_all_tim <- do.call(rbind, firth_all_tim)
 
 |Family            |n      | fastglm (ms)| brglm2 (ms)| Time ratio|
 |:-----------------|:------|------------:|-----------:|----------:|
-|binomial logit    |10,000 |         5.38|       15.70|        2.9|
-|binomial probit   |10,000 |         7.49|       17.48|        2.3|
-|binomial cloglog  |10,000 |         9.24|       19.21|        2.1|
-|poisson log       |10,000 |         4.58|      131.98|       28.8|
-|poisson sqrt      |10,000 |         3.10|      127.73|       41.2|
-|Gamma log         |10,000 |         3.78|      106.06|       28.0|
-|gaussian identity |10,000 |         1.58|       22.33|       14.1|
-|gaussian log      |10,000 |         7.12|       32.28|        4.5|
+|binomial logit    |10,000 |         6.08|       16.29|        2.7|
+|binomial probit   |10,000 |         8.59|       18.58|        2.2|
+|binomial cloglog  |10,000 |        10.04|       20.11|        2.0|
+|poisson log       |10,000 |         4.97|      137.16|       27.6|
+|poisson sqrt      |10,000 |         3.39|      133.03|       39.2|
+|Gamma log         |10,000 |         3.98|      109.96|       27.6|
+|gaussian identity |10,000 |         1.66|       23.88|       14.4|
+|gaussian log      |10,000 |         6.82|       32.45|        4.8|
 
 
 
@@ -549,18 +549,18 @@ firth_scale_tim <- do.call(rbind, firth_scale_tim)
 
 |Family            |n      | fastglm (ms)| brglm2 (ms)| Time ratio|
 |:-----------------|:------|------------:|-----------:|----------:|
-|binomial logit    |1,000  |         0.99|        2.94|        3.0|
-|poisson log       |1,000  |         0.97|       13.94|       14.4|
-|Gamma log         |1,000  |         0.76|       13.22|       17.3|
-|gaussian identity |1,000  |         0.49|        4.20|        8.5|
-|binomial logit    |10,000 |         5.79|       15.80|        2.7|
-|poisson log       |10,000 |         5.90|      132.55|       22.5|
-|Gamma log         |10,000 |         3.56|      105.72|       29.7|
-|gaussian identity |10,000 |         1.62|       23.84|       14.8|
-|binomial logit    |50,000 |        26.64|       72.68|        2.7|
-|poisson log       |50,000 |        25.04|      660.53|       26.4|
-|Gamma log         |50,000 |        16.72|      530.50|       31.7|
-|gaussian identity |50,000 |         5.99|      117.47|       19.6|
+|binomial logit    |1,000  |         0.88|        3.14|        3.6|
+|poisson log       |1,000  |         1.00|       14.02|       14.0|
+|Gamma log         |1,000  |         0.70|       13.31|       19.0|
+|gaussian identity |1,000  |         0.89|        4.42|        5.0|
+|binomial logit    |10,000 |         7.65|       16.22|        2.1|
+|poisson log       |10,000 |         6.18|      133.64|       21.6|
+|Gamma log         |10,000 |         4.56|      108.25|       23.8|
+|gaussian identity |10,000 |         1.70|       24.11|       14.2|
+|binomial logit    |50,000 |        25.00|       76.15|        3.0|
+|poisson log       |50,000 |        26.87|      672.45|       25.0|
+|Gamma log         |50,000 |        16.80|      541.72|       32.2|
+|gaussian identity |50,000 |         6.83|      122.06|       17.9|
 
 
 
@@ -624,12 +624,12 @@ Table: Firth logistic regression, n = 10000, p = 10
 
 |expr      | min (ms)| median (ms)| mean (ms)| max (ms)|
 |:---------|--------:|-----------:|---------:|--------:|
-|ColPivQR  |     8.29|        8.53|      8.66|     9.22|
-|QR        |     7.81|        8.20|      8.61|    10.44|
-|LLT       |     5.17|        5.77|      5.76|     6.31|
-|LDLT      |     5.40|        5.93|      5.91|     6.30|
-|FullPivQR |  3224.89|     3464.86|   3418.74|  3518.96|
-|SVD       |    11.77|       12.26|     14.87|    25.72|
+|ColPivQR  |     8.00|        9.04|      8.98|     9.98|
+|QR        |     7.37|        8.17|      8.19|     8.97|
+|LLT       |     4.85|        5.98|      5.81|     7.07|
+|LDLT      |     5.80|        6.20|      6.34|     6.80|
+|FullPivQR |  3343.16|     3400.48|   3391.05|  3452.92|
+|SVD       |    11.24|       13.84|     13.73|    16.68|
 
 
 
@@ -671,10 +671,10 @@ Table: Firth logistic regression, n = 5000, p = 6
 
 |expr       | min (ms)| median (ms)| mean (ms)| max (ms)|
 |:----------|--------:|-----------:|---------:|--------:|
-|dense      |     1.92|        2.21|      2.14|     2.25|
-|sparse     |     4.45|        4.59|      4.75|     5.60|
-|big.matrix |     2.03|        2.16|      2.60|     4.18|
-|streaming  |     5.12|        5.86|      5.65|     6.02|
+|dense      |     1.90|        2.16|      2.23|     2.70|
+|sparse     |     3.97|        4.54|      5.05|     7.54|
+|big.matrix |     2.16|        2.35|      2.63|     3.73|
+|streaming  |     4.76|        5.22|      5.41|     6.41|
 
 
 
@@ -742,8 +742,8 @@ Table: Median time in milliseconds
 
 |Method         | n = 1,000| n = 10,000| n = 50,000| n = 100,000|
 |:--------------|---------:|----------:|----------:|-----------:|
-|fastglm_hurdle |      0.67|       3.85|      19.34|       40.28|
-|pscl_hurdle    |      5.40|      47.67|     303.90|      543.50|
+|fastglm_hurdle |      0.77|       4.35|      19.83|       41.34|
+|pscl_hurdle    |      5.48|      48.71|     308.98|      546.39|
 
 
 
@@ -784,8 +784,8 @@ mb_hurdle_nb <- microbenchmark(
 
 |expr           | min (ms)| median (ms)| mean (ms)| max (ms)|
 |:--------------|--------:|-----------:|---------:|--------:|
-|fastglm_hurdle |    14.67|       17.67|     17.83|    21.15|
-|pscl_hurdle    |    53.95|       56.98|     63.75|    80.33|
+|fastglm_hurdle |    16.08|       19.67|     18.67|    20.24|
+|pscl_hurdle    |    55.38|       55.44|     55.48|    55.62|
 
 
 
@@ -825,8 +825,8 @@ Table: Median time in milliseconds
 
 |Method     | n = 1,000| n = 10,000| n = 50,000| n = 100,000|
 |:----------|---------:|----------:|----------:|-----------:|
-|fastglm_zi |      3.66|      43.01|     184.21|      361.27|
-|pscl_zi    |      9.92|     104.88|     595.38|     1180.63|
+|fastglm_zi |      3.73|      42.37|     185.23|      360.00|
+|pscl_zi    |     10.09|     109.69|     592.05|     1181.64|
 
 
 
@@ -862,8 +862,8 @@ mb_zi_nb <- microbenchmark(
 
 |expr       | min (ms)| median (ms)| mean (ms)| max (ms)|
 |:----------|--------:|-----------:|---------:|--------:|
-|fastglm_zi |    80.36|       94.15|     95.76|   112.76|
-|pscl_zi    |   158.21|      185.35|    176.68|   186.48|
+|fastglm_zi |   100.91|      104.14|    106.57|   114.64|
+|pscl_zi    |   164.99|      190.82|    186.48|   203.63|
 
 
 
@@ -931,23 +931,23 @@ These comparisons use packages that fit the same cumulative-link models. Each de
 
 |Link    |Method                       | Seconds| Time ratio|
 |:-------|:----------------------------|-------:|----------:|
-|logit   |`fastglm`                    |   0.067|        1.0|
+|logit   |`fastglm`                    |   0.068|        1.0|
 |logit   |`rms::orm`                   |   0.197|        2.9|
-|logit   |`ordinal::clm`               |   0.690|       10.3|
-|logit   |`MASS::polr`                 |   1.405|       20.9|
-|logit   |`VGAM::vglm`                 |   1.762|       26.2|
-|logit   |`WeightIt::ordinal_weightit` |   3.049|       45.4|
+|logit   |`ordinal::clm`               |   0.690|       10.1|
+|logit   |`MASS::polr`                 |   1.405|       20.5|
+|logit   |`VGAM::vglm`                 |   1.762|       25.7|
+|logit   |`WeightIt::ordinal_weightit` |   3.049|       44.5|
 |probit  |`fastglm`                    |   0.101|        1.0|
 |probit  |`rms::orm`                   |   0.219|        2.2|
 |probit  |`ordinal::clm`               |   0.688|        6.8|
-|probit  |`MASS::polr`                 |   1.800|       17.9|
-|probit  |`VGAM::vglm`                 |   2.007|       20.0|
-|probit  |`WeightIt::ordinal_weightit` |   6.429|       63.9|
+|probit  |`MASS::polr`                 |   1.800|       17.8|
+|probit  |`VGAM::vglm`                 |   2.007|       19.8|
+|probit  |`WeightIt::ordinal_weightit` |   6.429|       63.4|
 |cloglog |`fastglm`                    |   0.100|        1.0|
-|cloglog |`ordinal::clm`               |   0.763|        7.7|
-|cloglog |`MASS::polr`                 |   1.477|       14.8|
+|cloglog |`ordinal::clm`               |   0.763|        7.6|
+|cloglog |`MASS::polr`                 |   1.477|       14.7|
 |cloglog |`VGAM::vglm`                 |   6.579|         NA|
-|cloglog |`WeightIt::ordinal_weightit` |   5.922|       59.5|
+|cloglog |`WeightIt::ordinal_weightit` |   5.922|       59.0|
 
 
 
@@ -955,7 +955,7 @@ The table shows 100,000 observations and 5 categories. The ratio is the comparis
 
 The threshold-specific panel has no comparison at 1,000 observations. For that data set, the best fit with ordered cumulative probabilities at every row lies on the ordering boundary, and *fastglm* reports convergence there with `convergence.reason = "converged_boundary"`. `ordinal::clm` reported convergence with a log likelihood higher by about 0.74, but its cumulative predictors cross at 3 of the 1,000 rows, so its fit is outside the model. `VGAM::vglm` warned that some fitted probabilities were close to 0 or 1 and returned an undefined log likelihood. At 100,000 observations, `ordinal::clm` reported that it had not converged, so it is omitted there as well.
 
-With 20,000 observations, `rms::orm` overtakes *fastglm* between 30 and 300 categories:
+With 20,000 observations, `rms::orm` overtakes *fastglm* between 300 and 1,000 categories:
 
 ![plot of chunk ordinal-categories](benchmarks-figs/ordinal-categories-1.png)
 
@@ -963,26 +963,26 @@ With 20,000 observations, `rms::orm` overtakes *fastglm* between 30 and 300 cate
 
 | Categories|Method                       | Seconds| Time ratio|
 |----------:|:----------------------------|-------:|----------:|
-|         30|`fastglm`                    |   0.017|       1.00|
-|         30|`rms::orm`                   |   0.044|       2.56|
-|         30|`ordinal::clm`               |   0.649|      38.06|
-|         30|`MASS::polr`                 |   0.891|      52.25|
-|         30|`VGAM::vglm`                 |   5.443|     319.08|
-|         30|`WeightIt::ordinal_weightit` |   2.578|     151.13|
-|        300|`fastglm`                    |   0.098|       1.00|
-|        300|`rms::orm`                   |   0.049|       0.50|
-|        300|`ordinal::clm`               |  41.008|     418.83|
-|        300|`MASS::polr`                 |  29.603|     302.35|
-|        300|`WeightIt::ordinal_weightit` |  47.976|     490.00|
-|       1000|`fastglm`                    |   0.316|       1.00|
-|       1000|`rms::orm`                   |   0.085|       0.27|
-|       1000|`ordinal::clm`               | 483.794|    1530.82|
-|       1000|`MASS::polr`                 | 277.030|     876.58|
-|       1000|`WeightIt::ordinal_weightit` | 330.964|    1047.24|
+|         30|`fastglm`                    |   0.014|       1.00|
+|         30|`rms::orm`                   |   0.044|       3.09|
+|         30|`ordinal::clm`               |   0.649|      45.95|
+|         30|`MASS::polr`                 |   0.891|      63.09|
+|         30|`VGAM::vglm`                 |   5.443|     385.23|
+|         30|`WeightIt::ordinal_weightit` |   2.578|     182.45|
+|        300|`fastglm`                    |   0.045|       1.00|
+|        300|`rms::orm`                   |   0.049|       1.08|
+|        300|`ordinal::clm`               |  41.008|     909.81|
+|        300|`MASS::polr`                 |  29.603|     656.77|
+|        300|`WeightIt::ordinal_weightit` |  47.976|    1064.41|
+|       1000|`fastglm`                    |   0.141|       1.00|
+|       1000|`rms::orm`                   |   0.085|       0.60|
+|       1000|`ordinal::clm`               | 483.794|    3423.29|
+|       1000|`MASS::polr`                 | 277.030|    1960.24|
+|       1000|`WeightIt::ordinal_weightit` | 330.964|    2341.88|
 
 
 
-`rms::orm` is designed for outcomes with very many distinct values and is the faster choice in that range. `VGAM::vglm` was not run above 30 categories because it would need about 160 GB of memory at 1,000.
+`rms::orm` is designed for outcomes with very many distinct values and is the faster choice at 1,000 categories. Most of the *fastglm* time there is the expected-information calculation behind the reported covariance, which involves every category for every observation. The *fastglm* times in the common-slope and many-category panels were measured again after a change to that calculation, while the machine was more heavily loaded than when the other packages were timed, so these ratios understate *fastglm*'s speed rather than overstate it. `VGAM::vglm` was not run above 30 categories because it would need about 160 GB of memory at 1,000.
 
 None of these packages fits mean bias-reduced cumulative-link models or reads ordinal data in blocks:
 
@@ -992,14 +992,14 @@ None of these packages fits mean bias-reduced cumulative-link models or reads or
 
 |Observations |Fit                          | Seconds| Largest coefficient difference from dense fit|
 |:------------|:----------------------------|-------:|---------------------------------------------:|
-|100,000      |Dense ML                     |   0.068|                                       0.0e+00|
-|100,000      |Dense mean bias reduction    |   0.154|                                       0.0e+00|
-|100,000      |Streamed ML                  |   0.157|                                       2.2e-16|
-|100,000      |Streamed mean bias reduction |   0.362|                                       1.1e-16|
-|1,000,000    |Dense ML                     |   0.673|                                       0.0e+00|
-|1,000,000    |Dense mean bias reduction    |   1.536|                                       0.0e+00|
-|1,000,000    |Streamed ML                  |   1.570|                                       1.1e-16|
-|1,000,000    |Streamed mean bias reduction |   3.540|                                       3.0e-17|
+|100,000      |Dense ML                     |   0.069|                                       0.0e+00|
+|100,000      |Dense mean bias reduction    |   0.158|                                       0.0e+00|
+|100,000      |Streamed ML                  |   0.178|                                       2.2e-16|
+|100,000      |Streamed mean bias reduction |   0.482|                                       2.2e-16|
+|1,000,000    |Dense ML                     |   0.689|                                       0.0e+00|
+|1,000,000    |Dense mean bias reduction    |   1.554|                                       0.0e+00|
+|1,000,000    |Streamed ML                  |   1.637|                                       1.1e-16|
+|1,000,000    |Streamed mean bias reduction |   3.768|                                       2.2e-16|
 
 
 

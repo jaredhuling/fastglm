@@ -3,11 +3,16 @@
 # Rscript benchmarks/benchmark-ordinal-comparison.R --library=/path/to/library
 # Options: --extra-library=dir --output=dir --summary=dir --figure=file --quick
 #          --merge-only --plot-only --budget=seconds --panels=name[,name]
+#          --methods=name[,name] --internal
 #
 # --panels reruns only the named panels (e.g. "Threshold-specific slopes")
 # and replaces their rows in an existing summary, keeping the other panels'
 # rows and skipping the internal streaming comparison. Use it after a change
 # that affects only some solvers; metadata.csv records the panels rerun.
+# --methods=name[,name] reruns only those methods in cells whose raw results
+# already exist, keeping the other methods' stored times; agreement and time
+# ratios are then recomputed against the new fastglm fits. --internal reruns
+# the internal streaming and bias-reduction comparison even with --panels.
 #
 # Each cell runs in its own process, one at a time, and writes one results file,
 # so an interrupted study resumes where it stopped. A reference time is compared
@@ -30,6 +35,8 @@ plot_only <- "--plot-only" %in% args
 raw_dir <- argument("output", file.path(summary_dir, "raw"))
 budget <- as.numeric(argument("budget", if (quick) "120" else "1800"))
 panels <- strsplit(argument("panels", ""), ",", fixed = TRUE)[[1L]]
+methods_rerun <- strsplit(argument("methods", ""), ",", fixed = TRUE)[[1L]]
+internal_rerun <- "--internal" %in% args
 dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
 Sys.setenv(OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1")
 
@@ -212,14 +219,20 @@ run_method <- function(method, cell, data) {
 run_cell <- function(cell) {
     label <- sprintf("%s_%s_n%d_p%d_K%d", cell$design, cell$link, cell$n, cell$p, cell$K)
     file <- file.path(raw_dir, sprintf("results_%s.rds", label))
-    if (file.exists(file)) return(invisible(file))
+    previous <- NULL
+    if (file.exists(file)) {
+        if (!length(methods_rerun)) return(invisible(file))
+        previous <- readRDS(file)
+    }
     seed <- make_seed(label)
     data <- simulate(cell$n, cell$p, cell$K, cell$link, cell$nonparallel, seed)
     methods <- Filter(function(m) cell$link %in% METHOD_REGISTRY[[m]]$links &&
         (!cell$nonparallel || METHOD_REGISTRY[[m]]$partial) &&
         (is.null(METHOD_REGISTRY[[m]]$max_categories) || cell$K <= METHOD_REGISTRY[[m]]$max_categories),
         names(METHOD_REGISTRY))
-    results <- list()
+    # With --methods and stored results, only the named methods are rerun.
+    results <- if (is.null(previous)) list() else previous$results
+    if (!is.null(previous)) methods <- intersect(methods, methods_rerun)
     for (method in methods) {
         results[[method]] <- run_method(method, cell, data)
         message(label, " ", method, ": ", results[[method]]$status, " ",
@@ -228,6 +241,7 @@ run_cell <- function(cell) {
     temporary <- paste0(file, ".tmp")
     # Concurrent work can distort timings, so each cell records the load it ended under.
     load <- sub(".*load averages?: *", "", system2("uptime", stdout = TRUE))
+    if (!is.null(previous)) load <- paste0(previous$load, "; rerun ", paste(methods, collapse = ","), ": ", load)
     saveRDS(list(cell = cell, label = label, seed = seed, results = results, load = load), temporary)
     file.rename(temporary, file)
     invisible(file)
@@ -236,7 +250,7 @@ run_cell <- function(cell) {
 # Bias reduction relative to ML, and streaming relative to a dense fit.
 run_internal <- function() {
     file <- file.path(raw_dir, "results_internal.rds")
-    if (file.exists(file)) return(invisible(file))
+    if (file.exists(file) && !internal_rerun) return(invisible(file))
     out <- list()
     block <- 10000L
     for (n in if (quick) 2000L else c(100000L, 1000000L)) {
@@ -338,7 +352,8 @@ merge_results <- function() {
         value = c(system2("git", c("rev-parse", "HEAD"), stdout = TRUE),
                   tools::md5sum(bytes = unlist(lapply(sort(files), function(f) readBin(f, "raw", file.size(f))))),
                   system2("uptime", stdout = TRUE), format(Sys.time(), tz = "UTC"),
-                  if (length(panels)) paste(panels, collapse = ",") else "all")),
+                  paste0(if (length(panels)) paste(panels, collapse = ",") else "all",
+                         if (length(methods_rerun)) paste0(" (methods: ", paste(methods_rerun, collapse = ","), ")") else ""))),
         file.path(summary_dir, "metadata.csv"), row.names = FALSE)
     display <- summary[, c("panel", "link", "n", "K", "method", "status", "median_seconds",
                            "speedup", "loglik_difference", "slope_error", "agrees")]
@@ -370,7 +385,7 @@ if (!merge_only) {
         run_cell(CELLS[i, ])
         gc(FALSE)
     }
-    if (!length(panels)) run_internal()
+    if (!length(panels) || internal_rerun) run_internal()
 }
 merge_results()
 if (requireNamespace("ggplot2", quietly = TRUE)) plot_results()
