@@ -32,7 +32,8 @@
 
 * `fastglm_nb()` converges in cases where it previously stopped at the
   iteration limit (very small `theta`, outliers), and the outer convergence
-  measure is returned as `outer.decrement`.
+  measure is returned as `outer.decrement`. On data where 0.1.4 already
+  converged, these checks make fits about 20 percent slower.
 * `fastglm_nb()` checks the Poisson limit (`poisson.limit = TRUE`). When the
   likelihood is highest there, it returns `theta = Inf` with the Poisson fit,
   `convergence.reason = "theta_infinite"`, and a warning.
