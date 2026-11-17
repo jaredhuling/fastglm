@@ -71,9 +71,11 @@ Models with an outer loop, such as the negative binomial dispersion or the zero-
 The designs below were chosen to exercise these problems, and each was simulated 50 times.
 
 
+
+
 ``` r
-results <- readRDS("stability-data/e08_classified.rds")
 designs <- unique(results[, c("design", "model", "label")])
+designs <- designs[order(designs$design), ]
 knitr::kable(data.frame(Design = designs$design, Model = designs$label), row.names = FALSE)
 ```
 
@@ -81,21 +83,21 @@ knitr::kable(data.frame(Design = designs$design, Model = designs$label), row.nam
 
 |Design |Model                                            |
 |:------|:------------------------------------------------|
-|DGP21  |Poisson regression, identity link, prior weights |
-|DGP22  |Poisson regression, square-root link, offset     |
-|DGP23  |Binomial regression, identity link               |
-|DGP24  |Log-binomial regression                          |
-|DGP25  |Gamma regression, inverse link (interior)        |
-|DGP26  |Logistic regression (interior)                   |
-|DGP27  |Negative binomial, square-root link              |
-|DGP28  |Negative binomial, identity link                 |
-|DGP29  |Negative binomial, log link, near Poisson        |
-|DGP30  |Negative binomial, log link, theta = 0.03        |
-|DGP31  |Hurdle negative binomial, theta = 0.15           |
-|DGP32  |Zero-inflated negative binomial, theta = 1.2     |
-|DGP33  |Zero-inflated Poisson                            |
-|DGP34  |Partial proportional odds, logit link            |
-|DGP35  |Partial proportional odds, probit link           |
+|D1     |Poisson regression, identity link, prior weights |
+|D2     |Poisson regression, square-root link, offset     |
+|D3     |Binomial regression, identity link               |
+|D4     |Log-binomial regression                          |
+|D5     |Gamma regression, inverse link (interior)        |
+|D6     |Logistic regression (interior)                   |
+|D7     |Negative binomial, square-root link              |
+|D8     |Negative binomial, identity link                 |
+|D9     |Negative binomial, log link, near Poisson        |
+|D10    |Negative binomial, log link, theta = 0.03        |
+|D11    |Hurdle negative binomial, theta = 0.15           |
+|D12    |Zero-inflated negative binomial, theta = 1.2     |
+|D13    |Zero-inflated Poisson                            |
+|D14    |Partial proportional odds, logit link            |
+|D15    |Partial proportional odds, probit link           |
 
 
 
@@ -123,6 +125,7 @@ summary_table <- function(model) {
     data.frame(Design = r$design[1], Method = as.character(r$Method[1]),
                t(as.vector(table(r$Class))), check.names = FALSE)))
   out <- out[order(out$Design, factor(out$Method, levels = methods)), ]
+  out$Design <- as.character(out$Design)
   out$Design[duplicated(out$Design)] <- ""
   knitr::kable(out, row.names = FALSE, align = "llrrrr",
                col.names = c("Design", "Method", "ok", "false convergence", "not converged", "error"))
@@ -141,7 +144,8 @@ plot_ok <- function(model, ncol = 2L) {
   z <- results[results$model %in% model, ]
   ok <- aggregate(cbind(ok = class == "ok") ~ design + label + Method, data = z, FUN = sum)
   ok$Method <- factor(ok$Method, levels = rev(levels(droplevels(ok$Method))))
-  ok$panel <- factor(paste0(ok$design, ": ", ok$label))
+  ok <- ok[order(ok$design), ]
+  ok$panel <- factor(paste0(ok$design, ": ", ok$label), levels = unique(paste0(ok$design, ": ", ok$label)))
   ggplot(ok, aes(ok, Method, colour = Method, shape = Method)) +
     geom_segment(aes(x = 0, xend = ok, yend = Method), linewidth = 0.5, alpha = 0.5) +
     geom_point(size = 2.4) +
@@ -159,7 +163,7 @@ plot_ok <- function(model, ncol = 2L) {
 
 ## Generalized linear models
 
-Designs DGP21 to DGP24 have maxima on the boundary of the valid region (identity and square-root links for Poisson data, identity and log links for binomial data); DGP25 and DGP26 are interior controls. *fastglm* was fit with a dense design, a sparse (`dgCMatrix`) design, and in four chunks with `fastglm_streaming()`.
+Designs D1 to D4 have maxima on the boundary of the valid region (identity and square-root links for Poisson data, identity and log links for binomial data); D5 and D6 are interior controls. *fastglm* was fit with a dense design, a sparse (`dgCMatrix`) design, and in four chunks with `fastglm_streaming()`.
 
 
 ``` r
@@ -170,32 +174,32 @@ summary_table("glm")
 
 |Design |Method             | ok| false convergence| not converged| error|
 |:------|:------------------|--:|-----------------:|-------------:|-----:|
-|DGP21  |fastglm            | 49|                 0|             1|     0|
+|D1     |fastglm            | 49|                 0|             1|     0|
 |       |fastglm (sparse)   | 49|                 0|             1|     0|
 |       |fastglm (streamed) | 49|                 0|             1|     0|
 |       |glm.fit            |  0|                 0|             0|    50|
 |       |glm2               |  0|                 0|             0|    50|
-|DGP22  |fastglm            | 50|                 0|             0|     0|
+|D2     |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (sparse)   | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
 |       |glm.fit            |  0|                 0|             0|    50|
 |       |glm2               |  0|                 0|             0|    50|
-|DGP23  |fastglm            | 48|                 0|             2|     0|
+|D3     |fastglm            | 48|                 0|             2|     0|
 |       |fastglm (sparse)   | 48|                 0|             2|     0|
 |       |fastglm (streamed) | 48|                 0|             2|     0|
 |       |glm.fit            |  0|                 0|             0|    50|
 |       |glm2               |  0|                 0|             0|    50|
-|DGP24  |fastglm            | 50|                 0|             0|     0|
+|D4     |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (sparse)   | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
 |       |glm.fit            |  0|                 0|             0|    50|
 |       |glm2               |  0|                 0|             0|    50|
-|DGP25  |fastglm            | 50|                 0|             0|     0|
+|D5     |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (sparse)   | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
 |       |glm.fit            | 50|                 0|             0|     0|
 |       |glm2               | 50|                 0|             0|     0|
-|DGP26  |fastglm            | 50|                 0|             0|     0|
+|D6     |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (sparse)   | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
 |       |glm.fit            | 50|                 0|             0|     0|
@@ -217,7 +221,7 @@ On the boundary designs `glm.fit()` and *glm2* stop with an error in every data 
 
 ## Negative binomial models
 
-DGP27 and DGP28 use square-root and identity links with maxima on the boundary, DGP29 is nearly Poisson (true `theta = 2000`), and DGP30 has strong overdispersion (`theta = 0.03`).
+D7 and D8 use square-root and identity links with maxima on the boundary, D9 is nearly Poisson (true `theta = 2000`), and D10 has strong overdispersion (`theta = 0.03`).
 
 
 ``` r
@@ -228,16 +232,16 @@ summary_table("nb")
 
 |Design |Method           | ok| false convergence| not converged| error|
 |:------|:----------------|--:|-----------------:|-------------:|-----:|
-|DGP27  |fastglm          | 50|                 0|             0|     0|
+|D7     |fastglm          | 50|                 0|             0|     0|
 |       |fastglm (sparse) | 50|                 0|             0|     0|
 |       |MASS::glm.nb     |  0|                 0|             0|    50|
-|DGP28  |fastglm          | 50|                 0|             0|     0|
+|D8     |fastglm          | 50|                 0|             0|     0|
 |       |fastglm (sparse) | 50|                 0|             0|     0|
 |       |MASS::glm.nb     |  0|                 0|             0|    50|
-|DGP29  |fastglm          | 50|                 0|             0|     0|
+|D9     |fastglm          | 50|                 0|             0|     0|
 |       |fastglm (sparse) | 49|                 0|             1|     0|
 |       |MASS::glm.nb     |  5|                 0|            45|     0|
-|DGP30  |fastglm          | 50|                 0|             0|     0|
+|D10    |fastglm          | 50|                 0|             0|     0|
 |       |fastglm (sparse) | 50|                 0|             0|     0|
 |       |MASS::glm.nb     | 44|                 0|             4|     2|
 
@@ -268,11 +272,11 @@ summary_table(c("hurdle", "zi"))
 
 |Design |Method         | ok| false convergence| not converged| error|
 |:------|:--------------|--:|-----------------:|-------------:|-----:|
-|DGP31  |fastglm        | 50|                 0|             0|     0|
+|D11    |fastglm        | 50|                 0|             0|     0|
 |       |pscl::hurdle   | 50|                 0|             0|     0|
-|DGP32  |fastglm        | 47|                 0|             3|     0|
+|D12    |fastglm        | 47|                 0|             3|     0|
 |       |pscl::zeroinfl | 47|                 3|             0|     0|
-|DGP33  |fastglm        | 50|                 0|             0|     0|
+|D13    |fastglm        | 50|                 0|             0|     0|
 |       |pscl::zeroinfl | 50|                 0|             0|     0|
 
 
@@ -287,11 +291,11 @@ plot_ok(c("hurdle", "zi"), ncol = 3L)
 <p class="caption">plot of chunk count-plot</p>
 </div>
 
-The hurdle and zero-inflated Poisson fits agree with *pscl* throughout. In the zero-inflated negative binomial design (DGP32, weakly identified, with a low count mean) three *fastglm* fits stop short of the maximum and are reported as not converged, while three *pscl* fits are reported as converged below the best maximum found. Zero-inflated likelihoods can have several local maxima, and *fastglm* certifies a local maximum; it does not search among them.
+The hurdle and zero-inflated Poisson fits agree with *pscl* throughout. In the zero-inflated negative binomial design (D12, weakly identified, with a low count mean) three *fastglm* fits stop short of the maximum and are reported as not converged, while three *pscl* fits are reported as converged below the best maximum found. Zero-inflated likelihoods can have several local maxima, and *fastglm* certifies a local maximum; it does not search among them.
 
 ## Ordinal models with threshold-specific effects
 
-DGP34 and DGP35 are partial proportional odds models, where the cumulative probabilities must stay ordered at every observation; in some data sets the maximum lies where they touch.
+D14 and D15 are partial proportional odds models, where the cumulative probabilities must stay ordered at every observation; in some data sets the maximum lies where they touch.
 
 
 ``` r
@@ -302,10 +306,10 @@ summary_table("ordinal")
 
 |Design |Method             | ok| false convergence| not converged| error|
 |:------|:------------------|--:|-----------------:|-------------:|-----:|
-|DGP34  |fastglm            | 50|                 0|             0|     0|
+|D14    |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
 |       |ordinal::clm       | 48|                 2|             0|     0|
-|DGP35  |fastglm            | 50|                 0|             0|     0|
+|D15    |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
 |       |ordinal::clm       | 48|                 0|             2|     0|
 
