@@ -867,58 +867,6 @@ mb_zi_nb <- microbenchmark(
 
 
 
-# Summary
-
-A compact summary of the speed advantage *fastglm* delivers, expressed as the ratio of reference-implementation median time to *fastglm* median time. Larger is better. The reference for each model class is the canonical R implementation; for the standard GLMs we report the ratio against the fastest among `glm.fit`, `glm2`, and `speedglm` so the comparison is conservative.
-
-
-``` r
-.speedup <- function(df, fast_label, ref_labels) {
-    out <- lapply(split(df, df$n), function(sub) {
-        fast <- sub$median[sub$expr == fast_label]
-        if (length(fast) == 0) return(NULL)
-        ref  <- min(sub$median[sub$expr %in% ref_labels])
-        data.frame(n = sub$n[1], speedup = ref / fast)
-    })
-    do.call(rbind, out)
-}
-
-su_logit  <- .speedup(logit_tim,  "fastglm_chol",
-                      c("glm.fit", "glm2_fit2", "speedglm"))
-su_pois   <- .speedup(pois_tim,   "fastglm_chol",
-                      c("glm.fit", "glm2_fit2", "speedglm"))
-su_nb     <- .speedup(nb_tim,     "fastglm_nb",     "glm.nb")
-firth_avg_tim <- aggregate(median ~ n + expr, data = firth_scale_tim, FUN = mean)
-su_firth  <- .speedup(firth_avg_tim, "fastglm",  "brglm2")
-su_hurdle <- .speedup(hurdle_tim, "fastglm_hurdle", "pscl_hurdle")
-su_zi     <- .speedup(zi_tim,     "fastglm_zi",     "pscl_zi")
-
-su_all <- rbind(
-    transform(su_logit,  model = "logit"),
-    transform(su_pois,   model = "poisson"),
-    transform(su_nb,     model = "neg-binomial"),
-    transform(su_firth,  model = "Firth (avg)"),
-    transform(su_hurdle, model = "hurdle"),
-    transform(su_zi,     model = "zero-inflated")
-)
-
-su_all$model <- factor(su_all$model, levels = unique(su_all$model))
-ggplot(su_all, aes(n, speedup, colour = model, shape = model, group = model)) +
-    geom_hline(yintercept = 1, linetype = 2, colour = "grey60") +
-    geom_line(linewidth = 0.8) + geom_point(size = 2.4) +
-    .size_axis() + scale_y_log10() +
-    scale_colour_manual(values = c("#0B5CAD", "#D1661F", "#1F9E8F", "#9A62C4", "#9C8200", "#D0628E")) +
-    labs(x = "Number of observations, log scale",
-         y = "Reference time / fastglm time, log scale",
-         title = "fastglm time ratio against each reference, by model class",
-         colour = NULL, shape = NULL) +
-    .benchmark_theme()
-```
-
-![plot of chunk unnamed-chunk-18](benchmarks-figs/unnamed-chunk-18-1.png)
-
-Speed advantages depend on the design. A timing comparison is meaningful only after checking that the fits agree in coefficients, fitted means, uncertainty calculations, and convergence.
-
 # Ordinal models
 
 These comparisons use packages that fit the same cumulative-link models. Each design has 10 predictors, and each time includes coefficient covariance. A time is compared only when that fit converged and agreed with *fastglm* on the log likelihood and common slopes.
@@ -1004,6 +952,59 @@ None of these packages fits mean bias-reduced cumulative-link models or reads or
 
 
 Streamed fits use blocks of 10,000 rows. The last column compares each streamed fit with the dense fit of the same estimator.
+
+# Speed ratios across model classes
+
+A compact summary of the speed advantage *fastglm* delivers, expressed as the ratio of reference-implementation median time to *fastglm* median time. Larger is better. The reference for each model class is the canonical R implementation; for the standard GLMs we report the ratio against the fastest among `glm.fit`, `glm2`, and `speedglm` so the comparison is conservative.
+
+
+``` r
+.speedup <- function(df, fast_label, ref_labels) {
+    out <- lapply(split(df, df$n), function(sub) {
+        fast <- sub$median[sub$expr == fast_label]
+        if (length(fast) == 0) return(NULL)
+        ref  <- min(sub$median[sub$expr %in% ref_labels])
+        data.frame(n = sub$n[1], speedup = ref / fast)
+    })
+    do.call(rbind, out)
+}
+
+su_logit  <- .speedup(logit_tim,  "fastglm_chol",
+                      c("glm.fit", "glm2_fit2", "speedglm"))
+su_pois   <- .speedup(pois_tim,   "fastglm_chol",
+                      c("glm.fit", "glm2_fit2", "speedglm"))
+su_nb     <- .speedup(nb_tim,     "fastglm_nb",     "glm.nb")
+firth_avg_tim <- aggregate(median ~ n + expr, data = firth_scale_tim, FUN = mean)
+su_firth  <- .speedup(firth_avg_tim, "fastglm",  "brglm2")
+su_hurdle <- .speedup(hurdle_tim, "fastglm_hurdle", "pscl_hurdle")
+su_zi     <- .speedup(zi_tim,     "fastglm_zi",     "pscl_zi")
+
+su_all <- rbind(
+    transform(su_logit,  model = "logit"),
+    transform(su_pois,   model = "poisson"),
+    transform(su_nb,     model = "neg-binomial"),
+    transform(su_firth,  model = "Firth (avg)"),
+    transform(su_hurdle, model = "hurdle"),
+    transform(su_zi,     model = "zero-inflated")
+)
+
+su_all$model <- factor(su_all$model, levels = unique(su_all$model))
+ggplot(su_all, aes(n, speedup, colour = model, shape = model, group = model)) +
+    geom_hline(yintercept = 1, linetype = 2, colour = "grey60") +
+    geom_line(linewidth = 0.8) + geom_point(size = 2.4) +
+    .size_axis() + scale_y_log10() +
+    scale_colour_manual(values = c("#0B5CAD", "#D1661F", "#1F9E8F", "#9A62C4", "#9C8200", "#D0628E")) +
+    labs(x = "Number of observations, log scale",
+         y = "Reference time / fastglm time, log scale",
+         title = "fastglm time ratio against each reference, by model class",
+         colour = NULL, shape = NULL) +
+    .benchmark_theme()
+```
+
+![plot of chunk unnamed-chunk-18](benchmarks-figs/unnamed-chunk-18-1.png)
+
+Speed advantages depend on the design. A timing comparison is meaningful only after checking that the fits agree in coefficients, fitted means, uncertainty calculations, and convergence.
+
 
 # References
 
