@@ -31,16 +31,19 @@ unchanged within the convergence tolerance.
 ## Test environments
 
 * local macOS (aarch64), R 4.5.1
-* win-builder: R-devel (PENDING)
-* R-hub (PENDING)
+* win-builder: R-devel (Windows, gcc 14.3.0)
+* R-hub: Linux (R-devel), Windows (R-devel), valgrind, clang-asan,
+  clang-ubsan
 
 ## R CMD check results
 
-0 errors | 0 warnings | 2 notes (local, `R CMD check --as-cran`)
+0 errors | 0 warnings | 1 note
 
-* "Days since last update: 5" (see above).
-* The local HTML Tidy is too old to validate the HTML manual (local machine
-  only).
+* "Days since last update" (see above), on win-builder. The R-hub checks
+  finish with status OK.
+
+valgrind reports no memory errors or leaks, and the sanitizer builds report
+no runtime errors.
 
 ## Reverse dependencies
 

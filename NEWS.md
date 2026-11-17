@@ -9,8 +9,9 @@
 * Every model class returns `convergence.reason`, which says why fitting
   stopped (for example `"converged"`, `"converged_boundary"`,
   `"iteration_limit"`, or `"step_halving_failed"`).
-* The default starting values are the intercept-only fit, so identity-link
-  Poisson and Gamma models no longer need user-supplied starting values.
+* Without user-supplied starting values, an invalid first update is halved
+  toward the intercept-only fit, so identity-link Poisson and Gamma models no
+  longer need starting values.
 * This applies to dense, sparse, `big.matrix`, and streamed fits, and to the
   negative binomial, hurdle, truncated, zero-inflated, and ordinal models.
 * Sparse and streamed fits fall back to a QR decomposition when the Cholesky
