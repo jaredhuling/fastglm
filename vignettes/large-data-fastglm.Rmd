@@ -47,7 +47,7 @@ mapped_fit <- fastglm(Xb,raw$y,poisson(),method="llt")
 max(abs(coef(mapped_fit)-coef(dense_fit)))
 ```
 
-# Preserving a model across chunks
+# Data sources and a common design across blocks
 
 When even the observation-level working vectors are too large to retain, the data can be read in smaller blocks, called chunks. Fitting by repeatedly reading these blocks is called streaming. A pass is a visit to all blocks. GLM fitting generally requires several passes because each coefficient update depends on the current fitted means.
 
@@ -72,7 +72,7 @@ A file or database reader may need to return to its starting position before a n
 
 The algorithm reuses weighted-regression summaries calculated while checking a proposed coefficient update. Additional passes can still be needed to obtain starting values, shorten an unsuccessful step, fit the intercept-only comparison model, or calculate final summaries. The recorded `passes` and `chunk.reads` values help assess this cost when reading the data is slower than the regression calculations.
 
-# A more stable solve for related predictors
+# QR updates for nearly collinear predictors
 
 Streaming fits use the `"llt"` Cholesky method by default. At each coefficient update, this method combines weighted products of predictor columns into a small matrix. These products are inexpensive to accumulate across blocks, but they can lose precision when predictors are nearly linear combinations of one another. For example, two measurements may differ only slightly while still carrying distinct information. Rescaling their units can help with differences in magnitude, but it cannot remove their near redundancy.
 
@@ -90,7 +90,7 @@ The complete weighted design must still have full column rank. QR does not make 
 
 Bias-reduced QR fits check the remaining change in the fitted linear predictors together with the joint adjusted score and, when estimated, dispersion. This is useful when nearly redundant predictors have large coefficients that mostly cancel: the size of an individual coefficient update can then give a poor description of the remaining change in the fitted model. The checks use the current working weights and leverage values and require additional source passes. A better-scaled basis is used for verification when the design requires additional numerical precision. Fits that still fail these checks retain their nonconvergence flag. The bias-reduction vignette illustrates the saved diagnostics.
 
-# Bias reduction with repeated block reads
+# Bias reduction for sparse, mapped, and streamed data
 
 A large dataset can still contain small or imbalanced subgroups for which bias reduction is useful. The same `firth=TRUE` option is available for sparse matrices, mapped matrices, and repeatable sources. The bias-reduction vignette describes the estimating equations and their supported families.
 
@@ -284,7 +284,7 @@ database_source <- fastglm_source_dbi(connection,queries,
 
 These functions use [Arrow's Parquet reader](https://arrow.apache.org/docs/r/reference/read_parquet.html) and [DBI query retrieval](https://dbi.r-dbi.org/reference/dbGetQuery.html) to obtain each block. The analyst supplies the common model specification and a stable set of observations. This separation permits the same fitting routine to operate on files, databases, or other repeatable readers.
 
-# Count and two-part models from the same readers
+# Streaming negative binomial, hurdle, and two-part models
 
 Negative-binomial, hurdle, and semicontinuous two-part models can also use repeatable sources. A two-component formula gives the count or positive-outcome predictors before `|` and the binary predictors after it. For example, the following hurdle model describes whether a count is positive and, separately, its distribution among positive counts.
 

@@ -32,7 +32,7 @@ and loaded via:
 library(fastglm)
 ```
 
-## Example
+## Fitting from a model matrix
 
 The main function, `fastglm()`, accepts either a model formula and data frame or a predictor matrix and response vector. A matrix is convenient when the predictor columns have already been constructed. The following example illustrates that interface:
 
@@ -61,7 +61,7 @@ summary(gfit2)
 
 The coefficient summary uses the covariance calculated during fitting, evaluated at the reported coefficient estimates. It therefore obtains standard errors without fitting the model again.
 
-## Computational stability
+## Computational stability under a misspecified link
 
 A GLM is usually fitted through a sequence of weighted regression updates, called iteratively reweighted least squares (IRLS). An update can increase the discrepancy between the fitted and observed outcomes or produce means outside the distribution's allowed range. The *fastglm* safeguards shorten such steps until an acceptable update is found. This step-halving procedure can improve convergence, although difficult models can still fail.
 

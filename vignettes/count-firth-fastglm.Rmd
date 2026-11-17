@@ -21,7 +21,7 @@ d <- data.frame(x=rnorm(500), exposure=runif(500,.8,1.2))
 d$y <- rnbinom(500,mu=d$exposure*exp(.3+.5*d$x),size=1.5)
 ```
 
-# Negative-binomial variation
+# Negative binomial regression for overdispersed counts
 
 The negative-binomial model used here, often called NB2, has variance $\mu+\mu^2/\theta$, where larger $\theta$ corresponds to less overdispersion. `fastglm_nb()` alternates between estimating the regression coefficients with $\theta$ held fixed and estimating $\theta$ with the fitted means held fixed. A fixed value of $\theta$ can instead be supplied through `negbin(theta)`.
 
@@ -112,7 +112,7 @@ c(observed=mean(d$y==0),vapply(replicates,function(z) mean(z==0),numeric(1)))
 
 For nonnegative continuous outcomes, the two-part model in the semicontinuous-outcomes vignette uses a binary component together with a positive Gamma distribution.
 
-# Larger datasets and common model specifications
+# Larger datasets: sparse and blockwise count models
 
 A large count analysis may require predictors to be stored sparsely or read in blocks. The model specification and uncertainty target should remain the same when the data representation changes. `fastglm_nb()` accepts a sparse matrix directly, while `fastglm_hurdle()` accepts separate count and binary predictor matrices through its first argument and `z`. The response for the matrix hurdle interface is supplied as `response`.
 

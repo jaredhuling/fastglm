@@ -259,7 +259,7 @@ Table: Median time in milliseconds
 
 These timings compare two ways to solve the weighted regression in each fitting iteration: QR uses the predictor matrix directly, whereas Cholesky works with its smaller crossproduct. Their costs depend on the numbers of rows and columns, the response family, and the numerical libraries used. The observed ratios apply to the displayed cases.
 
-# Sparse and big.matrix paths
+# Sparse and memory-mapped designs
 
 A sparse design matrix from one-hot encoding a 100-level factor against a continuous covariate. The column count is `p = 200`; *fastglm* on the dense matrix stores all 200 columns, while the sparse path operates only on the nonzero entries:
 

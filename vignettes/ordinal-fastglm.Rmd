@@ -18,7 +18,7 @@ Outcomes such as satisfaction or symptom severity have a natural ordering, but t
 
 # Ordinal functionality at a glance {#ordinal-scope}
 
-## Models and estimation
+## Supported models and estimation methods
 
 All three cumulative links, logit, probit, and complementary log-log, support maximum likelihood (ML) and **mean bias reduction through `firth=TRUE`**. With the logit link, common slopes give proportional odds; allowing selected slopes to differ across thresholds gives partial proportional odds. The corresponding probit and complementary log-log specifications are nonparallel cumulative-link models.
 

@@ -78,7 +78,7 @@ knitr::kable(summary(mb, unit = "ms")[, c("expr", "min", "median", "max")], digi
              col.names = c("Method", "Minimum (ms)", "Median (ms)", "Maximum (ms)"), row.names = FALSE)
 ```
 
-# General GLM families
+# Supported families and links
 
 The supported response distributions are binomial, Poisson, Gaussian, Gamma, inverse Gaussian, and negative binomial with theta supplied as a fixed value. The standard family definitions must be used because the bias adjustment depends on distribution derivatives beyond those needed for an ordinary GLM. Quasi families, Tweedie families, and user-modified family calculations are therefore excluded from this estimator.
 

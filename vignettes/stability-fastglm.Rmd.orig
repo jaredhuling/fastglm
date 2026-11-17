@@ -26,7 +26,7 @@ library(ggplot2)
 
 A fitted model is useful only if the reported estimate is the maximum of the likelihood, or the software says that it is not. This vignette describes how *fastglm* makes that distinction for generalized linear models, negative binomial, hurdle, zero-inflated, and ordinal models, and it reports a simulation study that compares *fastglm* with `stats::glm.fit()`, *glm2*, `MASS::glm.nb()`, *pscl*, and *ordinal* on designs where fitting is difficult.
 
-# What can go wrong
+# Failure modes of iteratively reweighted least squares
 
 Most of these models are fit by iteratively reweighted least squares (IRLS), or by alternating such fits with updates of a dispersion or mixing parameter. Four problems recur.
 
@@ -52,7 +52,7 @@ c(converged = fit$converged, reason = fit$convergence.reason)
 
 `glm.fit()` cannot find a valid starting point, while *fastglm* converges to the maximum, which lies on the boundary, and says so: the warning and `convergence.reason = "converged_boundary"` indicate that Wald standard errors do not have their usual justification for this estimate.
 
-# How fastglm decides that a fit has converged
+# Convergence checks and step safeguards in fastglm
 
 *fastglm* reports convergence only when one more step is predicted to change the deviance negligibly (the Fisher or Newton decrement is below `tol` relative to the deviance), not merely when the last step changed little. Steps that leave the valid region are handled in three ways:
 
@@ -71,7 +71,7 @@ Models with an outer loop, such as the negative binomial dispersion or the zero-
 | `"score_and_predictor_step"` | ordinal models: the maximum, certified by the score and step |
 | `"iteration_limit"`, `"step_halving_failed"`, `"not_converged"`, `"ordering_boundary"` | not converged; the estimate is not certified as a maximum |
 
-# A simulation study
+# Simulation study of convergence across model classes
 
 The designs below were chosen to exercise these problems, and each was simulated 50 times.
 
