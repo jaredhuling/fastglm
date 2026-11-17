@@ -204,3 +204,22 @@ test_that("the opt-in block cache gives the same fits and reads each block from 
     expect_false(dir.exists(directory))
     expect_error(fastglm_source(reader, 4L, cache = 3), "cache")
 })
+
+test_that("fastglm_streaming reads a design matrix in row blocks", {
+    set.seed(81); n <- 5000
+    X <- cbind("(Intercept)" = 1, x1 = rnorm(n), x2 = rnorm(n)); w <- sample(1:2, n, TRUE); off <- runif(n, -.1, .1)
+    y <- rbinom(n, 1, plogis(drop(X %*% c(.2, .4, -.3)) + off))
+    dense <- fastglm(X, y, family = binomial(), weights = w, offset = off)
+    s <- fastglm_streaming(X, family = binomial(), y = y, weights = w, offset = off, block.size = 1200L)
+    expect_equal(coef(s), coef(dense), tolerance = 1e-10)
+    expect_equal(s$aic, dense$aic, tolerance = 1e-10)
+    expect_equal(coef(fastglm_streaming(as(X, "dgCMatrix"), family = binomial(), y = y, weights = w,
+                                        offset = off, block.size = 1200L)), coef(dense), tolerance = 1e-10)
+    if (requireNamespace("bigmemory", quietly = TRUE)) {
+        bm <- bigmemory::as.big.matrix(X)
+        expect_equal(coef(fastglm_streaming(bm, family = binomial(), y = y, weights = w, offset = off,
+                                            block.size = 1200L, method = "qr")), coef(dense), tolerance = 1e-10)
+    }
+    expect_error(fastglm_streaming(X, family = binomial()), "'y'")
+    expect_error(fastglm_streaming(function(k) list(X = X, y = y), 1L, y = y), "design matrix")
+})

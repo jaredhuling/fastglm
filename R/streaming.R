@@ -17,6 +17,12 @@
 #'   Every chunk must have the same number of columns, in the same order. The
 #'   supplied function, called a callback, is called repeatedly during fitting.
 #'   It must return the same rows and values each time a block is requested.
+#'   Alternatively, a [fastglm_source()], or a design matrix (a numeric
+#'   matrix, `dgCMatrix`, or file-backed `big.matrix`) with `y` and optional
+#'   `weights` and `offset`; the matrix is then read in blocks of `block.size`
+#'   rows. For a `big.matrix` this keeps memory use bounded by the block size,
+#'   whereas `fastglm()` on a `big.matrix` is faster but holds several vectors
+#'   of length n during the fit.
 #' @param n_chunks integer; the number of chunks to iterate over.
 #' @param family a `family` object describing the error distribution and link.
 #'   See [stats::family()].
@@ -41,6 +47,9 @@
 #'   the information at the reported coefficients is accumulated in the pass
 #'   that evaluates them. Coefficients agree to within the convergence
 #'   tolerance. Bias-reduced fits (`firth = TRUE`) are not affected.
+#' @param y,weights,offset response, prior weights, and offset when
+#'   `chunk_callback` is a design matrix.
+#' @param block.size number of rows read at a time from a design matrix.
 #' @param firth logical; if `TRUE` apply Firth bias reduction using
 #'   lagged leverages from the previous IRLS iteration. At convergence,
 #'   the fit solves the same adjusted-score equations as the dense path.
@@ -125,8 +134,13 @@
 fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
                               family = gaussian(), start = NULL, method = 2L,
                               tol = 1e-8, maxit = 100L, firth = FALSE,
-                              covariance = c("estimate", "previous")) {
+                              covariance = c("estimate", "previous"),
+                              y = NULL, weights = NULL, offset = NULL, block.size = 100000L) {
     method.supplied <- !missing(method)
+    if (is.matrix(chunk_callback) || inherits(chunk_callback, c("dgCMatrix", "big.matrix"))) {
+        chunk_callback <- .matrix_source(chunk_callback, y, weights, offset, block.size)
+    } else if (!is.null(y) || !is.null(weights) || !is.null(offset))
+        stop("'y', 'weights', and 'offset' apply to a design matrix; a source or callback supplies its own",call.=FALSE)
     old.rule <- set_conv_rule(.covariance_rule(covariance))
     on.exit(set_conv_rule(old.rule), add = TRUE)
     source <- if (inherits(chunk_callback, "fastglm_source")) chunk_callback else
@@ -361,4 +375,25 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     reference <- tryCatch(get(family$family,asNamespace("stats"))(link=family$link),error=function(e) NULL)
     !is.null(reference) && identical(deparse(family$aic),deparse(reference$aic)) &&
         identical(deparse(family$dev.resids),deparse(reference$dev.resids))
+}
+
+# A design matrix (dense, dgCMatrix, or file-backed big.matrix) as a source
+# of row blocks.
+.matrix_source <- function(x,y,weights,offset,block.size) {
+    .check_iterations(1e-8,block.size)
+    n <- nrow(x)
+    if(is.null(y) || NROW(y)!=n) stop("supply 'y' with one entry per row of the design matrix",call.=FALSE)
+    for(a in list(weights,offset)) if(!is.null(a) && length(a)!=n)
+        stop("weights and offsets must have one entry per row of the design matrix",call.=FALSE)
+    columns <- colnames(x)
+    block.size <- as.integer(min(block.size,n))
+    fastglm_source(function(k) {
+        i <- seq.int((k-1L)*block.size+1L,min(n,k*block.size))
+        X <- x[i,,drop=FALSE]
+        if(!is.null(columns)) colnames(X) <- columns
+        out <- list(X=X,y=if(is.matrix(y)) y[i,,drop=FALSE] else y[i])
+        if(!is.null(weights)) out$weights <- weights[i]
+        if(!is.null(offset)) out$offset <- offset[i]
+        out
+    },ceiling(n/block.size))
 }

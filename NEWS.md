@@ -66,6 +66,11 @@
   local file the first time it is read, and later passes read that file
   instead of repeating the query. Memory use is unchanged; for a database
   source it made a logistic fit about three times faster.
+* `fastglm_streaming()` accepts a design matrix (dense, sparse, or a
+  file-backed `big.matrix`) with `y`, `weights`, and `offset`, read in blocks
+  of `block.size` rows. For a `big.matrix` this bounds memory by the block
+  size; `fastglm()` on a `big.matrix` remains faster but holds vectors of
+  length n during the fit.
 
 ## Other changes
 

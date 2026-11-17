@@ -13,7 +13,11 @@ fastglm_streaming(
   tol = 1e-08,
   maxit = 100L,
   firth = FALSE,
-  covariance = c("estimate", "previous")
+  covariance = c("estimate", "previous"),
+  y = NULL,
+  weights = NULL,
+  offset = NULL,
+  block.size = 100000L
 )
 }
 \arguments{
@@ -27,7 +31,13 @@ fastglm_streaming(
 }
 Every chunk must have the same number of columns, in the same order. The
 supplied function, called a callback, is called repeatedly during fitting.
-It must return the same rows and values each time a block is requested.}
+It must return the same rows and values each time a block is requested.
+Alternatively, a \code{\link[=fastglm_source]{fastglm_source()}}, or a design matrix (a numeric
+matrix, \code{dgCMatrix}, or file-backed \code{big.matrix}) with \code{y} and optional
+\code{weights} and \code{offset}; the matrix is then read in blocks of \code{block.size}
+rows. For a \code{big.matrix} this keeps memory use bounded by the block size,
+whereas \code{fastglm()} on a \code{big.matrix} is faster but holds several vectors
+of length n during the fit.}
 
 \item{n_chunks}{integer; the number of chunks to iterate over.}
 
@@ -63,6 +73,11 @@ For streamed fits both read the data the same number of times, because
 the information at the reported coefficients is accumulated in the pass
 that evaluates them. Coefficients agree to within the convergence
 tolerance. Bias-reduced fits (\code{firth = TRUE}) are not affected.}
+
+\item{y, weights, offset}{response, prior weights, and offset when
+\code{chunk_callback} is a design matrix.}
+
+\item{block.size}{number of rows read at a time from a design matrix.}
 }
 \value{
 An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing
