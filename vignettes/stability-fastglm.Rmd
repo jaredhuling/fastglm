@@ -1,7 +1,7 @@
 ---
 title: "Numerical stability of fastglm"
 author: "Jared Huling"
-date: "2026-11-16"
+date: "2026-11-17"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Numerical stability of fastglm}
@@ -184,9 +184,9 @@ summary_table("glm")
 |       |fastglm (streamed) | 50|                 0|             0|     0|
 |       |glm.fit            |  0|                 0|             0|    50|
 |       |glm2               |  0|                 0|             0|    50|
-|D3     |fastglm            | 48|                 0|             2|     0|
-|       |fastglm (sparse)   | 48|                 0|             2|     0|
-|       |fastglm (streamed) | 48|                 0|             2|     0|
+|D3     |fastglm            | 49|                 0|             1|     0|
+|       |fastglm (sparse)   | 49|                 0|             1|     0|
+|       |fastglm (streamed) | 49|                 0|             1|     0|
 |       |glm.fit            |  0|                 0|             0|    50|
 |       |glm2               |  0|                 0|             0|    50|
 |D4     |fastglm            | 50|                 0|             0|     0|
@@ -217,7 +217,7 @@ plot_ok("glm")
 <p class="caption">plot of chunk glm-plot</p>
 </div>
 
-On the boundary designs `glm.fit()` and *glm2* stop with an error in every data set, because the starting values or a later step leave the valid region; *fastglm* reaches the maximum in nearly all of them. The few *fastglm* fits that are not counted as ok stopped at the default iteration limit (100) within about 1e-6 of the maximum and are reported as not converged: Fisher scoring converges only linearly for non-canonical links, more slowly as fitted means approach a bound, and these fits converge at the maximum within 125 to 211 iterations with a larger `maxit`. On the interior designs all methods agree.
+On the boundary designs `glm.fit()` and *glm2* stop with an error in every data set, because the starting values or a later step leave the valid region; *fastglm* reaches the maximum in nearly all of them. The two *fastglm* fits that are not counted as ok, one in D1 and one in D3, stopped at the default iteration limit (100) within about 3e-6 (relative) of the maximum and are reported as not converged: Fisher scoring converges only linearly for non-canonical links, more slowly as fitted means approach a bound, and these fits converge at the maximum in 116 and 225 iterations with a larger `maxit`. On the interior designs all methods agree.
 
 ## Negative binomial models
 
@@ -239,11 +239,11 @@ summary_table("nb")
 |       |fastglm (sparse) | 50|                 0|             0|     0|
 |       |MASS::glm.nb     |  0|                 0|             0|    50|
 |D9     |fastglm          | 50|                 0|             0|     0|
-|       |fastglm (sparse) | 49|                 0|             1|     0|
-|       |MASS::glm.nb     |  5|                 0|            45|     0|
+|       |fastglm (sparse) | 50|                 0|             0|     0|
+|       |MASS::glm.nb     |  3|                 0|            47|     0|
 |D10    |fastglm          | 50|                 0|             0|     0|
 |       |fastglm (sparse) | 50|                 0|             0|     0|
-|       |MASS::glm.nb     | 44|                 0|             4|     2|
+|       |MASS::glm.nb     | 43|                 0|             5|     2|
 
 
 
@@ -259,7 +259,7 @@ plot_ok("nb")
 
 
 
-`MASS::glm.nb()` does not fit the square-root and identity designs, and near the Poisson limit it seldom reports convergence. In 34 of the 50 nearly Poisson data sets the likelihood is highest in the Poisson limit; *fastglm* returns `theta = Inf` there, with the Poisson fit and a warning.
+`MASS::glm.nb()` does not fit the square-root and identity designs, and near the Poisson limit it seldom reports convergence. In 42 of the 50 nearly Poisson data sets the likelihood is highest in the Poisson limit; *fastglm* returns `theta = Inf` there, with the Poisson fit and a warning.
 
 ## Hurdle and zero-inflated models
 
@@ -274,8 +274,8 @@ summary_table(c("hurdle", "zi"))
 |:------|:--------------|--:|-----------------:|-------------:|-----:|
 |D11    |fastglm        | 50|                 0|             0|     0|
 |       |pscl::hurdle   | 50|                 0|             0|     0|
-|D12    |fastglm        | 47|                 0|             3|     0|
-|       |pscl::zeroinfl | 47|                 3|             0|     0|
+|D12    |fastglm        | 50|                 0|             0|     0|
+|       |pscl::zeroinfl | 50|                 0|             0|     0|
 |D13    |fastglm        | 50|                 0|             0|     0|
 |       |pscl::zeroinfl | 50|                 0|             0|     0|
 
@@ -291,7 +291,9 @@ plot_ok(c("hurdle", "zi"), ncol = 3L)
 <p class="caption">plot of chunk count-plot</p>
 </div>
 
-The hurdle and zero-inflated Poisson fits agree with *pscl* throughout. In the zero-inflated negative binomial design (D12, weakly identified, with a low count mean) three *fastglm* fits stop short of the maximum and are reported as not converged, while three *pscl* fits are reported as converged below the best maximum found. Zero-inflated likelihoods can have several local maxima, and *fastglm* certifies a local maximum; it does not search among them.
+
+
+The hurdle and zero-inflated fits agree with *pscl* in every data set. In 3 of the zero-inflated negative binomial data sets (D12) the likelihood is highest in the zero-inflated Poisson limit; *fastglm* stops with `theta` at its upper bound and `convergence.reason = "theta_boundary"`. Zero-inflated likelihoods can have several local maxima, and *fastglm* certifies a local maximum; it does not search among them.
 
 ## Ordinal models with threshold-specific effects
 
@@ -308,10 +310,10 @@ summary_table("ordinal")
 |:------|:------------------|--:|-----------------:|-------------:|-----:|
 |D14    |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
-|       |ordinal::clm       | 48|                 2|             0|     0|
+|       |ordinal::clm       | 49|                 1|             0|     0|
 |D15    |fastglm            | 50|                 0|             0|     0|
 |       |fastglm (streamed) | 50|                 0|             0|     0|
-|       |ordinal::clm       | 48|                 0|             2|     0|
+|       |ordinal::clm       | 46|                 0|             3|     1|
 
 
 
@@ -325,11 +327,11 @@ plot_ok("ordinal")
 <p class="caption">plot of chunk ordinal-plot</p>
 </div>
 
-*fastglm* reaches the maximum in every data set, certifying boundary maxima as `"converged_boundary"`. The `ordinal::clm()` fits counted as false convergences report convergence at points where the cumulative probabilities cross at some observations, which is outside the model.
+*fastglm* reaches the maximum in every data set, certifying boundary maxima as `"converged_boundary"`. In one probit data set no observation with `z = 1` falls in the third category, so at the maximum the second and third cumulative probabilities coincide for all of those observations. The `ordinal::clm()` fit counted as a false convergence reports convergence at a point where the cumulative probabilities cross at some observations, which is outside the model.
 
 ## Summary
 
-Across these designs, no *fastglm* fit was reported as converged away from the maximum. In every design, *fastglm* reached the maximum in at least 90% of the data sets and at least as often as each comparison method, and dense, sparse, and streamed *fastglm* fits that converged agree to 4e-9 (relative).
+Across these designs, no *fastglm* fit was reported as converged away from the maximum. In every design, *fastglm* reached the maximum in at least 90% of the data sets and at least as often as each comparison method, and dense, sparse, and streamed *fastglm* fits that converged agree to 3.5e-9 (relative).
 
 # Negative binomial fits across twelve scenarios
 

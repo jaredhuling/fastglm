@@ -76,7 +76,7 @@ Models with an outer loop, such as the negative binomial dispersion or the zero-
 The designs below were chosen to exercise these problems, and each was simulated 50 times.
 
 ```{r data-labels, include = FALSE}
-results <- readRDS("stability-data/e08_classified.rds")
+results <- readRDS("stability-data/e09_classified.rds")
 # Designs D1 to D15, as a factor so that they sort in numeric order.
 results$design <- factor(paste0("D", as.integer(sub("^DGP", "", results$design)) - 20L), levels = paste0("D", 1:15))
 ```
@@ -158,7 +158,7 @@ summary_table("glm")
 plot_ok("glm")
 ```
 
-On the boundary designs `glm.fit()` and *glm2* stop with an error in every data set, because the starting values or a later step leave the valid region; *fastglm* reaches the maximum in nearly all of them. The few *fastglm* fits that are not counted as ok stopped at the default iteration limit (100) within about 1e-6 of the maximum and are reported as not converged: Fisher scoring converges only linearly for non-canonical links, more slowly as fitted means approach a bound, and these fits converge at the maximum within 125 to 211 iterations with a larger `maxit`. On the interior designs all methods agree.
+On the boundary designs `glm.fit()` and *glm2* stop with an error in every data set, because the starting values or a later step leave the valid region; *fastglm* reaches the maximum in nearly all of them. The two *fastglm* fits that are not counted as ok, one in D1 and one in D3, stopped at the default iteration limit (100) within about 3e-6 (relative) of the maximum and are reported as not converged: Fisher scoring converges only linearly for non-canonical links, more slowly as fitted means approach a bound, and these fits converge at the maximum in 116 and 225 iterations with a larger `maxit`. On the interior designs all methods agree.
 
 ## Negative binomial models
 
@@ -188,7 +188,11 @@ summary_table(c("hurdle", "zi"))
 plot_ok(c("hurdle", "zi"), ncol = 3L)
 ```
 
-The hurdle and zero-inflated Poisson fits agree with *pscl* throughout. In the zero-inflated negative binomial design (D12, weakly identified, with a low count mean) three *fastglm* fits stop short of the maximum and are reported as not converged, while three *pscl* fits are reported as converged below the best maximum found. Zero-inflated likelihoods can have several local maxima, and *fastglm* certifies a local maximum; it does not search among them.
+```{r zi-theta, include = FALSE}
+n_zip <- sum(results$design == "D12" & results$method == "fastglm_dense" & results$reason %in% "theta_boundary")
+```
+
+The hurdle and zero-inflated fits agree with *pscl* in every data set. In `r n_zip` of the zero-inflated negative binomial data sets (D12) the likelihood is highest in the zero-inflated Poisson limit; *fastglm* stops with `theta` at its upper bound and `convergence.reason = "theta_boundary"`. Zero-inflated likelihoods can have several local maxima, and *fastglm* certifies a local maximum; it does not search among them.
 
 ## Ordinal models with threshold-specific effects
 
@@ -202,11 +206,11 @@ summary_table("ordinal")
 plot_ok("ordinal")
 ```
 
-*fastglm* reaches the maximum in every data set, certifying boundary maxima as `"converged_boundary"`. The `ordinal::clm()` fits counted as false convergences report convergence at points where the cumulative probabilities cross at some observations, which is outside the model.
+*fastglm* reaches the maximum in every data set, certifying boundary maxima as `"converged_boundary"`. In one probit data set no observation with `z = 1` falls in the third category, so at the maximum the second and third cumulative probabilities coincide for all of those observations. The `ordinal::clm()` fit counted as a false convergence reports convergence at a point where the cumulative probabilities cross at some observations, which is outside the model.
 
 ## Summary
 
-Across these designs, no *fastglm* fit was reported as converged away from the maximum. In every design, *fastglm* reached the maximum in at least 90% of the data sets and at least as often as each comparison method, and dense, sparse, and streamed *fastglm* fits that converged agree to 4e-9 (relative).
+Across these designs, no *fastglm* fit was reported as converged away from the maximum. In every design, *fastglm* reached the maximum in at least 90% of the data sets and at least as often as each comparison method, and dense, sparse, and streamed *fastglm* fits that converged agree to 3.5e-9 (relative).
 
 # Negative binomial fits across twelve scenarios
 
