@@ -102,8 +102,10 @@ fastglm_source_dbi <- function(connection, queries, formula, prototype,
                                weights = NULL, offset = NULL) {
     if (!requireNamespace("DBI",quietly=TRUE)) stop("install DBI to use database sources",call.=FALSE)
     if (!is.character(queries) || !length(queries) || any(!grepl("^\\s*(SELECT|WITH)\\b",queries,ignore.case=TRUE))) stop("queries must be read-only SELECT statements",call.=FALSE)
-    fastglm_source(function(k) DBI::dbGetQuery(connection,queries[[k]]),length(queries),
+    out <- fastglm_source(function(k) DBI::dbGetQuery(connection,queries[[k]]),length(queries),
                     formula=formula,prototype=prototype,weights=weights,offset=offset)
+    out$origin <- "database queries (DBI)"
+    out
 }
 
 #' Create a source from Parquet partitions
@@ -117,6 +119,27 @@ fastglm_source_dbi <- function(connection, queries, formula, prototype,
 fastglm_source_arrow <- function(files, formula, prototype, weights=NULL, offset=NULL) {
     if (!requireNamespace("arrow",quietly=TRUE)) stop("install arrow to use Parquet sources",call.=FALSE)
     if (!is.character(files) || !length(files)) stop("supply at least one Parquet file",call.=FALSE)
-    fastglm_source(function(k) as.data.frame(arrow::read_parquet(files[[k]])),length(files),
+    out <- fastglm_source(function(k) as.data.frame(arrow::read_parquet(files[[k]])),length(files),
                     formula=formula,prototype=prototype,weights=weights,offset=offset)
+    out$origin <- "Parquet files (arrow)"
+    out
+}
+
+#' @export
+print.fastglm_source <- function(x, ...) {
+    .fastglm_print_header("Data source for blockwise fitting")
+    .fastglm_print_field("Origin",if(is.null(x$origin)) "callback" else x$origin)
+    .fastglm_print_field("Blocks",x$n_chunks)
+    s <- x$schema
+    if(is.null(s)) {
+        .fastglm_print_field("Design","model matrices returned by the callback")
+    } else {
+        .fastglm_print_field("Formula",paste(deparse(stats::formula(s$formula)),collapse=" "))
+        if(is.list(s$columns)) {
+            .fastglm_print_field("Design columns",sprintf("%d (count), %d (zero)",
+                length(s$columns$count),length(s$columns$zero)))
+        } else .fastglm_print_field("Design columns",length(s$columns))
+        .fastglm_print_field("Offset columns",s$offset)
+    }
+    invisible(x)
 }

@@ -8,7 +8,10 @@
 #' effects can amplify numerical error. For bias-reduced fits the ordinary score
 #' need not vanish. The stored adjusted coefficient and dispersion scores instead
 #' assess the equations used to fit the model at the reported estimates.
-#' @param object a fitted fastglm GLM or ordinal model.
+#' @param object a fitted fastglm GLM, count, two-part, or ordinal model. For
+#'   truncated, hurdle, zero-inflated, and two-part fits the scores are the
+#'   joint estimating scores of all components, including log theta when it
+#'   is estimated.
 #' @param boundary for ordinal models, also locate the positive-frequency rows
 #'   with the smallest category probabilities and cumulative-predictor gaps.
 #'   This reads the retained observations or makes one additional source pass.
@@ -63,6 +66,8 @@ fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
     if(inherits(object,"fastglm_ordinal"))
         return(structure(.ordinal_diagnostics(object,boundary,max.rows),class="fastglm_diagnostics"))
     if(boundary) stop("boundary row diagnostics require an ordinal fit",call.=FALSE)
+    if(inherits(object,c("fastglm_truncated","fastglm_hurdle","fastglm_zi")))
+        return(structure(.count_diagnostics(object),class="fastglm_diagnostics"))
     b <- coef(object); good <- !is.na(b)
     score <- numeric(sum(good)); info <- numeric(sum(good))
     ordinary.available <- FALSE
@@ -120,6 +125,40 @@ fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
             if(!is.null(object[[name]])) out[[name]] <- object[[name]]
     }
     structure(out,class="fastglm_diagnostics")
+}
+
+# Truncated, hurdle, zero-inflated, and two-part fits: the joint estimating
+# scores of all components (and log theta when estimated) at the reported
+# estimate, each scaled by the square root of its information diagonal, and
+# the condition number of the joint covariance.
+.count_diagnostics <- function(object) {
+    reason <- object$convergence.reason
+    if(!length(reason) || !nzchar(reason)) reason <- if(isTRUE(object$converged)) "converged" else "not_converged"
+    out <- list(converged=isTRUE(object$converged),iterations=object$iter,
+        convergence.reason=reason,boundary=identical(reason,"converged_boundary"),
+        theta.boundary=.count_theta_boundary(object),
+        score.type=if(.count_adjusted(object)) "ordinary (before bias adjustment)" else "ordinary",
+        score=NULL,ordinary.score.available=FALSE,standardized.score=NA_real_,
+        covariance.condition=NA_real_)
+    parameters <- tryCatch(.count_parameters(object),error=function(e) NULL)
+    if(is.null(parameters)) return(out)
+    out$rank <- length(parameters)
+    p <- length(parameters); score <- numeric(p); info <- matrix(0,p,p)
+    ok <- tryCatch({
+        .count_blocks(object,function(z,i,k) {
+            score <<- score+colSums(.count_score(object,z,parameters))
+            info <<- info+.count_information_block(object,z,parameters)
+        })
+        TRUE
+    },error=function(e) FALSE)
+    if(!ok) return(out)
+    names(score) <- names(parameters)
+    out$score <- score; out$ordinary.score.available <- TRUE
+    d <- diag(info)
+    out$standardized.score <- if(all(d>0)) max(abs(score)/sqrt(d)) else NA_real_
+    v <- tryCatch(.count_inverse_information(info),error=function(e) NULL)
+    if(!is.null(v)) out$covariance.condition <- kappa(v,exact=TRUE)
+    out
 }
 
 #' Profile-likelihood interval for negative-binomial size

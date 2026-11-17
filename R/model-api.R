@@ -37,8 +37,8 @@ fastglm.formula <- function(x, data, family = gaussian(), subset, na.action,
     out <- eval(cl, parent.frame())
     out$call <- match.call()
     out$call[[1L]] <- quote(fastglm::fastglm)
-    out$call$formula <- out$call$x
-    out$call$x <- NULL
+    # Rename x to formula in place, so the call keeps the user's argument order.
+    names(out$call)[names(out$call) == "x"] <- "formula"
     out
 }
 

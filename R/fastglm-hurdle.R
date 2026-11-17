@@ -356,8 +356,8 @@ print.fastglm_hurdle <- function(x, digits = max(3, getOption("digits") - 3), ..
     .fastglm_print_coefficients(x$coefficients$count,"Count coefficients",digits,...)
     .fastglm_print_coefficients(x$coefficients$zero,"Occurrence coefficients",digits,...)
     cat("\n")
-    if(x$dist=="negbin") .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
-    .fastglm_print_field("Log-likelihood",format(x$loglik,digits=digits))
+    if(x$dist=="negbin") .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),max(digits,4L))
+    .fastglm_print_field("Log-likelihood",format(round(x$loglik,2),nsmall=2))
     .fastglm_print_convergence(x$converged,x$em_iter)
     invisible(x)
 }

@@ -376,7 +376,7 @@ print.summary.fastglm <- function(x,digits=max(3L,getOption("digits")-3L),
     cat("\n")
     .fastglm_print_table(data.frame(Dispersion=x$dispersion,`Null deviance`=x$null.deviance,
         `Null df`=x$df.null,Deviance=x$deviance,`Residual df`=x$df.residual,AIC=x$aic,check.names=FALSE),digits)
-    if(isTRUE(is.finite(x$theta))) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    if(isTRUE(is.finite(x$theta))) .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),max(digits,4L))
     else if(identical(x$theta,Inf)) .fastglm_print_field("Theta","Inf (the Poisson limit; no overdispersion)")
     .fastglm_print_convergence(x$converged,x$iter,x$convergence.reason)
     if(!is.null(x$correlation)) {

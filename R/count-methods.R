@@ -58,6 +58,13 @@
     }); names(off) <- names(frames)
     if (!is.null(object$call$offset)) {
         ext <- eval(object$call$offset, newdata, environment(object$formula))
+        # An offset written against the fitting data (for example data$x)
+        # evaluates to the fitting rows; recycling it over newdata would give
+        # silently wrong predictions.
+        if (NROW(ext) != 1L && NROW(ext) != NROW(newdata))
+            stop(sprintf(paste("the 'offset' argument of the fit evaluates to %d rows in newdata, which has %d;",
+                               "write the offset in terms of newdata columns (for example log(exposure))"),
+                         NROW(ext), NROW(newdata)), call. = FALSE)
         if (is.matrix(ext)) { off$count <- off$count + ext[, 1L]; off$zero <- off$zero + ext[, 2L] }
         else off$count <- off$count + ext
     }
@@ -92,6 +99,7 @@
     zi <- inherits(object, "fastglm_zi")
     continuous <- inherits(object, "fastglm_twopart")
     if (type == "link") return(cbind(count = eta, zero = eta0))
+    if (type == "nonzero") return(1 - .count_predict(object, design, parameters, "zero", at))
     if (continuous) {
         if (type == "prob") stop("probability masses are only defined for count models", call. = FALSE)
         return(switch(type, response = pi * mu, count = mu, zero = 1 - pi))
@@ -121,8 +129,9 @@
 #'   streaming model, omitting it rereads the fitted source.
 #' @param type prediction scale: marginal response, count-component mean,
 #'   zero probability, probability masses, or component linear predictors.
-#'   For two-part models `"positive"` and `"binary"` are the same as
-#'   `"count"` (mean given a positive outcome) and `"zero"`.
+#'   `"binary"` is the probability of a positive outcome, one minus the
+#'   `"zero"` probability. For two-part models `"positive"` is the same as
+#'   `"count"` (mean given a positive outcome).
 #' @param se.fit return delta-method standard errors.
 #' @param at nonnegative integer counts for `type = "prob"`.
 #' @param sink optional function of `(value, chunk_index)` for a streaming fit.
@@ -135,7 +144,10 @@
 predict.fastglm_hurdle <- function(object, newdata = NULL,
                                    type = c("response", "count", "zero", "prob", "link", "positive", "binary"),
                                    se.fit = FALSE, at = 0:10, sink=NULL, ...) {
-    type <- .component_selector(match.arg(type))
+    type <- match.arg(type)
+    # "binary" is the probability of a positive outcome, the quantity the
+    # binary component models; "zero" is its complement.
+    type <- if (type == "binary") "nonzero" else .component_selector(type)
     if (any(!is.finite(at) | at < 0 | at != floor(at))) stop("'at' must contain nonnegative integers", call. = FALSE)
     if(is.null(newdata) && !is.null(object$source) && is.function(object$fetch)) {
         if(!is.null(sink) && !is.function(sink)) stop("'sink' must be a function",call.=FALSE)
@@ -221,8 +233,8 @@ print.summary.fastglm_count <- function(x,digits=max(3L,getOption("digits")-3L),
     .fastglm_print_coefficients(x$coefficients,digits=digits,...)
     cat("\n")
     if(!is.null(x$theta) && is.finite(x$theta))
-        .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
-    .fastglm_print_field("Log-likelihood",format(x$loglik,digits=digits))
+        .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),max(digits,4L))
+    .fastglm_print_field("Log-likelihood",format(round(x$loglik,2),nsmall=2))
     .fastglm_print_field("Observations",x$nobs)
     .fastglm_print_convergence(x$converged)
     invisible(x)

@@ -36,3 +36,40 @@ glance.fastglm <- function(x,...) {
 #' @exportS3Method broom::glance fastglmFit
 #' @rdname fastglm-tidy
 glance.fastglmFit <- glance.fastglm
+#' @exportS3Method broom::tidy fastglm_hurdle
+#' @rdname fastglm-tidy
+tidy.fastglm_hurdle <- function(x,conf.int=FALSE,conf.level=.95,exponentiate=FALSE,...) {
+    tab <- summary(x)$coefficients
+    out <- data.frame(term=rownames(tab),estimate=tab[,1],std.error=tab[,2],
+                       statistic=tab[,3],p.value=tab[,4],row.names=NULL)
+    # Two-component models prefix each coefficient with its component.
+    if(!inherits(x,"fastglm_truncated"))
+        out <- cbind(component=sub("_.*$","",out$term),out)
+    if(conf.int) {
+        z <- stats::qnorm(1-(1-conf.level)/2)
+        out$conf.low <- out$estimate-z*out$std.error;out$conf.high <- out$estimate+z*out$std.error
+    }
+    if(exponentiate) for(nm in intersect(c("estimate","conf.low","conf.high"),names(out))) out[[nm]] <- exp(out[[nm]])
+    out
+}
+#' @exportS3Method broom::tidy fastglm_zi
+#' @rdname fastglm-tidy
+tidy.fastglm_zi <- tidy.fastglm_hurdle
+#' @exportS3Method broom::tidy fastglm_truncated
+#' @rdname fastglm-tidy
+tidy.fastglm_truncated <- tidy.fastglm_hurdle
+#' @exportS3Method broom::glance fastglm_hurdle
+#' @rdname fastglm-tidy
+glance.fastglm_hurdle <- function(x,...) {
+    ll <- logLik(x)
+    out <- data.frame(logLik=as.numeric(ll),AIC=AIC(ll),BIC=BIC(ll),nobs=nobs(x),
+                      converged=isTRUE(x$converged))
+    if(identical(x$dist,"negbin")) out$theta <- x$theta
+    out
+}
+#' @exportS3Method broom::glance fastglm_zi
+#' @rdname fastglm-tidy
+glance.fastglm_zi <- glance.fastglm_hurdle
+#' @exportS3Method broom::glance fastglm_truncated
+#' @rdname fastglm-tidy
+glance.fastglm_truncated <- glance.fastglm_hurdle
