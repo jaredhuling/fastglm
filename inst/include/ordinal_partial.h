@@ -503,6 +503,58 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
     // is not used where a constraint binds: the expected information diverges
     // there and makes both quantities small without stationarity. At the
     // boundary, convergence is certified by the constrained step instead.
+    // Face certificate for a maximum at which some rows touch but the Fisher
+    // step no longer crosses: the expected information diverges along the
+    // touching constraints, so the step along them vanishes while the score
+    // keeps a component along them (the Lagrange multipliers), and the
+    // interior certificate cannot pass. Hold every distinct touching
+    // constraint (rows sharing a constraint, for example all rows with the
+    // same nonparallel covariate value, contribute one normal), solve the
+    // scoring step on the remaining directions, and certify when that step is
+    // negligible and the score points into the constraints (nonnegative
+    // multipliers), so that no move back into the interior can increase the
+    // likelihood.
+    auto face_certificate=[&]() {
+        std::vector<VectorXd> normals;
+        data.visit([&](const PartialOrdinalData& block) {
+            const int q=block.q,p=block.p,pn=block.pn;
+            for(int i=0;i<block.n;++i) if(block.totals[i]>0) for(int s=1;s<q;++s) {
+                if(!(block.gap(i,b,s)<boundary_gap)) continue;
+                VectorXd normal=VectorXd::Zero(block.d);
+                normal[s]=1;normal[s-1]=-1;
+                for(int j=0;j<pn;++j) {normal[q+p+s*pn+j]=-block.z(i,j);normal[q+p+(s-1)*pn+j]=block.z(i,j);}
+                bool seen=false;
+                for(const VectorXd& a:normals) if((a-normal).cwiseAbs().maxCoeff()==0) {seen=true;break;}
+                if(!seen) normals.push_back(normal);
+            }
+        });
+        const int k=normals.size(),d=data.d;
+        if(k==0 || k>=d) return false;
+        MatrixXd A(d,k);
+        for(int j=0;j<k;++j) A.col(j)=normals[j];
+        Eigen::ColPivHouseholderQR<MatrixXd> qa(A);
+        const int r=qa.rank();
+        if(r==0 || r>=d) return false;
+        const MatrixXd Q=qa.householderQ()*MatrixXd::Identity(d,d);
+        const MatrixXd Q2=Q.rightCols(d-r);
+        Eigen::LDLT<MatrixXd> factor(Q2.transpose()*current.information*Q2);
+        if(factor.info()!=Eigen::Success) return false;
+        const VectorXd direction=Q2*factor.solve(Q2.transpose()*current.score);
+        if(!direction.allFinite()) return false;
+        // The face step is negligible, or its predicted gain in log likelihood
+        // (one half of score'direction) is below the rounding level at which the
+        // line search can measure an increase, so no further step can be
+        // verified as an improvement in double precision.
+        const double rounding=64*std::numeric_limits<double>::epsilon()*(1+std::abs(current.loglik));
+        if(!(data.predictor_step(direction)<step_tol) && !(.5*current.score.dot(direction)<=rounding)) return false;
+        // At a constrained maximum the score is minus a nonnegative
+        // combination of the constraint normals (gaps increase along them).
+        const VectorXd residual=current.score-current.information*direction;
+        const VectorXd multipliers=-qa.solve(residual);
+        if(!multipliers.allFinite()) return false;
+        const double scale=std::max(1.0,multipliers.cwiseAbs().maxCoeff());
+        return multipliers.minCoeff()>=-1e-6*scale;
+    };
     auto certify=[&]() {
         if(!firth && current.minimum_gap<boundary_gap) {
             VectorXd direction;int held=0;
@@ -510,6 +562,7 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
                 if(data.predictor_step(direction)<step_tol) {converged=true;reason="converged_boundary";return true;}
                 return false;
             }
+            if(face_certificate()) {converged=true;reason="converged_boundary";return true;}
         }
         if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
             // A fit whose rows touch to within boundary_gap is on the

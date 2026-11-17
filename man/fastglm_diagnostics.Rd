@@ -7,7 +7,10 @@
 fastglm_diagnostics(object, boundary = FALSE, max.rows = 5L)
 }
 \arguments{
-\item{object}{a fitted fastglm GLM or ordinal model.}
+\item{object}{a fitted fastglm GLM, count, two-part, or ordinal model. For
+truncated, hurdle, zero-inflated, and two-part fits the scores are the
+joint estimating scores of all components, including log theta when it
+is estimated.}
 
 \item{boundary}{for ordinal models, also locate the positive-frequency rows
 with the smallest category probabilities and cumulative-predictor gaps.

@@ -34,8 +34,9 @@ streaming model, omitting it rereads the fitted source.}
 
 \item{type}{prediction scale: marginal response, count-component mean,
 zero probability, probability masses, or component linear predictors.
-For two-part models `"positive"` and `"binary"` are the same as
-`"count"` (mean given a positive outcome) and `"zero"`.}
+`"binary"` is the probability of a positive outcome, one minus the
+`"zero"` probability. For two-part models `"positive"` is the same as
+`"count"` (mean given a positive outcome).}
 
 \item{se.fit}{return delta-method standard errors.}
 

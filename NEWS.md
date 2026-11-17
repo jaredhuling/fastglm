@@ -23,7 +23,9 @@
   it: for example a fitted mean of zero under an identity or square-root link,
   a fitted probability of one under a log-binomial model, or touching
   cumulative probabilities in a partial proportional odds model. Previously
-  these fits stopped short and were reported as not converged.
+  these fits stopped short and were reported as not converged. This includes
+  partial proportional odds maxima where many observations touch at once,
+  for example when a category is empty for one value of a covariate.
 * Such fits report `convergence.reason = "converged_boundary"` with a warning,
   because Wald standard errors and tests are not reliable there.
 * Bias-reduced fits (`firth = TRUE`) do not handle such boundary estimates and
@@ -69,6 +71,16 @@
   truncated, hurdle, and zero-inflated fits.
 * `predict()` accepts a sparse `newdata` matrix; it previously stopped with an
   error.
+* For hurdle, zero-inflated, and two-part models, `predict(newdata = )` stops
+  with an error when the fit's `offset` argument refers to the fitting data
+  (for example `log(data$exposure)`). Previously the fitting offset was
+  silently reused, giving wrong predictions.
+* `predict(type = "binary")` for these models returns the probability of a
+  positive outcome, the quantity the binary part models.
+* `fastglm_diagnostics()` supports truncated, hurdle, zero-inflated, and
+  two-part fits, and `broom::tidy()` and `broom::glance()` support them too.
+* Data sources print a short summary, and count model summaries print `theta`
+  and the log-likelihood with more digits.
 * More post-fit calculations (AIC, residuals, null deviance) run in C++, so
   ordinary fits are somewhat faster.
 * Logit ordinal fits with many categories are about twice as fast, from a
