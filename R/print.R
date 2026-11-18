@@ -7,7 +7,13 @@
 
 .fastglm_print_header <- function(title,call=NULL) {
     cat(title,"\n",sep="")
-    if(!is.null(call)) cat("\nCall:\n",paste(deparse(call),collapse="\n"),"\n",sep="")
+    if(!is.null(call)) {
+        # The stored call names fastglm::f so that update() works when the
+        # package is not attached; print it as f(...), as glm() does.
+        if(is.call(call) && is.call(call[[1L]]) && identical(call[[1L]][[1L]],as.name("::")) &&
+           identical(call[[1L]][[2L]],as.name("fastglm"))) call[[1L]] <- call[[1L]][[3L]]
+        cat("\nCall:\n",paste(deparse(call),collapse="\n"),"\n",sep="")
+    }
 }
 
 .fastglm_print_field <- function(label,value) {

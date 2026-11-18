@@ -503,21 +503,21 @@ fastglmPure <- function(x, y,
 
     if (!res$converged)
     {
-        warning("fit_glm: algorithm did not converge", call. = FALSE)
+        warning("fastglm: algorithm did not converge", call. = FALSE)
     }
     if (identical(res$convergence.reason, "converged_boundary"))
-        warning("fit_glm: ", BOUNDARY_WARNING, call. = FALSE)
+        warning("fastglm: ", BOUNDARY_WARNING, call. = FALSE)
 
     eps <- 10*.Machine$double.eps
     if (family$family == "binomial")
     {
         if (any(res$fitted.values > 1 - eps) || any(res$fitted.values < eps))
-            warning("fit_glm: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
+            warning("fastglm: fitted probabilities numerically 0 or 1 occurred", call. = FALSE)
     }
     if (family$family == "poisson")
     {
         if (any(res$fitted.values < eps))
-            warning("fit_glm: fitted rates numerically 0 occurred", call. = FALSE)
+            warning("fastglm: fitted rates numerically 0 occurred", call. = FALSE)
     }
 
     if (is.null(cnames)) {

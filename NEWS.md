@@ -74,6 +74,11 @@
 
 ## Other changes
 
+* Printed calls show the fitting function without the `fastglm::` prefix,
+  as `glm()` does; the stored call keeps it, so `update()` works when the
+  package is not attached. GLM warnings start with `fastglm:` instead of the
+  internal name `fit_glm:`.
+
 * New argument `covariance` in `fastglm()`, `fastglmPure()`,
   `fastglm_control()`, and `fastglm_streaming()`. The default, `"estimate"`,
   computes the covariance at the reported coefficients; `"previous"` follows

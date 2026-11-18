@@ -83,7 +83,7 @@ fastglm_prepare <- function(x, data = NULL, weights = NULL, offset = NULL, firth
         family$variance,family$mu.eta,family$linkinv,family$dev.resids,
         family$valideta,family$validmu,2L,tol,as.integer(maxit),family_code(family),
         family_params(family),inference=inference!="none",prepared=factor)
-    if(!fit$converged) warning("fit_glm: algorithm did not converge",call.=FALSE)
+    if(!fit$converged) warning("fastglm: algorithm did not converge",call.=FALSE)
     cn<-colnames(design$x);is.int<-factor$intercept
     if(is.null(cn)) {
         cn<-paste0("X",seq_len(ncol(design$x)))

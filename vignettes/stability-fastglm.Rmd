@@ -37,7 +37,7 @@ tryCatch(glm.fit(X, y, family = poisson("identity")), error = conditionMessage)
 #> [1] "no valid set of coefficients has been found: please supply starting values"
 
 fit <- fastglm(X, y, family = poisson("identity"))
-#> Warning: fit_glm: the estimate is on the boundary of the valid region for this
+#> Warning: fastglm: the estimate is on the boundary of the valid region for this
 #> family and link (convergence.reason = 'converged_boundary'); Wald standard
 #> errors and tests are not reliable
 c(converged = fit$converged, reason = fit$convergence.reason)
