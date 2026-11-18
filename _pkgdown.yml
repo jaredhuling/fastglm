@@ -21,6 +21,10 @@ reference:
 - title: Two-part models
   contents:
   - fastglm_twopart
+- title: Multinomial models
+  contents:
+  - fastglm_multinom
+  - "`fastglm-vglm-methods`"
 - title: Ordinal models
   contents:
   - fastglm_ordinal

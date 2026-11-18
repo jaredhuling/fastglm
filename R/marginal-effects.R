@@ -3,10 +3,10 @@
 #' Estimates the average rate of change of a prediction as a continuous
 #' predictor changes: the fitted mean of a generalized linear model, the mean,
 #' count-component mean, or zero probability of a count or two-part model, or
-#' each category probability of an ordinal model. Uncertainty uses the delta method, conditional
+#' each category probability of an ordinal or multinomial model. Uncertainty uses the delta method, conditional
 #' on the supplied predictor values and averaging weights.
 #' @param object a converged GLM (\code{fastglm()}), negative binomial,
-#'   zero-truncated, hurdle, zero-inflated, two-part, or ordinal fit.
+#'   zero-truncated, hurdle, zero-inflated, two-part, ordinal, or multinomial fit.
 #' @param variable name of one continuous numeric variable. For a formula fit,
 #'   this names the original variable in the data; interactions and smooth
 #'   transformations are differentiated together. For a matrix fit, this names
@@ -24,13 +24,14 @@
 #'   For count and two-part models, \code{"response"}, \code{"count"}, or
 #'   \code{"zero"}, as in \code{fastglm_average()}. For ordinal models, category
 #'   probabilities (\code{"response"} or \code{"probability"}) or
-#'   \code{"cumulative"} probabilities.
+#'   \code{"cumulative"} probabilities. For multinomial models,
+#'   \code{"response"} or \code{"probability"}.
 #' @param eps positive absolute step for numerical differentiation of formula
 #'   terms. The default is \code{.Machine$double.eps^(1/3) * pmax(1, abs(x))}
 #'   for the selected variable. For ordinal matrix fits the derivative is exact
 #'   and does not use this argument; GLM and count models use centered
 #'   differences for matrix columns as well.
-#' @param offset optional replacement prediction offset (GLM and ordinal fits).
+#' @param offset optional replacement prediction offset (GLM, ordinal, and multinomial fits).
 #'   All offsets are held fixed when differentiating, including formula offsets
 #'   involving \code{variable}.
 #' @details A marginal effect is a derivative, measured in probability units
@@ -66,9 +67,18 @@
 #'   parameter gradient of that same difference with the model covariance
 #'   (including theta for count models when it is estimated). Streaming fits
 #'   require \code{newdata}.
+#'
+#'   For multinomial fits, each row's derivative of every category probability
+#'   is the centered difference of its probabilities at the variable plus and
+#'   minus the step, with other predictors and all offsets held fixed. The
+#'   effects sum to zero across categories, and the standard error of each
+#'   category uses the gradient of that difference with the covariance of all
+#'   coefficients. A formula fit without \code{newdata} recovers its fitting data
+#'   from the call; a source fit requires \code{newdata}.
 #' @returns A data frame with \code{variable}, \code{estimate}, \code{std.error},
 #'   \code{conf.low}, and \code{conf.high}, and for ordinal models also
-#'   \code{category}, with one row per category. Ordinal category effects
+#'   \code{category}, with one row per category (also for multinomial models, whose
+#'   category effects sum to zero). Ordinal category effects
 #'   sum to zero. Removed categories have zero effects and unavailable standard
 #'   errors; inference otherwise refers to the reduced category model.
 #' @examples
@@ -85,6 +95,8 @@
 fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
                                      vcov.=NULL,level=.95,type="response",
                                      eps=NULL,offset=NULL) {
+    if(inherits(object,"fastglm_vglm"))
+        return(.vglm_marginal_effects(object,variable,newdata,weights,vcov.,level,type,eps,offset))
     if(!inherits(object,"fastglm_ordinal"))
         return(.response_marginal_effects(object,variable,newdata,weights,vcov.,level,type,eps,offset))
     .ordinal_check_inference(object)

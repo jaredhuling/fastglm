@@ -46,13 +46,44 @@
     relation
 }
 
+# Vector GLM fits: a term (formula term, or design column for a matrix fit)
+# selects all of its coefficients, one per linear predictor for an
+# unconstrained column. A full coefficient name selects that coefficient.
+.vglm_wald_columns <- function(object,terms) {
+    columns <- names(object$coefficients)
+    design <- .vglm_design_names(object)
+    # Design column of each coefficient: term-major with r_k coefficients per column.
+    owner <- rep(seq_along(object$constraints),vapply(object$constraints,ncol,1L))
+    labels <- if(!is.null(object$terms)) attr(object$terms,"term.labels") else setdiff(design,"(Intercept)")
+    if(is.null(terms)) terms <- labels
+    if(!is.character(terms) || !length(terms) || anyNA(terms) || anyDuplicated(terms))
+        stop("unknown or duplicated term in 'terms'",call.=FALSE)
+    if(all(terms %in% columns)) return(list(index=match(terms,columns),terms=terms))
+    if(!is.null(object$terms)) {
+        if(!all(terms %in% c("(Intercept)",labels)))
+            stop("unknown or duplicated formula term in 'terms'",call.=FALSE)
+        assignment <- if(!is.null(object$design.assign)) object$design.assign else attr(object$x,"assign")
+        if(is.null(assignment) || length(assignment)!=length(design))
+            stop("formula term tests require retained design assignments; supply a named 'contrast'",call.=FALSE)
+        target <- match(terms,c("(Intercept)",labels))-1L
+        cols <- which(assignment %in% target)
+    } else {
+        if(!all(terms %in% design)) stop("unknown or duplicated coefficient name in 'terms'",call.=FALSE)
+        cols <- match(terms,design)
+    }
+    list(index=which(owner %in% cols),terms=terms)
+}
+
 .fastglm_wald_contrast <- function(object,terms,contrast,component="all") {
     b <- coef(object); columns <- names(b); p <- length(b)
     if(!is.numeric(b) || is.null(columns) || anyNA(columns) || any(!nzchar(columns)) || anyDuplicated(columns))
         stop("Wald tests require distinct, named numeric coefficients",call.=FALSE)
     if(!is.null(terms) && !is.null(contrast)) stop("supply either 'terms' or 'contrast', not both",call.=FALSE)
     if(is.null(contrast)) {
-        if(.count_two_component(object)) {
+        if(inherits(object,"fastglm_vglm")) {
+            selected <- .vglm_wald_columns(object,terms)
+            index <- selected$index; terms <- selected$terms
+        } else if(.count_two_component(object)) {
             selected <- .fastglm_wald_component_terms(object,terms,component)
             index <- selected$index;terms <- selected$terms
         } else if(inherits(object,"fastglm_ordinal_partial")) {
@@ -114,10 +145,12 @@
 #' model. A factor or interaction can be tested as a complete formula
 #' term, and a named contrast can compare coefficients without refitting.
 #' @param object a fastglm GLM (including negative-binomial and streaming GLMs),
-#'   ordinal, truncated-count, hurdle, zero-inflated, or two-part fit.
+#'   ordinal, truncated-count, hurdle, zero-inflated, two-part, or multinomial fit.
 #' @param terms formula terms, or coefficient names for a matrix fit, to test
-#'   jointly. The default selects all formula terms or all matrix coefficients
-#'   except a coefficient named `(Intercept)`. For ordinal models it selects
+#'   jointly. For multinomial fits a term (or design column) selects all of its
+#'   K - 1 coefficients, so the test has K - 1 degrees of freedom per column, and a
+#'   full coefficient name such as `"B:x1"` selects that one coefficient. The default selects all formula terms or all
+#'   matrix coefficients except a coefficient named `(Intercept)`. For ordinal models it selects
 #'   location slopes. A nonparallel ordinal term includes its slopes at all
 #'   thresholds. Formula terms refer to their fitted design columns;
 #'   a main-effect test with interactions depends on their coding and reference
@@ -162,6 +195,8 @@
 #'   result with an explanation. Degrees of freedom are not reduced silently.
 #'   For aliased GLM coefficients, estimability is checked against the retained
 #'   dependence between design columns. No generalized inverse is used.
+#'   For multinomial fits no alias relation is stored, so a contrast that involves an
+#'   aliased coefficient is reported nonestimable.
 #'   Tests concern regression coefficients, excluding dispersion or size
 #'   parameters. An estimated negative-binomial size at its numerical boundary
 #'   returns an unavailable result. Truncated, hurdle, and zero-inflated fits
@@ -186,7 +221,7 @@
 #' @export
 fastglm_wald_test <- function(object,terms=NULL,contrast=NULL,null=0,vcov.=NULL,component="all") {
     if(!inherits(object,c("fastglm","fastglmFit","fastglm_ordinal","fastglm_nb",
-        "fastglm_hurdle","fastglm_zi","fastglm_twopart","fastglm_truncated")))
+        "fastglm_hurdle","fastglm_zi","fastglm_twopart","fastglm_truncated","fastglm_vglm")))
         stop("supply a supported fastglm fitted model",call.=FALSE)
     component <- match.arg(component,c("all","count","zero","positive","binary"))
     if(component %in% c("positive","binary")) {
@@ -223,11 +258,18 @@ fastglm_wald_test <- function(object,terms=NULL,contrast=NULL,null=0,vcov.=NULL,
     good <- !is.na(b)
     if(any(!good)) {
         relation <- .fastglm_wald_alias_relation(object)
-        if(is.null(relation)) return(unavailable("estimability_unavailable","The aliased design relation was not retained."))
-        implied <- L[,good,drop=FALSE]%*%relation
-        requested <- L[,!good,drop=FALSE]
-        if(any(abs(implied-requested)>1e-8*pmax(1,abs(implied),abs(requested))))
-            return(unavailable("nonestimable_contrast","A requested contrast is not estimable from the rank-deficient design."))
+        # Vector GLM fits retain no alias relation, so a contrast that involves
+        # an aliased coefficient is reported as not estimable.
+        if(inherits(object,"fastglm_vglm") && is.null(relation)) {
+            if(any(L[,!good,drop=FALSE]!=0))
+                return(unavailable("nonestimable_contrast","A requested contrast involves an aliased coefficient of the rank-deficient design."))
+        } else {
+            if(is.null(relation)) return(unavailable("estimability_unavailable","The aliased design relation was not retained."))
+            implied <- L[,good,drop=FALSE]%*%relation
+            requested <- L[,!good,drop=FALSE]
+            if(any(abs(implied-requested)>1e-8*pmax(1,abs(implied),abs(requested))))
+                return(unavailable("nonestimable_contrast","A requested contrast is not estimable from the rank-deficient design."))
+        }
     }
     active <- which(good & colSums(abs(L))>0)
     if(!length(active) || any(!is.finite(b[active])))

@@ -15,11 +15,13 @@ fastglm_wald_test(
 }
 \arguments{
 \item{object}{a fastglm GLM (including negative-binomial and streaming GLMs),
-ordinal, truncated-count, hurdle, zero-inflated, or two-part fit.}
+ordinal, truncated-count, hurdle, zero-inflated, two-part, or multinomial fit.}
 
 \item{terms}{formula terms, or coefficient names for a matrix fit, to test
-jointly. The default selects all formula terms or all matrix coefficients
-except a coefficient named \code{(Intercept)}. For ordinal models it selects
+jointly. For multinomial fits a term (or design column) selects all of its
+K - 1 coefficients, so the test has K - 1 degrees of freedom per column, and a
+full coefficient name such as \code{"B:x1"} selects that one coefficient. The default selects all formula terms or all
+matrix coefficients except a coefficient named \code{(Intercept)}. For ordinal models it selects
 location slopes. A nonparallel ordinal term includes its slopes at all
 thresholds. Formula terms refer to their fitted design columns;
 a main-effect test with interactions depends on their coding and reference
@@ -81,6 +83,8 @@ missing or numerically singular contrast covariance return an unavailable
 result with an explanation. Degrees of freedom are not reduced silently.
 For aliased GLM coefficients, estimability is checked against the retained
 dependence between design columns. No generalized inverse is used.
+For multinomial fits no alias relation is stored, so a contrast that involves an
+aliased coefficient is reported nonestimable.
 Tests concern regression coefficients, excluding dispersion or size
 parameters. An estimated negative-binomial size at its numerical boundary
 returns an unavailable result. Truncated, hurdle, and zero-inflated fits

@@ -34,7 +34,11 @@ and transformations; it need not contain all observations.}
 
 \item{weights, offset}{optional column names in data-frame blocks. For
 a two-component formula, two offset column names supply count/positive
-and binary offsets, respectively.}
+and binary offsets, respectively. For a one-part formula, multinomial
+fits ([fastglm_multinom()]) accept one offset column name per linear
+predictor, in order (or one name, applied to every linear predictor);
+other models accept one name, and report an error at the start of the fit
+otherwise.}
 
 \item{cache}{`FALSE` (default) reads every block from `callback` on every
 pass. `TRUE`, or the path of a directory, writes each block, after the
@@ -50,7 +54,8 @@ data even if the underlying source changes.}
 }
 \value{
 A `fastglm_source` object for [fastglm_streaming()],
-  [fastglm_ordinal_streaming()], or the count and two-part fitting functions.
+  [fastglm_ordinal_streaming()], [fastglm_multinom()], or the count and
+  two-part fitting functions.
 }
 \description{
 A source describes how to obtain a block of observations when a fitting

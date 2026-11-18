@@ -8,7 +8,12 @@
 #' effects can amplify numerical error. For bias-reduced fits the ordinary score
 #' need not vanish. The stored adjusted coefficient and dispersion scores instead
 #' assess the equations used to fit the model at the reported estimates.
-#' @param object a fitted fastglm GLM, count, two-part, or ordinal model. For
+#' @param object a fitted fastglm GLM, count, two-part, ordinal, or multinomial
+#'   (vector GLM) model. For multinomial fits the scores are the ordinary scores
+#'   of the K - 1 linear predictors at the estimate, accumulated over row blocks,
+#'   and `boundary` in the result is `TRUE` when fitted probabilities are
+#'   numerically 0 or 1 (the separation flag of the fit); `boundary = TRUE` as an
+#'   argument is not available. For
 #'   truncated, hurdle, zero-inflated, and two-part fits the scores are the
 #'   joint estimating scores of all components, including log theta when it
 #'   is estimated.
@@ -63,6 +68,10 @@
 fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
     if(!is.logical(boundary) || length(boundary)!=1L || is.na(boundary))
         stop("'boundary' must be TRUE or FALSE",call.=FALSE)
+    if(inherits(object,"fastglm_vglm")) {
+        if(boundary) stop("boundary row diagnostics require an ordinal fit",call.=FALSE)
+        return(structure(.vglm_diagnostics(object),class="fastglm_diagnostics"))
+    }
     if(inherits(object,"fastglm_ordinal"))
         return(structure(.ordinal_diagnostics(object,boundary,max.rows),class="fastglm_diagnostics"))
     if(boundary) stop("boundary row diagnostics require an ordinal fit",call.=FALSE)

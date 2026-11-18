@@ -24,7 +24,11 @@
 #'   and transformations; it need not contain all observations.
 #' @param weights,offset optional column names in data-frame blocks. For
 #'   a two-component formula, two offset column names supply count/positive
-#'   and binary offsets, respectively.
+#'   and binary offsets, respectively. For a one-part formula, multinomial
+#'   fits ([fastglm_multinom()]) accept one offset column name per linear
+#'   predictor, in order (or one name, applied to every linear predictor);
+#'   other models accept one name, and report an error at the start of the fit
+#'   otherwise.
 #' @param cache `FALSE` (default) reads every block from `callback` on every
 #'   pass. `TRUE`, or the path of a directory, writes each block, after the
 #'   formula has been applied, to an uncompressed file the first time it is
@@ -37,7 +41,8 @@
 #'   cached blocks are those of the first pass, so later passes see the same
 #'   data even if the underlying source changes.
 #' @returns A `fastglm_source` object for [fastglm_streaming()],
-#'   [fastglm_ordinal_streaming()], or the count and two-part fitting functions.
+#'   [fastglm_ordinal_streaming()], [fastglm_multinom()], or the count and
+#'   two-part fitting functions.
 #' @export
 fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
                            prototype = NULL, weights = NULL, offset = NULL, cache = FALSE) {
@@ -45,7 +50,12 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
     if (!is.function(callback) || (!is.null(reset) && !is.function(reset))) stop("callback and reset must be functions",call.=FALSE)
     if(!is.null(weights) && (!is.character(weights) || length(weights)!=1L || is.na(weights)))
         stop("weights must name one data column",call.=FALSE)
-    if(!is.null(offset) && (!is.character(offset) || !length(offset) || length(offset)>2L || anyNA(offset)))
+    # One-part formulas accept one offset column per linear predictor (any
+    # number, for vector GLMs); otherwise one or two columns, as before. The
+    # formula is inspected only when more than two names are given.
+    if(!is.null(offset) && (!is.character(offset) || !length(offset) || anyNA(offset) ||
+                            (length(offset)>2L && (is.null(formula) ||
+                                length(Formula::Formula(formula))[2L]!=1L))))
         stop("offset must name one or two data columns",call.=FALSE)
     schema <- NULL
     if (!is.null(formula)) {
@@ -56,18 +66,28 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
         build <- function(j) {
             mf <- model.frame(stats::formula(f,lhs=1L,rhs=j),prototype,na.action=na.fail)
             tt <- attr(mf,"terms");xx <- model.matrix(tt,mf)
+            if(j==1L) response <<- model.response(mf)
             list(terms=tt,xlevels=.getXlevels(tt,mf),contrasts=attr(xx,"contrasts"),
                  columns=colnames(xx),assign=attr(xx,"assign"))
         }
+        response <- NULL
         schema <- build(1L)
         if(length(f)[2L]==2L) {
             parts <- list(count=schema,zero=build(2L))
             schema <- lapply(names(schema),function(nm) lapply(parts,`[[`,nm))
             names(schema) <- names(parts$count)
-        } else if(length(offset)>1L) stop("two offset columns require a two-component formula",call.=FALSE)
+        }
         schema$formula <- f
         schema$offset <- offset
+        # Levels of a factor response in the prototype (no extra work), used
+        # by models with a categorical response.
+        if(is.factor(response)) schema$response.levels <- base::levels(response)
     }
+    # Several offset columns with a one-part formula are per-linear-predictor
+    # offsets (a block offset with one column each). Only readers that ask for
+    # them (vector GLMs) receive them; other models keep the message.
+    per.predictor <- !is.null(schema) && inherits(schema$terms,"terms") && length(offset)>1L
+    if(per.predictor) schema$offset.per.predictor <- TRUE
     fetch <- function(k) {
         if (k == 1L && !is.null(reset)) reset()
         z <- callback(k)
@@ -86,7 +106,9 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
         if(inherits(schema$terms,"terms")) {
             out <- part(schema$terms,schema$xlevels,schema$contrasts,schema$columns)
             out$offset.zero <- out$offset
-            if(length(offset)) out$offset <- out$offset+column(offset)
+            if(per.predictor) out$offset <- out$offset+matrix(vapply(offset,function(nm) as.numeric(column(nm)),
+                numeric(nrow(out$X))),nrow(out$X),dimnames=list(NULL,offset))
+            else if(length(offset)) out$offset <- out$offset+column(offset)
         } else {
             p <- lapply(c("count","zero"),function(k)
                 part(schema$terms[[k]],schema$xlevels[[k]],schema$contrasts[[k]],schema$columns[[k]]))
@@ -98,6 +120,15 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
         out
     }
     cached <- .source_cache(fetch,as.integer(n_chunks),cache)
+    if(per.predictor) {
+        inner <- cached$fetch
+        cached$fetch <- function(k,per.predictor=FALSE) {
+            # Models with one linear predictor keep their messages.
+            if(!per.predictor) stop(if(length(offset)>2L) "offset must name one or two data columns" else
+                "two offset columns require a two-component formula",call.=FALSE)
+            inner(k)
+        }
+    }
     structure(list(callback=cached$fetch,n_chunks=as.integer(n_chunks),schema=schema,
                    cache=cached$directory),class="fastglm_source")
 }

@@ -3,7 +3,7 @@
 \name{fastglm_bootstrap}
 \alias{fastglm_bootstrap}
 \alias{print.fastglm_bootstrap}
-\title{Refit bootstrap uncertainty for GLMs, count models, and ordinal models}
+\title{Refit bootstrap uncertainty for GLMs, count, ordinal, and multinomial models}
 \usage{
 fastglm_bootstrap(
   object,
@@ -111,6 +111,16 @@ Pair resampling treats rows as independent sampling units. Cluster
   empty-category restriction applies to maximum likelihood and to pairs or
   cluster resampling. These rules also apply to custom statistics; point
   replicates remain available for inspection.
+
+  Multinomial fits refit in memory with `fastglm_multinom()`, retaining the
+  reference category, weights, offsets, bias reduction, and the fit's `tol`,
+  `maxit`, `block.size`, and `control`; `control` may override any
+  `fastglm_multinom()` argument. Pair and cluster resampling are supported
+  (cluster identifiers match the retained rows or the rows before
+  missing-value omission); parametric resampling and source fits stop with
+  an error. A resample in which a category has no observations fails to
+  refit and is recorded as a failed replicate. Memory-mapped (`big.matrix`)
+  multinomial fits also stop with an error.
 
   Every failed or nonconverged refit is recorded. If any replicate fails,
   standard errors and intervals are returned as missing rather than silently

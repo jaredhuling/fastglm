@@ -72,6 +72,42 @@
   size; `fastglm()` on a `big.matrix` remains faster but holds vectors of
   length n during the fit.
 
+## Multinomial models
+
+* New `fastglm_multinom()` fits multinomial logit models. It accepts a formula
+  with `data`, a numeric or sparse (`dgCMatrix`) design matrix, a
+  `big.matrix`, or a `fastglm_source()` read block by block. The response is a
+  factor or a matrix of category counts, and `weights`, `offset` (one column
+  per non-reference category is allowed), the reference category, and
+  bias-reduced estimation (`firth = TRUE`) are supported. Fits have
+  `summary()`, `coef()`, `vcov()`, `confint()`, `predict()` (with
+  `se.fit = TRUE`), `residuals()`, `fastglm_wald_test()`,
+  `fastglm_diagnostics()`, `fastglm_marginal_effects()`, `fastglm_average()`,
+  `fastglm_bootstrap()` (for in-memory fits), `fastglm_vcov()` (robust and
+  cluster-robust covariances), and `broom::tidy()` and `broom::glance()`.
+  Some of these are limited for fits over a `fastglm_source()`, which keeps
+  the source rather than its rows: `residuals()` and evaluation without
+  `newdata` are not available, marginal
+  effects require `newdata`, and the bootstrap is not yet available (it
+  is also unavailable for `big.matrix` fits). `fastglm_vcov()` offers
+  the HC0 and HC1 types and cluster-robust versions for these fits.
+* The fit uses a general vector GLM engine: weighted cross products are
+  accumulated for each pair of linear predictors, one block of rows at a time,
+  and safeguarded Fisher scoring with the Fisher-decrement stopping rule is
+  run on the stacked coefficients.
+* Without `firth = TRUE`, a multinomial fit with separation stops by the usual
+  rule and warns that fitted probabilities are numerically 0 or 1, using the
+  same threshold as `glm.fit()`; the warning suggests `firth = TRUE`.
+* `fastglm_source()` accepts several offset names for a one-part formula, one
+  per linear predictor, when the source is used by `fastglm_multinom()`. Other
+  models still accept one offset column (two for two-part formulas). The error
+  for any other number of offset columns now appears at the start of the fit,
+  with the same message, rather than when the source is created.
+* For a count-matrix (grouped) response, the deviance and null deviance of a
+  multinomial fit subtract the saturated log likelihood, as for a grouped
+  binomial `glm()`; the log likelihood, AIC, and BIC are unchanged. In formula
+  fits, unused levels of factor predictors are dropped, as in `glm()`.
+
 ## Other changes
 
 * Printed calls show the fitting function without the `fastglm::` prefix,

@@ -7,7 +7,12 @@
 fastglm_diagnostics(object, boundary = FALSE, max.rows = 5L)
 }
 \arguments{
-\item{object}{a fitted fastglm GLM, count, two-part, or ordinal model. For
+\item{object}{a fitted fastglm GLM, count, two-part, ordinal, or multinomial
+(vector GLM) model. For multinomial fits the scores are the ordinary scores
+of the K - 1 linear predictors at the estimate, accumulated over row blocks,
+and \code{boundary} in the result is \code{TRUE} when fitted probabilities are
+numerically 0 or 1 (the separation flag of the fit); \code{boundary = TRUE} as an
+argument is not available. For
 truncated, hurdle, zero-inflated, and two-part fits the scores are the
 joint estimating scores of all components, including log theta when it
 is estimated.}

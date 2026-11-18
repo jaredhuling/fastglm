@@ -15,7 +15,8 @@ fastglm_average(
 )
 }
 \arguments{
-\item{object}{a fitted fastglm GLM, count, two-part, or ordinal model.}
+\item{object}{a fitted fastglm GLM, count, two-part, ordinal, or multinomial
+(vector GLM) model.}
 
 \item{newdata}{optional prediction data.}
 
@@ -31,17 +32,21 @@ of chunk index. Defaults to equal weights.}
 joint covariance, including theta when estimated; for robust inference use
 `fastglm_vcov(object, full=TRUE)`. Ordinal models require the full
 threshold--location covariance; supplied covariance matrices are supported
-only when no categories were collapsed.}
+only when no categories were collapsed. Multinomial fits require the full
+covariance of all coefficients, in the order of `coef(object)`.}
 
 \item{level}{confidence level for a normal interval.}
 
 \item{type}{prediction target: `"response"` for the marginal mean;
 `"count"` and `"zero"` are also available for two-component models.
 For ordinal fits, `"response"` or `"probability"` gives category
-probabilities and `"cumulative"` gives cumulative probabilities.}
+probabilities and `"cumulative"` gives cumulative probabilities.
+Multinomial fits use `"response"` or `"probability"`.}
 }
 \value{
-A data frame with estimate, standard error, and confidence limits.
+A data frame with estimate, standard error, and confidence limits;
+  ordinal and multinomial fits have one row per category, labeled in a
+  `category` column.
 }
 \description{
 Computes averages without retaining individual predictions. For a streaming
@@ -53,4 +58,11 @@ category model and removed-category standard errors are unavailable.
 Nonparallel ordinal fits include the joint uncertainty of thresholds,
 common slopes, and threshold-specific slopes and check prediction validity
 at all rows with positive averaging weight.
+For multinomial fits, returns the average predicted probability of each
+category (or, with a contrast, the average change in each probability) with
+delta-method errors from the joint covariance of all coefficients. A
+contrast is applied once to the whole design of an in-memory dense fit, and
+block by block to sparse, `big.matrix`, and source designs. A multinomial
+source fit, with `newdata = NULL`, is reread block by block and `weights` is
+a function of the chunk index.
 }

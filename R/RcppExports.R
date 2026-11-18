@@ -181,6 +181,42 @@ ordinal_partial_stream_native_fit <- function(fetch, n_chunks, common_predictors
     .Call(`_fastglm_ordinal_partial_stream_native_fit`, fetch, n_chunks, common_predictors, nonparallel_predictors, categories, start, firth, score_tol, step_tol, maxit, block_size, max_step, max_halves, condition_tol, trace, link, observed)
 }
 
+vglm_family_eval <- function(family, K, reference, eta, codes, counts, weights, A) {
+    .Call(`_fastglm_vglm_family_eval`, family, K, reference, eta, codes, counts, weights, A)
+}
+
+vglm_fit_dense <- function(x, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control) {
+    .Call(`_fastglm_vglm_fit_dense`, x, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control)
+}
+
+vglm_fit_sparse <- function(xt, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control) {
+    .Call(`_fastglm_vglm_fit_sparse`, xt, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control)
+}
+
+vglm_evaluate_dense <- function(x, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size) {
+    .Call(`_fastglm_vglm_evaluate_dense`, x, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size)
+}
+
+vglm_evaluate_sparse <- function(xt, first, last, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size) {
+    .Call(`_fastglm_vglm_evaluate_sparse`, xt, first, last, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size)
+}
+
+vglm_fit_big <- function(x, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control) {
+    .Call(`_fastglm_vglm_fit_big`, x, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control)
+}
+
+vglm_evaluate_big <- function(x, first, last, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size) {
+    .Call(`_fastglm_vglm_evaluate_big`, x, first, last, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size)
+}
+
+vglm_fit_source <- function(fetch, n_chunks, p, totals, intercept, value, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control) {
+    .Call(`_fastglm_vglm_fit_source`, fetch, n_chunks, p, totals, intercept, value, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control)
+}
+
+vglm_evaluate_source <- function(block, constraints, family, K, reference, coefficients, block_size) {
+    .Call(`_fastglm_vglm_evaluate_source`, block, constraints, family, K, reference, coefficients, block_size)
+}
+
 prepare_glm_constant <- function(x, weights, leverage, code) {
     .Call(`_fastglm_prepare_glm_constant`, x, weights, leverage, code)
 }

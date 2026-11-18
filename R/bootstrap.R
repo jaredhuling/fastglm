@@ -1,4 +1,4 @@
-#' Refit bootstrap uncertainty for GLMs, count models, and ordinal models
+#' Refit bootstrap uncertainty for GLMs, count, ordinal, and multinomial models
 #'
 #' Repeatedly resamples observations or independent clusters, or generates new
 #' responses from the fitted model, and refits the regression. A statistic such
@@ -69,6 +69,16 @@
 #'   cluster resampling. These rules also apply to custom statistics; point
 #'   replicates remain available for inspection.
 #'
+#'   Multinomial fits refit in memory with `fastglm_multinom()`, retaining the
+#'   reference category, weights, offsets, bias reduction, and the fit's `tol`,
+#'   `maxit`, `block.size`, and `control`; `control` may override any
+#'   `fastglm_multinom()` argument. Pair and cluster resampling are supported
+#'   (cluster identifiers match the retained rows or the rows before
+#'   missing-value omission); parametric resampling and source fits stop with
+#'   an error. A resample in which a category has no observations fails to
+#'   refit and is recorded as a failed replicate. Memory-mapped (`big.matrix`)
+#'   multinomial fits also stop with an error.
+#'
 #'   Every failed or nonconverged refit is recorded. If any replicate fails,
 #'   standard errors and intervals are returned as missing rather than silently
 #'   conditioning inference on the successful fits. Inspect `diagnostics` and
@@ -81,12 +91,19 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
                               type=c("pairs","cluster","parametric"),
                               cluster=NULL,seed=NULL,workers=1L,level=.95,
                               control=list()) {
+    if(inherits(object,"fastglm_vglm") && !is.null(object$source))
+        stop("bootstrap refitting is not yet available for multinomial source fits",call.=FALSE)
+    if(inherits(object,"fastglm_vglm") && inherits(object$x,"big.matrix"))
+        stop("bootstrap refitting is not yet available for memory-mapped (big.matrix) multinomial fits",call.=FALSE)
     if(inherits(object,"fastglm_ordinal_stream"))
         stop("bootstrap refitting is not yet available for ordinal source fits",call.=FALSE)
     if(inherits(object,"fastglm_ordinal"))
         return(.ordinal_bootstrap(object,R,statistic,type,cluster,seed,workers,level,control,
                                   call=match.call()))
-    type<-match.arg(type);.check_iterations(1e-8,R);.check_iterations(1e-8,workers)
+    type<-match.arg(type)
+    if(inherits(object,"fastglm_vglm") && type=="parametric")
+        stop("parametric bootstrap is not available for multinomial fits",call.=FALSE)
+    .check_iterations(1e-8,R);.check_iterations(1e-8,workers)
     if(R<2L) stop("'R' must be at least two",call.=FALSE)
     if(!isTRUE(object$converged)) stop("bootstrap requires a converged original fit",call.=FALSE)
     if(.count_inference_model(object) && .count_theta_boundary(object))
@@ -121,7 +138,7 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
             unlist(lapply(seq_along(input$rows),function(k) {
                 g<-cluster(k);if(length(g)!=input$rows[k]) stop("invalid cluster identifiers",call.=FALSE);as.character(g)
             }),use.names=FALSE)
-        } else cluster
+        } else if(inherits(object,"fastglm_vglm")) .vglm_cluster_vector(cluster,object,input$n) else cluster
         if(length(groups)!=input$n || anyNA(groups)) stop("invalid cluster identifiers",call.=FALSE)
         units<-split(seq_len(input$n),as.character(groups))
         if(length(units)<2L) stop("cluster bootstrap requires at least two clusters",call.=FALSE)
@@ -179,6 +196,7 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
 }
 
 .bootstrap_input <- function(object,streaming) {
+    if(inherits(object,"fastglm_vglm")) return(.vglm_bootstrap_input(object))
     two<-.count_two_component(object)
     if(streaming) {
         rows<-vapply(seq_len(object$source$n_chunks),function(k)nrow(object$fetch(k)$X),integer(1))
@@ -200,6 +218,9 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
     list(data=z,n=nrow(x))
 }
 .bootstrap_subset <- function(z,index) {
+    if(isTRUE(z$vglm)) return(list(X=z$X[index,,drop=FALSE],
+        y=if(is.matrix(z$y)) z$y[index,,drop=FALSE] else z$y[index],
+        weights=z$weights[index],offset=z$offset[index,,drop=FALSE]))
     list(X=z$X[index,,drop=FALSE],Z=if(!is.null(z$Z)) z$Z[index,,drop=FALSE],
         y=if(is.matrix(z$y)) z$y[index,,drop=FALSE] else z$y[index],
         weights=z$weights[index],offset=lapply(z$offset,`[`,index))
@@ -248,6 +269,7 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
     stop("parametric bootstrap is unavailable for this family",call.=FALSE)
 }
 .bootstrap_refit <- function(object,z,control) {
+    if(inherits(object,"fastglm_vglm")) return(.vglm_bootstrap_refit(object,z,control))
     defaults<-object$refit.controls;if(is.null(defaults)) defaults<-list()
     controls<-utils::modifyList(defaults,control)
     fit<-if(.count_two_component(object)) {

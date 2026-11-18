@@ -86,9 +86,18 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #' Computes the sandwich meat in row blocks, optionally accumulating scores
 #' by cluster. Cluster storage is proportional to the number of distinct
 #' clusters times the number of coefficients. Streaming fits reread the source.
-#' @param object a fitted fastglm GLM, count, two-part, or ordinal model.
-#' @param type HC0, HC1, HC2, or HC3 correction. Cluster covariance, count,
-#'   two-part, and ordinal models support HC0 and HC1. The default is HC3 for
+#' @param object a fitted fastglm GLM, count, two-part, ordinal, or multinomial
+#'   (vector GLM) model.
+#' @param type HC0, HC1, HC2, or HC3 correction. Multinomial fits support HC0 (the
+#'   default) and HC1 only; HC2 and HC3 stop with an error. Their HC1 factor is
+#'   `n/(n - P)`, with `n` the number of observations that enter the likelihood
+#'   (`nobs`; for grouped count data each row is one observation, so the
+#'   sandwich treats rows as independent and `nobs` counts rows, not counts)
+#'   and `P` the number of non-aliased coefficients. Multinomial fits take
+#'   `cluster` as a vector with `cadjust`, as ordinal fits do, and fits with
+#'   `firth = TRUE` stop because sandwich inference for adjusted scores is not
+#'   implemented. Aliased coefficients have `NA` rows and columns.
+#'   Cluster covariance, count, two-part, and ordinal models support HC0 and HC1. The default is HC3 for
 #'   GLMs and HC0 for count, two-part, and ordinal models.
 #' @param cluster optional cluster identifiers; for streaming fits, a function
 #'   of chunk index returning identifiers in the source row order. For dense
@@ -152,6 +161,10 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #' @export
 fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
                           cadjust=TRUE,block.size=8192L,full=FALSE) {
+    if(inherits(object,"fastglm_vglm")) {
+        if(missing(type)) type <- "HC0"
+        return(.vglm_robust_vcov(object,type,cluster,cadjust,block.size))
+    }
     if(inherits(object,"fastglm_ordinal")) {
         if(missing(type)) type <- "HC0"
         return(.ordinal_robust_vcov(object,type,cluster,cadjust,block.size))
@@ -238,7 +251,15 @@ vcovHC.fastglm_stream <- function(object,type=c("HC3","HC2","HC1","HC0"),...) fa
 #' Nonparallel ordinal fits include the joint uncertainty of thresholds,
 #' common slopes, and threshold-specific slopes and check prediction validity
 #' at all rows with positive averaging weight.
-#' @param object a fitted fastglm GLM, count, two-part, or ordinal model.
+#' For multinomial fits, returns the average predicted probability of each
+#' category (or, with a contrast, the average change in each probability) with
+#' delta-method errors from the joint covariance of all coefficients. A
+#' contrast is applied once to the whole design of an in-memory dense fit, and
+#' block by block to sparse, `big.matrix`, and source designs. A multinomial
+#' source fit, with `newdata = NULL`, is reread block by block and `weights` is
+#' a function of the chunk index.
+#' @param object a fitted fastglm GLM, count, two-part, ordinal, or multinomial
+#'   (vector GLM) model.
 #' @param newdata optional prediction data.
 #' @param contrast optional function transforming a design matrix. For models
 #'   with two components, the function receives and returns a list with design
@@ -250,19 +271,25 @@ vcovHC.fastglm_stream <- function(object,type=c("HC3","HC2","HC1","HC0"),...) fa
 #'   joint covariance, including theta when estimated; for robust inference use
 #'   `fastglm_vcov(object, full=TRUE)`. Ordinal models require the full
 #'   threshold--location covariance; supplied covariance matrices are supported
-#'   only when no categories were collapsed.
+#'   only when no categories were collapsed. Multinomial fits require the full
+#'   covariance of all coefficients, in the order of `coef(object)`.
 #' @param level confidence level for a normal interval.
 #' @param type prediction target: `"response"` for the marginal mean;
 #'   `"count"` and `"zero"` are also available for two-component models.
 #'   For ordinal fits, `"response"` or `"probability"` gives category
 #'   probabilities and `"cumulative"` gives cumulative probabilities.
-#' @returns A data frame with estimate, standard error, and confidence limits.
+#'   Multinomial fits use `"response"` or `"probability"`.
+#' @returns A data frame with estimate, standard error, and confidence limits;
+#'   ordinal and multinomial fits have one row per category, labeled in a
+#'   `category` column.
 #' @export
 fastglm_average <- function(object,newdata=NULL,contrast=NULL,weights=NULL,
                              vcov.=NULL,level=.95,type="response") {
     if(anyNA(coef(object))) stop("average prediction inference requires a full-rank fit",call.=FALSE)
     if(length(level)!=1L || !is.finite(level) || level<=0 || level>=1)
         stop("'level' must lie between zero and one",call.=FALSE)
+    if(inherits(object,"fastglm_vglm"))
+        return(.vglm_average(object,newdata,contrast,weights,vcov.,level,type))
     if(inherits(object,"fastglm_ordinal"))
         return(.ordinal_average(object,newdata,contrast,weights,vcov.,level,type))
     if(.count_inference_model(object))

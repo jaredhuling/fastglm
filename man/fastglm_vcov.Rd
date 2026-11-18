@@ -14,10 +14,19 @@ fastglm_vcov(
 )
 }
 \arguments{
-\item{object}{a fitted fastglm GLM, count, two-part, or ordinal model.}
+\item{object}{a fitted fastglm GLM, count, two-part, ordinal, or multinomial
+(vector GLM) model.}
 
-\item{type}{HC0, HC1, HC2, or HC3 correction. Cluster covariance, count,
-two-part, and ordinal models support HC0 and HC1. The default is HC3 for
+\item{type}{HC0, HC1, HC2, or HC3 correction. Multinomial fits support HC0 (the
+default) and HC1 only; HC2 and HC3 stop with an error. Their HC1 factor is
+\code{n/(n - P)}, with \code{n} the number of observations that enter the likelihood
+(\code{nobs}; for grouped count data each row is one observation, so the
+sandwich treats rows as independent and \code{nobs} counts rows, not counts)
+and \code{P} the number of non-aliased coefficients. Multinomial fits take
+\code{cluster} as a vector with \code{cadjust}, as ordinal fits do, and fits with
+\code{firth = TRUE} stop because sandwich inference for adjusted scores is not
+implemented. Aliased coefficients have \code{NA} rows and columns.
+Cluster covariance, count, two-part, and ordinal models support HC0 and HC1. The default is HC3 for
 GLMs and HC0 for count, two-part, and ordinal models.}
 
 \item{cluster}{optional cluster identifiers; for streaming fits, a function

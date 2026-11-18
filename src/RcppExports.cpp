@@ -906,6 +906,209 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// vglm_family_eval
+Rcpp::List vglm_family_eval(std::string family, int K, int reference, Rcpp::NumericMatrix eta, Rcpp::IntegerVector codes, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericMatrix A);
+RcppExport SEXP _fastglm_vglm_family_eval(SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP etaSEXP, SEXP codesSEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP ASEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type codes(codesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type A(ASEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_family_eval(family, K, reference, eta, codes, counts, weights, A));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_fit_dense
+Rcpp::List vglm_fit_dense(Rcpp::NumericMatrix x, Rcpp::IntegerVector codes, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericMatrix offset, Rcpp::List constraints, std::string family, int K, int reference, bool firth, double tol, int maxit, int block_size, bool trace, Rcpp::List control);
+RcppExport SEXP _fastglm_vglm_fit_dense(SEXP xSEXP, SEXP codesSEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP firthSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP block_sizeSEXP, SEXP traceSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type codes(codesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< bool >::type trace(traceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_fit_dense(x, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_fit_sparse
+Rcpp::List vglm_fit_sparse(SEXP xt, Rcpp::IntegerVector codes, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericMatrix offset, Rcpp::List constraints, std::string family, int K, int reference, bool firth, double tol, int maxit, int block_size, bool trace, Rcpp::List control);
+RcppExport SEXP _fastglm_vglm_fit_sparse(SEXP xtSEXP, SEXP codesSEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP firthSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP block_sizeSEXP, SEXP traceSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xt(xtSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type codes(codesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< bool >::type trace(traceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_fit_sparse(xt, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_evaluate_dense
+Rcpp::List vglm_evaluate_dense(Rcpp::NumericMatrix x, Rcpp::IntegerVector codes, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericMatrix offset, Rcpp::List constraints, std::string family, int K, int reference, Rcpp::NumericVector coefficients, int block_size);
+RcppExport SEXP _fastglm_vglm_evaluate_dense(SEXP xSEXP, SEXP codesSEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP coefficientsSEXP, SEXP block_sizeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type codes(codesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type coefficients(coefficientsSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_evaluate_dense(x, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_evaluate_sparse
+Rcpp::List vglm_evaluate_sparse(SEXP xt, int first, int last, Rcpp::IntegerVector codes, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericMatrix offset, Rcpp::List constraints, std::string family, int K, int reference, Rcpp::NumericVector coefficients, int block_size);
+RcppExport SEXP _fastglm_vglm_evaluate_sparse(SEXP xtSEXP, SEXP firstSEXP, SEXP lastSEXP, SEXP codesSEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP coefficientsSEXP, SEXP block_sizeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xt(xtSEXP);
+    Rcpp::traits::input_parameter< int >::type first(firstSEXP);
+    Rcpp::traits::input_parameter< int >::type last(lastSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type codes(codesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type coefficients(coefficientsSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_evaluate_sparse(xt, first, last, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_fit_big
+Rcpp::List vglm_fit_big(SEXP x, Rcpp::IntegerVector codes, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericMatrix offset, Rcpp::List constraints, std::string family, int K, int reference, bool firth, double tol, int maxit, int block_size, bool trace, Rcpp::List control);
+RcppExport SEXP _fastglm_vglm_fit_big(SEXP xSEXP, SEXP codesSEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP firthSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP block_sizeSEXP, SEXP traceSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type codes(codesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< bool >::type trace(traceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_fit_big(x, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_evaluate_big
+Rcpp::List vglm_evaluate_big(SEXP x, int first, int last, Rcpp::IntegerVector codes, Rcpp::NumericMatrix counts, Rcpp::NumericVector weights, Rcpp::NumericMatrix offset, Rcpp::List constraints, std::string family, int K, int reference, Rcpp::NumericVector coefficients, int block_size);
+RcppExport SEXP _fastglm_vglm_evaluate_big(SEXP xSEXP, SEXP firstSEXP, SEXP lastSEXP, SEXP codesSEXP, SEXP countsSEXP, SEXP weightsSEXP, SEXP offsetSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP coefficientsSEXP, SEXP block_sizeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type x(xSEXP);
+    Rcpp::traits::input_parameter< int >::type first(firstSEXP);
+    Rcpp::traits::input_parameter< int >::type last(lastSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type codes(codesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type counts(countsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type coefficients(coefficientsSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_evaluate_big(x, first, last, codes, counts, weights, offset, constraints, family, K, reference, coefficients, block_size));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_fit_source
+Rcpp::List vglm_fit_source(Rcpp::Function fetch, int n_chunks, int p, Rcpp::NumericVector totals, int intercept, double value, Rcpp::List constraints, std::string family, int K, int reference, bool firth, double tol, int maxit, int block_size, bool trace, Rcpp::List control);
+RcppExport SEXP _fastglm_vglm_fit_source(SEXP fetchSEXP, SEXP n_chunksSEXP, SEXP pSEXP, SEXP totalsSEXP, SEXP interceptSEXP, SEXP valueSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP firthSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP block_sizeSEXP, SEXP traceSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::Function >::type fetch(fetchSEXP);
+    Rcpp::traits::input_parameter< int >::type n_chunks(n_chunksSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type totals(totalsSEXP);
+    Rcpp::traits::input_parameter< int >::type intercept(interceptSEXP);
+    Rcpp::traits::input_parameter< double >::type value(valueSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< bool >::type firth(firthSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    Rcpp::traits::input_parameter< bool >::type trace(traceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_fit_source(fetch, n_chunks, p, totals, intercept, value, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vglm_evaluate_source
+Rcpp::List vglm_evaluate_source(Rcpp::List block, Rcpp::List constraints, std::string family, int K, int reference, Rcpp::NumericVector coefficients, int block_size);
+RcppExport SEXP _fastglm_vglm_evaluate_source(SEXP blockSEXP, SEXP constraintsSEXP, SEXP familySEXP, SEXP KSEXP, SEXP referenceSEXP, SEXP coefficientsSEXP, SEXP block_sizeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type block(blockSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type constraints(constraintsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type coefficients(coefficientsSEXP);
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    rcpp_result_gen = Rcpp::wrap(vglm_evaluate_source(block, constraints, family, K, reference, coefficients, block_size));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepare_glm_constant
 SEXP prepare_glm_constant(NumericMatrix x, NumericVector weights, bool leverage, int code);
 RcppExport SEXP _fastglm_prepare_glm_constant(SEXP xSEXP, SEXP weightsSEXP, SEXP leverageSEXP, SEXP codeSEXP) {
@@ -987,6 +1190,15 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_ordinal_stream_native_fit", (DL_FUNC) &_fastglm_ordinal_stream_native_fit, 16},
     {"_fastglm_ordinal_partial_stream_native_evaluate", (DL_FUNC) &_fastglm_ordinal_partial_stream_native_evaluate, 10},
     {"_fastglm_ordinal_partial_stream_native_fit", (DL_FUNC) &_fastglm_ordinal_partial_stream_native_fit, 17},
+    {"_fastglm_vglm_family_eval", (DL_FUNC) &_fastglm_vglm_family_eval, 8},
+    {"_fastglm_vglm_fit_dense", (DL_FUNC) &_fastglm_vglm_fit_dense, 15},
+    {"_fastglm_vglm_fit_sparse", (DL_FUNC) &_fastglm_vglm_fit_sparse, 15},
+    {"_fastglm_vglm_evaluate_dense", (DL_FUNC) &_fastglm_vglm_evaluate_dense, 11},
+    {"_fastglm_vglm_evaluate_sparse", (DL_FUNC) &_fastglm_vglm_evaluate_sparse, 13},
+    {"_fastglm_vglm_fit_big", (DL_FUNC) &_fastglm_vglm_fit_big, 15},
+    {"_fastglm_vglm_evaluate_big", (DL_FUNC) &_fastglm_vglm_evaluate_big, 13},
+    {"_fastglm_vglm_fit_source", (DL_FUNC) &_fastglm_vglm_fit_source, 16},
+    {"_fastglm_vglm_evaluate_source", (DL_FUNC) &_fastglm_vglm_evaluate_source, 7},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
     {"_fastglm_validate_glm_vectors", (DL_FUNC) &_fastglm_validate_glm_vectors, 3},
     {"colmax_big",         (DL_FUNC) &colmax_big,         1},

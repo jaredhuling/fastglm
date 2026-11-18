@@ -53,6 +53,8 @@ Suggests:
     DBI,
     RSQLite,
     numDeriv,
+    nnet,
+    VGAM,
     arrow
 Config/testthat/edition: 3
 RoxygenNote: 7.3.3

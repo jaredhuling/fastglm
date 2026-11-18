@@ -73,3 +73,27 @@ glance.fastglm_zi <- glance.fastglm_hurdle
 #' @exportS3Method broom::glance fastglm_truncated
 #' @rdname fastglm-tidy
 glance.fastglm_truncated <- glance.fastglm_hurdle
+#' @exportS3Method broom::tidy fastglm_vglm
+#' @rdname fastglm-tidy
+tidy.fastglm_vglm <- function(x,conf.int=FALSE,conf.level=.95,exponentiate=FALSE,...) {
+    tab <- summary(x)$coefficients
+    M <- length(x$levels)-1L
+    design <- .vglm_design_names(x)
+    out <- data.frame(term=rep(design,each=M),
+                      y.level=rep(setdiff(x$levels,x$reference),times=length(design)),
+                      estimate=tab[,1],std.error=tab[,2],statistic=tab[,3],
+                      p.value=tab[,4],row.names=NULL)
+    if(conf.int) {
+        ci <- confint(x,level=conf.level)
+        out$conf.low <- ci[,1];out$conf.high <- ci[,2]
+    }
+    if(exponentiate) for(nm in intersect(c("estimate","conf.low","conf.high"),names(out))) out[[nm]] <- exp(out[[nm]])
+    out
+}
+#' @exportS3Method broom::glance fastglm_vglm
+#' @rdname fastglm-tidy
+glance.fastglm_vglm <- function(x,...) {
+    data.frame(nobs=nobs(x),df=x$rank,logLik=as.numeric(logLik(x)),AIC=AIC(x),BIC=BIC(x),
+        deviance=x$deviance,null.deviance=x$null.deviance,df.residual=x$df.residual,
+        converged=isTRUE(x$converged))
+}

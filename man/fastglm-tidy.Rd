@@ -12,6 +12,8 @@
 \alias{glance.fastglm_hurdle}
 \alias{glance.fastglm_zi}
 \alias{glance.fastglm_truncated}
+\alias{tidy.fastglm_vglm}
+\alias{glance.fastglm_vglm}
 \title{Tidy summaries for fastglm models}
 \usage{
 tidy.fastglm(x, conf.int = FALSE, conf.level = 0.95, exponentiate = FALSE, ...)
@@ -57,6 +59,16 @@ glance.fastglm_hurdle(x, ...)
 glance.fastglm_zi(x, ...)
 
 glance.fastglm_truncated(x, ...)
+
+tidy.fastglm_vglm(
+  x,
+  conf.int = FALSE,
+  conf.level = 0.95,
+  exponentiate = FALSE,
+  ...
+)
+
+glance.fastglm_vglm(x, ...)
 }
 \arguments{
 \item{x}{a fastglm model.}
