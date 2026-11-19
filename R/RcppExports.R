@@ -225,8 +225,24 @@ vglm_evaluate_source <- function(block, constraints, family, K, reference, coeff
     .Call(`_fastglm_vglm_evaluate_source`, block, constraints, family, K, reference, coefficients, block_size)
 }
 
+fastglm_crossprod_test <- function(X, w, block_rows, threads, scheme) {
+    .Call(`_fastglm_fastglm_crossprod_test`, X, w, block_rows, threads, scheme)
+}
+
 prepare_glm_constant <- function(x, weights, leverage, code) {
     .Call(`_fastglm_prepare_glm_constant`, x, weights, leverage, code)
+}
+
+fastglm_set_threads_cpp <- function(n) {
+    .Call(`_fastglm_fastglm_set_threads_cpp`, n)
+}
+
+fastglm_has_openmp_cpp <- function() {
+    .Call(`_fastglm_fastglm_has_openmp_cpp`)
+}
+
+fastglm_logical_cores_cpp <- function() {
+    .Call(`_fastglm_fastglm_logical_cores_cpp`)
 }
 
 validate_glm_vectors <- function(y, weights, offset) {

@@ -21,6 +21,7 @@ BugReports: https://github.com/jaredhuling/fastglm/issues
 URL: https://github.com/jaredhuling/fastglm, https://jaredhuling.org/fastglm/
 License: GPL (>= 2)
 Encoding: UTF-8
+SystemRequirements: OpenMP (optional)
 Depends:
     R (>= 4.1.0)
 Imports:
@@ -28,7 +29,8 @@ Imports:
     bigmemory,
     methods,
     Matrix,
-    Formula
+    Formula,
+    parallel
 LinkingTo:
     Rcpp, 
     RcppEigen,

@@ -1,5 +1,10 @@
 .onLoad <- function(libname, pkgname)
 {
+    ## Thread setting for the compiled code: the fastglm.threads option when
+    ## set, otherwise the default. No warning at load.
+    fastglm_set_threads_cpp(tryCatch(.fastglm_resolve_threads(NULL),
+                                     error = function(e) 1L))
+
     if (requireNamespace("sandwich", quietly = TRUE))
     {
         sw <- asNamespace("sandwich")

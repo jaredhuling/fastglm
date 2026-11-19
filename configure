@@ -1,0 +1,79 @@
+#!/bin/sh
+# Writes src/Makevars from src/Makevars.in with the OpenMP flags for this
+# platform. Without OpenMP the package builds serially (one thread).
+#
+# Linux and other platforms: use R's own $(SHLIB_OPENMP_CXXFLAGS), which is
+# empty when R was built without OpenMP.
+# macOS: CRAN's R uses Apple clang and leaves $(SHLIB_OPENMP_CXXFLAGS) empty,
+# so probe for "-Xclang -fopenmp" linked against the libomp shipped in R's own
+# lib directory. Never link a second OpenMP runtime (for example Homebrew's).
+# R ships libomp.dylib but not omp.h; when the header is absent, the probe and
+# inst/include/parallel_reduce.h declare the OpenMP functions they call.
+#
+# Setting FASTGLM_DISABLE_OPENMP=1 forces a serial build.
+
+: ${R_HOME=`R RHOME`}
+if test -z "${R_HOME}"; then
+    echo "fastglm: could not determine R_HOME" >&2
+    exit 1
+fi
+RBIN="${R_HOME}/bin/R"
+
+OPENMP_CXXFLAGS=""
+OPENMP_LIBS=""
+
+if test "${FASTGLM_DISABLE_OPENMP}" = "1"; then
+    echo "fastglm: FASTGLM_DISABLE_OPENMP=1; building without threads"
+else
+    case "`uname -s`" in
+        Darwin)
+            CXX=`"${RBIN}" CMD config CXX17`
+            if test -z "${CXX}"; then
+                CXX=`"${RBIN}" CMD config CXX`
+            fi
+            CXXSTD=`"${RBIN}" CMD config CXX17STD`
+            CXXFLAGS=`"${RBIN}" CMD config CXX17FLAGS`
+            CPPFLAGS=`"${RBIN}" CMD config CPPFLAGS`
+            LDFLAGS=`"${RBIN}" CMD config LDFLAGS`
+            cat > conftest_omp.cpp <<'EOT'
+#if __has_include(<omp.h>)
+#include <omp.h>
+#else
+extern "C" int omp_get_num_threads(void);
+#endif
+int main() {
+    int n = 0;
+#pragma omp parallel reduction(+:n)
+    n += omp_get_num_threads() > 0 ? 1 : 0;
+    return n > 0 ? 0 : 1;
+}
+EOT
+            echo "fastglm: checking for OpenMP with -Xclang -fopenmp and ${R_HOME}/lib/libomp.dylib"
+            # Link R's libomp by its full path, with LDFLAGS first as in R's
+            # own link rule, so that no other libomp on the -L path is used.
+            if test -f "${R_HOME}/lib/libomp.dylib" \
+               && ${CXX} ${CXXSTD} ${CPPFLAGS} -I"${R_HOME}/include" -Xclang -fopenmp ${CXXFLAGS} \
+                   conftest_omp.cpp -o conftest_omp \
+                   ${LDFLAGS} "${R_HOME}/lib/libomp.dylib" >/dev/null 2>&1 \
+               && ./conftest_omp >/dev/null 2>&1; then
+                OPENMP_CXXFLAGS="-Xclang -fopenmp"
+                OPENMP_LIBS='"$(R_HOME)/lib/libomp.dylib"'
+                echo "fastglm: OpenMP found; building with threads"
+            else
+                echo "fastglm: OpenMP not found; building without threads"
+            fi
+            rm -f conftest_omp.cpp conftest_omp
+            rm -rf conftest_omp.dSYM
+            ;;
+        *)
+            OPENMP_CXXFLAGS='$(SHLIB_OPENMP_CXXFLAGS)'
+            OPENMP_LIBS='$(SHLIB_OPENMP_CXXFLAGS)'
+            ;;
+    esac
+fi
+
+sed -e "s|@OPENMP_CXXFLAGS@|${OPENMP_CXXFLAGS}|" \
+    -e "s|@OPENMP_LIBS@|${OPENMP_LIBS}|" \
+    src/Makevars.in > src/Makevars
+
+exit 0

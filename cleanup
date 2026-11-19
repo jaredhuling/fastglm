@@ -1,0 +1,4 @@
+#!/bin/sh
+# Removes the files that configure generates.
+rm -f src/Makevars conftest_omp.cpp conftest_omp
+rm -rf conftest_omp.dSYM

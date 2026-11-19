@@ -1157,6 +1157,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fastglm_crossprod_test
+Rcpp::List fastglm_crossprod_test(const Eigen::MatrixXd& X, const Eigen::VectorXd& w, int block_rows, int threads, std::string scheme);
+RcppExport SEXP _fastglm_fastglm_crossprod_test(SEXP XSEXP, SEXP wSEXP, SEXP block_rowsSEXP, SEXP threadsSEXP, SEXP schemeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Eigen::MatrixXd& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const Eigen::VectorXd& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< int >::type block_rows(block_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type scheme(schemeSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_crossprod_test(X, w, block_rows, threads, scheme));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepare_glm_constant
 SEXP prepare_glm_constant(NumericMatrix x, NumericVector weights, bool leverage, int code);
 RcppExport SEXP _fastglm_prepare_glm_constant(SEXP xSEXP, SEXP weightsSEXP, SEXP leverageSEXP, SEXP codeSEXP) {
@@ -1168,6 +1183,37 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type leverage(leverageSEXP);
     Rcpp::traits::input_parameter< int >::type code(codeSEXP);
     rcpp_result_gen = Rcpp::wrap(prepare_glm_constant(x, weights, leverage, code));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fastglm_set_threads_cpp
+int fastglm_set_threads_cpp(int n);
+RcppExport SEXP _fastglm_fastglm_set_threads_cpp(SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_set_threads_cpp(n));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fastglm_has_openmp_cpp
+bool fastglm_has_openmp_cpp();
+RcppExport SEXP _fastglm_fastglm_has_openmp_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(fastglm_has_openmp_cpp());
+    return rcpp_result_gen;
+END_RCPP
+}
+// fastglm_logical_cores_cpp
+int fastglm_logical_cores_cpp();
+RcppExport SEXP _fastglm_fastglm_logical_cores_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(fastglm_logical_cores_cpp());
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1249,7 +1295,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_vglm_evaluate_big", (DL_FUNC) &_fastglm_vglm_evaluate_big, 13},
     {"_fastglm_vglm_fit_source", (DL_FUNC) &_fastglm_vglm_fit_source, 16},
     {"_fastglm_vglm_evaluate_source", (DL_FUNC) &_fastglm_vglm_evaluate_source, 7},
+    {"_fastglm_fastglm_crossprod_test", (DL_FUNC) &_fastglm_fastglm_crossprod_test, 5},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
+    {"_fastglm_fastglm_set_threads_cpp", (DL_FUNC) &_fastglm_fastglm_set_threads_cpp, 1},
+    {"_fastglm_fastglm_has_openmp_cpp", (DL_FUNC) &_fastglm_fastglm_has_openmp_cpp, 0},
+    {"_fastglm_fastglm_logical_cores_cpp", (DL_FUNC) &_fastglm_fastglm_logical_cores_cpp, 0},
     {"_fastglm_validate_glm_vectors", (DL_FUNC) &_fastglm_validate_glm_vectors, 3},
     {"colmax_big",         (DL_FUNC) &colmax_big,         1},
     {"colmin_big",         (DL_FUNC) &colmin_big,         1},
