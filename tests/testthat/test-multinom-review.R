@@ -90,6 +90,49 @@ test_that("unused predictor levels are dropped, unused response levels still err
                  "category 'C' has no observations")
 })
 
+test_that("user-set contrasts are kept unless levels are dropped", {
+    d <- review_frame(400L)
+    contrasts(d$f) <- contr.sum(3L)
+    fit <- expect_silent(fastglm_multinom(y ~ x1 + f, data = d))
+    ref <- fastglm_multinom(y ~ x1 + f, data = d,
+                            contrasts = list(f = "contr.sum"))
+    expect_max_diff(coef(fit), coef(ref), 1e-10)
+    expect_true(is.matrix(fit$contrasts$f) || identical(fit$contrasts$f, "contr.sum"))
+    expect_false(isTRUE(all.equal(coef(fit),
+                                  coef(fastglm_multinom(y ~ x1 + f, data = {
+                                      d2 <- d; contrasts(d2$f) <- NULL; d2 })))))
+    # A factor with unused levels loses a contrasts matrix it carried, with a
+    # warning, as model.frame() does.
+    expect_warning(fastglm_multinom(y ~ x1 + f, data = d, subset = f != "w"),
+                   "contrasts dropped from factor f")
+})
+
+test_that("fastglm_ordinal dispatches on a formula named formula", {
+    set.seed(91)
+    x <- rnorm(150)
+    y <- ordered(cut(0.5 * x + rlogis(150), c(-Inf, -0.5, 0.7, Inf),
+                     labels = c("low", "middle", "high")))
+    a <- fastglm_ordinal(y ~ x)
+    b <- fastglm_ordinal(formula = y ~ x)
+    expect_max_diff(coef(b), coef(a), 1e-12)
+    expect_error(fastglm_ordinal(y = y), "supply a design matrix or model formula")
+})
+
+test_that("a reloaded big.matrix fastglm fit stops clearly instead of crashing", {
+    skip_if_not_installed("bigmemory")
+    set.seed(3)
+    x <- cbind(1, matrix(rnorm(400), 200))
+    y <- rbinom(200, 1, 0.4)
+    f <- fastglm(bigmemory::as.big.matrix(x), y, family = binomial(), method = 3L)
+    tf <- tempfile(fileext = ".rds")
+    on.exit(unlink(tf))
+    saveRDS(f, tf)
+    f2 <- readRDS(tf)
+    expect_error(fastglm_vcov(f2, "HC0"), "no longer available")
+    expect_error(model.matrix(f2), "no longer available")
+    expect_equal(coef(f2), coef(f))
+})
+
 test_that("individual-data Pearson residuals scale by the square root of the weight", {
     d <- review_frame(150L)
     w <- runif(150L, 0.5, 3)

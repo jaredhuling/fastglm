@@ -118,9 +118,18 @@
 * For a count-matrix (grouped) response, the deviance and null deviance of a
   multinomial fit subtract the saturated log likelihood, as for a grouped
   binomial `glm()`; the log likelihood, AIC, and BIC are unchanged. In formula
-  fits, unused levels of factor predictors are dropped, as in `glm()`.
+  fits, unused levels of factor predictors are dropped, as in `glm()`; only
+  factors with unused levels are changed, so contrasts set on the others are
+  kept, and a factor that loses its contrasts by dropping levels gives a
+  warning, as `model.frame()` does.
 
 ## Other changes
+
+* `fastglm_ordinal(formula = y ~ x, ...)` now works; previously only a
+  formula given as the first, unnamed argument was dispatched.
+* A `fastglm()` fit to a `big.matrix` that was saved and reloaded (the
+  `big.matrix` does not survive `saveRDS()`) now stops with an error in
+  `model.matrix()` and `fastglm_vcov()` instead of crashing R.
 
 * Printed calls show the fitting function without the `fastglm::` prefix,
   as `glm()` does; the stored call keeps it, so `update()` works when the

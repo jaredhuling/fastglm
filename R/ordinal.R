@@ -106,7 +106,20 @@
 #' head(predict(fit))
 #' @md
 #' @export
-fastglm_ordinal <- function(x, ...) UseMethod("fastglm_ordinal")
+fastglm_ordinal <- function(x, ...) {
+    # S3 dispatch is on the first argument, so a call that names the formula
+    # (fastglm_ordinal(formula = y ~ x, ...)) is rewritten with it as x.
+    if (missing(x)) {
+        mc <- match.call(expand.dots = TRUE)
+        if (is.null(mc$formula))
+            stop("supply a design matrix or model formula", call. = FALSE)
+        mc$x <- mc$formula
+        mc$formula <- NULL
+        mc[[1L]] <- quote(fastglm::fastglm_ordinal)
+        return(eval(mc, parent.frame()))
+    }
+    UseMethod("fastglm_ordinal")
+}
 
 #' @rdname fastglm_ordinal
 #' @export

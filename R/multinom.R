@@ -417,11 +417,22 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
     mf[[1L]] <- quote(stats::model.frame)
     # The response keeps all of its levels (an emptied category is an error
     # naming it); unused levels of the predictors are dropped, as in glm().
+    # As in model.frame(drop.unused.levels = TRUE), only factors that have
+    # unused levels are touched, so contrasts set on the others are kept, and
+    # a contrasts attribute lost by dropping levels is reported.
     mf$drop.unused.levels <- FALSE
     mf <- eval(mf, parent.frame())
     terms <- attr(mf, "terms")
-    for (j in seq_along(mf)[-1L])
-        if (is.factor(mf[[j]])) mf[[j]] <- droplevels(mf[[j]])
+    for (j in seq_along(mf)[-1L]) {
+        x <- mf[[j]]
+        if (is.factor(x) && length(unique(x[!is.na(x)])) < length(levels(x))) {
+            ctr <- attr(x, "contrasts")
+            mf[[j]] <- x[, drop = TRUE]
+            if (!identical(attr(mf[[j]], "contrasts"), ctr))
+                warning(gettextf("fastglm_multinom: contrasts dropped from factor %s due to missing levels",
+                                 names(mf)[j]), call. = FALSE)
+        }
+    }
     y <- model.response(mf)
     if (is.null(y)) stop("fastglm_multinom: the formula needs a response", call. = FALSE)
     design <- model.matrix(terms, mf, contrasts.arg = contrasts)
@@ -750,7 +761,7 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
 # columns by name), is read in row blocks of at most `block` rows, so only one
 # block of it is in memory as an R matrix at a time.
 .vglm_linear <- function(x, B, M, cols = NULL, block = 8192L) {
-    .vglm_check_big(x)
+    .check_big_alive(x)
     Bm <- t(matrix(B, M))
     if (!inherits(x, "big.matrix") && is.null(cols)) return(as.matrix(x %*% Bm))
     n <- nrow(x)
@@ -773,7 +784,7 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
 
 # Stop clearly when a big.matrix's external pointer is null, as after the fit
 # was saved and reloaded: dereferencing it would crash R.
-.vglm_check_big <- function(x) {
+.check_big_alive <- function(x) {
     if (inherits(x, "big.matrix") && bigmemory::is.nil(x@address))
         stop("the big.matrix referenced by this fit is no longer available (for example after the fit was saved and reloaded); refit or supply newdata",
              call. = FALSE)

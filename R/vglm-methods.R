@@ -224,7 +224,7 @@ print.summary.fastglm_vglm <- function(x, digits = max(3L, getOption("digits") -
     M <- length(object$levels) - 1L
     if (is.null(newdata)) {
         x <- object$x
-        .vglm_check_big(x)
+        .check_big_alive(x)
         off <- object$offset
     } else if (!is.null(object$terms)) {
         if (!is.data.frame(newdata) && !is.list(newdata))
@@ -272,7 +272,7 @@ print.summary.fastglm_vglm <- function(x, digits = max(3L, getOption("digits") -
     }
     sparse <- inherits(x, "dgCMatrix")
     big <- inherits(x, "big.matrix")
-    .vglm_check_big(x)
+    .check_big_alive(x)
     if (!sparse && !big && (!is.matrix(x) || !is.numeric(x)))
         stop("'newdata' must be a numeric design matrix, a dgCMatrix, or a big.matrix for a matrix fit",
              call. = FALSE)

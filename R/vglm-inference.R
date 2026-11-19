@@ -26,7 +26,7 @@
              call. = FALSE)
     if (is.null(newdata)) {
         x <- object$x
-        .vglm_check_big(x)
+        .check_big_alive(x)
         # A sparse design is transposed once here, so that every block of rows
         # is a contiguous range of columns of xt.
         xt <- if (inherits(x, "dgCMatrix")) Matrix::t(x)
@@ -87,7 +87,7 @@
     parts <- .vglm_response_parts(y, object$levels)
     off <- dat$off[i, , drop = FALSE]
     if (inherits(dat$x, "big.matrix")) {
-        .vglm_check_big(dat$x)
+        .check_big_alive(dat$x)
         if (!length(i) || any(diff(i) != 1L))
             stop("big.matrix evaluation needs a contiguous, nonempty range of rows", call. = FALSE)
         # Only the block's rows are read into R; the compiled evaluator maps
@@ -223,7 +223,7 @@
     if (!is.numeric(block.size) || length(block.size) != 1L || !is.finite(block.size) || block.size < 1)
         stop("'block.size' must be a positive integer", call. = FALSE)
     block.size <- as.integer(block.size)
-    .vglm_check_big(object$x)
+    .check_big_alive(object$x)
     if (isTRUE(object$firth))
         stop("sandwich inference for adjusted scores is not implemented", call. = FALSE)
     if (is.null(object$cov.unscaled)) stop("covariance information was not retained", call. = FALSE)

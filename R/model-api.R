@@ -143,7 +143,12 @@ predict.fastglmFit <- function(object, newdata = NULL,
 
 #' @export
 model.matrix.fastglm <- function(object, ...) {
-    if (!is.null(object$x)) return(object$x)
+    # A big.matrix design does not survive saveRDS(); checking here makes
+    # every method that needs the design stop clearly instead of crashing R.
+    if (!is.null(object$x)) {
+        .check_big_alive(object$x)
+        return(object$x)
+    }
     if (is.null(object$terms)) stop("model matrix was not retained", call. = FALSE)
     stats::model.matrix(object$terms, model.frame(object), contrasts.arg = object$contrasts)
 }

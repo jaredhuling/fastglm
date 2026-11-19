@@ -44,6 +44,9 @@ test_that("reference bias reduction matches brglm2", {
     # brmultinom fits through a Poisson representation with one nuisance
     # parameter per row, so the simulated check uses n = 300 to stay fast.
     check(vglm_sim_data(300L, 3L, 4L, seed = 1L))
+    # On separated data the agreement depends on brglm2's own convergence
+    # near the boundary, so this external comparison is not run on CRAN.
+    skip_on_cran()
     check(vglm_separated_data())
 })
 
