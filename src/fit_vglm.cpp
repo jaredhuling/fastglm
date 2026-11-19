@@ -39,6 +39,11 @@ public:
     void score_information(const VglmBlock& block, MatrixXd& u, MatrixXd& W) const override {
         base_.score_information(block, u, W);
     }
+    int information_rank() const override { return base_.information_rank(); }
+    void score_information_lowrank(const VglmBlock& block, MatrixXd& u, MatrixXd& d,
+                                   MatrixXd& C) const override {
+        base_.score_information_lowrank(block, u, d, C);
+    }
     void probabilities(const MatrixXd& eta, MatrixXd& P) const override {
         base_.probabilities(eta, P);
     }
@@ -177,6 +182,55 @@ inline void big_intercept(const BigDesign& b, int& intercept, double& value) {
     }
 }
 
+// The test-only engine controls (see vglm_fit_dense) from a control list.
+inline VglmOptions vglm_options(const Rcpp::List& control) {
+    VglmOptions opts;
+    if (control.containsElementNamed("force_mapping"))
+        opts.force_mapping = Rcpp::as<bool>(control["force_mapping"]);
+    if (control.containsElementNamed("force_pairwise"))
+        opts.force_pairwise = Rcpp::as<bool>(control["force_pairwise"]);
+    if (control.containsElementNamed("force_lowrank"))
+        opts.force_lowrank = Rcpp::as<bool>(control["force_lowrank"]);
+    if (control.containsElementNamed("lowrank_cap")) {
+        const double cap = Rcpp::as<double>(control["lowrank_cap"]);
+        if (!(cap >= 1) || cap != std::floor(cap) || cap > 1e15)
+            Rcpp::stop("lowrank_cap must be a positive integer");
+        opts.lowrank_cap = static_cast<std::int64_t>(cap);
+    }
+    if (control.containsElementNamed("cg_reject_confirmation")) {
+        const int k = Rcpp::as<int>(control["cg_reject_confirmation"]);
+        if (k < 0) Rcpp::stop("cg_reject_confirmation must be nonnegative");
+        opts.cg_reject_confirmation = k;
+    }
+    if (control.containsElementNamed("cg_reject_steps")) {
+        const int k = Rcpp::as<int>(control["cg_reject_steps"]);
+        if (k < 0) Rcpp::stop("cg_reject_steps must be nonnegative");
+        opts.cg_reject_steps = k;
+    }
+    if (control.containsElementNamed("product_cache_cap")) {
+        const double cap = Rcpp::as<double>(control["product_cache_cap"]);
+        if (!(cap >= 0) || cap != std::floor(cap) || cap > 1e15)
+            Rcpp::stop("product_cache_cap must be a nonnegative integer");
+        opts.product_cache_cap = static_cast<std::int64_t>(cap);
+    }
+    if (control.containsElementNamed("solver")) {
+        SEXP solver = control["solver"];
+        if (TYPEOF(solver) != STRSXP || Rf_length(solver) != 1 ||
+            STRING_ELT(solver, 0) == NA_STRING)
+            Rcpp::stop("solver must be \"exact\" or \"cg\"");
+        opts.solver = Rcpp::as<std::string>(solver);
+        if (opts.solver != "exact" && opts.solver != "cg")
+            Rcpp::stop("solver must be \"exact\" or \"cg\"");
+    }
+    if (control.containsElementNamed("max_products")) {
+        const double cap = Rcpp::as<double>(control["max_products"]);
+        if (!std::isfinite(cap) || cap != std::floor(cap) || cap > 1e9)
+            Rcpp::stop("max_products must be an integer (negative for the default)");
+        opts.max_products = cap < 0 ? -1 : static_cast<int>(cap);
+    }
+    return opts;
+}
+
 // The fit for any data representation: starting values and the test-only
 // controls, then the engine. known_totals, when given, are the weighted
 // category totals (otherwise computed by a pass over the data).
@@ -185,9 +239,7 @@ Rcpp::List vglm_fit_data(const Data& data, const VectorFamily& fam,
                          const std::vector<MatrixXd>& H, int intercept, double value,
                          int K, bool firth, double tol, int maxit, bool trace,
                          const Rcpp::List& control, const VectorXd* known_totals = nullptr) {
-    bool force_mapping = false;
-    if (control.containsElementNamed("force_mapping"))
-        force_mapping = Rcpp::as<bool>(control["force_mapping"]);
+    const VglmOptions opts = vglm_options(control);
     // A streamed source supplies the totals from its preliminary pass, so
     // that the engine does not read the source once more for them.
     const VectorXd totals = known_totals ? *known_totals : vglm_category_totals(data, K);
@@ -196,9 +248,9 @@ Rcpp::List vglm_fit_data(const Data& data, const VectorFamily& fam,
         const double bound = Rcpp::as<double>(control["step_bound"]);
         if (!(bound >= 0)) Rcpp::stop("step_bound must be nonnegative");
         const StepBoundFamily bounded(fam, bound);
-        return vglm_fit(data, bounded, H, start, firth, tol, maxit, trace, force_mapping);
+        return vglm_fit(data, bounded, H, start, firth, tol, maxit, trace, opts);
     }
-    return vglm_fit(data, fam, H, start, firth, tol, maxit, trace, force_mapping);
+    return vglm_fit(data, fam, H, start, firth, tol, maxit, trace, opts);
 }
 
 // Per-row evaluation for any data representation (see vglm_evaluate_dense).
@@ -239,11 +291,88 @@ Rcpp::List vglm_evaluate_data(const Data& data, const VectorFamily& fam,
         Rcpp::Named("P") = Rcpp::wrap(P_all),
         Rcpp::Named("loglik_rows") = Rcpp::wrap(ll_all));
 }
+// The body of the test-only exports vglm_info_product_dense and
+// vglm_info_product_sparse.
+template <class Data>
+Rcpp::List vglm_info_product_data(const Data& data, const VectorFamily& fam,
+                                  const std::vector<MatrixXd>& H,
+                                  const Rcpp::NumericVector& beta, const Rcpp::NumericVector& v,
+                                  const Rcpp::List& control,
+                                  const Rcpp::Nullable<Rcpp::NumericVector>& r) {
+    const VglmOptions opts = vglm_options(control);
+    const VglmLayout L(H, fam.M(), opts.force_mapping);
+    if (beta.size() != L.P || v.size() != L.P)
+        Rcpp::stop("beta and v must have one entry per constrained coefficient");
+    const VectorXd b = Rcpp::as<VectorXd>(beta), vv = Rcpp::as<VectorXd>(v);
+    VglmState full, diagonal;
+    double fraction;
+    MatrixXd R, Rdiag;
+    if (vglm_pass(data, fam, L, opts, b, nullptr, full, fraction, &R) != VGLM_PASS_OK ||
+        vglm_pass(data, fam, L, opts, b, nullptr, diagonal, fraction, &Rdiag,
+                  VGLM_DIAGONAL) != VGLM_PASS_OK)
+        Rcpp::stop("the model cannot be evaluated at beta");
+    VectorXd product;
+    if (vglm_info_product(data, fam, L, opts, b, vv, product) != VGLM_PASS_OK)
+        Rcpp::stop("the information-vector product cannot be evaluated at beta");
+    // The same product through a product cache: one product fills it, the
+    // second reads it (with product_cache_cap 0, both evaluate the model type).
+    VglmProductCache cache;
+    cache.reset(opts.product_cache_cap);
+    VectorXd filling, cached;
+    if (vglm_info_product(data, fam, L, opts, b, vv, filling, &cache) != VGLM_PASS_OK ||
+        vglm_info_product(data, fam, L, opts, b, vv, cached, &cache) != VGLM_PASS_OK)
+        Rcpp::stop("the information-vector product cannot be evaluated at beta");
+    const bool cache_used = cache.filled && !cache.disabled;
+    const std::vector<bool> aliased = vglm_structural_aliased(R, L);
+    // The diagonal pass as a P by P matrix (assembled from the M blocks
+    // under an identity layout).
+    MatrixXd Idiag = diagonal.I;
+    if (L.identity) {
+        Idiag.setZero(L.P, L.P);
+        for (int a = 0; a < L.M; ++a)
+            for (int l = 0; l < L.p; ++l)
+                for (int k = 0; k < L.p; ++k)
+                    Idiag(L.start[k] + a, L.start[l] + a) = diagonal.Gdiag[a](k, l);
+    }
+    Rcpp::List out = Rcpp::List::create(
+        Rcpp::Named("product") = Rcpp::wrap(product),
+        Rcpp::Named("product.cached") = Rcpp::wrap(cached),
+        Rcpp::Named("cache.used") = cache_used,
+        Rcpp::Named("information") = Rcpp::wrap(full.I),
+        Rcpp::Named("score") = Rcpp::wrap(full.U),
+        Rcpp::Named("loglik") = full.loglik,
+        Rcpp::Named("pmin") = full.pmin,
+        Rcpp::Named("pmax") = full.pmax,
+        Rcpp::Named("structure") = Rcpp::wrap(R),
+        Rcpp::Named("information.diagonal") = Rcpp::wrap(Idiag),
+        Rcpp::Named("score.diagonal") = Rcpp::wrap(diagonal.U),
+        Rcpp::Named("loglik.diagonal") = diagonal.loglik,
+        Rcpp::Named("pmin.diagonal") = diagonal.pmin,
+        Rcpp::Named("pmax.diagonal") = diagonal.pmax,
+        Rcpp::Named("structure.diagonal") = Rcpp::wrap(Rdiag),
+        Rcpp::Named("diagonal.I.rows") = static_cast<int>(diagonal.I.rows()),
+        Rcpp::Named("aliased") = Rcpp::wrap(aliased));
+    if (r.isNotNull()) {
+        const VectorXd rv = Rcpp::as<VectorXd>(Rcpp::NumericVector(r.get()));
+        if (rv.size() != L.P) Rcpp::stop("r must have one entry per constrained coefficient");
+        VglmPreconditioner pre;
+        const bool ok = pre.compute(diagonal, aliased, L);
+        VectorXd z;
+        if (ok) pre.apply(rv, z);
+        else z = VectorXd::Constant(L.P, NA_REAL);
+        out["precond.ok"] = ok;
+        out["precond.apply"] = Rcpp::wrap(z);
+    }
+    return out;
+}
 } // namespace fglm_vglm
 
 // Evaluate every block method of a model type on one block, for tests.
 // codes is used when counts is 0 by 0; A may be 0 by 0, in which case the
-// bias terms are computed with A = 0.
+// bias terms are computed with A = 0. When the model type has a low-rank
+// information structure (information_rank() > 0), the result also holds
+// u_lowrank (b by M), d (b by M), and C (b by rM) of
+// score_information_lowrank.
 // [[Rcpp::export]]
 Rcpp::List vglm_family_eval(std::string family, int K, int reference,
                             Rcpp::NumericMatrix eta, Rcpp::IntegerVector codes,
@@ -276,13 +405,21 @@ Rcpp::List vglm_family_eval(std::string family, int K, int reference,
     fam->score_information(block, u, W);
     fam->probabilities(E, P);
     fam->bias_terms(block, Amat, t);
-    return Rcpp::List::create(
+    Rcpp::List out = Rcpp::List::create(
         Rcpp::Named("loglik_rows") = Rcpp::wrap(rows),
         Rcpp::Named("u") = Rcpp::wrap(u),
         Rcpp::Named("W") = Rcpp::wrap(W),
         Rcpp::Named("P") = Rcpp::wrap(P),
         Rcpp::Named("t") = Rcpp::wrap(t),
         Rcpp::Named("valid") = fam->valid(block));
+    if (fam->information_rank() > 0) {
+        MatrixXd ulr, d, C;
+        fam->score_information_lowrank(block, ulr, d, C);
+        out["u_lowrank"] = Rcpp::wrap(ulr);
+        out["d"] = Rcpp::wrap(d);
+        out["C"] = Rcpp::wrap(C);
+    }
+    return out;
 }
 
 // Fit a vector GLM to dense in-memory data (internal). codes holds 1-based
@@ -296,6 +433,27 @@ Rcpp::List vglm_family_eval(std::string family, int K, int reference,
 // linear predictor changes by more than step_bound (0 allows no step).
 // control may hold force_mapping (test only): apply the constraint mapping
 // even when every constraint matrix is the identity.
+// control may hold force_pairwise (test only): accumulate the information
+// pair by pair even when the model type provides a low-rank structure.
+// control may hold force_lowrank (test only): use the low-rank structure even
+// when K - 1 is below the engine's threshold (force_pairwise takes
+// precedence).
+// control may hold lowrank_cap (test only, positive integer): the largest
+// number of entries of the low-rank matrix Z per sub-block of rows (default
+// 4194304); a cap below one row's p(K - 1) entries processes one row at a time.
+// control may hold solver ("exact", the default, or "cg": the truncated
+// Newton solver, not available with firth) and max_products (an integer cap
+// on the information-vector products of one conjugate gradient solve;
+// negative, the default, means min(2 rank, 250)), and, test only,
+// product_cache_cap (nonnegative integer, doubles; 0 evaluates the model type
+// in every product) and cg_reject_confirmation (the number of exact
+// convergence confirmations of the CG solver to treat as failed) and
+// cg_reject_steps (the number of CG steps whose halving is treated as failed,
+// so that the iteration is repeated with the exact step).
+// The result's accumulation is "lowrank" when some pass that formed the full
+// information used the low-rank accumulation and "pairwise" otherwise;
+// solver is the solver used and products the number of information-vector
+// products (each a pass over the data, counted in passes).
 // [[Rcpp::export]]
 Rcpp::List vglm_fit_dense(Rcpp::NumericMatrix x, Rcpp::IntegerVector codes,
                           Rcpp::NumericMatrix counts, Rcpp::NumericVector weights,
@@ -318,6 +476,64 @@ Rcpp::List vglm_fit_dense(Rcpp::NumericMatrix x, Rcpp::IntegerVector codes,
     fglm_vglm::dense_intercept(x, intercept, value);
     return fglm_vglm::vglm_fit_data(data, *fam, H, intercept, value, K, firth, tol, maxit,
                                     trace, control);
+}
+
+// Test only: the information-vector product, the full and diagonal passes,
+// and the preconditioner at the coefficients beta, for dense data. The
+// arguments up to reference are those of vglm_fit_dense; beta and v have
+// one entry per constrained coefficient, and control honors force_mapping,
+// force_pairwise, force_lowrank, and lowrank_cap. The result holds product
+// (I(beta) v); product.cached, the same product read from a product cache
+// filled by a first product (cache.used is FALSE when product_cache_cap in
+// control disabled the cache); information, score, loglik, pmin, pmax, and structure (the
+// design factor R) of a VGLM_FULL pass at beta; the same of a VGLM_DIAGONAL
+// pass with the suffix ".diagonal", where information.diagonal is assembled
+// as a P by P matrix here (under an identity layout the pass keeps only the
+// M blocks); and aliased (the structural aliasing of the design). When r
+// is given, it also holds precond.ok (whether the preconditioner built from
+// the diagonal pass and aliased is positive definite) and precond.apply,
+// the preconditioner applied to r (NA when precond.ok is FALSE).
+// [[Rcpp::export]]
+Rcpp::List vglm_info_product_dense(Rcpp::NumericMatrix x, Rcpp::IntegerVector codes,
+                                   Rcpp::NumericMatrix counts, Rcpp::NumericVector weights,
+                                   Rcpp::NumericMatrix offset, Rcpp::List constraints,
+                                   std::string family, int K, int reference,
+                                   Rcpp::NumericVector beta, Rcpp::NumericVector v,
+                                   int block_size, Rcpp::List control,
+                                   Rcpp::Nullable<Rcpp::NumericVector> r = R_NilValue) {
+    using namespace fglm_vglm;
+    std::unique_ptr<VectorFamily> fam = make_vector_family(family, K, reference - 1, Rcpp::List());
+    const int n = x.nrow(), p = x.ncol(), M = fam->M();
+    const bool grouped = counts.nrow() != 0 || counts.ncol() != 0;
+    validate_vglm_inputs(n, p, codes, counts, weights, offset, constraints, K, M, block_size);
+    validate_dense_design(x);
+    const DenseVglmData data(x.begin(), n, p, grouped ? nullptr : codes.begin(),
+                             grouped ? counts.begin() : nullptr, K, weights.begin(),
+                             offset.begin(), M, block_size);
+    return vglm_info_product_data(data, *fam, vglm_constraints(constraints), beta, v, control, r);
+}
+
+// Test only: vglm_info_product_dense for a sparse design, given as its
+// transpose xt (a p by n dgCMatrix) as for vglm_fit_sparse.
+// [[Rcpp::export]]
+Rcpp::List vglm_info_product_sparse(SEXP xt, Rcpp::IntegerVector codes,
+                                    Rcpp::NumericMatrix counts, Rcpp::NumericVector weights,
+                                    Rcpp::NumericMatrix offset, Rcpp::List constraints,
+                                    std::string family, int K, int reference,
+                                    Rcpp::NumericVector beta, Rcpp::NumericVector v,
+                                    int block_size, Rcpp::List control,
+                                    Rcpp::Nullable<Rcpp::NumericVector> r = R_NilValue) {
+    using namespace fglm_vglm;
+    std::unique_ptr<VectorFamily> fam = make_vector_family(family, K, reference - 1, Rcpp::List());
+    const SparseTransposed st(xt);
+    const int n = st.n(), p = st.p(), M = fam->M();
+    const bool grouped = counts.nrow() != 0 || counts.ncol() != 0;
+    validate_vglm_inputs(n, p, codes, counts, weights, offset, constraints, K, M, block_size);
+    const SparseVglmData data(st.xt.outerIndexPtr(), st.xt.innerIndexPtr(), st.xt.valuePtr(),
+                              n, p, grouped ? nullptr : codes.begin(),
+                              grouped ? counts.begin() : nullptr, K, weights.begin(),
+                              offset.begin(), M, block_size);
+    return vglm_info_product_data(data, *fam, vglm_constraints(constraints), beta, v, control, r);
 }
 
 // Fit a vector GLM to a sparse design (internal). xt is the transpose of the

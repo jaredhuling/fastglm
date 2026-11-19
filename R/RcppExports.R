@@ -189,6 +189,14 @@ vglm_fit_dense <- function(x, codes, counts, weights, offset, constraints, famil
     .Call(`_fastglm_vglm_fit_dense`, x, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control)
 }
 
+vglm_info_product_dense <- function(x, codes, counts, weights, offset, constraints, family, K, reference, beta, v, block_size, control, r = NULL) {
+    .Call(`_fastglm_vglm_info_product_dense`, x, codes, counts, weights, offset, constraints, family, K, reference, beta, v, block_size, control, r)
+}
+
+vglm_info_product_sparse <- function(xt, codes, counts, weights, offset, constraints, family, K, reference, beta, v, block_size, control, r = NULL) {
+    .Call(`_fastglm_vglm_info_product_sparse`, xt, codes, counts, weights, offset, constraints, family, K, reference, beta, v, block_size, control, r)
+}
+
 vglm_fit_sparse <- function(xt, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control) {
     .Call(`_fastglm_vglm_fit_sparse`, xt, codes, counts, weights, offset, constraints, family, K, reference, firth, tol, maxit, block_size, trace, control)
 }

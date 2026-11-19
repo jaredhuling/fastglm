@@ -70,17 +70,35 @@ public:
         W.setZero(b, packed_size(M_));
         VectorXd pk(K_), p(M_);
         for (int i = 0; i < b; ++i) {
-            const double w = block.weights[i];
-            if (w == 0) continue;
-            probability_row(block.eta, i, pk);
-            for (int m = 0; m < M_; ++m) p[m] = pk[category(m)];
-            const double n = total(block, i), c = w * n;
-            for (int m = 0; m < M_; ++m)
-                u(i, m) = w * (response(block, i, category(m)) - n * p[m]);
+            double c;
+            if (!row_score(block, i, pk, p, u, c)) continue;
             for (int bb = 0; bb < M_; ++bb) {
                 for (int a = 0; a < bb; ++a)
                     W(i, pack_index(a, bb, M_)) = -c * p[a] * p[bb];
                 W(i, pack_index(bb, bb, M_)) = c * p[bb] * (1.0 - p[bb]);
+            }
+        }
+    }
+
+    // W_i = c (diag(p) - p p') with c = w n, so d_i = c p and C_i = sqrt(c) p
+    // (rank 1). Rows with c = 0 have zero u, d, and C.
+    int information_rank() const override { return 1; }
+
+    void score_information_lowrank(const VglmBlock& block, MatrixXd& u, MatrixXd& d,
+                                   MatrixXd& C) const override {
+        check(block);
+        const int b = block.rows();
+        u.setZero(b, M_);
+        d.setZero(b, M_);
+        C.setZero(b, M_);
+        VectorXd pk(K_), p(M_);
+        for (int i = 0; i < b; ++i) {
+            double c;
+            if (!row_score(block, i, pk, p, u, c)) continue;
+            const double root = std::sqrt(c);
+            for (int m = 0; m < M_; ++m) {
+                d(i, m) = c * p[m];
+                C(i, m) = root * p[m];
             }
         }
     }
@@ -159,6 +177,25 @@ private:
                 if (block.codes[i] < 1 || block.codes[i] > K_)
                     throw std::invalid_argument("response category code out of range");
         }
+    }
+
+    // The terms of row i shared by score_information and
+    // score_information_lowrank: the probabilities p of the non-reference
+    // categories (pk holds all K), row i of the score u, and c = w n, the
+    // scale of the row information W_i = c (diag(p) - p p'). Returns false,
+    // leaving p, u, and c unset, for a row of zero prior weight.
+    bool row_score(const VglmBlock& block, int i, VectorXd& pk, VectorXd& p, MatrixXd& u,
+                   double& c) const {
+        const double w = block.weights[i];
+        if (w == 0) return false;
+        probability_row(block.eta, i, pk);
+        const double n = total(block, i);
+        c = w * n;
+        for (int m = 0; m < M_; ++m) {
+            p[m] = pk[category(m)];
+            u(i, m) = w * (response(block, i, category(m)) - n * p[m]);
+        }
+        return true;
     }
 
     double response(const VglmBlock& block, int i, int k) const {

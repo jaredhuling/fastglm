@@ -2,10 +2,10 @@
 
 # Simulate a multinomial logit data set. Returns the design matrix with an
 # "(Intercept)" column and columns x1..xp, a factor response with levels
-# A, B, C, ..., and the n by K 0/1 indicator matrix of the response.
+# A, B, C, ... (C1, ..., CK when K > 26), and the n by K 0/1 indicator matrix of the response.
 vglm_sim_data <- function(n = 200L, p = 3L, K = 3L, seed = 1L) {
     set.seed(seed)
-    lev <- LETTERS[seq_len(K)]
+    lev <- if (K <= 26L) LETTERS[seq_len(K)] else paste0("C", seq_len(K))
     x <- cbind(1, matrix(rnorm(n * p), n, p))
     colnames(x) <- c("(Intercept)", paste0("x", seq_len(p)))
     beta <- matrix(rnorm((K - 1L) * (p + 1L), sd = 0.5), K - 1L, p + 1L)

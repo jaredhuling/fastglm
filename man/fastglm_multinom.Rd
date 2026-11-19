@@ -127,7 +127,26 @@ numerical kernel. For a \code{\link[=fastglm_source]{fastglm_source()}} the kern
 source block, so it also bounds the rows handled at once inside a block,
 and the source's own block size sets how many rows are read at a time.}
 
-\item{control}{a named list of engine controls (for example \code{step_bound}).}
+\item{control}{a named list of engine controls (for example \code{step_bound}).
+\code{solver} chooses how each Fisher scoring step is solved: \code{"exact"}
+solves the full information system, \code{"cg"} uses a truncated Newton
+method (preconditioned conjugate gradients on information-vector
+products), and \code{"auto"} (the default) uses \code{"cg"} when the design has at
+least 8 columns and the number of design columns times \code{K - 1} is large,
+and \code{"exact"} otherwise. The conjugate gradient solver does not form the
+full information during its conjugate gradient iterations. It forms it
+to confirm convergence, in the exact steps that follow, and for the
+returned \code{cov.unscaled}, so its peak memory is that of the exact solver.
+Convergence is declared by the same rule for both solvers, so the
+estimates agree to the convergence tolerance. The conjugate gradient
+solver can take more outer iterations than the exact solver, so \code{iter}
+and \code{maxit} counts may differ. \code{"auto"} uses the exact solver for Firth
+fits (\code{firth = TRUE}), and \code{"cg"} with \code{firth = TRUE} is an error. For a
+\code{\link[=fastglm_source]{fastglm_source()}}, \code{"auto"} is \code{"exact"}, and \code{"cg"} reads the whole
+source for every conjugate gradient step. The solver used is stored in
+the fit as \code{solver}, with the number of information-vector products as
+\code{products}. Under \code{"cg"}, \code{passes} also counts the information-vector
+products and the passes that confirm convergence.}
 
 \item{levels}{for a \code{\link[=fastglm_source]{fastglm_source()}}, the category labels in order. By
 default they are the levels of the prototype's factor response (a
@@ -147,7 +166,16 @@ An object of class \code{c("fastglm_multinom", "fastglm_vglm")} with
 \code{constraints}, \code{family}, \code{terms}, \code{xlevels}, \code{contrasts}, \code{call},
 \code{fitted.values} (an \code{n} by \code{K} matrix of probabilities), \code{y},
 \code{prior.weights}, \code{offset} (an \code{n} by \code{K - 1} matrix), \code{firth}, \code{rank},
-\code{aliased}, \code{separation}, and the design matrix \code{x}.
+\code{aliased}, \code{separation}, and the design matrix \code{x}, together with
+\itemize{
+\item \code{solver}: the solver used, \code{"exact"} or \code{"cg"} (see \code{control}).
+\item \code{products}: the number of information-vector products (0 under the
+exact solver).
+\item \code{accumulation}: how the information was accumulated, \code{"lowrank"} (the
+low-rank form used for dense designs with \code{K - 1} of at least 6) or
+\code{"pairwise"} (one weighted cross product per pair of linear
+predictors).
+}
 }
 \description{
 Fits a multinomial (baseline-category) logit model for a categorical
@@ -165,10 +193,13 @@ are one column per non-reference category (\code{offset} names in
 fit makes one preliminary pass for the category totals and the intercept
 column, then the passes of the engine, then a fit of the intercept-only
 model for \code{null.deviance}. \code{passes} counts the engine's passes for the
-model, as for in-memory fits: one at the starting values, which also
-finds aliased columns, and one per step length tried, so a fit without
-step halving makes \code{iter + 1} passes, and bias reduction adds one pass
-per iteration and one at the start (\verb{2 iter + 2}). \code{source.passes} counts
+model, as for in-memory fits. Under the exact solver there is one pass at
+the starting values, which also finds aliased columns, and one per step
+length tried, so a fit without step halving makes \code{iter + 1} passes, and
+bias reduction adds one pass per iteration and one at the start
+(\verb{2 iter + 2}). Under the conjugate gradient solver, \code{passes} also counts
+the information-vector products and the passes that confirm convergence,
+so it exceeds \code{iter + 1}. \code{source.passes} counts
 every pass over the source, including the preliminary pass and the
 intercept-only fit. The fit keeps the source, not its rows: fitted
 probabilities are not stored (\code{fitted.values}, \code{y}, \code{x}, \code{prior.weights},

@@ -56,6 +56,26 @@ public:
     virtual void score_information(const VglmBlock& block, MatrixXd& u,
                                    MatrixXd& W) const = 0;
 
+    // Optional structure of the row information. A return value r > 0 means
+    // that every W_i is diagonal minus rank r, W_i = diag(d_i) - C_i C_i'
+    // with C_i of M by r, and that score_information_lowrank is provided; 0
+    // (the default) means no such structure.
+    virtual int information_rank() const { return 0; }
+
+    // Row scores u (b x M, as in score_information) and the terms of the
+    // structured row information: d (b x M) holds d_i and C (b x rM) holds
+    // C_i, with column s * M + a holding C_i[a, s]. All include the prior
+    // weight, and rows that do not enter the likelihood have zero d and C.
+    // Called only when information_rank() > 0.
+    virtual void score_information_lowrank(const VglmBlock& block, MatrixXd& u,
+                                           MatrixXd& d, MatrixXd& C) const {
+        (void)block;
+        (void)u;
+        (void)d;
+        (void)C;
+        Rcpp::stop("this model type has no low-rank information structure");
+    }
+
     // Fitted category probabilities (b x K).
     virtual void probabilities(const MatrixXd& eta, MatrixXd& P) const = 0;
 

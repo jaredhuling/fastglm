@@ -91,6 +91,18 @@
   effects require `newdata`, and the bootstrap is not yet available (it
   is also unavailable for `big.matrix` fits). `fastglm_vcov()` offers
   the HC0 and HC1 types and cluster-robust versions for these fits.
+* `fastglm_multinom()` has a new `control = list(solver = )` option. With
+  `"cg"`, each Fisher scoring step is solved by preconditioned conjugate
+  gradients on information-vector products, so the full information is not
+  formed during the conjugate gradient iterations, which keeps fits fast when
+  the number of categories is large. The information is still formed to
+  confirm convergence, in the exact steps that follow, and for the returned
+  covariance, so peak memory is that of the exact solver. The default
+  `"auto"` uses it when the design has at least 8 columns and the number of
+  design columns times `K - 1` is large, and the exact solver otherwise and
+  for Firth fits (`"cg"` with `firth = TRUE` is an error). Convergence is
+  declared by the same rule, and the fit records the `solver` used, the
+  number of `products`, and the `accumulation` of the information.
 * The fit uses a general vector GLM engine: weighted cross products are
   accumulated for each pair of linear predictors, one block of rows at a time,
   and safeguarded Fisher scoring with the Fisher-decrement stopping rule is

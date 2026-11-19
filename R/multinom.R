@@ -46,6 +46,25 @@
 #'   source block, so it also bounds the rows handled at once inside a block,
 #'   and the source's own block size sets how many rows are read at a time.
 #' @param control a named list of engine controls (for example `step_bound`).
+#'   `solver` chooses how each Fisher scoring step is solved: `"exact"`
+#'   solves the full information system, `"cg"` uses a truncated Newton
+#'   method (preconditioned conjugate gradients on information-vector
+#'   products), and `"auto"` (the default) uses `"cg"` when the design has at
+#'   least 8 columns and the number of design columns times `K - 1` is large,
+#'   and `"exact"` otherwise. The conjugate gradient solver does not form the
+#'   full information during its conjugate gradient iterations. It forms it
+#'   to confirm convergence, in the exact steps that follow, and for the
+#'   returned `cov.unscaled`, so its peak memory is that of the exact solver.
+#'   Convergence is declared by the same rule for both solvers, so the
+#'   estimates agree to the convergence tolerance. The conjugate gradient
+#'   solver can take more outer iterations than the exact solver, so `iter`
+#'   and `maxit` counts may differ. `"auto"` uses the exact solver for Firth
+#'   fits (`firth = TRUE`), and `"cg"` with `firth = TRUE` is an error. For a
+#'   [fastglm_source()], `"auto"` is `"exact"`, and `"cg"` reads the whole
+#'   source for every conjugate gradient step. The solver used is stored in
+#'   the fit as `solver`, with the number of information-vector products as
+#'   `products`. Under `"cg"`, `passes` also counts the information-vector
+#'   products and the passes that confirm convergence.
 #' @param ... additional arguments to the default or formula method (not used).
 #' @details A [fastglm_source()] is read one block at a time, so the
 #'   design is never held in memory as a whole. Each block (a data frame for a
@@ -56,10 +75,13 @@
 #'   fit makes one preliminary pass for the category totals and the intercept
 #'   column, then the passes of the engine, then a fit of the intercept-only
 #'   model for `null.deviance`. `passes` counts the engine's passes for the
-#'   model, as for in-memory fits: one at the starting values, which also
-#'   finds aliased columns, and one per step length tried, so a fit without
-#'   step halving makes `iter + 1` passes, and bias reduction adds one pass
-#'   per iteration and one at the start (`2 iter + 2`). `source.passes` counts
+#'   model, as for in-memory fits. Under the exact solver there is one pass at
+#'   the starting values, which also finds aliased columns, and one per step
+#'   length tried, so a fit without step halving makes `iter + 1` passes, and
+#'   bias reduction adds one pass per iteration and one at the start
+#'   (`2 iter + 2`). Under the conjugate gradient solver, `passes` also counts
+#'   the information-vector products and the passes that confirm convergence,
+#'   so it exceeds `iter + 1`. `source.passes` counts
 #'   every pass over the source, including the preliminary pass and the
 #'   intercept-only fit. The fit keeps the source, not its rows: fitted
 #'   probabilities are not stored (`fitted.values`, `y`, `x`, `prior.weights`,
@@ -109,7 +131,14 @@
 #'   `constraints`, `family`, `terms`, `xlevels`, `contrasts`, `call`,
 #'   `fitted.values` (an `n` by `K` matrix of probabilities), `y`,
 #'   `prior.weights`, `offset` (an `n` by `K - 1` matrix), `firth`, `rank`,
-#'   `aliased`, `separation`, and the design matrix `x`.
+#'   `aliased`, `separation`, and the design matrix `x`, together with
+#'   * `solver`: the solver used, `"exact"` or `"cg"` (see `control`).
+#'   * `products`: the number of information-vector products (0 under the
+#'     exact solver).
+#'   * `accumulation`: how the information was accumulated, `"lowrank"` (the
+#'     low-rank form used for dense designs with `K - 1` of at least 6) or
+#'     `"pairwise"` (one weighted cross product per pair of linear
+#'     predictors).
 #' @seealso `nnet::multinom()` and `VGAM::vglm()` with `multinomial()` for
 #'   comparable fits; [fastglm_ordinal()] for ordered outcomes.
 #' @examples
@@ -176,6 +205,8 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     if (!is.null(schema) && !inherits(schema$terms, "terms"))
         err("a multinomial source needs a formula with one right-hand side")
     .multinom_check_controls(tol, maxit, block.size, firth, control)
+    # Fail fast on "cg" with bias reduction, before any pass over the source.
+    .vglm_control_solver(control, 1L, 1L, firth, streamed = TRUE)
     read <- .vglm_stream_reader(source, levels)
     state <- environment(read)$state
 
@@ -217,18 +248,23 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     intercept <- if (any(constant)) which(constant)[1L] else 0L
     value <- if (intercept) first[[intercept]] else 0
     p <- length(state$columns)
-    engine <- function(fetch, p, intercept, value, constraints, firth)
+    control.null <- .vglm_control_solver(control, 1L, M, FALSE, streamed = TRUE)
+    if (identical(control[["solver"]], "cg") && !firth)
+        warning("fastglm_multinom: solver = \"cg\" reads the whole source for every conjugate gradient step",
+                call. = FALSE)
+    control <- .vglm_control_solver(control, p, M, firth, streamed = TRUE)
+    engine <- function(fetch, p, intercept, value, constraints, firth, ctl = control)
         .multinom_engine_errors(vglm_fit_source(
             fetch, source$n_chunks, as.integer(p), totals, as.integer(intercept), value,
             constraints, "multinomial", as.integer(K), as.integer(ref), firth, tol,
-            as.integer(maxit), block.size, FALSE, control))
+            as.integer(maxit), block.size, FALSE, ctl))
     constraints <- rep(list(diag(M)), p)
     fit <- engine(read, p, intercept, value, constraints, firth)
     null <- engine(function(k) {
         z <- read(k)
         z$X <- matrix(1, nrow(z$X), 1L)
         z
-    }, 1L, 1L, 1, list(diag(M)), FALSE)
+    }, 1L, 1L, 1, list(diag(M)), FALSE, control.null)
 
     info <- list(x = NULL, y = NULL, weights = NULL, offset = NULL,
                  null.deviance = null$deviance, nobs = used, lsat = lsat,
@@ -502,11 +538,13 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
     used <- if (grouped) weights > 0 & rowSums(counts) > 0 else weights > 0
     lsat <- if (grouped) .multinom_saturated(counts, weights) else 0
     constraints <- rep(list(diag(M)), ncol(x))
-    run <- function(xx, cons, fth) .multinom_engine(
+    control.null <- .vglm_control_solver(control, 1L, M, FALSE)
+    control <- .vglm_control_solver(control, ncol(x), M, firth)
+    run <- function(xx, cons, fth, ctl) .multinom_engine(
         xx, codes, counts, weights, offset, cons, K, ref, fth, tol, maxit,
-        block.size, control)
-    fit <- run(x, constraints, firth)
-    null <- run(matrix(1, n, 1L), list(diag(M)), FALSE)
+        block.size, ctl)
+    fit <- run(x, constraints, firth, control)
+    null <- run(matrix(1, n, 1L), list(diag(M)), FALSE, control.null)
 
     info <- c(info, list(x = x, y = yout, weights = weights, offset = offset,
                          null.deviance = null$deviance, nobs = sum(used),
@@ -540,7 +578,49 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
         err("'block.size' must be a positive integer")
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         err("'firth' must be TRUE or FALSE")
+    solver <- control[["solver"]]
+    if (!is.null(solver) &&
+        !(is.character(solver) && length(solver) == 1L && !is.na(solver) &&
+          solver %in% c("auto", "exact", "cg")))
+        err("'control$solver' must be \"auto\", \"exact\", or \"cg\"")
     invisible(NULL)
+}
+
+# The number of columns p of the design times M = K - 1 linear predictors at
+# and above which solver = "auto" chooses the conjugate gradient solver
+# (timing study, Part 3: cg/exact time ratio 1.18 at p M = 209 and 0.88 at 539
+# with 11 design columns; 0.93 at 204 and 0.67 at 459 with 51).
+.vglm_cg_threshold <- 400L
+
+# The fewest design columns p (intercept included) at which solver = "auto"
+# chooses the conjugate gradient solver. With few columns the per-row work of
+# the model type and the extra diagonal passes outweigh the cheaper products
+# (n = 20000: p = 5, K = 100, cg 1.64 s against exact 1.40 s; p = 3,
+# K = 150, cg 2.18 s against exact 1.76 s; p = 8, K = 60, cg 1.03 s against
+# exact 1.20 s). The floor also keeps intercept-only and null fits on the
+# exact solver, whose start is already the maximum.
+.vglm_cg_min_p <- 8L
+
+# Resolve the user's solver ("auto", "exact", or "cg") to the "exact" or "cg"
+# the engine accepts. "auto" is "exact" for bias reduction, for a streamed
+# source, when p is below .vglm_cg_min_p, and when p * M is below the
+# threshold.
+.vglm_resolve_solver <- function(solver, p, M, firth, streamed) {
+    if (identical(solver, "cg") && isTRUE(firth))
+        stop("fastglm_multinom: the conjugate gradient solver is not available with bias reduction",
+             call. = FALSE)
+    if (solver != "auto") return(solver)
+    if (isTRUE(firth) || isTRUE(streamed) || p < .vglm_cg_min_p ||
+        as.double(p) * as.double(M) < .vglm_cg_threshold)
+        "exact" else "cg"
+}
+
+# Return `control` with its solver resolved for a design with p columns and
+# M linear predictors; the user's value defaults to "auto".
+.vglm_control_solver <- function(control, p, M, firth, streamed = FALSE) {
+    solver <- if (is.null(control[["solver"]])) "auto" else control[["solver"]]
+    control$solver <- .vglm_resolve_solver(solver, p, M, firth, streamed)
+    control
 }
 
 # The 1-based index of the reference category among the levels lev.
@@ -642,6 +722,7 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
         null.deviance = x_info$null.deviance + 2 * lsat,
         df.residual = x_info$nobs * M - fit$rank,
         nobs = as.integer(x_info$nobs), iter = fit$iter, passes = fit$passes,
+        solver = fit$solver, products = fit$products, accumulation = fit$accumulation,
         converged = fit$converged, convergence.reason = fit$convergence.reason,
         levels = levels, reference = reference,
         constraints = x_info$constraints, family = family,
