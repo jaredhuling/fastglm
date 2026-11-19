@@ -66,6 +66,7 @@ reference:
   - fastglm_source_dbi
   - predict.fastglm_stream
   - predict.fastglm_ordinal_stream
+  - fastglm_threads
 - title: Diagnostics and reporting
   contents:
   - fastglm_diagnostics

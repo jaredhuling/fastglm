@@ -26,3 +26,4 @@ docs
 ^vignettes/stability-data$
 ^tests/testthat/_problems$
 ^vignettes/multinom-data$
+^src/Makevars$
