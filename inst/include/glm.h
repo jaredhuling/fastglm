@@ -111,8 +111,8 @@ protected:
 
     // Pre-allocated solver workspace, reused across IRLS iterations.
     // Avoids one n*p alloc and one n alloc per iteration in solve_wls().
-    // For big.matrix mode with method 2/3, WX is left empty -- we accumulate
-    // X'WX and X'Wz directly via row-block streaming kernels and never
+    // For method 2/3 (except dense bias-reduced fits), WX is left empty -- we
+    // accumulate X'WX and X'Wz directly via row-block kernels and never
     // materialize the n*p product.
     MatrixXd                     WX;     // w.asDiagonal() * X (dense path only)
     VectorXd                     wz;     // w .* z
@@ -120,6 +120,7 @@ protected:
     VectorXd                     Xtwz_buf; // for streaming accumulation
     MatrixXd                     block_buf;    // row-block workspace for the fused X'WX kernel
     VectorXd                     wz_block_buf;
+    fglm::RowBlockPool           block_pool;   // row-block workspaces of the threaded kernels
     bool                         use_streaming;
     bool                         constant_weights;
     bool                         factor_ready = false;
@@ -144,12 +145,38 @@ protected:
         return di;
     }
     
-    // X' W X using the rank-1 update on the pre-multiplied WX = w * X.
-    // Reuses the XtWX_buf member to avoid per-iteration allocation.
+    // X' W X (lower triangle) from the pre-multiplied WX = w * X, summed over
+    // fixed row blocks by the deterministic reductions (chunk_source.h).
     void update_XtWX()
     {
-        XtWX_buf.setZero();
-        XtWX_buf.selfadjointView<Lower>().rankUpdate(WX.adjoint());
+        fglm::accumulate_crossprod_blocked(WX, XtWX_buf, -1, &block_pool);
+    }
+
+    // WX = w * X, formed over fixed row blocks (in parallel when there are
+    // several). Each entry is a single product, so the split does not change
+    // it.
+    void form_WX()
+    {
+        if (WX.rows() != nobs || WX.cols() != nvars) WX.resize(nobs, nvars);
+        fglm_par::parallel_blocks(nobs, fglm::default_chunk_rows(), [&](Eigen::Index r, Eigen::Index k) {
+            WX.middleRows(r, k).noalias() = w.segment(r, k).asDiagonal() * X.middleRows(r, k);
+        });
+    }
+
+    // WX' v summed over fixed row blocks.
+    VectorXd WX_adjoint_times(const VectorXd& v)
+    {
+        VectorXd out;
+        fglm::accumulate_xtv_blocked(WX, v, out, -1, &block_pool);
+        return out;
+    }
+
+    // Whether X'WX and X'Wz are accumulated from row blocks of X without
+    // forming the weighted design: Cholesky methods, except dense
+    // bias-reduced fits, whose exact leverages need WX.
+    static bool blocked_normal_equations(int type_, bool is_big_matrix_, bool firth_flag)
+    {
+        return (type_ == 2 || type_ == 3) && (is_big_matrix_ || !firth_flag);
     }
 
     virtual void update_mu_eta() override
@@ -195,13 +222,8 @@ protected:
     virtual void update_eta() override
     {
         binomial_current=false;
-        // eta <- drop(x %*% beta) + offset
-        if (use_streaming) {
-            fglm::apply_X_streamed(X, beta, offset, eta);
-        } else {
-            eta.noalias() = X * beta;
-            eta += offset;
-        }
+        // eta <- drop(x %*% beta) + offset, over fixed row blocks
+        fglm::apply_X_streamed(X, beta, offset, eta);
     }
     
     virtual void update_z() override
@@ -210,7 +232,10 @@ protected:
             z=eta-offset;return; // Add scores directly, without dividing by tiny weights.
         }
         // z <- (eta - offset)[good] + (y - mu)[good]/mu.eta.val[good]
-        z = (eta - offset).array() + (Y - mu).array() / mu_eta.array();
+        fglm_par::parallel_blocks(nobs, fglm::default_chunk_rows(), [&](Eigen::Index r, Eigen::Index k) {
+            z.segment(r, k) = (eta.segment(r, k) - offset.segment(r, k)).array() +
+                (Y.segment(r, k) - mu.segment(r, k)).array() / mu_eta.segment(r, k).array();
+        });
     }
     
     virtual void update_w() override
@@ -227,19 +252,24 @@ protected:
             factor_ready = false;
             if (prepared_info) {
                 prepared_info = nullptr;
-                WX.resize(nobs,nvars);
+                if (!use_streaming) WX.resize(nobs,nvars);
             }
         }
-        if (fam_code >= 0) {
-            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
-            Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data(), mu_eta.size());
-            Eigen::Map<const Eigen::ArrayXd> pw(weights.data(), weights.size());
-            Eigen::Map<Eigen::ArrayXd>       ww(w.data(), w.size());
-            if (fglm::stable_weights(fam_code, fam_params, m, me, pw, ww))
-                return;
-        }
-        // w <- sqrt((weights[good] * mu.eta.val[good]^2)/variance(mu)[good])
-        w = (weights.array() * mu_eta.array().square() / var_mu.array()).array().sqrt();
+        // w <- sqrt((weights[good] * mu.eta.val[good]^2)/variance(mu)[good]),
+        // or the stable form of stable_weights() for the families that have
+        // one (the same choice for every block)
+        fglm_par::parallel_blocks(nobs, fglm::default_chunk_rows(), [&](Eigen::Index r, Eigen::Index k) {
+            if (fam_code >= 0) {
+                Eigen::Map<const Eigen::ArrayXd> m(mu.data() + r, k);
+                Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data() + r, k);
+                Eigen::Map<const Eigen::ArrayXd> pw(weights.data() + r, k);
+                Eigen::Map<Eigen::ArrayXd>       ww(w.data() + r, k);
+                if (fglm::stable_weights(fam_code, fam_params, m, me, pw, ww))
+                    return;
+            }
+            w.segment(r, k) = (weights.segment(r, k).array() * mu_eta.segment(r, k).array().square() /
+                               var_mu.segment(r, k).array()).sqrt();
+        });
     }
     
     virtual void update_dev_resids() override
@@ -811,7 +841,7 @@ protected:
         if (use_streaming) {
             const bool current_information=fglm::bounded_firth_predictors(fam_code);
             if ((fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) || current_information) {
-                fglm::accumulate_xtwx_streamed(X,w,XtWX_buf);
+                fglm::accumulate_xtwx_streamed(X, w, XtWX_buf, -1, &block_pool);
                 if (type == 2) {
                     Ch.compute(XtWX_buf.selfadjointView<Lower>());
                     if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
@@ -825,8 +855,8 @@ protected:
             }
             const bool reuse_factor = (constant_weights || current_information) && factor_ready;
             if (!A_prev_available || fam_code == fglm::FAM_GAUSSIAN_IDENTITY) {
-                if (!reuse_factor) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
-                fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf);
+                if (!reuse_factor) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf, -1, &block_pool);
+                fglm::accumulate_xtwz_streamed(X, w, z, Xtwz_buf, -1, &block_pool);
             } else {
                 fglm::accumulate_firth_streamed(
                     X, w, z, Eigen::Map<const Eigen::VectorXd>(d2mu.data(), nobs),
@@ -834,7 +864,7 @@ protected:
                     -1, !reuse_factor,
                     fam_code == fglm::FAM_GAMMA_LOG ? &streaming_gamma_adjustment : nullptr,
                     current_information ? &binomial_working.score : nullptr,
-                    current_information ? &binomial_working.ratio : nullptr);
+                    current_information ? &binomial_working.ratio : nullptr, &block_pool);
             }
             if (type == 2) {
                 if (!reuse_factor) {
@@ -866,7 +896,7 @@ protected:
         // --- Dense path: exact leverages from current decomposition ---
         bool reuse_factor = constant_weights && factor_ready;
         if (!reuse_factor) {
-            WX.noalias() = w.asDiagonal() * X;
+            form_WX();
 
             // Decompose
             if (type == 0) {
@@ -943,9 +973,9 @@ protected:
         } else if (type == 1) {
             beta = QR.solve(wz);
         } else if (type == 2) {
-            beta = Ch.solve(WX.adjoint() * wz);
+            beta = Ch.solve(WX_adjoint_times(wz));
         } else if (type == 3) {
-            beta = ChD.solve(WX.adjoint() * wz);
+            beta = ChD.solve(WX_adjoint_times(wz));
         } else if (type == 4) {
             if (rank == nvars) {
                 beta = FPQR.solve(wz);
@@ -973,18 +1003,19 @@ protected:
         beta_prev = beta;
 
         if (constant_weights && factor_ready && (type == 2 || type == 3)) {
-            VectorXd rhs = X.adjoint() * (w.array().square() * z.array()).matrix();
+            VectorXd rhs;
+            fglm::accumulate_xtwz_streamed(X, w, z, rhs, -1, &block_pool);
             if (type == 2) beta = Ch.solve(rhs);
             else beta = ChD.solve(rhs);
             return;
         }
         factor_ready = true;
 
-        // Streaming path for big.matrix + Cholesky-based methods (2 or 3):
-        // never materialize the n*p product W*X.  Instead accumulate
-        // X'W^2 X and X'W^2 z directly in row blocks.
+        // Cholesky methods (2 or 3), dense or big.matrix: never materialize
+        // the n*p product W*X. Instead accumulate X'W^2 X and X'W^2 z
+        // directly in row blocks (threaded, identical for every thread count).
         if (use_streaming) {
-            fglm::accumulate_xtwx_xtwz_fused(X, w, z, XtWX_buf, Xtwz_buf, block_buf, wz_block_buf);
+            fglm::accumulate_xtwx_xtwz_fused(X, w, z, XtWX_buf, Xtwz_buf, block_buf, wz_block_buf, -1, &block_pool);
             if (type == 2) {
                 Ch.compute(XtWX_buf.selfadjointView<Lower>());
                 if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
@@ -1001,11 +1032,9 @@ protected:
         }
 
         // Pre-multiply once per iteration into pre-allocated buffers,
-        // then feed them to every decomposition.  noalias() avoids a
-        // temporary; both buffers are sized in the constructor. (A blocked
-        // kernel that avoids forming WX was slower for small p and moderate
-        // n, and only about 6 percent faster at n = 1e6, p = 50.)
-        WX.noalias() = w.asDiagonal() * X;
+        // then feed them to every decomposition.  Both buffers are sized in
+        // the constructor.
+        form_WX();
         wz.noalias() = w.cwiseProduct(z);
 
         if (type == 0)
@@ -1043,7 +1072,7 @@ protected:
             Ch.compute(XtWX_buf.selfadjointView<Lower>());
                 if (Ch.info() != Eigen::Success || Ch.rcond() < 1e-12)
                     Rcpp::stop("Cholesky factorization is singular or ill-conditioned; use method = 'qr' or 'auto'.");
-            beta            = Ch.solve(WX.adjoint() * wz);
+            beta            = Ch.solve(WX_adjoint_times(wz));
         } else if (type == 3)
         {
             update_XtWX();
@@ -1053,7 +1082,7 @@ protected:
             Dplus(ChD.vectorD());	// to set the rank
             //FIXME: Check on the permutation in the LDLT and incorporate it in
             //the coefficients and the standard error computation.
-            beta            = ChD.solve(WX.adjoint() * wz);
+            beta            = ChD.solve(WX_adjoint_times(wz));
         } else if (type == 4)
         {
             FPQR.compute(WX); // decompose the model matrix
@@ -1123,9 +1152,9 @@ protected:
         update_mu_eta();
         update_w();
         if (!(constant_weights && factor_ready)) {
-            if (use_streaming) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf);
+            if (use_streaming) fglm::accumulate_xtwx_streamed(X, w, XtWX_buf, -1, &block_pool);
             else {
-                WX.noalias() = w.asDiagonal() * X;
+                form_WX();
                 update_XtWX();
             }
             if (type == 2) {
@@ -1328,12 +1357,12 @@ public:
                                                      log_det_XtWX_(0.0),
                                                      A_prev(X_.cols(), X_.cols()),
                                                      A_prev_available(false),
-                                                     WX( (prepared_ || (is_big_matrix_ && (type_ == 2 || type_ == 3))) ? 0 : X_.rows(),
-                                                         (prepared_ || (is_big_matrix_ && (type_ == 2 || type_ == 3))) ? 0 : X_.cols()),
-                                                     wz( (is_big_matrix_ && (type_ == 2 || type_ == 3)) ? 0 : X_.rows()),
+                                                     WX( (prepared_ || blocked_normal_equations(type_, is_big_matrix_, firth_flag)) ? 0 : X_.rows(),
+                                                         (prepared_ || blocked_normal_equations(type_, is_big_matrix_, firth_flag)) ? 0 : X_.cols()),
+                                                     wz( blocked_normal_equations(type_, is_big_matrix_, firth_flag) ? 0 : X_.rows()),
                                                      XtWX_buf(X_.cols(), X_.cols()),
                                                      Xtwz_buf(X_.cols()),
-                                                     use_streaming(is_big_matrix_ && (type_ == 2 || type_ == 3)),
+                                                     use_streaming(blocked_normal_equations(type_, is_big_matrix_, firth_flag)),
                                                      constant_weights(fam_code_ == 0 || fam_code_ == 9 || fam_code_ == 10),
                                                      prepared_info(prepared_)
                                                      {}

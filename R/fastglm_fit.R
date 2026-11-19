@@ -27,6 +27,9 @@
 #' @param firth `logical`; if `TRUE` apply the Kosmidis--Firth mean
 #'   bias-reducing adjusted score (AS_mean) to the IRLS iteration.  Supported
 #'   for all standard GLM families on dense `x`.
+#' @param threads the number of threads for the compiled computations, or
+#'   `NULL` (default) for the session setting of [fastglm_threads()]. Results
+#'   are identical for every number of threads.
 #' @param object a `fastglmFit` object; the output of a call to `glm()` with `method = fastglm_fit`.
 #' @param \dots for `vcov()` and `summary()`, other arguments passed downstream.
 #'
@@ -139,7 +142,11 @@ fastglm_fit <- function(x, y,
                       if (is.null(weights)) rep(1, NROW(y)) else weights,
                       if (is.null(offset)) rep(0, NROW(y)) else offset,
                       start, etastart, mustart, control$method, control$tol,
-                      control$maxit, firth = firth, covariance = control$covariance)
+                      control$maxit, firth = firth, covariance = control$covariance,
+                      threads = control$threads)
+    # The post-fit pass runs at the fit's thread count.
+    restore.threads <- .fastglm_with_threads(res$threads)
+    on.exit(restore.threads(), add = TRUE)
     if (!singular.ok && res$rank < ncol(x)) stop("singular fit encountered", call. = FALSE)
     res <- .finish_glm(res, if (is.null(offset)) rep(0, NROW(y)) else offset, intercept)
     res$class <- "fastglmFit"
@@ -149,7 +156,7 @@ fastglm_fit <- function(x, y,
 #' @export
 #' @rdname fastglm_fit
 fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = FALSE,
-                            covariance = c("estimate", "previous"), ...) {
+                            covariance = c("estimate", "previous"), threads = NULL, ...) {
     covariance <- match.arg(covariance)
     if (...length() > 0L && "method" %in% ...names() && identical(fastmethod, 0L)) {
         fastmethod <- ...elt(which(...names() == "method")[1L])
@@ -162,7 +169,9 @@ fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = F
     if (!identical(fastmethod, "auto")) fastmethod <- .solver_method(fastmethod)
     .check_iterations(tol, maxit)
 
-    list(method = fastmethod, tol = tol, maxit = maxit, firth = firth, covariance = covariance)
+    if (!is.null(threads)) .fastglm_resolve_threads(threads)   # validates the request
+    list(method = fastmethod, tol = tol, maxit = maxit, firth = firth, covariance = covariance,
+         threads = threads)
 }
 
 #' @exportS3Method stats::vcov fastglmFit

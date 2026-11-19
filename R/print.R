@@ -139,6 +139,7 @@ print.fastglm_diagnostics <- function(x,digits=max(3L,getOption("digits")-3L),..
     if(length(x$fallbacks) && x$fallbacks>0) .fastglm_print_field("Solver fallbacks",x$fallbacks)
     if(length(x$step.reductions) && x$step.reductions>0) .fastglm_print_field("Reduced scoring steps",x$step.reductions)
     .fastglm_print_field("Estimable coefficients (rank)",x$rank)
+    .fastglm_print_field("Threads",x$threads)
     .fastglm_print_field("Aliased coefficients",x$aliased)
     .fastglm_print_field("Boundary flag",if(isTRUE(x$boundary)) "yes" else "no")
     if(isTRUE(x$theta.boundary)) .fastglm_print_field("Negative-binomial size boundary","yes")

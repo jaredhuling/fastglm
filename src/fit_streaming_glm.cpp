@@ -135,6 +135,15 @@ struct Chunk {
     bool has_offset;
 };
 
+// eta = X beta + offset for a source block, over fixed row blocks (in
+// parallel when the source block has several).
+static ArrayXd block_eta(const Chunk& c, const VectorXd& beta)
+{
+    ArrayXd eta(c.y.size());
+    fglm::apply_X_streamed(c.X, beta, c.off, eta.matrix());
+    return eta;
+}
+
 // Pull the k-th chunk via the user's R callback.  k is 1-based for the
 // closure, matching the R-side documentation.
 static Chunk pull_chunk(Function& callback, int k, int expected_p)
@@ -222,7 +231,8 @@ static double stream_pass(Function& callback,
     int n_total = 0;
     const bool collect = stats != nullptr && stats->enabled;
     double pearson_sum = 0.0, null_sum = 0.0;
-    MatrixXd work_block; VectorXd work_vec;   // reused across blocks
+    MatrixXd work_block; VectorXd work_vec;
+    fglm::RowBlockPool pool;   // row-block workspaces, reused across blocks
 
     if (accumulate) {
         XtWX_out->setZero();
@@ -234,7 +244,7 @@ static double stream_pass(Function& callback,
         const int n_k = c.y.size();
         n_total += n_k;
 
-        ArrayXd eta = (c.X * beta).array() + c.off.array();
+        ArrayXd eta = block_eta(c, beta);
         if (!fam.valideta(eta))
             throw std::domain_error("invalid linear predictor in streaming pass");
 
@@ -275,7 +285,7 @@ static double stream_pass(Function& callback,
             // row sub-blocks so that no weighted copy of the block is formed.
             const VectorXd sw = w2.sqrt().matrix();
             fglm::add_xtwx_xtwz_blocked(c.X, sw, z.matrix(), *XtWX_out, *Xtwz_out,
-                                        work_block, work_vec, -1);
+                                        work_block, work_vec, -1, &pool);
             if(stable_binomial) (*Xtwz_out).noalias() += c.X.adjoint() * binomial.score;
         }
 
@@ -342,7 +352,7 @@ static double stream_pass_firth(Function& callback,
         const int n_k = c.y.size();
         n_total += n_k;
 
-        ArrayXd eta = (c.X * beta).array() + c.off.array();
+        ArrayXd eta = block_eta(c, beta);
         if (!fam.valideta(eta))
             throw std::domain_error("invalid linear predictor in streaming pass");
 
@@ -1328,7 +1338,7 @@ List fit_streaming_glm(Function chunk_callback,
             const int n_k = c.y.size();
 
             ArrayXd eta = type==0 ? fglm::qr_linear_predictor(c.X,beta,c.off).array() :
-                ((c.X * beta).array() + c.off.array()).eval();
+                block_eta(c, beta);
             ArrayXd mu;
             fam.linkinv(eta, mu);
             ArrayXd ya = c.y.array();

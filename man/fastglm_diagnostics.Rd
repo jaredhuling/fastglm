@@ -66,6 +66,7 @@ probability can be numerical underflow; its log probability remains
 informative. These observations help diagnose a fit but do not prove
 that an interior solution is absent. Source rows and values must remain
 unchanged since fitting. Unavailable row diagnostics retain a reason.
+\code{threads} is the number of threads the fit used, when the fit records it.
 }
 \description{
 Reports whether the iteration converged, which coefficients can be estimated

@@ -18,7 +18,8 @@ fastglmPure(
   maxit = 100L,
   firth = FALSE,
   inference = c("full", "diagonal", "none"),
-  covariance = c("estimate", "previous")
+  covariance = c("estimate", "previous"),
+  threads = NULL
 )
 }
 \arguments{
@@ -86,6 +87,17 @@ of the fitting time for large data) and changes standard errors by a
 relative amount of order 1e-6 at the default tolerance. Coefficients agree
 to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
 are not affected.}
+
+\item{threads}{the number of threads for the compiled computations of this
+fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+The count is reduced to the number of logical cores (and to 2 under
+`R CMD check`). Results are identical for every number of threads.
+Families supplied as R functions are evaluated on one thread. Dense fits
+with a QR or SVD method (0, 1, 4, 5) use one thread, because their
+decomposition is serial; so does the pivoted QR refit after a failed
+Cholesky factorization. Cholesky fits of dense, sparse (`dgCMatrix`), and
+`big.matrix` designs are threaded. Fits with fewer than two row blocks
+of observations (16384 rows each by default) run on one thread.}
 }
 \value{
 A list with the elements

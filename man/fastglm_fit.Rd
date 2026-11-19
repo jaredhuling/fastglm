@@ -28,6 +28,7 @@ fastglm_control(
   maxit = 100L,
   firth = FALSE,
   covariance = c("estimate", "previous"),
+  threads = NULL,
   ...
 )
 
@@ -75,6 +76,10 @@ of the fitting time for large data) and changes standard errors by a
 relative amount of order 1e-6 at the default tolerance. Coefficients agree
 to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
 are not affected.}
+
+\item{threads}{the number of threads for the compiled computations, or
+`NULL` (default) for the session setting of [fastglm_threads()]. Results
+are identical for every number of threads.}
 
 \item{\dots}{for `vcov()` and `summary()`, other arguments passed downstream.}
 

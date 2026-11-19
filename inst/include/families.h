@@ -4,6 +4,9 @@
 #include <RcppEigen.h>
 #include <cmath>
 #include <limits>
+#include <vector>
+#include "chunk_source.h"
+#include "parallel_reduce.h"
 
 namespace fglm {
 
@@ -84,7 +87,7 @@ static inline double y_log_y(double y, double mu) {
 // ---------------------------------------------------------------------------
 // linkinv: mu = g^{-1}(eta)
 // ---------------------------------------------------------------------------
-inline void linkinv(int code,
+inline void linkinv_block(int code,
                     const FamilyParams& /*params*/,
                     const Eigen::Ref<const Eigen::ArrayXd>& eta,
                     Eigen::Ref<Eigen::ArrayXd> mu)
@@ -182,7 +185,7 @@ inline void linkinv(int code,
 // ---------------------------------------------------------------------------
 // mu_eta: dmu / deta
 // ---------------------------------------------------------------------------
-inline void mu_eta(int code,
+inline void mu_eta_block(int code,
                    const FamilyParams& /*params*/,
                    const Eigen::Ref<const Eigen::ArrayXd>& eta,
                    Eigen::Ref<Eigen::ArrayXd> dmu)
@@ -265,7 +268,7 @@ inline void mu_eta(int code,
 // ---------------------------------------------------------------------------
 // variance: V(mu)
 // ---------------------------------------------------------------------------
-inline void variance(int code,
+inline void variance_block(int code,
                      const FamilyParams& params,
                      const Eigen::Ref<const Eigen::ArrayXd>& mu,
                      Eigen::Ref<Eigen::ArrayXd> v)
@@ -369,7 +372,7 @@ inline void dvariance(int code,
 // Returns the *sum* over all observations.  For binomial with prior weights,
 // y is taken as a proportion (the standard glm convention after $initialize).
 // ---------------------------------------------------------------------------
-inline double dev_resids_sum(int code,
+inline double dev_resids_sum_block(int code,
                              const FamilyParams& params,
                              const Eigen::Ref<const Eigen::ArrayXd>& y,
                              const Eigen::Ref<const Eigen::ArrayXd>& mu,
@@ -498,6 +501,85 @@ inline double dev_resids_sum(int code,
     }
 
     return s;
+}
+
+// ---------------------------------------------------------------------------
+// Threaded evaluation.
+//
+// linkinv, mu_eta, variance, and dev_resids_sum evaluate the *_block
+// functions above over fixed row blocks of default_chunk_rows() rows, in
+// parallel with a static schedule when there are at least 2 blocks
+// (fglm_par::parallel_blocks). The blocks do not depend on the thread count,
+// so every element, and the deviance sum, is the same for every thread
+// count. The probit link calls R's math library (Rf_pnorm5, Rf_dnorm4,
+// Rf_qnorm5), which counts as the R API, so probit linkinv and mu_eta are
+// evaluated serially.
+//
+// These functions make no R API call (other than the serial probit link) and
+// may be called only from the calling thread, not from inside another
+// parallel region.
+// ---------------------------------------------------------------------------
+inline void linkinv(int code,
+                    const FamilyParams& params,
+                    const Eigen::Ref<const Eigen::ArrayXd>& eta,
+                    Eigen::Ref<Eigen::ArrayXd> mu)
+{
+    if (code == FAM_BINOMIAL_PROBIT) { linkinv_block(code, params, eta, mu); return; }
+    fglm_par::parallel_blocks(eta.size(), default_chunk_rows(), [&](Eigen::Index r, Eigen::Index k) {
+        linkinv_block(code, params, eta.segment(r, k), mu.segment(r, k));
+    });
+}
+
+inline void mu_eta(int code,
+                   const FamilyParams& params,
+                   const Eigen::Ref<const Eigen::ArrayXd>& eta,
+                   Eigen::Ref<Eigen::ArrayXd> dmu)
+{
+    if (code == FAM_BINOMIAL_PROBIT) { mu_eta_block(code, params, eta, dmu); return; }
+    fglm_par::parallel_blocks(eta.size(), default_chunk_rows(), [&](Eigen::Index r, Eigen::Index k) {
+        mu_eta_block(code, params, eta.segment(r, k), dmu.segment(r, k));
+    });
+}
+
+inline void variance(int code,
+                     const FamilyParams& params,
+                     const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                     Eigen::Ref<Eigen::ArrayXd> v)
+{
+    fglm_par::parallel_blocks(mu.size(), default_chunk_rows(), [&](Eigen::Index r, Eigen::Index k) {
+        variance_block(code, params, mu.segment(r, k), v.segment(r, k));
+    });
+}
+
+// The deviance sum in the lane order of fglm_par::lane_reduce with a double
+// accumulator: block b's sum (from 0, in row order) is added to lane b mod 8
+// in increasing b, and the lanes are added in lane order. The block sums are
+// computed in parallel by parallel_blocks; the order of the additions is
+// fixed by the block count only.
+inline double dev_resids_sum(int code,
+                             const FamilyParams& params,
+                             const Eigen::Ref<const Eigen::ArrayXd>& y,
+                             const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                             const Eigen::Ref<const Eigen::ArrayXd>& wt)
+{
+    const Eigen::Index n = y.size();
+    if (n <= 0) return 0.0;
+    const Eigen::Index B = default_chunk_rows();
+    const Eigen::Index nblocks = (n + B - 1) / B;
+    std::vector<double> part(static_cast<std::size_t>(nblocks), 0.0);
+    fglm_par::parallel_blocks(n, B, [&](Eigen::Index r, Eigen::Index k) {
+        part[static_cast<std::size_t>(r / B)] =
+            dev_resids_sum_block(code, params, y.segment(r, k), mu.segment(r, k), wt.segment(r, k));
+    });
+    const int nlanes = nblocks < fglm_par::kLanes ? static_cast<int>(nblocks) : fglm_par::kLanes;
+    double out = 0.0;
+    for (int l = 0; l < nlanes; ++l) {
+        double lane = 0.0;
+        for (Eigen::Index b = l; b < nblocks; b += fglm_par::kLanes)
+            lane += part[static_cast<std::size_t>(b)];
+        out += lane;
+    }
+    return out;
 }
 
 // ---------------------------------------------------------------------------

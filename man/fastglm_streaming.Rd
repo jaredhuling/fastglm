@@ -17,7 +17,8 @@ fastglm_streaming(
   y = NULL,
   weights = NULL,
   offset = NULL,
-  block.size = 100000L
+  block.size = 100000L,
+  threads = NULL
 )
 }
 \arguments{
@@ -78,6 +79,11 @@ tolerance. Bias-reduced fits (\code{firth = TRUE}) are not affected.}
 \code{chunk_callback} is a design matrix.}
 
 \item{block.size}{number of rows read at a time from a design matrix.}
+
+\item{threads}{the number of threads for the compiled computations within
+each block of observations, or \code{NULL} (default) for the session setting
+of \code{\link[=fastglm_threads]{fastglm_threads()}}. Blocks are still read one at a time. Results are
+identical for every number of threads.}
 }
 \value{
 An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing

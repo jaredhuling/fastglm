@@ -19,6 +19,11 @@
 #' The setting is stored in \code{options(fastglm.threads = )}, which can also be
 #' set before the package is loaded.
 #'
+#' A fit holds its thread setting for the whole call and then restores the
+#' session setting, so a call to \code{fastglm_threads()} made during a fit (for
+#' example from a \code{\link{fastglm_source}} callback) is undone when the fit
+#' returns.
+#'
 #' @param n \code{NULL} to report the current setting, or a single positive whole
 #'   number of threads to use.
 #'
@@ -81,12 +86,23 @@ fastglm_threads <- function(n = NULL)
     n
 }
 
+## parallel::detectCores(), cached for the session: on some platforms it
+## starts a subprocess (about 10 ms), which would otherwise be paid by every
+## fit that uses the default thread count.
+.fastglm_detected_cores <- function(logical = TRUE)
+{
+    key <- if (logical) "cores_logical" else "cores_physical"
+    if (is.null(.fastglm_state[[key]]))
+        assign(key, parallel::detectCores(logical = logical), envir = .fastglm_state)
+    .fastglm_state[[key]]
+}
+
 ## The default thread count. The inputs are arguments so that the rule can be
 ## tested; env is a named list of environment variables, where a missing or
 ## empty entry means the variable is unset.
 .fastglm_default_threads <- function(
-    physical = parallel::detectCores(logical = FALSE),
-    logical  = parallel::detectCores(logical = TRUE),
+    physical = .fastglm_detected_cores(logical = FALSE),
+    logical  = .fastglm_detected_cores(logical = TRUE),
     env      = as.list(Sys.getenv(c("OMP_THREAD_LIMIT", "OMP_NUM_THREADS",
                                     "_R_CHECK_LIMIT_CORES_"), unset = "")))
 {
@@ -142,4 +158,37 @@ fastglm_threads <- function(n = NULL)
     eff <- .fastglm_resolve_threads(threads)
     prev <- fastglm_set_threads_cpp(eff)
     function() invisible(fastglm_set_threads_cpp(prev))
+}
+
+## Sets the thread count for everything an entry point runs: the C++ setting
+## and options(fastglm.threads), so that fits it calls with threads = NULL
+## (pilot fits, component fits, refits) use the same count. Returns a list
+## with the effective count (threads) and a function (restore) that restores
+## both settings. Callers use
+##   scope <- .fastglm_scope_threads(threads); on.exit(scope$restore(), add = TRUE)
+## and keep the scope until every pass of the fit, including any finishing
+## pass, has run.
+.fastglm_scope_threads <- function(threads = NULL)
+{
+    eff <- .fastglm_resolve_threads(threads)
+    old <- options(fastglm.threads = eff)
+    prev <- fastglm_set_threads_cpp(eff)
+    list(threads = eff,
+         restore = function() {
+             fastglm_set_threads_cpp(prev)
+             options(old)
+             invisible(NULL)
+         })
+}
+
+## Wraps fun so that it first sets one thread for the session; used for
+## forked worker processes (parallel::mclapply), which inherit the parent's
+## setting. The parent's setting is not changed.
+.fastglm_one_thread <- function(fun)
+{
+    force(fun)
+    function(...) {
+        fastglm_threads(1L)
+        fun(...)
+    }
 }

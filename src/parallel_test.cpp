@@ -1,10 +1,14 @@
 // Internal test export for the deterministic reductions in parallel_reduce.h.
-// Used only by tests/testthat/test-parallel-reduce.R.
+// Used only by tests/testthat/test-parallel-reduce.R and test-threads-glm.R.
 
 #include <RcppEigen.h>
 #include <cmath>
 #include <string>
 #include "parallel_reduce.h"
+#include "chunk_source.h"
+#include <stdexcept>
+#include <new>
+#include <vector>
 
 namespace {
 
@@ -152,4 +156,75 @@ Rcpp::List fastglm_crossprod_test(const Eigen::MatrixXd& X, const Eigen::VectorX
 
     xtwx.triangularView<Eigen::StrictlyUpper>() = xtwx.adjoint();
     return Rcpp::List::create(Rcpp::Named("xtwx") = xtwx, Rcpp::Named("xtwz") = xtwz);
+}
+
+// The largest OpenMP team size seen by the reductions and parallel_blocks
+// since the last reset (1 when nothing ran in parallel). With reset = TRUE
+// the record is set back to 1 after it is read.
+// [[Rcpp::export]]
+int fastglm_max_team_size_test(bool reset)
+{
+    const int m = fglm_par::max_team_size_seen();
+    if (reset) fglm_par::max_team_size_seen() = 1;
+    return m;
+}
+
+// Runs fglm_par::parallel_blocks over n rows in blocks of block_rows with the
+// given thread setting; the blocks listed in fail (1-based) throw inside the
+// region. The exception rethrown on the calling thread is reported with
+// Rcpp::stop. Returns the number of blocks that ran when none failed.
+// [[Rcpp::export]]
+int fastglm_parallel_blocks_test(int n, int block_rows, Rcpp::IntegerVector fail, int threads)
+{
+    std::vector<char> failing((n + block_rows - 1) / block_rows + 1, 0);
+    for (int f : fail)
+        if (f >= 1 && f < static_cast<int>(failing.size())) failing[f - 1] = 1;
+    std::vector<int> ran(failing.size(), 0);
+    std::string msg;
+    {
+        ThreadSettingGuard guard(threads);
+        try {
+            fglm_par::parallel_blocks(n, block_rows, [&](Eigen::Index r, Eigen::Index) {
+                const Eigen::Index b = r / block_rows;
+                ran[b] = 1;
+                if (failing[b])
+                    throw std::runtime_error("failure in block " + std::to_string(static_cast<long long>(b) + 1));
+            });
+        } catch (const std::exception& e) {
+            msg = e.what();
+        }
+    }
+    if (!msg.empty()) Rcpp::stop(msg);
+    int count = 0;
+    for (int r : ran) count += r;
+    return count;
+}
+
+// X' diag(w^2) X through fglm::accumulate_xtwx_streamed with the given
+// thread setting; when fail_block (1-based) is positive, preparing that
+// block throws std::bad_alloc inside the region, as an allocation failure
+// would.
+// [[Rcpp::export]]
+Eigen::MatrixXd fastglm_block_reduce_test(const Eigen::MatrixXd& X, const Eigen::VectorXd& w,
+                                          int fail_block, int threads)
+{
+    const Eigen::Index n = X.rows(), p = X.cols();
+    Eigen::MatrixXd out = Eigen::MatrixXd::Zero(p, p);
+    Eigen::VectorXd none1, none2;
+    {
+        ThreadSettingGuard guard(threads);
+        const bool lanes = fglm_par::use_lanes(p);
+        const Eigen::Index R = fglm::reduction_block_rows(p, lanes);
+        fglm::weighted_block_reduce(
+            n, p, -1, true, 0, nullptr, out, none1, none2,
+            [&](fglm::RowBlockWork& wk) {
+                if (fail_block > 0 && wk.r / R == fail_block - 1) throw std::bad_alloc();
+                wk.WB.topRows(wk.k).noalias() =
+                    w.segment(wk.r, wk.k).asDiagonal() * X.middleRows(wk.r, wk.k);
+                return true;
+            },
+            [](const fglm::RowBlockWork&, Eigen::VectorXd&, Eigen::VectorXd&) {});
+    }
+    out.triangularView<Eigen::StrictlyUpper>() = out.adjoint();
+    return out;
 }

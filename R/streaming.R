@@ -53,6 +53,10 @@
 #' @param firth logical; if `TRUE` apply Firth bias reduction using
 #'   lagged leverages from the previous IRLS iteration. At convergence,
 #'   the fit solves the same adjusted-score equations as the dense path.
+#' @param threads the number of threads for the compiled computations within
+#'   each block of observations, or `NULL` (default) for the session setting
+#'   of [fastglm_threads()]. Blocks are still read one at a time. Results are
+#'   identical for every number of threads.
 #'
 #' @returns An object with classes `"fastglm_stream"` and `"fastglm"` containing
 #'   coefficient estimates and model summaries as in
@@ -135,8 +139,12 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
                               family = gaussian(), start = NULL, method = 2L,
                               tol = 1e-8, maxit = 100L, firth = FALSE,
                               covariance = c("estimate", "previous"),
-                              y = NULL, weights = NULL, offset = NULL, block.size = 100000L) {
+                              y = NULL, weights = NULL, offset = NULL, block.size = 100000L,
+                              threads = NULL) {
     method.supplied <- !missing(method)
+    threads <- .fastglm_resolve_threads(threads)
+    restore.threads <- .fastglm_with_threads(threads)
+    on.exit(restore.threads(), add = TRUE)
     if (is.matrix(chunk_callback) || inherits(chunk_callback, c("dgCMatrix", "big.matrix"))) {
         chunk_callback <- .matrix_source(chunk_callback, y, weights, offset, block.size)
     } else if (!is.null(y) || !is.null(weights) || !is.null(offset))
@@ -237,7 +245,8 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         })
     if (qr.fallback) {
         return(fastglm_streaming(source, family = family, start = if (start.from.means) NULL else start,
-                                 method = 0L, tol = tol, maxit = maxit, firth = firth, covariance = covariance))
+                                 method = 0L, tol = tol, maxit = maxit, firth = firth, covariance = covariance,
+                                 threads = threads))
     }
     if(!firth && start.from.means) res$iter <- res$iter + 1L
     cn <- state$columns
@@ -321,6 +330,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         res$null.deviance <- nf$deviance
     }
     res$passes <- state$passes; res$chunk.reads <- state$reads
+    res$threads <- threads
     if(!res$converged) warning("streaming GLM did not converge",call.=FALSE)
     if(identical(res$convergence.reason,"converged_boundary"))
         warning("streaming GLM: ",BOUNDARY_WARNING,call.=FALSE)

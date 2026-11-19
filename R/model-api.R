@@ -19,21 +19,25 @@
 #'   relative amount of order 1e-6 at the default tolerance. Coefficients agree
 #'   to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
 #'   are not affected.
+#' @param threads the number of threads for the compiled computations, or
+#'   `NULL` (default) for the session setting of [fastglm_threads()]. Results
+#'   are identical for every number of threads.
 #' @param ... additional arguments to [stats::glm()].
 #' @returns A fitted model inheriting from `fastglmFit`, `glm`, and `lm`.
 #' @export
 fastglm.formula <- function(x, data, family = gaussian(), subset, na.action,
                             weights, offset, contrasts = NULL, method = 0L,
                             tol = 1e-8, maxit = 100L, firth = FALSE,
-                            covariance = c("estimate", "previous"), ...) {
+                            covariance = c("estimate", "previous"), threads = NULL, ...) {
     covariance <- match.arg(covariance)
     cl <- match.call(expand.dots = TRUE)
     cl[[1L]] <- quote(stats::glm)
     cl$formula <- cl$x
     cl$x <- TRUE
     cl$method <- quote(fastglm::fastglm_fit)
-    cl$tol <- cl$maxit <- cl$firth <- cl$covariance <- NULL
-    cl$control <- list(fastmethod = method, tol = tol, maxit = maxit, firth = firth, covariance = covariance)
+    cl$tol <- cl$maxit <- cl$firth <- cl$covariance <- cl$threads <- NULL
+    cl$control <- list(fastmethod = method, tol = tol, maxit = maxit, firth = firth, covariance = covariance,
+                       threads = threads)
     out <- eval(cl, parent.frame())
     out$call <- match.call()
     out$call[[1L]] <- quote(fastglm::fastglm)

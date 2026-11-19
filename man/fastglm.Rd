@@ -23,6 +23,7 @@ fastglm(x, ...)
   inference = c("full", "diagonal", "none"),
   retain.data = TRUE,
   covariance = c("estimate", "previous"),
+  threads = NULL,
   ...
 )
 }
@@ -84,6 +85,10 @@ of the fitting time for large data) and changes standard errors by a
 relative amount of order 1e-6 at the default tolerance. Coefficients agree
 to within the convergence tolerance. Bias-reduced fits (`firth = TRUE`)
 are not affected.}
+
+\item{threads}{the number of threads for the compiled computations of this
+fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+Results are identical for every number of threads.}
 }
 \value{
 A list with the elements
@@ -98,6 +103,8 @@ A list with the elements
 \item{converged}{whether convergence was confirmed (see Convergence)}
 \item{convergence.reason}{`"converged"`, `"converged_boundary"`,
   `"iteration_limit"`, or `"step_halving_failed"`}
+\item{threads}{the thread setting of the fit (fits with fewer than two
+  row blocks of observations run on one thread)}
 }
 \description{
 Fast generalized linear model fitting

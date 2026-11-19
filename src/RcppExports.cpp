@@ -1172,6 +1172,45 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fastglm_max_team_size_test
+int fastglm_max_team_size_test(bool reset);
+RcppExport SEXP _fastglm_fastglm_max_team_size_test(SEXP resetSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< bool >::type reset(resetSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_max_team_size_test(reset));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fastglm_parallel_blocks_test
+int fastglm_parallel_blocks_test(int n, int block_rows, Rcpp::IntegerVector fail, int threads);
+RcppExport SEXP _fastglm_fastglm_parallel_blocks_test(SEXP nSEXP, SEXP block_rowsSEXP, SEXP failSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type block_rows(block_rowsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type fail(failSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_parallel_blocks_test(n, block_rows, fail, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fastglm_block_reduce_test
+Eigen::MatrixXd fastglm_block_reduce_test(const Eigen::MatrixXd& X, const Eigen::VectorXd& w, int fail_block, int threads);
+RcppExport SEXP _fastglm_fastglm_block_reduce_test(SEXP XSEXP, SEXP wSEXP, SEXP fail_blockSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Eigen::MatrixXd& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const Eigen::VectorXd& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< int >::type fail_block(fail_blockSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_block_reduce_test(X, w, fail_block, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepare_glm_constant
 SEXP prepare_glm_constant(NumericMatrix x, NumericVector weights, bool leverage, int code);
 RcppExport SEXP _fastglm_prepare_glm_constant(SEXP xSEXP, SEXP weightsSEXP, SEXP leverageSEXP, SEXP codeSEXP) {
@@ -1296,6 +1335,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_vglm_fit_source", (DL_FUNC) &_fastglm_vglm_fit_source, 16},
     {"_fastglm_vglm_evaluate_source", (DL_FUNC) &_fastglm_vglm_evaluate_source, 7},
     {"_fastglm_fastglm_crossprod_test", (DL_FUNC) &_fastglm_fastglm_crossprod_test, 5},
+    {"_fastglm_fastglm_max_team_size_test", (DL_FUNC) &_fastglm_fastglm_max_team_size_test, 1},
+    {"_fastglm_fastglm_parallel_blocks_test", (DL_FUNC) &_fastglm_fastglm_parallel_blocks_test, 4},
+    {"_fastglm_fastglm_block_reduce_test", (DL_FUNC) &_fastglm_fastglm_block_reduce_test, 4},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
     {"_fastglm_fastglm_set_threads_cpp", (DL_FUNC) &_fastglm_fastglm_set_threads_cpp, 1},
     {"_fastglm_fastglm_has_openmp_cpp", (DL_FUNC) &_fastglm_fastglm_has_openmp_cpp, 0},

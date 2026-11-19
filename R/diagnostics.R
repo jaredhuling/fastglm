@@ -63,11 +63,19 @@
 #'   informative. These observations help diagnose a fit but do not prove
 #'   that an interior solution is absent. Source rows and values must remain
 #'   unchanged since fitting. Unavailable row diagnostics retain a reason.
+#'   `threads` is the number of threads the fit used, when the fit records it.
 #' @md
 #' @export
 fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
     if(!is.logical(boundary) || length(boundary)!=1L || is.na(boundary))
         stop("'boundary' must be TRUE or FALSE",call.=FALSE)
+    out <- .fastglm_diagnostics(object,boundary,max.rows)
+    # The number of threads the fit used, for fits that record it.
+    if(!is.null(object$threads)) out$threads <- object$threads
+    out
+}
+
+.fastglm_diagnostics <- function(object,boundary,max.rows) {
     if(inherits(object,"fastglm_vglm")) {
         if(boundary) stop("boundary row diagnostics require an ordinal fit",call.=FALSE)
         return(structure(.vglm_diagnostics(object),class="fastglm_diagnostics"))

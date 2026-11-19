@@ -179,6 +179,16 @@ tweedie_link_power <- function(family) {
 #'   sup-norm of the coefficient update. Gamma-log fits also check the remaining
 #'   adjusted-score update, so a small step caused by step halving does not
 #'   suffice for convergence.
+#' @param threads the number of threads for the compiled computations of this
+#'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+#'   The count is reduced to the number of logical cores (and to 2 under
+#'   `R CMD check`). Results are identical for every number of threads.
+#'   Families supplied as R functions are evaluated on one thread. Dense fits
+#'   with a QR or SVD method (0, 1, 4, 5) use one thread, because their
+#'   decomposition is serial; so does the pivoted QR refit after a failed
+#'   Cholesky factorization. Cholesky fits of dense, sparse (`dgCMatrix`), and
+#'   `big.matrix` designs are threaded. Fits with fewer than two row blocks
+#'   of observations (16384 rows each by default) run on one thread.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -259,10 +269,12 @@ fastglmPure <- function(x, y,
                         maxit    = 100L,
                         firth    = FALSE,
                         inference = c("full", "diagonal", "none"),
-                        covariance = c("estimate", "previous"))
+                        covariance = c("estimate", "previous"),
+                        threads  = NULL)
 {
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE.", call. = FALSE)
+    threads <- .fastglm_resolve_threads(threads)
     inference <- match.arg(inference)
     old.rule <- set_conv_rule(.covariance_rule(covariance))
     on.exit(set_conv_rule(old.rule), add = TRUE)
@@ -303,11 +315,18 @@ fastglmPure <- function(x, y,
     } else if (is.matrix(x))
     {
         is_big_matrix <- FALSE
+        # Dense QR and SVD fits run on one thread: the decomposition is serial
+        # and dominates, so threading the rest gave at most 1.15x with 4
+        # threads at n = 1e6 (below the 1.5x bar for threading a path).
+        if (!(method %in% 2:3)) threads <- 1L
     } else
     {
         stop("x must be a matrix, a big.matrix object, or a Matrix::dgCMatrix")
     }
 
+
+    restore.threads <- .fastglm_with_threads(threads)
+    on.exit(restore.threads(), add = TRUE)
 
     stopifnot(is.numeric(y) || is.factor(y),
               is.numeric(weights),
@@ -329,6 +348,7 @@ fastglmPure <- function(x, y,
         res$se <- numeric(); res$x <- x
         res$n <- if (is.matrix(y)) rowSums(y) else rep(1, NROW(y))
         res$intercept <- FALSE; res$inference <- inference; res$solver <- "empty"
+        res$threads <- threads
         return(res)
     }
     nobs  <- n <- NROW(y)
@@ -465,6 +485,9 @@ fastglmPure <- function(x, y,
                 warning("Cholesky factorization is singular or ill-conditioned; ",
                         "the model was fit with pivoted QR (method = 0) instead.", call. = FALSE)
             method <<- 0L
+            # The pivoted QR refit runs on one thread, as dense QR fits do.
+            threads <<- 1L
+            fastglm_set_threads_cpp(1L)
             is.int <<- .intercept_columns(x)
             ans <- if (firth) fit_glm_firth(x, y, weights, offset, start, mu, eta,
                 family$variance, family$mu.eta, family$linkinv, family$dev.resids,
@@ -487,6 +510,9 @@ fastglmPure <- function(x, y,
             warning("sparse Cholesky factorization is singular or ill-conditioned; ",
                     "the model was fit with a dense copy of the design and pivoted QR (method = 0).", call. = FALSE)
             method <<- 0L
+            # The pivoted QR refit runs on one thread, as dense QR fits do.
+            threads <<- 1L
+            fastglm_set_threads_cpp(1L)
             xd <- as.matrix(x)
             ans <- if (firth) fit_glm_firth(xd, y, weights, offset, start, mu, eta,
                 family$variance, family$mu.eta, family$linkinv, family$dev.resids,
@@ -542,6 +568,7 @@ fastglmPure <- function(x, y,
         res$column.scale <- scaling
     }
     res$inference <- inference
+    res$threads <- threads
     res$x <- original.x
     attr(res, "family_code") <- fc
     res
@@ -589,6 +616,9 @@ fastglmPure <- function(x, y,
 #'   Gaussian, Gamma, inverse Gaussian, and fixed-theta negative-binomial families
 #'   on dense, sparse, and `big.matrix` designs, and with any decomposition
 #'   method.
+#' @param threads the number of threads for the compiled computations of this
+#'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+#'   Results are identical for every number of threads.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -601,6 +631,8 @@ fastglmPure <- function(x, y,
 #' \item{converged}{whether convergence was confirmed (see Convergence)}
 #' \item{convergence.reason}{`"converged"`, `"converged_boundary"`,
 #'   `"iteration_limit"`, or `"step_halving_failed"`}
+#' \item{threads}{the thread setting of the fit (fits with fewer than two
+#'   row blocks of observations run on one thread)}
 #' @section Convergence and starting values:
 #' Each iteration solves a weighted least squares problem (iteratively
 #' reweighted least squares). A step that gives invalid fitted values or
@@ -714,6 +746,7 @@ fastglm.default <- function(x, y,
                             inference = c("full", "diagonal", "none"),
                             retain.data = TRUE,
                             covariance = c("estimate", "previous"),
+                            threads = NULL,
                             ...)
 {
     family <- .resolve_family(family)
@@ -721,7 +754,10 @@ fastglm.default <- function(x, y,
     if (is.null(offset)) offset <- rep(0, NROW(y))
     res <- fastglmPure(x, y, family, weights, offset, start, etastart,
                       mustart, method, tol, maxit, firth = firth, inference = match.arg(inference),
-                      covariance = match.arg(covariance))
+                      covariance = match.arg(covariance), threads = threads)
+    # The post-fit pass runs at the fit's thread count.
+    restore.threads <- .fastglm_with_threads(res$threads)
+    on.exit(restore.threads(), add = TRUE)
     res <- .finish_glm(res, offset)
     if (res$inference != "full") res$cov.unscaled <- NULL
     if (!retain.data) { res$x <- NULL; res$y <- NULL }

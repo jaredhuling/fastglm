@@ -229,6 +229,18 @@ fastglm_crossprod_test <- function(X, w, block_rows, threads, scheme) {
     .Call(`_fastglm_fastglm_crossprod_test`, X, w, block_rows, threads, scheme)
 }
 
+fastglm_max_team_size_test <- function(reset) {
+    .Call(`_fastglm_fastglm_max_team_size_test`, reset)
+}
+
+fastglm_parallel_blocks_test <- function(n, block_rows, fail, threads) {
+    .Call(`_fastglm_fastglm_parallel_blocks_test`, n, block_rows, fail, threads)
+}
+
+fastglm_block_reduce_test <- function(X, w, fail_block, threads) {
+    .Call(`_fastglm_fastglm_block_reduce_test`, X, w, fail_block, threads)
+}
+
 prepare_glm_constant <- function(x, weights, leverage, code) {
     .Call(`_fastglm_prepare_glm_constant`, x, weights, leverage, code)
 }
