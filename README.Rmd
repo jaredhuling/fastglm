@@ -14,7 +14,7 @@ knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE,
 
 # fastglm
 
-The *fastglm* package provides fast regression modeling, mean bias reduction, and inference for continuous, binary, count, and ordered outcomes. C++ fitting routines and numerical checks support familiar R workflows, including `summary()`, `coef()`, `vcov()`, `predict()`, `residuals()`, and `logLik()`.
+The *fastglm* package provides fast regression modeling, mean bias reduction, and inference for continuous, binary, count, ordered, and unordered categorical outcomes. C++ fitting routines and numerical checks support familiar R workflows, including `summary()`, `coef()`, `vcov()`, `predict()`, `residuals()`, and `logLik()`.
 
 ## Models and estimation
 
@@ -26,6 +26,7 @@ The *fastglm* package provides fast regression modeling, mean bias reduction, an
 | Zero-inflated counts | `fastglm_zi()` | Poisson or negative-binomial counts with an additional zero component; [zero-inflated models](#zero-inflated-models) |
 | Zero and positive continuous outcomes | `fastglm_twopart()` | Binary and Gamma components, with ML or mean bias reduction; [two-part models](#two-part-models-for-continuous-outcomes) |
 | Ordered outcomes | `fastglm_ordinal()` | Proportional odds and selected nonparallel effects; logit, probit, and complementary log-log links; ML or mean bias reduction; [ordinal functionality](#ordered-outcomes) |
+| Unordered categorical outcomes | `fastglm_multinom()` | Multinomial (baseline-category) logit; ML or mean bias reduction; dense, sparse, mapped, or streamed data; [multinomial models](#unordered-categorical-outcomes) |
 
 Mean bias reduction uses `firth=TRUE` where supported. Its scope depends on the model and family/link combination; the [bias-reduction section](#firth-bias-reduced-glms) describes the GLM choices. Truncated, hurdle, and zero-inflated count fitting uses ML.
 
@@ -33,10 +34,10 @@ Mean bias reduction uses `firth=TRUE` where supported. Its scope depends on the 
 
 - Uncertainty and testing. Model-based intervals, joint Wald tests, robust and clustered covariance, and refitting bootstraps are available for supported classes. Profile inference covers dense binomial-logit Firth fits, ordinal ML fits with common or threshold-specific slopes, and negative-binomial size. Ordinal score tests address coefficient hypotheses or the common-slope assumption.
 - Prediction and interpretation. Response means or category probabilities, prediction standard errors, averages and contrasts, residuals, and ordinal calibration summaries connect fitted coefficients to outcomes. Shared printed tables and optional broom methods support reporting.
-- Large datasets. Dense, sparse, mapped, and repeatable-source inputs serve different model classes. Streaming supports GLMs, negative-binomial, hurdle, two-part, and ordinal models with common or threshold-specific slopes.
+- Large datasets. Dense, sparse, mapped, and repeatable-source inputs serve different model classes. Streaming supports GLMs, negative-binomial, hurdle, two-part, and multinomial models, and ordinal models with common or threshold-specific slopes.
 - Repeated fitting and numerical control. Prepared GLM and ordinal designs reuse predictor setup across responses. GLMs offer six decompositions and an automatic choice, with diagnostics for convergence and numerical conditioning.
 
-The [package overview](vignettes/fastglm-overview.Rmd) maps these methods to their supported models. Dedicated guides cover [bias reduction](vignettes/firth-fastglm.Rmd), [counts](vignettes/count-firth-fastglm.Rmd), [ordered outcomes](vignettes/ordinal-fastglm.Rmd), [two-part outcomes](vignettes/semicontinuous-fastglm.Rmd), and [large-data computation](vignettes/large-data-fastglm.Rmd). See [NEWS](NEWS.md) for the version history.
+The [package overview](vignettes/fastglm-overview.Rmd) maps these methods to their supported models. Dedicated guides cover [bias reduction](vignettes/firth-fastglm.Rmd), [counts](vignettes/count-firth-fastglm.Rmd), [ordered outcomes](vignettes/ordinal-fastglm.Rmd), [unordered categorical outcomes](vignettes/multinom-fastglm.Rmd), [two-part outcomes](vignettes/semicontinuous-fastglm.Rmd), and [large-data computation](vignettes/large-data-fastglm.Rmd). See [NEWS](NEWS.md) for the version history.
 
 [Installation](#installation) · [GLM example](#fitting-a-glm) · [Model extensions](#extended-models) · [Bias reduction](#firth-bias-reduced-glms) · [Inference and repeated fits](#inference-and-repeated-fits) · [Large data](#sparse-bigmatrix-and-streaming-designs) · [Speed](#speed) · [Stability](#stability) · [Benchmarks](#benchmarks)
 
@@ -171,6 +172,26 @@ The overall mean combines the probability of a positive outcome with its conditi
 | Repeat fits or read large datasets | `fastglm_ordinal_prepare()` / `fastglm_ordinal_batch()` reuse dense designs; `fastglm_ordinal_streaming()` fits common-slope or partial models from repeatable blocks, including mean bias reduction |
 
 Dense partial fits support robust covariance, marginal effects, ML profiles, and constrained score tests, including equality of selected slopes across thresholds. Streamed fits provide model-based or robust covariance, Wald inference, common-slope tests, prediction scores, and calibration by rereading their source. `fastglm_diagnostics(fit,boundary=TRUE)` locates rows near probability boundaries. Profile intervals and general constrained coefficient-score tests require retained data. Empty-category behavior also depends on the model and estimation method. The [ordinal vignette](vignettes/ordinal-fastglm.Rmd) begins with the full support guide and develops examples for each workflow.
+
+### Unordered categorical outcomes
+
+`fastglm_multinom()` fits multinomial (baseline-category) logit models,
+$\log(\pi_{ik}/\pi_{ir}) = x_i^\top \beta_k$ for each category $k$ other than the reference $r$, by Fisher scoring with step halving, or with mean bias reduction (`firth=TRUE`). The response is a factor or a matrix of category counts, and the design can be a formula, a dense or sparse matrix, a `big.matrix`, or a repeatable source read in blocks.
+
+```{r multinom-example}
+set.seed(1)
+n <- 2000
+x1 <- rnorm(n); x2 <- rnorm(n)
+eta <- cbind(0, 0.5 + x1, -0.5 + x2, x1 - x2)
+y <- factor(apply(exp(eta) / rowSums(exp(eta)), 1,
+                  function(p) sample(c("a", "b", "c", "d"), 1, prob=p)))
+dat <- data.frame(y, x1, x2)
+fit_mn <- fastglm_multinom(y ~ x1 + x2, data=dat)
+coef(fit_mn, matrix=TRUE)
+fastglm_marginal_effects(fit_mn, "x1")
+```
+
+Fits provide `summary()` Wald tables, predicted probabilities with standard errors, robust and clustered covariance (`fastglm_vcov()`), joint Wald tests, average probabilities and contrasts, marginal effects, and pairs or cluster bootstraps. For many categories, `control=list(solver="auto")` switches to a truncated Newton (conjugate gradient) solver that avoids forming the full information matrix during the iterations. The [multinomial vignette](vignettes/multinom-fastglm.Rmd) gives the computations and a full example.
 
 ## Firth bias-reduced GLMs
 
@@ -475,10 +496,56 @@ knitr::kable(ordinal_internal[, c("n", "way", "median_seconds", "coefficient_dif
 
 Streamed fits use blocks of 10,000 rows.
 
+### Multinomial comparison
+
+```{r multinom-benchmark-data, include=FALSE}
+mn_speed <- readRDS("vignettes/multinom-data/multinom_speed.rds")
+mn_median <- function(d, by) aggregate(time ~ ., data=d[, c(by, "time")], FUN=median)
+mn1 <- mn_median(mn_speed$part1, c("n", "p", "K", "method"))
+mn1_fast <- mn1[mn1$method=="mn_fastglm", c("n", "p", "K", "time")]
+names(mn1_fast)[4] <- "fastglm"
+mn1 <- merge(mn1, mn1_fast)
+mn1$ratio <- mn1$time / mn1$fastglm
+mn_range <- function(m) { r <- range(mn1$ratio[mn1$method==m]); sprintf("%.0f to %.0f", r[1], r[2]) }
+mn3 <- mn_median(mn_speed$part3, c("p", "K", "method"))
+```
+
+These comparisons time `nnet::multinom()` at its defaults and with tightened tolerances (`maxit=10000`, `reltol=abstol=1e-14`), with which it reaches the same maximum, and `VGAM::vglm()`. Times are medians of five runs with single-threaded linear algebra. In three settings with 4 to 6 categories and 20,000 to 100,000 observations, `nnet::multinom()` took `r mn_range("mn_nnet")` times as long as *fastglm* at its defaults and `r mn_range("mn_nnet_tight")` times as long with tight tolerances, and `VGAM::vglm()` took `r mn_range("mn_vglm")` times as long. With many categories, *fastglm* uses its conjugate gradient solver:
+
+```{r multinom-categories, echo=FALSE, fig.width=8, fig.height=4, out.width="100%", fig.alt="Multinomial fitting times against the number of categories, with 20,000 observations and 10 or 50 covariates."}
+lab <- c(mn3_exact="fastglm (exact solver)", mn3_cg="fastglm (CG solver)", mn3_nnet="nnet (tight)")
+d <- mn3[mn3$method %in% names(lab), ]
+d$method <- factor(lab[d$method], lab)
+d$panel <- factor(sprintf("%d covariates", d$p), sprintf("%d covariates", c(10, 50)))
+ggplot2::ggplot(d, ggplot2::aes(K, time, colour=method, linetype=method, shape=method)) +
+    ggplot2::geom_line() + ggplot2::geom_point(size=2) + ggplot2::facet_wrap(~ panel) +
+    ggplot2::scale_x_log10(breaks=c(5, 10, 20, 50, 100)) + ggplot2::scale_y_log10() +
+    ggplot2::scale_colour_manual(values=c("#C0392B", "#C0392B", "#2E86C1")) +
+    ggplot2::scale_linetype_manual(values=c("solid", "dashed", "solid")) +
+    ggplot2::scale_shape_manual(values=c(16, 17, 15)) +
+    ggplot2::labs(x="Number of categories K (log scale)", y="Median seconds (log scale)",
+                  colour=NULL, linetype=NULL, shape=NULL) +
+    ggplot2::theme_minimal(base_size=11) + ggplot2::theme(legend.position="bottom")
+```
+
+```{r multinom-results, echo=FALSE, results='asis'}
+w <- reshape(mn3[mn3$method %in% c("mn3_exact", "mn3_cg", "mn3_nnet"), ],
+             idvar=c("p", "K"), timevar="method", direction="wide")
+w <- w[order(w$p, w$K), ]
+knitr::kable(data.frame(Covariates=w$p, Categories=w$K, Coefficients=(w$p + 1) * (w$K - 1),
+                        Exact=w$time.mn3_exact, CG=w$time.mn3_cg, nnet=w$time.mn3_nnet),
+    col.names=c("Covariates", "Categories", "Coefficients", "fastglm exact (s)",
+                "fastglm CG (s)", "nnet tight (s)"),
+    digits=c(0, 0, 0, 2, 2, 2), row.names=FALSE)
+```
+
+All methods reached the same log likelihood, with relative differences below $10^{-12}$. The machine was shared with other jobs during these runs, so absolute times carry some noise.
+
 ## References
 
 - Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika*, 80(1), 27--38. [doi:10.1093/biomet/80.1.27](https://doi.org/10.1093/biomet/80.1.27)
 - Kosmidis, I. and Firth, D. (2009). Bias reduction in exponential family nonlinear models. *Biometrika*, 96(4), 793--804. [doi:10.1093/biomet/asp055](https://doi.org/10.1093/biomet/asp055)
+- Kosmidis, I. and Firth, D. (2011). Multinomial logit bias reduction via the Poisson log-linear model. *Biometrika*, 98(3), 755--759. [doi:10.1093/biomet/asr026](https://doi.org/10.1093/biomet/asr026)
 - Kosmidis, I. and Firth, D. (2021). Jeffreys-prior penalty, finiteness and shrinkage in binomial-response generalized linear models. *Biometrika*, 108(1), 71--82. [doi:10.1093/biomet/asaa052](https://doi.org/10.1093/biomet/asaa052)
 - Marschner, I. C. (2011). glm2: Fitting generalized linear models with convergence problems. *The R Journal*, 3(2), 12--15. [doi:10.32614/RJ-2011-012](https://doi.org/10.32614/RJ-2011-012)
 - Bates, D. and Eddelbuettel, D. (2013). Fast and elegant numerical linear algebra using the RcppEigen package. *Journal of Statistical Software*, 52(5), 1--24. [doi:10.18637/jss.v052.i05](https://doi.org/10.18637/jss.v052.i05)

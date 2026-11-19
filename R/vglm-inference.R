@@ -298,11 +298,14 @@
 # ---- Averages, marginal effects, and bootstrap helpers ---------------------
 
 # The training data of a formula fit, recovered from the call when the caller
-# supplies no newdata: the data argument, then subset and NA omission. The
-# result must have one row per row of the stored design.
+# supplies no newdata: the data argument (or, without one, the formula's
+# variables in its environment, as model.frame() finds them), then subset and
+# NA omission. The result must have one row per row of the stored design.
 .vglm_training_data <- function(object) {
     env <- environment(object$terms)
-    dat <- tryCatch(eval(object$call$data, env), error = function(e) NULL)
+    dat <- if (is.null(object$call$data)) {
+        tryCatch(stats::get_all_vars(object$terms, data = NULL), error = function(e) NULL)
+    } else tryCatch(eval(object$call$data, env), error = function(e) NULL)
     if (is.data.frame(dat)) {
         if (!is.null(object$call$subset))
             dat <- dat[eval(object$call$subset, dat, env), , drop = FALSE]

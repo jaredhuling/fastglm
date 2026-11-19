@@ -188,3 +188,19 @@ test_that("bootstrap print reports inference as unavailable only after failed re
     b$successful <- b$R - 1L
     expect_true(any(grepl("Unavailable", capture.output(print(b)))))
 })
+
+test_that("formula fits without a data argument recover their data for effects", {
+    set.seed(8)
+    x1 <- rnorm(300)
+    x2 <- rnorm(300)
+    y <- factor(sample(c("a", "b", "c"), 300, TRUE))
+    f <- fastglm_multinom(y ~ x1 + x2)
+    g <- fastglm_multinom(y ~ x1 + x2, data = data.frame(y, x1, x2))
+    expect_max_diff(fastglm_marginal_effects(f, "x1")$estimate,
+                    fastglm_marginal_effects(g, "x1")$estimate, 1e-12)
+    expect_max_diff(fastglm_average(f)$estimate, fastglm_average(g)$estimate, 1e-12)
+    fs <- fastglm_multinom(y ~ x1 + x2, subset = x2 > 0)
+    gs <- fastglm_multinom(y ~ x1 + x2, data = data.frame(y, x1, x2), subset = x2 > 0)
+    expect_max_diff(fastglm_marginal_effects(fs, "x1")$estimate,
+                    fastglm_marginal_effects(gs, "x1")$estimate, 1e-12)
+})
