@@ -177,3 +177,14 @@ test_that("a source fit accepts block.size and gives the same fit", {
     expect_max_diff(coef(b), coef(a), 1e-10)
     expect_error(fastglm_multinom(mk(), block.size = 0), "block.size")
 })
+
+test_that("bootstrap print reports inference as unavailable only after failed refits", {
+    set.seed(5)
+    x <- rnorm(200)
+    y <- rbinom(200, 1, plogis(0.5 * x))
+    fit <- fastglm(cbind(1, x), y, family = binomial())
+    b <- fastglm_bootstrap(fit, R = 19L, seed = 1L)
+    expect_false(any(grepl("Unavailable", capture.output(print(b)))))
+    b$successful <- b$R - 1L
+    expect_true(any(grepl("Unavailable", capture.output(print(b)))))
+})

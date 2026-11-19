@@ -74,6 +74,11 @@
 
 ## Multinomial models
 
+* New vignette, "Multinomial logit models with fastglm"
+  (`vignette("multinom-fastglm")`), walks through fitting, printed output,
+  prediction, robust and bootstrap inference, probability summaries,
+  grouped data, separation, and large data, and reports timing comparisons
+  with `nnet::multinom()` and `VGAM::vglm()`.
 * New `fastglm_multinom()` fits multinomial logit models. It accepts a formula
   with `data`, a numeric or sparse (`dgCMatrix`) design matrix, a
   `big.matrix`, or a `fastglm_source()` read block by block. The response is a
@@ -125,6 +130,9 @@
 
 ## Other changes
 
+* Printing a `fastglm_bootstrap()` result for a GLM, count, or multinomial
+  fit no longer reports "Inference: Unavailable" when every refit
+  succeeded.
 * `fastglm_ordinal(formula = y ~ x, ...)` now works; previously only a
   formula given as the first, unnamed argument was dispatched.
 * A `fastglm()` fit to a `big.matrix` that was saved and reloaded (the

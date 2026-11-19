@@ -1,0 +1,394 @@
+---
+title: "Multinomial logit models with fastglm"
+author: "Jared Huling"
+output:
+  rmarkdown::html_vignette:
+    math_method:
+      engine: mathjax
+      url: https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js
+vignette: >
+  %\VignetteIndexEntry{Multinomial logit models with fastglm}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse   = TRUE,
+  comment    = "#>",
+  message    = FALSE,
+  fig.width  = 7,
+  fig.height = 4.5,
+  dpi        = 150,
+  out.width  = "100%",
+  fig.path   = "multinom-figs/"
+)
+library(fastglm)
+library(ggplot2)
+```
+
+`fastglm_multinom()` fits multinomial (baseline-category) logit models by Fisher scoring with the step-halving safeguards of `fastglm()`. Fits support model-based, robust, and cluster-robust covariance, Wald tests, probability averages and marginal effects with standard errors, the bootstrap, and mean bias reduction, and the same function fits sparse, memory-mapped, and streamed data. This vignette works through an example and then reports timing comparisons with `nnet::multinom()` and `VGAM::vglm()`.
+
+# Multinomial functionality at a glance {#multinom-scope}
+
+| Analysis task | Functions | Notes |
+|:--|:--|:--|
+| Fit the model | `fastglm_multinom()` | Formula, dense matrix, `dgCMatrix`, `big.matrix`, or `fastglm_source()`; factor response or a matrix of category counts; weights and offsets; `firth = TRUE` for mean bias reduction |
+| Display and extract estimates | `print()`, `summary()`, `coef(matrix = TRUE)`, `vcov()`, `confint()`, `logLik()`, `AIC()`, `BIC()`, `nobs()`, `broom::tidy()`, `broom::glance()` | Coefficients are named `"<category>:<term>"` |
+| Predict | `predict()` with `type = "probability"`, `"class"`, or `"link"`, optionally with `se.fit = TRUE` | Standard errors by the delta method |
+| Robust inference | `fastglm_vcov()`, `fastglm_wald_test()`, `fastglm_bootstrap()` | HC0 and HC1 sandwich and cluster-robust covariance; pairs and cluster bootstrap |
+| Probability summaries | `fastglm_average()`, `fastglm_marginal_effects()` | Average probabilities, contrasts, and average derivatives for every category |
+| Diagnostics | `fastglm_diagnostics()`, `residuals()` | Score size, conditioning, and the separation flag |
+
+# Model and parameterization {#multinom-model}
+
+For observations $i = 1, \dots, n$ with design rows $x_i$ of length $p$ (including the intercept), response categories $1, \dots, K$, and reference category $r$, the model has one linear predictor for each non-reference category,
+$$
+\eta_{ik} = \log \frac{\pi_{ik}}{\pi_{ir}} = o_{ik} + x_i^\top \beta_k, \qquad k \neq r,
+$$
+with $\pi_{ik} = \Pr(Y_i = k \mid x_i)$ and offsets $o_{ik}$, so that
+$$
+\pi_{ik} = \frac{\exp(\eta_{ik})}{1 + \sum_{l \neq r} \exp(\eta_{il})}, \qquad
+\pi_{ir} = \frac{1}{1 + \sum_{l \neq r} \exp(\eta_{il})}.
+$$
+The coefficient $\beta_{kj}$ is the change in the log odds of category $k$ relative to category $r$ per unit change in covariate $j$. There are $P = p(K - 1)$ coefficients. The reference is the first level of the response by default, as in `nnet::multinom()`, and `reference` selects another level; the fitted probabilities and the likelihood do not depend on this choice.
+
+With prior weights $w_i$, category counts $y_{ik}$, and totals $m_i = \sum_{k=1}^K y_{ik}$ (for individual data, $y_{ik}$ indicates $Y_i = k$ and $m_i = 1$), the log likelihood is $\ell(\beta) = \sum_i w_i \sum_k y_{ik} \log \pi_{ik}$. Writing $\pi_i$ and $y_i$ for the vectors of $\pi_{ik}$ and $y_{ik}$ over the $K - 1$ non-reference categories, $I_{K-1}$ for the identity matrix, and $X_i = I_{K-1} \otimes x_i^\top$ (so that $(\eta_{ik})_{k \neq r} = X_i \beta$ without offsets, with $\beta = (\beta_k)_{k \neq r}$ stacked), the score and the expected (Fisher) information are
+$$
+U(\beta) = \sum_i w_i X_i^\top (y_i - m_i \pi_i), \qquad
+F(\beta) = \sum_i X_i^\top W_i X_i, \qquad
+W_i = w_i m_i \{\operatorname{diag}(\pi_i) - \pi_i \pi_i^\top\}.
+$$
+Each Fisher scoring step is $\beta \leftarrow \beta + \alpha\, F(\beta)^{-1} U(\beta)$, starting from $\alpha = 1$ and halving $\alpha$ until the log likelihood does not decrease. With the deviance $D(\beta) = -2\ell(\beta)$ for individual data (grouped data are treated [below](#multinom-grouped)), the iteration stops when the deviance $D$ of the new iterate and $D_{\text{old}}$ of the previous one satisfy $|D - D_{\text{old}}| / (0.1 + |D|) < \varepsilon$ with $\varepsilon$ = `tol` and the Fisher decrement confirms it, $U^\top F^{-1} U / (0.1 + |D|) < \varepsilon$ at the new iterate. The estimate $\hat\beta$ is that iterate, and $\hat\pi_{ik}$ and $\hat\eta_{ik}$ are evaluated at it; a fit reported as converged is at the maximum of the likelihood to the tolerance `tol`.
+
+# Example data {#multinom-data}
+
+The examples use simulated data on the commuting mode (car, transit, bike, walk) of 3,000 workers in 30 cities, with distance in kilometers, age, and income group as covariates. A city-level shift shared by the non-car linear predictors makes responses within a city correlated.
+
+```{r data}
+set.seed(2026)
+n <- 3000
+city <- factor(sample(sprintf("city%02d", 1:30), n, replace = TRUE))
+distance <- round(pmin(rlnorm(n, log(6), 0.6), 30), 1)
+age <- round(runif(n, 18, 75))
+income <- factor(sample(c("low", "middle", "high"), n, replace = TRUE,
+                        prob = c(0.30, 0.45, 0.25)),
+                 levels = c("low", "middle", "high"))
+shift <- rnorm(30, sd = 0.4)[city]
+eta <- cbind(car     = 0,
+             transit = 0.8 - 0.05 * distance - 0.01 * (age - 40) -
+                       0.5 * (income == "high") + shift,
+             bike    = 1.2 - 0.35 * distance - 0.03 * (age - 40) -
+                       0.2 * (income == "high") + shift,
+             walk    = 3.0 - 1.10 * distance - 0.01 * (age - 40) + shift)
+prob <- exp(eta) / rowSums(exp(eta))
+mode <- apply(prob, 1, function(p) sample(colnames(eta), 1, prob = p))
+commute <- data.frame(mode = factor(mode, levels = colnames(eta)),
+                      distance, age, income, city)
+table(commute$mode)
+```
+
+# Fitting and printed output {#multinom-fit}
+
+The formula interface follows `glm()`. The response is a factor, and its first level, `car`, is the reference.
+
+```{r fit}
+fit <- fastglm_multinom(mode ~ distance + age + income, data = commute)
+fit
+```
+
+The printed coefficients are the matrix $(\beta_k)_{k \neq r}$, one row per non-reference category, as returned by `coef(fit, matrix = TRUE)`. Row `walk` gives the log odds of walking relative to driving, which decrease by about 1 per kilometer. The residual degrees of freedom are $n(K - 1)$ minus the number of estimated coefficients (the rank; coefficients of aliased design columns are not estimated), as in `VGAM::vglm()`, and the last line gives the convergence status and the number of Fisher scoring iterations.
+
+`summary()` gives Wald tests $z = \hat\beta_{kj} / \widehat{\operatorname{se}}(\hat\beta_{kj})$ with standard errors from $F(\hat\beta)^{-1}$. Coefficients are named `<category>:<term>`.
+
+```{r summary}
+summary(fit)
+```
+
+Coefficients are ordered term by term: all categories of the intercept, then all categories of `distance`, and so on. The residual deviance is $D(\hat\beta) = -2\ell(\hat\beta)$ for individual data, the null deviance is that of the intercept-only model, and AIC and BIC count the $15$ coefficients. The usual extractors return the coefficients, $F(\hat\beta)^{-1}$, Wald intervals, and the log likelihood.
+
+```{r extractors}
+coef(fit)[1:4]
+round(vcov(fit)[1:3, 1:3], 5)
+confint(fit)[c("transit:distance", "bike:distance", "walk:distance"), ]
+logLik(fit)
+c(AIC = AIC(fit), BIC = BIC(fit), n = nobs(fit))
+```
+
+`broom::tidy()` and `broom::glance()` return data frames, with the category in `y.level` as for `nnet::multinom()`.
+
+```{r broom}
+head(broom::tidy(fit, conf.int = TRUE), 4)
+broom::glance(fit)
+```
+
+# Predicted probabilities {#multinom-predict}
+
+`predict()` returns the $n \times K$ matrix of $\hat\pi_{ik}$; `type = "class"` returns $\arg\max_k \hat\pi_{ik}$ and `type = "link"` the $\hat\eta_{ik}$. With `se.fit = TRUE`, standard errors are $\{\nabla_\beta \pi_{ik}^\top\, \hat V\, \nabla_\beta \pi_{ik}\}^{1/2}$ (delta method) with $\hat V = F(\hat\beta)^{-1}$.
+
+```{r predict}
+profiles <- data.frame(distance = c(2, 5, 15), age = 35,
+                       income = factor("middle", levels(commute$income)))
+predict(fit, newdata = profiles)
+predict(fit, newdata = profiles, type = "class")
+predict(fit, newdata = profiles, se.fit = TRUE)$se.fit
+```
+
+
+# Inference {#multinom-inference}
+
+## Model-based and cluster-robust covariance
+
+`fastglm_vcov()` computes the sandwich covariance
+$$
+\hat V_{\text{rob}} = F(\hat\beta)^{-1} \Big(\sum_g s_g s_g^\top\Big) F(\hat\beta)^{-1}, \qquad s_g = \sum_{i \in g} w_i X_i^\top (y_i - m_i \hat\pi_i),
+$$
+where $g$ indexes clusters given by `cluster` (multiplied by $G/(G - 1)$ for $G$ clusters by default) or single observations otherwise (`type = "HC0"`, or `"HC1"` with the factor $n/(n - P)$). Here the clusters are cities.
+
+```{r robust}
+v_cluster <- fastglm_vcov(fit, cluster = commute$city)
+se <- cbind(model = sqrt(diag(vcov(fit))), cluster = sqrt(diag(v_cluster)))
+round(se[grep("income", rownames(se)), ], 4)
+```
+
+## Joint Wald tests
+
+`fastglm_wald_test()` computes $T = (L\hat\beta)^\top (L \hat V L^\top)^{-1} (L\hat\beta)$, referred to $\chi^2_q$, where $L$ is the $q \times P$ matrix whose rows select the $q$ coefficients of a term and $\hat V$ is a covariance estimate of $\hat\beta$. Income has $2 \times 3 = 6$ coefficients. The test is shown with $\hat V = F(\hat\beta)^{-1}$ and then with the cluster-robust $\hat V_{\text{rob}}$.
+
+```{r wald}
+fastglm_wald_test(fit, terms = "income")
+fastglm_wald_test(fit, terms = "income", vcov. = v_cluster)$statistic
+```
+
+## Likelihood ratio tests
+
+The likelihood ratio statistic $2\{\ell(\hat\beta) - \ell(\hat\beta_0)\}$, with $\hat\beta_0$ the estimate under the smaller model, compares nested fits; here the smaller model drops income, so the statistic is referred to $\chi^2_6$.
+
+```{r lr}
+fit0 <- fastglm_multinom(mode ~ distance + age, data = commute)
+lr <- 2 * as.numeric(logLik(fit) - logLik(fit0))
+c(statistic = lr, df = 6, p.value = pchisq(lr, 6, lower.tail = FALSE))
+```
+
+## Bootstrap
+
+`fastglm_bootstrap()` refits the model to resampled data; `type = "cluster"` resamples whole clusters. Failed or nonconverged refits are recorded, and if any refit fails, standard errors and intervals are returned as missing.
+
+```{r bootstrap}
+boot <- fastglm_bootstrap(fit, R = 199, type = "cluster",
+                          cluster = commute$city, seed = 1)
+boot
+```
+
+
+# Probability summaries {#multinom-effects}
+
+The sign of $\beta_{kj}$ need not match the direction in which $\pi_{ik}$ changes with $x_{ij}$, since every $\pi_{ik}$ depends on all $\eta_{il}$. `fastglm_average()` estimates $\bar\pi_k = n^{-1} \sum_i \hat\pi_{ik}$ with delta-method standard errors.
+
+```{r average}
+fastglm_average(fit)
+```
+
+Write $\pi_k(x)$ for the probability of category $k$ at design row $x$, so that $\pi_{ik} = \pi_k(x_i)$. With `contrast`, a function $c$ applied to the design rows, it estimates $n^{-1} \sum_i \{\pi_k(c(x_i)) - \pi_k(x_i)\}$. Below, $c$ sets every worker's income group to high.
+
+```{r contrast}
+to_high <- function(x) {
+  x[, "incomemiddle"] <- 0
+  x[, "incomehigh"] <- 1
+  x
+}
+fastglm_average(fit, contrast = to_high)
+```
+
+`fastglm_marginal_effects()` estimates the average derivative $n^{-1} \sum_i \partial \pi_{ik} / \partial x_{ij}$. For a covariate entering linearly,
+$$
+\frac{\partial \pi_{ik}}{\partial x_{ij}} = \pi_{ik} \Big(\beta_{kj} - \sum_{l} \pi_{il} \beta_{lj}\Big), \qquad \beta_{rj} = 0,
+$$
+so the effects sum to zero over $k$.
+
+```{r marginal}
+me <- fastglm_marginal_effects(fit, "distance")
+me
+sum(me$estimate)
+```
+
+Both functions accept `vcov.`, for example $\hat V_{\text{rob}}$.
+
+# Diagnostics {#multinom-diagnostics}
+
+`fastglm_diagnostics()` reports the convergence status, the number of estimable coefficients, the standardized score at $\hat\beta$, and the condition number of $F(\hat\beta)^{-1}$. `residuals()` returns $n \times K$ matrices of response residuals $y_{ik} - \hat\pi_{ik}$ or Pearson residuals $\sqrt{w_i}\,(y_{ik} - \hat\pi_{ik}) / \{\hat\pi_{ik}(1 - \hat\pi_{ik})\}^{1/2}$.
+
+```{r diagnostics}
+fastglm_diagnostics(fit)
+head(residuals(fit, type = "pearson"), 3)
+```
+
+# Grouped data and offsets {#multinom-grouped}
+
+A response given as a matrix of category counts $y_{ik}$ (one column per category, through `cbind()` or a matrix column) is fitted with $m_i = \sum_k y_{ik}$ in the likelihood above, so it gives the same estimates as the individual records. For grouped data the deviance is $D = 2\{\ell_{\text{sat}} - \ell(\hat\beta)\}$ with $\ell_{\text{sat}} = \sum_i w_i \sum_k y_{ik} \log(y_{ik}/m_i)$, as `glm()` does for a grouped binomial response.
+
+```{r grouped}
+commute$age_group <- cut(commute$age, c(17, 35, 55, 75))
+counts <- as.data.frame.matrix(table(interaction(commute$income, commute$age_group,
+                                                 sep = "_"), commute$mode))
+groups <- do.call(rbind, strsplit(rownames(counts), "_"))
+grouped <- data.frame(income = factor(groups[, 1], levels(commute$income)),
+                      age_group = factor(groups[, 2], levels(commute$age_group)))
+grouped$y <- as.matrix(counts)
+fit_g <- fastglm_multinom(y ~ income + age_group, data = grouped)
+fit_i <- fastglm_multinom(mode ~ income + age_group, data = commute)
+max(abs(coef(fit_g) - coef(fit_i)))
+c(grouped = deviance(fit_g), df = fit_g$df.residual)
+```
+
+The deviance of `r round(deviance(fit_g), 1)` on `r fit_g$df.residual` degrees of freedom shows no lack of fit of the grouped model.
+
+`offset` is a vector (the same $o_{ik}$ for all $k$) or an $n \times (K - 1)$ matrix of $o_{ik}$, one column per non-reference category in level order.
+
+# Separation and bias reduction {#multinom-firth}
+
+Under separation the likelihood has no finite maximum and some $\hat\beta_{kj}$ diverge. In `iris`, petal measurements separate *setosa* from the other species. The fit warns when fitted probabilities are numerically 0 or 1 (the threshold of `glm.fit()`), sets `separation = TRUE`, and notes in `summary()` that the Wald standard errors are unreliable.
+
+```{r separation}
+fit_iris <- fastglm_multinom(Species ~ Petal.Length + Petal.Width, data = iris)
+fit_iris$separation
+coef(fit_iris, matrix = TRUE)
+```
+
+With `firth = TRUE`, the estimate solves the adjusted score equations of Firth (1993); for the multinomial logit, a canonical-link model, this is the maximizer of $\ell(\beta) + \tfrac12 \log\det F(\beta)$, which is finite under separation (Kosmidis and Firth, 2011). The estimates agree with `brglm2::brmultinom(type = "AS_mean")` to the convergence tolerance.
+
+```{r firth}
+fit_firth <- fastglm_multinom(Species ~ Petal.Length + Petal.Width, data = iris,
+                              firth = TRUE)
+summary(fit_firth)
+```
+
+Near separation the bias-reduced iteration converges linearly, so a smaller `tol` (for example `1e-12`) gives tighter agreement with other software.
+
+# Large data and many categories {#multinom-large}
+
+The design can also be a sparse `Matrix::dgCMatrix`, a memory-mapped `bigmemory::big.matrix` read in blocks, or a `fastglm_source()` (including `fastglm_source_dbi()` and `fastglm_source_arrow()`) that supplies blocks of rows, so the data are never held in memory at once. These are described in the [large-data vignette](large-data-fastglm.html) and work as in `fastglm()`.
+
+```{r sparse}
+x <- Matrix::sparse.model.matrix(~ distance + age + income, data = commute)
+fit_sparse <- fastglm_multinom(x, commute$mode)
+max(abs(coef(fit_sparse) - coef(fit)))
+```
+
+Forming $F(\beta)$ costs $O(n p^2 K^2)$ operations per step and solving the step $O(P^3)$, so large $K$ dominates the cost. Two parts of the computation address this.
+
+* The weight $W_i = w_i m_i \operatorname{diag}(\pi_i) - (\sqrt{w_i m_i}\, \pi_i)(\sqrt{w_i m_i}\, \pi_i)^\top$ is diagonal minus rank one. Let $X$ be the $n \times p$ design matrix with rows $x_i^\top$ and $\Lambda_k = \operatorname{diag}(w_1 m_1 \pi_{1k}, \dots, w_n m_n \pi_{nk})$. When $K - 1 \geq 6$, $F$ is accumulated as the $K - 1$ diagonal blocks $X^\top \Lambda_k X$ minus one symmetric rank update $Z^\top Z$, where row $i$ of the $n \times P$ matrix $Z$ is $\sqrt{w_i m_i}\,(\pi_i \otimes x_i)^\top$, in place of $K(K - 1)/2$ separate weighted cross products.
+* The truncated Newton solver (`control = list(solver = "cg")`) computes the step $\delta = F^{-1} U$ approximately, by preconditioned conjugate gradients on $F\delta = U$. These use only products $F v = \sum_i X_i^\top W_i (X_i v)$ for vectors $v$ of length $P$, each costing $O(npK)$ and needing no $P \times P$ matrix; the preconditioner is the block-diagonal part of $F$ over categories. Convergence is confirmed with the full $F$, as for the exact solver, so the two solvers agree to the convergence tolerance.
+
+`solver = "auto"` (the default) uses the conjugate gradient solver when the number of design columns satisfies $p \geq 8$ and $p(K - 1) \geq 400$, and the exact solver otherwise; the choice is stored in `fit$solver`.
+
+```{r solver}
+fit_cg <- fastglm_multinom(mode ~ distance + age + income, data = commute,
+                           control = list(solver = "cg"), tol = 1e-12)
+fit_ex <- fastglm_multinom(mode ~ distance + age + income, data = commute,
+                           control = list(solver = "exact"), tol = 1e-12)
+c(fit_cg$solver, fit_ex$solver, fit$solver)
+max(abs(coef(fit_cg) - coef(fit_ex)))
+```
+
+# Speed and accuracy {#multinom-speed}
+
+```{r speed-data, include = FALSE}
+sp <- readRDS("multinom-data/multinom_speed.rds")
+med <- function(d, by) aggregate(cbind(time, loglik) ~ ., data = d[, c(by, "time", "loglik")],
+                                 FUN = median)
+```
+
+Timings are medians of five runs, each fit in its own R process with single-threaded linear algebra, for `fastglm_multinom()` 0.1.5 on an Apple silicon Mac (`r sp$session[1]`). The machine was shared with other jobs (load average 5 to 6 on 14 cores), so absolute times carry some noise. Data were simulated from multinomial logit models with standard normal covariates.
+
+## Comparison with nnet and VGAM
+
+Three settings with few categories. `nnet::multinom()` was run at its defaults and with `maxit = 10000`, `reltol = abstol = 1e-14` (tight), and `VGAM::vglm()` with `epsilon = 1e-12`. The last column is $(\ell_{\text{best}} - \ell)/|\ell_{\text{best}}|$, where $\ell_{\text{best}}$ is the largest log likelihood found by any method.
+
+```{r speed-part1, echo = FALSE}
+p1 <- med(sp$part1, c("n", "p", "K", "method"))
+best <- aggregate(loglik ~ n + p + K, data = p1, FUN = max)
+p1 <- merge(p1, setNames(best, c("n", "p", "K", "best")))
+p1$gap <- (p1$best - p1$loglik) / abs(p1$best)
+ref <- setNames(p1$time[p1$method == "mn_fastglm"],
+                paste(p1$n, p1$p, p1$K)[p1$method == "mn_fastglm"])
+p1$ratio <- p1$time / ref[paste(p1$n, p1$p, p1$K)]
+labels <- c(mn_fastglm = "fastglm", mn_nnet = "nnet (defaults)",
+            mn_nnet_tight = "nnet (tight)", mn_vglm = "VGAM")
+p1$method <- factor(labels[p1$method], labels)
+p1 <- p1[order(p1$n, p1$p, p1$method), ]
+tab1 <- data.frame(Setting = sprintf("n = %s, %d covariates, K = %d",
+                                     format(p1$n, big.mark = ",", scientific = FALSE),
+                                     p1$p, p1$K),
+                   Method = p1$method,
+                   `Time (s)` = sprintf("%.2f", p1$time),
+                   `Relative to fastglm` = sprintf("%.1f", p1$ratio),
+                   `Log-likelihood gap` = ifelse(p1$gap < 1e-12, "< 1e-12",
+                                                 sprintf("%.1e", p1$gap)),
+                   check.names = FALSE)
+knitr::kable(tab1, align = "llrrr")
+rng <- function(m) { r <- range(p1$ratio[p1$method == m]); sprintf("%.0f to %.0f", r[1], r[2]) }
+```
+
+`nnet::multinom()` took `r rng("nnet (defaults)")` times as long at its defaults and `r rng("nnet (tight)")` times as long with tight tolerances, the setting in which it reaches the same maximum. Its defaults stop BFGS at a relative change in the objective of $10^{-8}$ or after 100 iterations, slightly below the maximum here. `VGAM::vglm()` reached the maximum and took `r rng("VGAM")` times as long.
+
+## Many categories
+
+$K$ from 5 to 100 with $n = 20{,}000$ and 10 or 50 covariates plus an intercept (up to $P = 5{,}049$), comparing the exact and conjugate gradient solvers, `fastglm_multinom()` before the large-$K$ changes in this release, and `nnet::multinom()` with tight tolerances. All methods reached the same log likelihood, with relative differences below $10^{-12}$.
+
+```{r speed-part3, echo = FALSE, fig.height = 4}
+p3 <- med(sp$part3, c("p", "K", "method"))
+labels3 <- c(mn3_exact = "fastglm (exact solver)", mn3_cg = "fastglm (CG solver)",
+             mn3_pre = "fastglm (before large-K changes)", mn3_nnet = "nnet (tight)")
+p3$method <- factor(labels3[p3$method], labels3)
+p3$panel <- factor(sprintf("%d covariates", p3$p), sprintf("%d covariates", c(10, 50)))
+ggplot(p3, aes(K, time, colour = method, linetype = method, shape = method)) +
+  geom_line() + geom_point(size = 2) +
+  facet_wrap(~ panel) +
+  scale_x_log10(breaks = c(5, 10, 20, 50, 100)) +
+  scale_y_log10() +
+  scale_colour_manual(values = c("#C0392B", "#C0392B", "#C0392B", "#2E86C1")) +
+  scale_linetype_manual(values = c("solid", "dashed", "dotted", "solid")) +
+  scale_shape_manual(values = c(16, 17, 1, 15)) +
+  labs(x = "Number of categories K (log scale)", y = "Median time in seconds (log scale)",
+       colour = NULL, linetype = NULL, shape = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom") +
+  guides(colour = guide_legend(nrow = 2))
+```
+
+```{r speed-part3-table, echo = FALSE}
+w <- reshape(p3[, c("p", "K", "method", "time")], idvar = c("p", "K"),
+             timevar = "method", direction = "wide")
+names(w) <- sub("^time\\.", "", names(w))
+w <- w[order(w$p, w$K), ]
+tab3 <- data.frame(Covariates = w$p, K = w$K,
+                   Coefficients = (w$p + 1) * (w$K - 1),
+                   Exact = sprintf("%.2f", w[["fastglm (exact solver)"]]),
+                   CG = sprintf("%.2f", w[["fastglm (CG solver)"]]),
+                   Before = sprintf("%.2f", w[["fastglm (before large-K changes)"]]),
+                   `nnet (tight)` = sprintf("%.2f", w[["nnet (tight)"]]),
+                   check.names = FALSE)
+knitr::kable(tab3, align = "rrrrrrr",
+             caption = "Median time in seconds for n = 20,000 observations.")
+b <- p3[p3$p == 50 & p3$K == 100, ]
+big <- setNames(b$time[b$method == "fastglm (CG solver)"] / b$time, as.character(b$method))
+pct <- function(m) round(100 * big[m])
+```
+
+The exact solver's time grows roughly as $K^2$ (forming $F$) and the cost of a conjugate gradient product as $K$. With 10 covariates the conjugate gradient solver was faster from between 20 and 50 categories on; with 50 covariates it was faster at every $K$ (within run-to-run noise at $K = 5$). At 50 covariates and $K = 100$ it took `r pct("fastglm (exact solver)")`% of the exact solver's time and `r pct("fastglm (before large-K changes)")`% of the time before the large-$K$ changes, and `nnet::multinom()` took `r sprintf("%.1f", 1 / big["nnet (tight)"])` times as long. `VGAM::vglm()` was not included because of its run time at large $K$.
+
+## Streamed data
+
+```{r speed-stream, echo = FALSE}
+st <- aggregate(cbind(time, peak_footprint_mb, source_reads) ~ model, data = sp$stream,
+                FUN = median)
+```
+
+A streamed fit with $K = 5$, one million rows, and 20 covariates read from SQLite took `r sprintf("%.1f", st$time[st$model == "mn_stream (K = 5)"])` seconds and `r st$source_reads[st$model == "mn_stream (K = 5)"]` reads of the source, with a peak memory footprint of `r round(st$peak_footprint_mb[st$model == "mn_stream (K = 5)"])` MB. The streamed binomial GLM on the same rows took `r sprintf("%.1f", st$time[st$model == "glm_stream (binomial)"])` seconds with a peak of `r round(st$peak_footprint_mb[st$model == "glm_stream (binomial)"])` MB.
+
+# References
+
+Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika*, 80(1), 27&ndash;38. <doi:10.1093/biomet/80.1.27>
+
+Kosmidis, I. and Firth, D. (2011). Multinomial logit bias reduction via the Poisson log-linear model. *Biometrika*, 98(3), 755&ndash;759. <doi:10.1093/biomet/asr026>

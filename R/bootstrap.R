@@ -384,6 +384,9 @@ print.fastglm_bootstrap <- function(x,digits=max(3L,getOption("digits")-3L),...)
     .fastglm_print_field("Refits",paste(x$successful,"of",x$R,"successful"))
     .fastglm_print_coefficients(cbind(Estimate=x$estimate,`Std. Error`=x$std.error,x$conf.int),
         "Estimates and confidence intervals",digits,P.values=FALSE,has.Pvalue=FALSE,...)
-    if(!isTRUE(x$inference.available)) .fastglm_print_field("Inference","Unavailable; inspect the refit diagnostics")
+    # Ordinal results record availability; for the others, inference is
+    # returned only when every refit succeeded.
+    available <- if(is.null(x$inference.available)) isTRUE(x$successful==x$R) else isTRUE(x$inference.available)
+    if(!available) .fastglm_print_field("Inference","Unavailable; inspect the refit diagnostics")
     invisible(x)
 }

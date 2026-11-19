@@ -87,6 +87,7 @@ articles:
   - count-firth-fastglm
   - semicontinuous-fastglm
   - ordinal-fastglm
+  - multinom-fastglm
 - title: Large data
   navbar: Large data
   contents:

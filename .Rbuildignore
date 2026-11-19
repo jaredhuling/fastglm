@@ -25,3 +25,4 @@ docs
 ^CRAN-SUBMISSION$
 ^vignettes/stability-data$
 ^tests/testthat/_problems$
+^vignettes/multinom-data$
