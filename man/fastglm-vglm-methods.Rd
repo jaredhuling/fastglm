@@ -59,7 +59,8 @@ are the non-reference categories and whose columns are the design columns,
 the layout of \code{coef()} for \code{nnet::multinom()}.}
 
 \item{...}{further arguments (not used, except that \code{print} and \code{summary}
-pass them to the coefficient printer).}
+pass them to the coefficient printer; \code{confint()} gives Wald intervals
+and stops for any \code{method} other than \code{"wald"}).}
 
 \item{parm}{coefficients, by name or position; defaults to all.}
 

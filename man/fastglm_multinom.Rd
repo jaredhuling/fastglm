@@ -151,8 +151,10 @@ products and the passes that confirm convergence.}
 \item{levels}{for a \code{\link[=fastglm_source]{fastglm_source()}}, the category labels in order. By
 default they are the levels of the prototype's factor response (a
 formula source) or of the first block's factor response or count
-columns; a character response needs \code{levels}. A block
-with a response value outside them stops with an error naming it.}
+columns. For a character or logical response without \code{levels}, one
+extra pass over the source collects the distinct values, sorted as
+\code{\link[=factor]{factor()}} sorts them. A block with a response value outside the
+categories stops with an error naming it.}
 
 \item{data, subset, na.action, contrasts}{formula and model-frame arguments.
 Rows with missing values are removed by \code{na.action} (default \code{na.omit}),

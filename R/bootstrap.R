@@ -69,15 +69,20 @@
 #'   cluster resampling. These rules also apply to custom statistics; point
 #'   replicates remain available for inspection.
 #'
-#'   Multinomial fits refit in memory with `fastglm_multinom()`, retaining the
+#'   Multinomial fits refit with `fastglm_multinom()`, retaining the
 #'   reference category, weights, offsets, bias reduction, and the fit's `tol`,
 #'   `maxit`, `block.size`, and `control`; `control` may override any
 #'   `fastglm_multinom()` argument. Pair and cluster resampling are supported
 #'   (cluster identifiers match the retained rows or the rows before
-#'   missing-value omission); parametric resampling and source fits stop with
-#'   an error. A resample in which a category has no observations fails to
-#'   refit and is recorded as a failed replicate. Memory-mapped (`big.matrix`)
-#'   multinomial fits also stop with an error.
+#'   missing-value omission; for a source, a function of the block index);
+#'   parametric resampling stops with an error. Dense and sparse designs are
+#'   subset to the drawn rows. Memory-mapped (`big.matrix`) designs and
+#'   sources are not copied: every row is kept, and its prior weight is
+#'   multiplied by the number of times it was drawn, which gives the same
+#'   likelihood, the same bias-reduced score, and so the same estimates. A
+#'   source refit reads the blocks in order on each pass, and a memory-mapped
+#'   refit uses `workers = 1`. A resample in which a category has no
+#'   observations fails to refit and is recorded as a failed replicate.
 #'
 #'   Every failed or nonconverged refit is recorded. If any replicate fails,
 #'   standard errors and intervals are returned as missing rather than silently
@@ -91,10 +96,8 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
                               type=c("pairs","cluster","parametric"),
                               cluster=NULL,seed=NULL,workers=1L,level=.95,
                               control=list()) {
-    if(inherits(object,"fastglm_vglm") && !is.null(object$source))
-        stop("bootstrap refitting is not yet available for multinomial source fits",call.=FALSE)
-    if(inherits(object,"fastglm_vglm") && inherits(object$x,"big.matrix"))
-        stop("bootstrap refitting is not yet available for memory-mapped (big.matrix) multinomial fits",call.=FALSE)
+    if(inherits(object,"fastglm_vglm") && inherits(object$x,"big.matrix") && workers>1L)
+        stop("memory-mapped (big.matrix) bootstrap uses workers = 1",call.=FALSE)
     if(inherits(object,"fastglm_ordinal_stream"))
         stop("bootstrap refitting is not yet available for ordinal source fits",call.=FALSE)
     if(inherits(object,"fastglm_ordinal"))
@@ -149,7 +152,10 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
         ans<-tryCatch(withCallingHandlers({
             index<-if(type=="pairs") sample.int(input$n,input$n,replace=TRUE) else
                 if(type=="cluster") unlist(units[sample.int(length(units),length(units),replace=TRUE)],use.names=FALSE) else NULL
-            fit<-if(streaming) .bootstrap_stream_refit(object,input,index,type,control) else {
+            fit<-if(streaming) {
+                if(inherits(object,"fastglm_vglm")) .vglm_bootstrap_stream_refit(object,input,index,control)
+                else .bootstrap_stream_refit(object,input,index,type,control)
+            } else {
                 z<-input$data
                 if(type=="parametric") z$y<-.bootstrap_response(object,z)
                 else z<-.bootstrap_subset(z,index)
@@ -218,6 +224,11 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
     list(data=z,n=nrow(x))
 }
 .bootstrap_subset <- function(z,index) {
+    # A memory-mapped design is not copied: each row is weighted by the number
+    # of times it was drawn, which gives the same likelihood and estimates.
+    if(isTRUE(z$vglm) && inherits(z$X,"big.matrix")) {
+        z$weights<-z$weights*tabulate(index,nbins=nrow(z$X));return(z)
+    }
     if(isTRUE(z$vglm)) return(list(X=z$X[index,,drop=FALSE],
         y=if(is.matrix(z$y)) z$y[index,,drop=FALSE] else z$y[index],
         weights=z$weights[index],offset=z$offset[index,,drop=FALSE]))

@@ -88,14 +88,24 @@
   `summary()`, `coef()`, `vcov()`, `confint()`, `predict()` (with
   `se.fit = TRUE`), `residuals()`, `fastglm_wald_test()`,
   `fastglm_diagnostics()`, `fastglm_marginal_effects()`, `fastglm_average()`,
-  `fastglm_bootstrap()` (for in-memory fits), `fastglm_vcov()` (robust and
+  `fastglm_bootstrap()`, `fastglm_vcov()` (robust and
   cluster-robust covariances), and `broom::tidy()` and `broom::glance()`.
   Some of these are limited for fits over a `fastglm_source()`, which keeps
   the source rather than its rows: `residuals()` and evaluation without
   `newdata` are not available, marginal
-  effects require `newdata`, and the bootstrap is not yet available (it
-  is also unavailable for `big.matrix` fits). `fastglm_vcov()` offers
+  effects require `newdata`. `fastglm_vcov()` offers
   the HC0 and HC1 types and cluster-robust versions for these fits.
+* `fastglm_bootstrap()` refits `big.matrix` and source multinomial fits
+  without copying the data: every row is kept and its weight is multiplied by
+  the number of times it was drawn, which gives the same estimates as
+  refitting the drawn rows. A source refit reads the blocks in order on each
+  pass, and cluster identifiers for a source are a function of the block
+  index.
+* `confint()` of a multinomial fit stops when a `method` other than `"wald"`
+  is requested, instead of returning Wald intervals.
+* A source with a character or logical response no longer needs `levels`:
+  one extra pass collects the distinct values, sorted as `factor()` sorts
+  them.
 * `fastglm_multinom()` has a new `control = list(solver = )` option. With
   `"cg"`, each Fisher scoring step is solved by preconditioned conjugate
   gradients on information-vector products, so the full information is not

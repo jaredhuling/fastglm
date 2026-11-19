@@ -38,7 +38,8 @@
 #'   errors are not available for `type = "class"`.
 #' @param digits number of significant digits to display.
 #' @param ... further arguments (not used, except that `print` and `summary`
-#'   pass them to the coefficient printer).
+#'   pass them to the coefficient printer; `confint()` gives Wald intervals
+#'   and stops for any `method` other than `"wald"`).
 #' @returns `predict()` returns a matrix or factor, or with `se.fit = TRUE` a
 #'   list with components `fit` and `se.fit`. Other methods return the
 #'   conventional objects. The `summary()` coefficient table has one row per
@@ -79,6 +80,11 @@ vcov.fastglm_vglm <- function(object, ...) object$cov.unscaled
 #' @rdname fastglm-vglm-methods
 #' @export
 confint.fastglm_vglm <- function(object, parm, level = 0.95, ...) {
+    # Only Wald intervals exist; a request for another method is an error
+    # rather than a silent Wald interval.
+    method <- list(...)$method
+    if (!is.null(method) && !identical(method, "wald"))
+        stop("only Wald intervals (method = \"wald\") are available for multinomial fits", call. = FALSE)
     if (length(level) != 1L || !is.finite(level) || level <= 0 || level >= 1)
         stop("'level' must lie between zero and one", call. = FALSE)
     b <- object$coefficients

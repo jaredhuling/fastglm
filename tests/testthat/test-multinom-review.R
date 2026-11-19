@@ -204,3 +204,10 @@ test_that("formula fits without a data argument recover their data for effects",
     expect_max_diff(fastglm_marginal_effects(fs, "x1")$estimate,
                     fastglm_marginal_effects(gs, "x1")$estimate, 1e-12)
 })
+
+test_that("confint for multinomial fits refuses non-Wald methods", {
+    d <- review_frame(150L)
+    fit <- fastglm_multinom(y ~ x1, data = d)
+    expect_identical(confint(fit, method = "wald"), confint(fit))
+    expect_error(confint(fit, method = "profile"), "only Wald intervals")
+})

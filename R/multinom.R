@@ -31,8 +31,10 @@
 #' @param levels for a [fastglm_source()], the category labels in order. By
 #'   default they are the levels of the prototype's factor response (a
 #'   formula source) or of the first block's factor response or count
-#'   columns; a character response needs `levels`. A block
-#'   with a response value outside them stops with an error naming it.
+#'   columns. For a character or logical response without `levels`, one
+#'   extra pass over the source collects the distinct values, sorted as
+#'   [factor()] sorts them. A block with a response value outside the
+#'   categories stops with an error naming it.
 #' @param reference the reference category, as a level name or an index in
 #'   `1, ..., K`. The default is the first level, as in `nnet::multinom()`.
 #' @param firth use mean bias reduction through adjusted score equations,
@@ -219,7 +221,9 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     lsat <- 0
     offset.used <- FALSE
     for (k in seq_len(source$n_chunks)) {
-        z <- read(k)
+        # After a pass that collected the response levels, block 1 starts a
+        # new pass.
+        z <- if (k == 1L) tryCatch(read(1L), vglm_levels_scanned = function(e) read(1L)) else read(k)
         if (is.null(totals)) {
             totals <- numeric(length(state$levels))
             first <- z$X[1L, ]
@@ -294,8 +298,10 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
 # source with one offset column, applies to every linear predictor). The
 # categories are `levels` if given, otherwise the levels of the prototype's
 # response (formula sources), otherwise those of the first block (a factor's
-# levels or the count column names). A response value outside them stops with
-# the value named. The state (levels, design columns, rows per block, and
+# levels or the count column names, or, for a character or logical response,
+# the sorted distinct values over a full pass, after which read(1) signals
+# "vglm_levels_scanned" so that the caller restarts the pass). A response
+# value outside them stops with the value named. The state (levels, design columns, rows per block, and
 # counts of passes and block reads) is kept in environment(read)$state, so the
 # fit keeps the reader but not a source block.
 .vglm_stream_reader <- function(source, levels = NULL) {
@@ -315,6 +321,20 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     state$columns <- NULL
     state$grouped <- NULL
     per.predictor <- isTRUE(source$schema$offset.per.predictor)
+    scan.levels <- function(y, k) {
+        if (k != 1L) err("the response of source block ", k, " is not a factor; supply 'levels'")
+        values <- unique(as.character(y))
+        for (j in seq_len(source$n_chunks)[-1L]) {
+            state$reads <- state$reads + 1L
+            yj <- (if (per.predictor) source$callback(j, per.predictor = TRUE) else source$callback(j))$y
+            if (is.data.frame(yj)) yj <- as.matrix(yj)
+            if (is.matrix(yj) && ncol(yj) == 1L && !is.numeric(yj)) yj <- yj[, 1L]
+            if (!is.null(dim(yj)) || !(is.factor(yj) || is.character(yj) || is.logical(yj)))
+                err("the response of source block ", j, " is not of the kind (factor or counts) of block 1")
+            values <- union(values, unique(as.character(yj)))
+        }
+        sort(values[!is.na(values)])
+    }
     read <- function(k) {
         if (k == 1L) state$passes <- state$passes + 1L
         state$reads <- state$reads + 1L
@@ -366,9 +386,15 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
             if (!(is.factor(y) || is.character(y) || is.logical(y)))
                 err("the response must be a factor, a character vector, or a matrix of counts")
             if (is.null(state$levels)) {
-                if (!is.factor(y))
-                    err("supply 'levels', or a prototype or source blocks with a factor response")
-                state$levels <- base::levels(y)
+                if (is.factor(y)) state$levels <- base::levels(y)
+                else {
+                    # A character or logical response without 'levels': the
+                    # rest of this pass collects the distinct values, sorted
+                    # as factor() sorts them, and the caller starts a new pass.
+                    state$levels <- scan.levels(y, k)
+                    stop(structure(class = c("vglm_levels_scanned", "error", "condition"),
+                                   list(message = "response levels collected", call = NULL)))
+                }
             }
             if (anyNA(y)) err("missing values in the response of source block ", k)
             y <- as.character(y)

@@ -166,6 +166,40 @@ test_that("response levels come from the prototype or 'levels'; unknown levels s
     expect_error(fastglm_multinom(src, levels = c("A", "B", "C", "D")), "'D'")
 })
 
+test_that("a character response without 'levels' takes its sorted values from one extra pass", {
+    d <- source_sim_frame(n = 140L)
+    idx <- source_blocks(d)
+    chr <- d
+    chr$y <- as.character(chr$y)
+    # The prototype and block 1 lack category "A"; later blocks have it.
+    first <- idx[[1L]][chr$y[idx[[1L]]] != "A"]
+    idx[[1L]] <- first
+    keep <- unlist(idx)
+    ref <- fastglm_multinom(y ~ x1, data = d[keep, ], tol = 1e-12)
+    resets <- 0L
+    src <- fastglm_source(function(k) chr[idx[[k]], ], 7L, reset = function() resets <<- resets + 1L,
+                          formula = y ~ x1, prototype = chr[first, ])
+    sf <- fastglm_multinom(src, tol = 1e-12)
+    expect_identical(sf$levels, c("A", "B", "C"))
+    expect_max_diff(sf$coefficients, ref$coefficients, 1e-10)
+    expect_identical(names(sf$coefficients), names(ref$coefficients))
+    # Each pass, including the one that collects the levels, starts at block 1
+    # with a reset, and reads the blocks in order.
+    expect_identical(resets, sf$source.passes)
+    expect_identical(sf$source.reads, 7L * sf$source.passes)
+    lv <- fastglm_multinom(src, levels = c("A", "B", "C"), tol = 1e-12)
+    expect_identical(lv$source.passes, sf$source.passes - 1L)
+    expect_max_diff(lv$coefficients, sf$coefficients, 1e-12)
+    # A matrix source with a logical response.
+    X <- cbind("(Intercept)" = 1, x1 = d$x1)
+    yl <- d$y == "B"
+    ls <- fastglm_source(function(k) list(X = X[idx[[k]], ], y = yl[idx[[k]]]), 7L)
+    fl <- fastglm_multinom(ls)
+    expect_identical(fl$levels, c("FALSE", "TRUE"))
+    expect_max_diff(fl$coefficients,
+                    fastglm_multinom(X[keep, ], factor(yl[keep]))$coefficients, 1e-8)
+})
+
 test_that("per-predictor source offsets generalize offset without changing existing models", {
     d <- source_sim_frame(n = 140L)
     idx <- source_blocks(d)

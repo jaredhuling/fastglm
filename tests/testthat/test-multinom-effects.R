@@ -118,15 +118,45 @@ test_that("the bootstrap is reproducible and replicates equal refits", {
     expect_error(fastglm_bootstrap(fit, R = 4L, type = "parametric"), "multinomial")
 })
 
-test_that("source fits stop for the bootstrap", {
-    d <- eff_frame(n = 120L)
-    d$blk <- rep(1:3, length.out = nrow(d))
+test_that("source bootstraps weight each row by its draws and match the in-memory bootstrap", {
+    d <- eff_frame(n = 240L)
+    d$blk <- rep(1:4, each = 60L)
+    d$g <- rep(1:24, each = 10L)
+    d$w <- runif(nrow(d), 0.5, 2)
+    d$o1 <- rnorm(nrow(d), sd = 0.2); d$o2 <- 0; d$o3 <- rnorm(nrow(d), sd = 0.2)
     idx <- split(seq_len(nrow(d)), d$blk)
-    src <- fastglm_source(function(k) d[idx[[k]], ], 3L, formula = y ~ x1 + x2,
-                          prototype = d[1:20, ])
-    sf <- fastglm_multinom(src)
-    expect_error(fastglm_bootstrap(sf, R = 3L),
-                 "bootstrap refitting is not yet available for multinomial source fits")
+    resets <- 0L
+    src <- fastglm_source(function(k) d[idx[[k]], ], 4L, reset = function() resets <<- resets + 1L,
+                          formula = y ~ x1 + x2, prototype = d, weights = "w",
+                          offset = c("o1", "o2", "o3"))
+    off <- as.matrix(d[, c("o1", "o2", "o3")])
+    for (firth in c(FALSE, TRUE)) {
+        sf <- fastglm_multinom(src, reference = "C", firth = firth, tol = 1e-12)
+        de <- fastglm_multinom(y ~ x1 + x2, data = d, weights = w, offset = off,
+                               reference = "C", firth = firth, tol = 1e-12)
+        bs <- fastglm_bootstrap(sf, R = 6L, seed = 4L)
+        bd <- fastglm_bootstrap(de, R = 6L, seed = 4L)
+        expect_identical(bs$successful, 6L)
+        expect_max_diff(bs$replicates, bd$replicates, 1e-9)
+    }
+    # Every pass of a refit starts at block 1 with a reset.
+    resets <- 0L
+    fastglm_bootstrap(sf, R = 2L, seed = 1L)
+    expect_gt(resets, 0L)
+    cs <- fastglm_bootstrap(sf, R = 4L, type = "cluster", seed = 2L,
+                            cluster = function(k) d$g[idx[[k]]])
+    cd <- fastglm_bootstrap(de, R = 4L, type = "cluster", cluster = d$g, seed = 2L)
+    expect_max_diff(cs$replicates, cd$replicates, 1e-9)
+    expect_error(fastglm_bootstrap(sf, R = 2L, type = "cluster", cluster = d$g),
+                 "function of chunk index")
+    # Grouped counts from a matrix source.
+    x <- model.matrix(~ x1, d)
+    counts <- t(sapply(seq_len(nrow(d)), function(i) tabulate(c(d$y[i], sample(4L, 2L, TRUE)), 4L)))
+    colnames(counts) <- LETTERS[1:4]
+    gs <- fastglm_source(function(k) list(X = x[idx[[k]], ], y = counts[idx[[k]], ]), 4L)
+    bg <- fastglm_bootstrap(fastglm_multinom(gs, tol = 1e-12), R = 4L, seed = 6L)
+    bm <- fastglm_bootstrap(fastglm_multinom(x, counts, tol = 1e-12), R = 4L, seed = 6L)
+    expect_max_diff(bg$replicates, bm$replicates, 1e-9)
 })
 
 test_that("sparse and big.matrix fits give the same averages and effects", {
@@ -170,11 +200,25 @@ test_that("bootstrap refits use the stored settings, weights, offsets, reference
     expect_false(isTRUE(low$converged))
 })
 
-test_that("bootstrap stops for big.matrix fits", {
+test_that("big.matrix bootstraps weight each row by its draws and match the dense bootstrap", {
     skip_if_not_installed("bigmemory")
-    d <- eff_frame(n = 100L)
-    bg <- fastglm_multinom(bigmemory::as.big.matrix(model.matrix(~ x1, d)), d$y)
-    expect_error(fastglm_bootstrap(bg, R = 3L), "memory-mapped \\(big.matrix\\) multinomial")
+    d <- eff_frame(n = 200L)
+    x <- model.matrix(~ x1 + x2, d)
+    w <- runif(nrow(x), 0.5, 2)
+    off <- matrix(rnorm(nrow(x) * 3L, sd = 0.2), nrow(x), 3L)
+    g <- rep(1:20, each = 10L)
+    for (firth in c(FALSE, TRUE)) {
+        de <- fastglm_multinom(x, d$y, weights = w, offset = off, reference = "C",
+                               firth = firth, tol = 1e-12)
+        bg <- fastglm_multinom(bigmemory::as.big.matrix(x), d$y, weights = w, offset = off,
+                               reference = "C", firth = firth, tol = 1e-12)
+        expect_max_diff(fastglm_bootstrap(bg, R = 6L, seed = 3L)$replicates,
+                        fastglm_bootstrap(de, R = 6L, seed = 3L)$replicates, 1e-9)
+        expect_max_diff(fastglm_bootstrap(bg, R = 4L, type = "cluster", cluster = g, seed = 5L)$replicates,
+                        fastglm_bootstrap(de, R = 4L, type = "cluster", cluster = g, seed = 5L)$replicates,
+                        1e-9)
+    }
+    expect_error(fastglm_bootstrap(bg, R = 3L, workers = 2L), "workers = 1")
 })
 
 test_that("formula source fits work with newdata and agree with the in-memory fit", {

@@ -12,7 +12,7 @@ vignette: >
 knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE)
 ```
 
-The *fastglm* package provides regression models for continuous, binary, count, and ordered outcomes, with an emphasis on efficient computation and numerical stability. Its scope includes model-specific mean bias reduction, coefficient and model-assumption tests, probability and mean-response summaries, and methods for repeated fitting or data too large to retain as a dense design. This overview identifies the available models and methods before developing a common workflow for specification, diagnostics, uncertainty, and repeated outcomes.
+The *fastglm* package provides regression models for continuous, binary, count, ordered, and unordered categorical outcomes, with an emphasis on efficient computation and numerical stability. Its scope includes model-specific mean bias reduction, coefficient and model-assumption tests, probability and mean-response summaries, and methods for repeated fitting or data too large to retain as a dense design. This overview identifies the available models and methods before developing a common workflow for specification, diagnostics, uncertainty, and repeated outcomes.
 
 # Package scope and model selection {#package-scope}
 
@@ -27,8 +27,9 @@ The *fastglm* package provides regression models for continuous, binary, count, 
 | Zeros arising from an additional component and a count distribution | `fastglm_zi()` | Zero-inflated Poisson or negative-binomial likelihood. [Zero-inflated models](count-firth-fastglm.html#zero-inflated-counts) |
 | A point mass at zero and a positive continuous amount | `fastglm_twopart()` | Binary and Gamma components, with ML or mean bias reduction. [Two-part models](semicontinuous-fastglm.html) |
 | Ordered outcome categories | `fastglm_ordinal()` | Common or selected threshold-specific slopes; logit, probit, and complementary log-log links; ML or mean bias reduction. [Ordinal models, inference, and computation](ordinal-fastglm.html#ordinal-scope) |
+| Unordered outcome categories | `fastglm_multinom()` | Multinomial (baseline-category) logit for individual or grouped data; ML or mean bias reduction; a conjugate gradient solver for many categories. [Multinomial models](multinom-fastglm.html) |
 
-Mean bias reduction is requested with `firth=TRUE` in the interfaces that support it. For GLMs, support depends on the family and link; a fixed-size negative-binomial family supplied through `negbin(theta)` differs from jointly estimating size with `fastglm_nb()`. The truncated, hurdle, and zero-inflated count interfaces above use ML. The [bias-reduction guide](firth-fastglm.html) lists the supported GLM combinations, while the ordinal and two-part guides describe their respective adjustments.
+Mean bias reduction is requested with `firth=TRUE` in the interfaces that support it. For GLMs, support depends on the family and link; a fixed-size negative-binomial family supplied through `negbin(theta)` differs from jointly estimating size with `fastglm_nb()`. The truncated, hurdle, and zero-inflated count interfaces above use ML. The [bias-reduction guide](firth-fastglm.html) lists the supported GLM combinations, while the ordinal, multinomial, and two-part guides describe their respective adjustments.
 
 ## Inference, prediction, and assessment
 
@@ -37,8 +38,8 @@ Mean bias reduction is requested with `firth=TRUE` in the interfaces that suppor
 | Coefficient intervals and joint tests | `confint()` and `fastglm_wald_test()` | Model-based Wald inference for supported fitted classes; formula terms and named contrasts can combine several coefficients |
 | Profile intervals and likelihood-ratio tests | `confint(method="profile")`, `fastglm_profile_test()`, and `fastglm_confint_theta()` | Dense binomial-logit Firth fits, dense ordinal ML fits with common or varying slopes, and negative-binomial size profiles, respectively |
 | Score tests of coefficients or the common-slope restriction | `fastglm_score_test()` and `fastglm_po_test()` | Retained dense ordinal models for coefficient constraints; `fastglm_po_test()` tests complete terms in dense or streamed common-slope and partial models |
-| Robust or clustered standard errors | `fastglm_vcov()` and supported `vcov(type=...)` methods | GLMs, count and two-part models, and dense or streamed ordinal fits, subject to each class's requirements |
-| Response or probability summaries | `predict(se.fit=TRUE)`, `fastglm_average()`, and `fastglm_marginal_effects()` | Predictions and averages for supported classes; automatic marginal effects target common-slope or partial ordinal probabilities |
+| Robust or clustered standard errors | `fastglm_vcov()` and supported `vcov(type=...)` methods | GLMs, count and two-part models, dense or streamed ordinal fits, and multinomial fits from any input, subject to each class's requirements |
+| Response or probability summaries | `predict(se.fit=TRUE)`, `fastglm_average()`, and `fastglm_marginal_effects()` | Predictions and averages for supported classes; automatic marginal effects target common-slope or partial ordinal probabilities and multinomial category probabilities |
 | Refitting uncertainty and model assessment | `fastglm_bootstrap()`, `fastglm_diagnostics()`, residuals, and `fastglm_ordinal_assess()` | Bootstrap support depends on retained data and model class; ordinal prediction scores, calibration, and optional boundary-row diagnostics support dense or streamed fits |
 
 These methods use different assumptions and are not interchangeable across model classes. Dense partial ordinal fits support robust covariance, ML profiles, and constrained score inference. Streamed ordinal fits provide model-based and robust covariance, common-slope tests, prediction scores, and calibration on the original source. General constrained coefficient inference requires retained observations. The [ordinal support guide](ordinal-fastglm.html#ordinal-scope) states these distinctions explicitly. The sections below explain [coefficient uncertainty and population averages](#inference-and-population-averages), [joint tests](#joint-coefficient-tests), and [readable result displays](#specifying-the-mean-model).
@@ -48,8 +49,8 @@ These methods use different assumptions and are not interchangeable across model
 | Computational setting | Available approach | Scope and guide |
 |:--|:--|:--|
 | Ordinary in-memory analysis | Formula and dense-design interfaces | Model-specific fitting with coefficient, prediction, and diagnostic methods |
-| Predictors with many zeros or stored outside ordinary R matrices | Sparse matrices and `bigmemory::big.matrix` inputs | GLMs; selected count interfaces also accept sparse designs. [Large-data guide](large-data-fastglm.html#sparse-and-mapped-matrices) |
-| Data read repeatedly from files or databases | `fastglm_source()`, Arrow and DBI adapters, and streaming fitters | GLMs, negative-binomial, hurdle, two-part, and common-slope or partial ordinal models. [Streaming computation](large-data-fastglm.html) |
+| Predictors with many zeros or stored outside ordinary R matrices | Sparse matrices and `bigmemory::big.matrix` inputs | GLMs and multinomial models; selected count interfaces also accept sparse designs. [Large-data guide](large-data-fastglm.html#sparse-and-mapped-matrices) |
+| Data read repeatedly from files or databases | `fastglm_source()`, Arrow and DBI adapters, and streaming fitters | GLMs, negative-binomial, hurdle, two-part, multinomial, and common-slope or partial ordinal models. [Streaming computation](large-data-fastglm.html) |
 | Several responses with the same predictors | `fastglm_prepare()` / `fastglm_batch()` and their ordinal counterparts | GLMs and common-slope or partial ordinal models; supported calculations are reused across responses. [Repeated outcomes](#repeated-outcomes-on-a-shared-design) |
 
 Data representation changes the amount of retained information and the cost of rereading observations. It can therefore affect both fitting time and which later procedures are available. The [large-data vignette](large-data-fastglm.html) explains these requirements. [Benchmark examples](benchmarks-fastglm.html) examine speed together with numerical agreement.

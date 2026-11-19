@@ -112,15 +112,20 @@ Pair resampling treats rows as independent sampling units. Cluster
   cluster resampling. These rules also apply to custom statistics; point
   replicates remain available for inspection.
 
-  Multinomial fits refit in memory with `fastglm_multinom()`, retaining the
+  Multinomial fits refit with `fastglm_multinom()`, retaining the
   reference category, weights, offsets, bias reduction, and the fit's `tol`,
   `maxit`, `block.size`, and `control`; `control` may override any
   `fastglm_multinom()` argument. Pair and cluster resampling are supported
   (cluster identifiers match the retained rows or the rows before
-  missing-value omission); parametric resampling and source fits stop with
-  an error. A resample in which a category has no observations fails to
-  refit and is recorded as a failed replicate. Memory-mapped (`big.matrix`)
-  multinomial fits also stop with an error.
+  missing-value omission; for a source, a function of the block index);
+  parametric resampling stops with an error. Dense and sparse designs are
+  subset to the drawn rows. Memory-mapped (`big.matrix`) designs and
+  sources are not copied: every row is kept, and its prior weight is
+  multiplied by the number of times it was drawn, which gives the same
+  likelihood, the same bias-reduced score, and so the same estimates. A
+  source refit reads the blocks in order on each pass, and a memory-mapped
+  refit uses `workers = 1`. A resample in which a category has no
+  observations fails to refit and is recorded as a failed replicate.
 
   Every failed or nonconverged refit is recorded. If any replicate fails,
   standard errors and intervals are returned as missing rather than silently

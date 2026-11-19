@@ -515,9 +515,15 @@
     stats::model.matrix(tt, mf, contrasts.arg = object$contrasts)
 }
 
-# Bootstrap input and refit for in-memory multinomial fits. The refit uses the
-# tolerances and controls stored on the fit.
+# Bootstrap input and refit for multinomial fits. The refit uses the
+# tolerances and controls stored on the fit. Dense and sparse designs are
+# subset to the drawn rows; memory-mapped designs and sources keep every row
+# and multiply its prior weight by the number of times it was drawn.
 .vglm_bootstrap_input <- function(object) {
+    if (!is.null(object$source)) {
+        rows <- environment(object$fetch)$state$rows
+        return(list(rows = rows, n = sum(rows)))
+    }
     if (is.null(object$y)) stop("bootstrap requires a retained response", call. = FALSE)
     x <- object$x
     n <- nrow(x)
@@ -527,16 +533,37 @@
                      vglm = TRUE), n = n)
 }
 
-.vglm_bootstrap_refit <- function(object, z, control) {
+.vglm_bootstrap_refit <- function(object, z, control, source = NULL) {
     rc <- object$refit.controls
     if (is.null(rc)) rc <- list(tol = 1e-8, maxit = 100L, block.size = 8192L, control = list())
-    args <- list(x = z$X, y = z$y, weights = z$weights, offset = z$offset,
-                 reference = object$reference, firth = isTRUE(object$firth),
+    args <- list(reference = object$reference, firth = isTRUE(object$firth),
                  tol = rc$tol, maxit = rc$maxit, block.size = rc$block.size,
                  control = rc$control)
+    args <- if (is.null(source))
+        c(list(x = z$X, y = z$y, weights = z$weights, offset = z$offset), args)
+    else c(list(x = source, levels = object$levels), args)
     fit <- do.call(fastglm_multinom, utils::modifyList(args, control))
     for (key in c("terms", "xlevels", "contrasts")) fit[[key]] <- object[[key]]
     fit$call <- object$call
     fit$na.action <- NULL
     fit
+}
+
+# A source refit reads the fit's own blocks in order on every pass (so
+# sequential sources stay valid), with each row's weight multiplied by the
+# number of times it was drawn.
+.vglm_bootstrap_stream_refit <- function(object, input, index, control) {
+    frequencies <- tabulate(index, nbins = input$n)
+    starts <- c(0L, cumsum(input$rows))
+    lev <- object$levels
+    callback <- function(k) {
+        z <- object$fetch(k)
+        b <- nrow(z$X)
+        y <- if (length(z$codes)) factor(lev[z$codes], levels = lev)
+        else `colnames<-`(z$counts, lev)
+        list(X = z$X, y = y, weights = z$weights * frequencies[starts[k] + seq_len(b)],
+             offset = z$offset)
+    }
+    .vglm_bootstrap_refit(object, NULL, control,
+                          source = fastglm_source(callback, length(input$rows)))
 }

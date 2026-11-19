@@ -172,7 +172,7 @@ c(statistic = lr, df = 6, p.value = pchisq(lr, 6, lower.tail = FALSE))
 
 ## Bootstrap
 
-`fastglm_bootstrap()` refits the model to resampled data; `type = "cluster"` resamples whole clusters. Failed or nonconverged refits are recorded, and if any refit fails, standard errors and intervals are returned as missing.
+`fastglm_bootstrap()` refits the model to resampled data; `type = "cluster"` resamples whole clusters. Failed or nonconverged refits are recorded, and if any refit fails, standard errors and intervals are returned as missing. For memory-mapped and streamed data, each refit keeps every row and multiplies its weight by the number of times the row was drawn, so the data are not copied.
 
 ```{r bootstrap}
 boot <- fastglm_bootstrap(fit, R = 199, type = "cluster",
