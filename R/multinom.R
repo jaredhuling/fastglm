@@ -66,7 +66,14 @@
 #'   source for every conjugate gradient step. The solver used is stored in
 #'   the fit as `solver`, with the number of information-vector products as
 #'   `products`. Under `"cg"`, `passes` also counts the information-vector
-#'   products and the passes that confirm convergence.
+#'   products and the passes that confirm convergence. `threads` sets the
+#'   number of threads for the compiled computations of this fit (and of its
+#'   intercept-only fit for `null.deviance`); the default `NULL` uses the
+#'   session setting of [fastglm_threads()]. Results are identical for every
+#'   number of threads. The thread count used is stored in the fit as
+#'   `threads`. A [fastglm_source()] is read on one thread, and each source
+#'   block is split into blocks of `block.size` rows that are processed in
+#'   parallel.
 #' @param ... additional arguments to the default or formula method (not used).
 #' @details A [fastglm_source()] is read one block at a time, so the
 #'   design is never held in memory as a whole. Each block (a data frame for a
@@ -137,6 +144,7 @@
 #'   * `solver`: the solver used, `"exact"` or `"cg"` (see `control`).
 #'   * `products`: the number of information-vector products (0 under the
 #'     exact solver).
+#'   * `threads`: the number of threads the fit used (see `control`).
 #'   * `accumulation`: how the information was accumulated, `"lowrank"` (the
 #'     low-rank form used for dense designs with `K - 1` of at least 6) or
 #'     `"pairwise"` (one weighted cross product per pair of linear
@@ -207,6 +215,12 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     if (!is.null(schema) && !inherits(schema$terms, "terms"))
         err("a multinomial source needs a formula with one right-hand side")
     .multinom_check_controls(tol, maxit, block.size, firth, control)
+    # The thread count holds for every pass, the intercept-only fit included,
+    # and is not kept in the refit controls (bootstrap refits take theirs
+    # from the session, one thread per worker process).
+    scope <- .fastglm_scope_threads(control[["threads"]])
+    on.exit(scope$restore(), add = TRUE)
+    control$threads <- NULL
     # Fail fast on "cg" with bias reduction, before any pass over the source.
     .vglm_control_solver(control, 1L, 1L, firth, streamed = TRUE)
     read <- .vglm_stream_reader(source, levels)
@@ -287,6 +301,7 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     out$source.offset.used <- offset.used
     out$source.passes <- state$passes
     out$source.reads <- state$reads
+    out$threads <- scope$threads
     .multinom_warnings(out)
 }
 
@@ -504,6 +519,11 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
     if (anyNA(cn) || any(!nzchar(cn)) || anyDuplicated(cn))
         err("design column names must be distinct and nonmissing")
     .multinom_check_controls(tol, maxit, block.size, firth, control)
+    # The thread count holds for the fit and its intercept-only fit, and is
+    # not kept in the refit controls (see the source method).
+    scope <- .fastglm_scope_threads(control[["threads"]])
+    on.exit(scope$restore(), add = TRUE)
+    control$threads <- NULL
 
     # Response: factor (individual) or count matrix (grouped).
     grouped <- FALSE
@@ -590,6 +610,7 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
                          refit = list(tol = tol, maxit = maxit, block.size = block.size,
                                       control = control)))
     out <- .vglm_fit_object(fit, "multinomial", lev, lev[ref], info, NULL)
+    out$threads <- scope$threads
     .multinom_warnings(out)
 }
 
@@ -615,6 +636,9 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
         err("'block.size' must be a positive integer")
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         err("'firth' must be TRUE or FALSE")
+    threads <- control[["threads"]]
+    if (!is.null(threads) && (!is.numeric(threads) || is.na(.fastglm_as_count(threads))))
+        err("'control$threads' must be a positive integer")
     solver <- control[["solver"]]
     if (!is.null(solver) &&
         !(is.character(solver) && length(solver) == 1L && !is.na(solver) &&
@@ -748,7 +772,11 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
         eta <- .vglm_linear(x, B, M) + x_info$offset
         full <- matrix(0, nrow(x), K)
         full[, -ref] <- eta
-        full <- exp(full - apply(full, 1L, max))
+        # Row maxima by columns (pmax), which is exact and much faster than
+        # apply() over the rows.
+        top <- full[, 1L]
+        for (k in seq_len(K)[-1L]) top <- pmax(top, full[, k])
+        full <- exp(full - top)
         probs <- full / rowSums(full)
         dimnames(probs) <- list(if (!inherits(x, "big.matrix")) rownames(x), levels)
     }

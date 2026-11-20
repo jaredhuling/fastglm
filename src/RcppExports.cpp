@@ -1227,6 +1227,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fastglm_reduce_failure_test
+std::string fastglm_reduce_failure_test(std::string scheme, std::string where, Rcpp::IntegerVector throws, Rcpp::IntegerVector invalid, std::string kind, int threads);
+RcppExport SEXP _fastglm_fastglm_reduce_failure_test(SEXP schemeSEXP, SEXP whereSEXP, SEXP throwsSEXP, SEXP invalidSEXP, SEXP kindSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type scheme(schemeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type where(whereSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type throws(throwsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type invalid(invalidSEXP);
+    Rcpp::traits::input_parameter< std::string >::type kind(kindSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_reduce_failure_test(scheme, where, throws, invalid, kind, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepare_glm_constant
 SEXP prepare_glm_constant(NumericMatrix x, NumericVector weights, bool leverage, int code);
 RcppExport SEXP _fastglm_prepare_glm_constant(SEXP xSEXP, SEXP weightsSEXP, SEXP leverageSEXP, SEXP codeSEXP) {
@@ -1355,6 +1371,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_fastglm_parallel_blocks_test", (DL_FUNC) &_fastglm_fastglm_parallel_blocks_test, 4},
     {"_fastglm_fastglm_block_reduce_test", (DL_FUNC) &_fastglm_fastglm_block_reduce_test, 4},
     {"_fastglm_fastglm_sparse_products_test", (DL_FUNC) &_fastglm_fastglm_sparse_products_test, 6},
+    {"_fastglm_fastglm_reduce_failure_test", (DL_FUNC) &_fastglm_fastglm_reduce_failure_test, 6},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
     {"_fastglm_fastglm_set_threads_cpp", (DL_FUNC) &_fastglm_fastglm_set_threads_cpp, 1},
     {"_fastglm_fastglm_has_openmp_cpp", (DL_FUNC) &_fastglm_fastglm_has_openmp_cpp, 0},

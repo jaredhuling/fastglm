@@ -58,3 +58,33 @@ test_that("the smallest failing block is reported for every thread count", {
             expect_error(cp(X, w, t, scheme, rows = 50L),
                          "negative or non-finite weight in block 5$")
 })
+
+test_that("an exception inside a reduction is rethrown, not reported as a data failure", {
+    rf <- function(scheme, where, throws, invalid = integer(), kind = "runtime", t)
+        tryCatch(fastglm:::fastglm_reduce_failure_test(scheme, where, as.integer(throws),
+                                                       as.integer(invalid), kind, t),
+                 error = function(e) paste("error:", conditionMessage(e)))
+    mem <- "error: not enough memory: an allocation failed inside a parallel computation"
+    for (t in threads_to_test()) for (scheme in c("lanes", "tiles")) {
+        info <- paste(scheme, "threads", t)
+        expect_identical(rf(scheme, "add", integer(), t = t), "ok", info = info)
+        # A data failure alone is reported as before.
+        expect_identical(rf(scheme, "add", integer(), 7L, t = t), "invalid block 7", info = info)
+        # The smallest failing block decides, whether it threw or reported.
+        expect_identical(rf(scheme, "add", c(12L, 5L), t = t), "error: failure in block 5",
+                         info = info)
+        expect_identical(rf(scheme, "add", 12L, 5L, t = t), "invalid block 5", info = info)
+        expect_identical(rf(scheme, "add", 5L, 12L, t = t), "error: failure in block 5",
+                         info = info)
+        # An allocation failure is a memory error with no block number.
+        expect_identical(rf(scheme, "add", 9L, 15L, "bad_alloc", t), mem, info = info)
+    }
+    for (t in threads_to_test()) {
+        # add_tile: blocks 3 and 11 are in groups 1 and 2; group 1 stops the pass.
+        expect_identical(rf("tiles", "tile", c(11L, 3L), t = t), "error: failure in block 3")
+        expect_identical(rf("tiles", "tile", 10L, kind = "bad_alloc", t = t), mem)
+        # Lane setup (reset, make_work) failures are always errors.
+        expect_identical(rf("lanes", "reset", 1L, 4L, "bad_alloc", t), mem)
+        expect_identical(rf("lanes", "work", 1L, 4L, "bad_alloc", t), mem)
+    }
+})

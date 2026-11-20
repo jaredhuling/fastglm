@@ -255,3 +255,72 @@ Rcpp::List fastglm_sparse_products_test(SEXP x, const Eigen::VectorXd& v, const 
     return Rcpp::List::create(Rcpp::Named("xtvx") = Rcpp::wrap(xtvx),
                               Rcpp::Named("eta") = eta, Rcpp::Named("xtv") = xtv);
 }
+
+// Failure injection for lane_reduce_into ("lanes") and tile_reduce ("tiles")
+// over 20 blocks with the given thread setting. Blocks in invalid (1-based)
+// report a data failure (the callback returns false); blocks in throws throw
+// inside the region, at the place named by where: "add" (lanes: add; tiles:
+// prepare), "tile" (tiles: add_tile, for tile 1 of a group holding such a
+// block), "reset" (lanes: a lane reset), or "work" (lanes: make_work). kind
+// "bad_alloc" throws std::bad_alloc, anything else std::runtime_error
+// ("failure in block N"). Returns "invalid block N" for a reported data
+// failure and "ok" otherwise; a rethrown exception becomes an R error.
+// [[Rcpp::export]]
+std::string fastglm_reduce_failure_test(std::string scheme, std::string where,
+                                        Rcpp::IntegerVector throws, Rcpp::IntegerVector invalid,
+                                        std::string kind, int threads)
+{
+    const Eigen::Index nblocks = 20;
+    std::vector<char> bad(nblocks, 0), inv(nblocks, 0);
+    for (int b : throws) if (b >= 1 && b <= nblocks) bad[b - 1] = 1;
+    for (int b : invalid) if (b >= 1 && b <= nblocks) inv[b - 1] = 1;
+    auto fail = [&](Eigen::Index b) {
+        if (kind == "bad_alloc") throw std::bad_alloc();
+        throw std::runtime_error("failure in block " + std::to_string(static_cast<long long>(b) + 1));
+    };
+    bool ok;
+    Eigen::Index failed = -1;
+    {
+        ThreadSettingGuard guard(threads);
+        if (scheme == "lanes") {
+            double out = 0;
+            std::vector<double> lanes;
+            struct NoWork {};
+            ok = fglm_par::lane_reduce_into(
+                nblocks, out, lanes,
+                [&](double& a) {
+                    if (where == "reset" && bad[0]) fail(0);
+                    a = 0;
+                },
+                [&]() {
+                    if (where == "work" && bad[0]) fail(0);
+                    return NoWork();
+                },
+                [&](Eigen::Index b, double& a, NoWork&) {
+                    if (where == "add" && bad[b]) fail(b);
+                    if (inv[b]) return false;
+                    a += static_cast<double>(b);
+                    return true;
+                },
+                [](double& o, const double& a) { o += a; }, &failed);
+        } else {
+            struct Slot { Eigen::Index b = 0; };
+            std::vector<Slot> work(fglm_par::kGroupBlocks);
+            std::vector<double> tiles(3, 0.0);
+            ok = fglm_par::tile_reduce(
+                nblocks, 3, work,
+                [&](Eigen::Index b, Slot& s) {
+                    s.b = b;
+                    if (where == "add" && bad[b]) fail(b);
+                    return !inv[b];
+                },
+                [&](const Slot& s, Eigen::Index t) {
+                    if (where == "tile" && bad[s.b] && t == 1) fail(s.b);
+                    tiles[t] += static_cast<double>(s.b);
+                },
+                [](const Slot&) {}, &failed);
+        }
+    }
+    if (!ok) return "invalid block " + std::to_string(static_cast<long long>(failed) + 1);
+    return "ok";
+}

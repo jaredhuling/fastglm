@@ -40,28 +40,43 @@ public:
           weights_(weights, n), offset_(offset, n, M), codes_(codes),
           n_(n), p_(p), M_(M), block_(std::max(1, block_size)) {}
 
+    typedef DenseVglmData Segment;
+
     int n() const { return n_; }
     int p() const { return p_; }
     int M() const { return M_; }
+    int block_rows() const { return block_; }
     bool grouped() const { return codes_ == nullptr; }
+
+    // The b rows starting at row first, as a chunk of views (no copy). It
+    // makes no R API call, so the engine may build chunks inside a parallel
+    // region.
+    Chunk chunk(int first, int b) const {
+        Chunk chunk{
+            std::vector<DesignView>(),
+            grouped() ? nullptr : codes_ + first,
+            grouped() ? Eigen::Ref<const Eigen::MatrixXd>(counts_.middleRows(first, b))
+                      : Eigen::Ref<const Eigen::MatrixXd>(empty_),
+            weights_.segment(first, b),
+            offset_.middleRows(first, b)};
+        chunk.design.reserve(M_);
+        for (int a = 0; a < M_; ++a) chunk.design.emplace_back(x_.middleRows(first, b));
+        return chunk;
+    }
 
     template <class F>
     void visit(F&& f) const {
         for (int first = 0; first < n_; first += block_) {
             Rcpp::checkUserInterrupt();
-            const int b = std::min(block_, n_ - first);
-            Chunk chunk{
-                std::vector<DesignView>(),
-                grouped() ? nullptr : codes_ + first,
-                grouped() ? Eigen::Ref<const Eigen::MatrixXd>(counts_.middleRows(first, b))
-                          : Eigen::Ref<const Eigen::MatrixXd>(empty_),
-                weights_.segment(first, b),
-                offset_.middleRows(first, b)};
-            chunk.design.reserve(M_);
-            for (int a = 0; a < M_; ++a) chunk.design.emplace_back(x_.middleRows(first, b));
-            f(static_cast<const Chunk&>(chunk));
+            const Chunk c = chunk(first, std::min(block_, n_ - first));
+            f(c);
         }
     }
+
+    // The engine's passes reach in-memory data as one segment of rows,
+    // which it splits into fixed row blocks (see vglm_pass).
+    template <class F>
+    void segments(F&& f) const { f(*this); }
 
 private:
     Eigen::Map<const Eigen::MatrixXd, 0, Eigen::OuterStride<> > x_;
@@ -121,35 +136,46 @@ public:
           offset_(offset, n, M), codes_(codes), n_(n), p_(p), M_(M),
           block_(std::max(1, block_size)) {}
 
+    typedef SparseVglmData Segment;
+
     int n() const { return n_; }
     int p() const { return p_; }
     int M() const { return M_; }
+    int block_rows() const { return block_; }
     bool grouped() const { return codes_ == nullptr; }
 
     template <class F>
     void visit(F&& f) const {
         for (int first = 0; first < n_; first += block_) {
             Rcpp::checkUserInterrupt();
-            const int b = std::min(block_, n_ - first);
-            Chunk chunk{
-                std::vector<DesignView>(),
-                grouped() ? nullptr : codes_ + first,
-                grouped() ? Eigen::Ref<const Eigen::MatrixXd>(counts_.middleRows(first, b))
-                          : Eigen::Ref<const Eigen::MatrixXd>(empty_),
-                weights_.segment(first, b),
-                offset_.middleRows(first, b)};
-            chunk.design.reserve(M_);
-            // The block map starts at outer_ + first, so its first outer index
-            // is not 0 and its stored entries are valuePtr()[outer[0], outer[b]).
-            // Eigen operations that iterate over inner iterators (products,
-            // InnerIterator) are valid on it; operations that read
-            // valuePtr()[0, nonZeros()) directly, such as sum() or coeffs() on a
-            // compressed map, are not and must not be used on this view.
-            const int nnz = outer_[first + b] - outer_[first];
-            for (int a = 0; a < M_; ++a)
-                chunk.design.emplace_back(p_, b, nnz, outer_ + first, inner_, values_);
-            f(static_cast<const Chunk&>(chunk));
+            const Chunk c = chunk(first, std::min(block_, n_ - first));
+            f(c);
         }
+    }
+
+    template <class F>
+    void segments(F&& f) const { f(*this); }
+
+    // The b rows starting at row first (see DenseVglmData::chunk).
+    Chunk chunk(int first, int b) const {
+        Chunk chunk{
+            std::vector<DesignView>(),
+            grouped() ? nullptr : codes_ + first,
+            grouped() ? Eigen::Ref<const Eigen::MatrixXd>(counts_.middleRows(first, b))
+                      : Eigen::Ref<const Eigen::MatrixXd>(empty_),
+            weights_.segment(first, b),
+            offset_.middleRows(first, b)};
+        chunk.design.reserve(M_);
+        // The block map starts at outer_ + first, so its first outer index
+        // is not 0 and its stored entries are valuePtr()[outer[0], outer[b]).
+        // Eigen operations that iterate over inner iterators (products,
+        // InnerIterator) are valid on it; operations that read
+        // valuePtr()[0, nonZeros()) directly, such as sum() or coeffs() on a
+        // compressed map, are not and must not be used on this view.
+        const int nnz = outer_[first + b] - outer_[first];
+        for (int a = 0; a < M_; ++a)
+            chunk.design.emplace_back(p_, b, nnz, outer_ + first, inner_, values_);
+        return chunk;
     }
 
 private:
@@ -250,16 +276,28 @@ public:
         : fetch_(fetch), constraints_(constraints), chunks_(chunks), p_(p), K_(K), M_(M),
           block_(std::max(1, block_size)) {}
 
+    typedef DenseVglmData Segment;
+
     int p() const { return p_; }
     int M() const { return M_; }
+    int block_rows() const { return block_; }
 
     template <class F>
     void visit(F&& f) const {
+        segments([&](const Segment& s) { s.visit(f); });
+    }
+
+    // Each source block is one segment: blocks are read one at a time on the
+    // calling thread (the reader is an R function), and the engine splits
+    // each into fixed row blocks of block_size rows, so threading applies
+    // within a source block.
+    template <class F>
+    void segments(F&& f) const {
         for (int k = 1; k <= chunks_; ++k) {
             Rcpp::checkUserInterrupt();
             const Rcpp::List z(fetch_(k));
             const VglmSourceBlock block(z, p_, K_, M_, block_, constraints_);
-            block.data(K_, M_, block_).visit(f);
+            f(static_cast<const Segment&>(block.data(K_, M_, block_)));
         }
     }
 

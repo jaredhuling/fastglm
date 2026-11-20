@@ -20,6 +20,8 @@
 #include <algorithm>
 #include <atomic>
 #include <exception>
+#include <new>
+#include <stdexcept>
 #include <vector>
 
 #ifdef _OPENMP
@@ -114,6 +116,24 @@ inline int threads_for(Eigen::Index nblocks)
     return static_cast<Eigen::Index>(n) < nblocks ? n : static_cast<int>(nblocks);
 }
 
+// Rethrows, on the calling thread after a parallel region, an exception
+// captured inside the region. An allocation failure (std::bad_alloc) becomes
+// a std::runtime_error saying that memory ran out, with no block number: it
+// is not a property of the data, and which block first fails to allocate can
+// depend on the thread count. Any other exception is rethrown unchanged.
+// The reductions use this for every exception thrown by their callbacks, so
+// an exception is never reported as a data failure (a callback returning
+// false).
+[[noreturn]] inline void rethrow_region_exception(const std::exception_ptr& e)
+{
+    try {
+        std::rethrow_exception(e);
+    } catch (const std::bad_alloc&) {
+        throw std::runtime_error(
+            "not enough memory: an allocation failed inside a parallel computation");
+    }
+}
+
 // Elementwise work over fixed row blocks: f(r, k) for the blocks [r, r + k)
 // of n rows with block_rows rows each (the last block may be shorter), in
 // parallel with a static schedule when there are at least 2 blocks. f must
@@ -124,8 +144,8 @@ inline int threads_for(Eigen::Index nblocks)
 // exp(), whose packet and scalar paths can differ in the last bit) gives the
 // same result for every thread count. An exception thrown by f is caught
 // inside the region; after the region the exception of the smallest failing
-// block is rethrown on the calling thread, which is the exception a serial
-// pass would have thrown first.
+// block is rethrown on the calling thread by rethrow_region_exception, which
+// is the exception a serial pass would have thrown first.
 template <class F>
 void parallel_blocks(Eigen::Index n, Eigen::Index block_rows, F f)
 {
@@ -152,7 +172,7 @@ void parallel_blocks(Eigen::Index n, Eigen::Index block_rows, F f)
         }
     }
     for (const auto& e : err)
-        if (e) std::rethrow_exception(e);
+        if (e) rethrow_region_exception(e);
 }
 
 // Fixed reduction parameters. None of them depends on the thread count or on
@@ -245,14 +265,17 @@ double ordered_block_sum(Eigen::Index n, Eigen::Index block_rows, F f, bool para
 // min(nblocks, 8) lanes are used, because a lane with no blocks would add an
 // exact zero; this choice depends on nblocks only.
 //
-// reset, add, and make_work must not call the R API. An exception thrown by
-// add is caught inside the region and counts as a failure of its block; an
-// exception from reset or make_work counts as a failure of the first block of
-// each lane of that thread. Each lane stops at its own first failure and the
-// other lanes run on, so the smallest failing block index is the same for
-// every thread count. Returns false if any block failed; out is then left
-// unchanged and, when failed_block is not null, *failed_block is set to the
-// smallest failing block index (0-based). On success *failed_block is -1.
+// reset, add, and make_work must not call the R API. A block fails when add
+// returns false (a data failure) or throws. Each lane stops at its own first
+// failure and the other lanes run on, so the smallest failing block index is
+// the same for every thread count. If the smallest failing block threw, its
+// exception is rethrown on the calling thread after the region by
+// rethrow_region_exception (an allocation failure becomes a memory error),
+// as a serial pass would have stopped there; an exception from reset or
+// make_work (not tied to a block) is always rethrown. Otherwise returns false
+// if any block failed; out is then left unchanged and, when failed_block is
+// not null, *failed_block is set to the smallest failing block index
+// (0-based). On success *failed_block is -1.
 template <class Acc, class Reset, class MakeWork, class Add, class Combine>
 bool lane_reduce_into(Eigen::Index nblocks, Acc& out, std::vector<Acc>& lanes, Reset reset,
                       MakeWork make_work, Add add, Combine combine,
@@ -266,6 +289,9 @@ bool lane_reduce_into(Eigen::Index nblocks, Acc& out, std::vector<Acc>& lanes, R
     // First failing block of each lane, or -1. Only the lane's owner writes
     // its entry.
     std::vector<Eigen::Index> lane_fail(nlanes, -1);
+    // The exception of a lane's first failing block, if it threw, and an
+    // exception from reset or make_work of each lane's thread.
+    std::vector<std::exception_ptr> lane_exc(nlanes), setup_exc(nlanes);
     const int nt = std::min(threads_for(nblocks), nlanes);
     (void) nt;
 #ifdef _OPENMP
@@ -275,13 +301,13 @@ bool lane_reduce_into(Eigen::Index nblocks, Acc& out, std::vector<Acc>& lanes, R
         const int t = current_thread();
         const int T = team_size();
         note_team_size();
-        bool ready = true;
+        std::exception_ptr setup;
         try {
             for (int l = t; l < nlanes; l += T) reset(lanes[l]);
         } catch (...) {
-            ready = false;
+            setup = std::current_exception();
         }
-        if (ready) {
+        if (!setup) {
             try {
                 auto work = make_work();
                 for (Eigen::Index b = 0; b < nblocks; ++b) {
@@ -291,26 +317,126 @@ bool lane_reduce_into(Eigen::Index nblocks, Acc& out, std::vector<Acc>& lanes, R
                     try {
                         ok = add(b, lanes[l], work);
                     } catch (...) {
+                        lane_exc[l] = std::current_exception();
                         ok = false;
                     }
                     if (!ok) lane_fail[l] = b;
                 }
             } catch (...) {
-                ready = false;
+                setup = std::current_exception();
             }
         }
-        if (!ready)
-            for (int l = t; l < nlanes; l += T)
-                if (lane_fail[l] < 0) lane_fail[l] = l;
+        if (setup)
+            for (int l = t; l < nlanes; l += T) setup_exc[l] = setup;
     }
 
     Rcpp::checkUserInterrupt();
-    Eigen::Index first = -1;
     for (int l = 0; l < nlanes; ++l)
-        if (lane_fail[l] >= 0 && (first < 0 || lane_fail[l] < first)) first = lane_fail[l];
+        if (setup_exc[l]) rethrow_region_exception(setup_exc[l]);
+    Eigen::Index first = -1;
+    int first_lane = -1;
+    for (int l = 0; l < nlanes; ++l)
+        if (lane_fail[l] >= 0 && (first < 0 || lane_fail[l] < first)) {
+            first = lane_fail[l];
+            first_lane = l;
+        }
     if (first >= 0) {
+        if (lane_exc[first_lane]) rethrow_region_exception(lane_exc[first_lane]);
         if (failed_block) *failed_block = first;
         return false;
+    }
+    for (int l = 0; l < nlanes; ++l) combine(out, static_cast<const Acc&>(lanes[l]));
+    return true;
+}
+
+// Lane reduction with a serial stage: as lane_reduce_into, but the blocks
+// are processed in rounds of kLanes (8) blocks, and stage(first, count) is
+// called on the calling thread, outside any parallel region, before each
+// round, for its blocks [first, first + count) (first is a multiple of 8, so
+// block b of a round is its slot b - first = b mod 8). The stage may call the
+// R API (for example R's math library) and may itself run parallel_blocks;
+// it prepares inputs that add then reads. Each round runs in its own
+// parallel region, in which lane l (block first + l) is processed by thread
+// l mod T. Lane l receives the blocks l, l + 8, ... in increasing order and
+// the lanes are combined in lane order, so the result is that of
+// lane_reduce_into with the same callbacks.
+//
+// make_work() is called once per running thread in each round. Failures are
+// handled as in lane_reduce_into; since the blocks of later rounds are all
+// larger than any block of the current round, the reduction stops after the
+// first round with a failing block, without staging further rounds.
+// Rcpp::checkUserInterrupt() is called after each round. An exception thrown
+// by stage propagates from this function.
+template <class Acc, class Reset, class MakeWork, class Stage, class Add, class Combine>
+bool lane_reduce_staged(Eigen::Index nblocks, Acc& out, std::vector<Acc>& lanes, Reset reset,
+                        MakeWork make_work, Stage stage, Add add, Combine combine,
+                        Eigen::Index* failed_block = nullptr)
+{
+    if (failed_block) *failed_block = -1;
+    if (nblocks <= 0) return true;
+    const int nlanes = nblocks < kLanes ? static_cast<int>(nblocks) : kLanes;
+    if (static_cast<int>(lanes.size()) < nlanes) lanes.resize(nlanes);
+    std::vector<Eigen::Index> lane_fail(nlanes, -1);
+    std::vector<std::exception_ptr> lane_exc(nlanes), setup_exc(nlanes);
+    const int nt = std::min(threads_for(nblocks), nlanes);
+    (void) nt;
+    for (Eigen::Index first = 0; first < nblocks; first += kLanes) {
+        const int count = static_cast<int>(std::min<Eigen::Index>(kLanes, nblocks - first));
+        stage(first, static_cast<Eigen::Index>(count));
+        const bool initial = first == 0;
+        const int ntr = std::min(nt, count);
+        (void) ntr;
+#ifdef _OPENMP
+#pragma omp parallel num_threads(ntr) if (ntr > 1)
+#endif
+        {
+            const int t = current_thread();
+            const int T = team_size();
+            note_team_size();
+            std::exception_ptr setup;
+            if (initial) {
+                try {
+                    for (int l = t; l < nlanes; l += T) reset(lanes[l]);
+                } catch (...) {
+                    setup = std::current_exception();
+                }
+            }
+            if (!setup) {
+                try {
+                    auto work = make_work();
+                    for (int l = t; l < count; l += T) {
+                        const Eigen::Index b = first + l;
+                        bool ok = false;
+                        try {
+                            ok = add(b, lanes[l], work);
+                        } catch (...) {
+                            lane_exc[l] = std::current_exception();
+                            ok = false;
+                        }
+                        if (!ok) lane_fail[l] = b;
+                    }
+                } catch (...) {
+                    setup = std::current_exception();
+                }
+            }
+            if (setup)
+                for (int l = t; l < nlanes; l += T) setup_exc[l] = setup;
+        }
+        Rcpp::checkUserInterrupt();
+        for (int l = 0; l < nlanes; ++l)
+            if (setup_exc[l]) rethrow_region_exception(setup_exc[l]);
+        Eigen::Index first_fail = -1;
+        int first_lane = -1;
+        for (int l = 0; l < nlanes; ++l)
+            if (lane_fail[l] >= 0 && (first_fail < 0 || lane_fail[l] < first_fail)) {
+                first_fail = lane_fail[l];
+                first_lane = l;
+            }
+        if (first_fail >= 0) {
+            if (lane_exc[first_lane]) rethrow_region_exception(lane_exc[first_lane]);
+            if (failed_block) *failed_block = first_fail;
+            return false;
+        }
     }
     for (int l = 0; l < nlanes; ++l) combine(out, static_cast<const Acc&>(lanes[l]));
     return true;
@@ -354,19 +480,30 @@ bool lane_reduce(Eigen::Index nblocks, Acc& out, Make make, Add add, Combine com
 //      in increasing order (for vector and scalar sums).
 // add_tile for different tiles must write disjoint entries. prepare and
 // add_tile must not call the R API; exceptions they throw are caught inside
-// the region and count as failures. work must hold at least
-// min(kGroupBlocks, nblocks) slots.
+// the region. work must hold at least min(kGroupBlocks, nblocks) slots.
 //
-// Returns false if any prepare or add_tile failed; the remaining groups are
-// then skipped. Every slot of a group is prepared even when another fails,
-// so when failed_block is not null, *failed_block is set to the smallest
-// failing block index (0-based), the same for every thread count. A failure
-// in add_tile (an exception, for example std::bad_alloc) reports the group's
-// first block. On success *failed_block is set to -1.
-template <class Work, class Prepare, class AddTile, class AddOrdered>
-bool tile_reduce(Eigen::Index nblocks, Eigen::Index ntiles, std::vector<Work>& work,
-                 Prepare prepare, AddTile add_tile, AddOrdered add_ordered,
-                 Eigen::Index* failed_block = nullptr)
+// A block fails when prepare returns false (a data failure) or throws. Every
+// slot of a group is prepared even when another fails, so the smallest
+// failing block is the same for every thread count: if it threw, its
+// exception is rethrown on the calling thread after the region by
+// rethrow_region_exception (an allocation failure becomes a memory error);
+// otherwise tile_reduce returns false, the remaining groups are skipped, and
+// when failed_block is not null *failed_block is set to that block index
+// (0-based). An exception thrown by add_tile (for example std::bad_alloc
+// from a temporary) is rethrown in the same way, that of the smallest tile
+// index first; add_tile never reports a data failure. On success
+// *failed_block is set to -1.
+//
+// tile_reduce_staged is tile_reduce with a serial stage: stage(g, gsize) is
+// called on the calling thread, outside any parallel region, before the
+// group of blocks [g, g + gsize) is prepared (g is a multiple of 8, so block
+// b of a group is its slot b - g). The stage may call the R API and may
+// itself run parallel_blocks; it prepares inputs that prepare then reads. An
+// exception thrown by stage propagates from tile_reduce_staged.
+template <class Work, class Stage, class Prepare, class AddTile, class AddOrdered>
+bool tile_reduce_staged(Eigen::Index nblocks, Eigen::Index ntiles, std::vector<Work>& work,
+                        Stage stage, Prepare prepare, AddTile add_tile, AddOrdered add_ordered,
+                        Eigen::Index* failed_block = nullptr)
 {
     if (failed_block) *failed_block = -1;
     if (nblocks <= 0) return true;
@@ -376,12 +513,16 @@ bool tile_reduce(Eigen::Index nblocks, Eigen::Index ntiles, std::vector<Work>& w
 
     const int nt = threads_for(nblocks);
     std::vector<char> slot_fail(kGroupBlocks, 0);
+    std::vector<std::exception_ptr> slot_exc(kGroupBlocks);
+    std::vector<std::exception_ptr> tile_exc(static_cast<std::size_t>(std::max<Eigen::Index>(ntiles, 0)));
 
     for (Eigen::Index g = 0; g < nblocks; g += kGroupBlocks) {
         const int gsize = static_cast<int>(
             std::min<Eigen::Index>(kGroupBlocks, nblocks - g));
 
+        stage(g, static_cast<Eigen::Index>(gsize));
         std::fill(slot_fail.begin(), slot_fail.end(), 0);
+        std::fill(slot_exc.begin(), slot_exc.end(), std::exception_ptr());
         const int ntp = std::min(nt, gsize);
         (void) ntp;
 #ifdef _OPENMP
@@ -393,6 +534,7 @@ bool tile_reduce(Eigen::Index nblocks, Eigen::Index ntiles, std::vector<Work>& w
             try {
                 ok = prepare(g + j, work[j]);
             } catch (...) {
+                slot_exc[j] = std::current_exception();
                 ok = false;
             }
             if (!ok) slot_fail[j] = 1;
@@ -400,6 +542,7 @@ bool tile_reduce(Eigen::Index nblocks, Eigen::Index ntiles, std::vector<Work>& w
         for (int j = 0; j < gsize; ++j) {
             if (slot_fail[j]) {
                 Rcpp::checkUserInterrupt();
+                if (slot_exc[j]) rethrow_region_exception(slot_exc[j]);
                 if (failed_block) *failed_block = g + j;
                 return false;
             }
@@ -418,19 +561,30 @@ bool tile_reduce(Eigen::Index nblocks, Eigen::Index ntiles, std::vector<Work>& w
             try {
                 for (int j = 0; j < gsize; ++j) add_tile(static_cast<const Work&>(work[j]), t);
             } catch (...) {
+                tile_exc[static_cast<std::size_t>(t)] = std::current_exception();
                 tile_failed.store(true, std::memory_order_relaxed);
             }
         }
         if (tile_failed.load()) {
             Rcpp::checkUserInterrupt();
-            if (failed_block) *failed_block = g;
-            return false;
+            for (const auto& e : tile_exc)
+                if (e) rethrow_region_exception(e);
         }
 
         for (int j = 0; j < gsize; ++j) add_ordered(static_cast<const Work&>(work[j]));
         Rcpp::checkUserInterrupt();
     }
     return true;
+}
+
+// Column-tile reduction without a stage (see tile_reduce_staged).
+template <class Work, class Prepare, class AddTile, class AddOrdered>
+bool tile_reduce(Eigen::Index nblocks, Eigen::Index ntiles, std::vector<Work>& work,
+                 Prepare prepare, AddTile add_tile, AddOrdered add_ordered,
+                 Eigen::Index* failed_block = nullptr)
+{
+    return tile_reduce_staged(nblocks, ntiles, work, [](Eigen::Index, Eigen::Index) {},
+                              prepare, add_tile, add_ordered, failed_block);
 }
 
 } // namespace fglm_par

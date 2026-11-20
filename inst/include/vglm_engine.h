@@ -4,12 +4,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <exception>
+#include <memory>
 #include <limits>
 #include <string>
 #include <type_traits>
 #include <vector>
 #include "vglm_family.h"
 #include "vglm_data.h"
+#include "parallel_reduce.h"
 namespace fglm_vglm {
 
 // Fisher scoring for vector GLMs (design document, Sections 5 and 7).
@@ -381,6 +384,168 @@ inline bool vglm_row_counts(const Chunk& chunk, int i) {
     return chunk.codes != nullptr || chunk.counts.row(i).sum() > 0;
 }
 
+// ---------------------------------------------------------------------------
+// Threading (OpenMP, through the deterministic reductions of
+// parallel_reduce.h). A pass reaches the data as segments of rows (the whole
+// in-memory data, or one block of a streamed source at a time, read on the
+// calling thread) and splits each segment into fixed row blocks. The blocks
+// are summed by one of two schemes, chosen from the dimensions alone:
+//
+// * lanes (fglm_par::lane_reduce_into): each of up to 8 lane accumulators
+//   holds the information terms, score, log likelihood, extreme
+//   probabilities, and design factor of the blocks l, l + 8, ...; the lanes
+//   are then added in lane order. The blocks have vglm_lane_rows() rows
+//   (block_size unless the dimensions are large).
+// * column tiles (fglm_par::tile_reduce), for a full pass when the
+//   information has more than kLaneMaxDim rows (P = p M > 1024), or for a
+//   diagonal pass when its M blocks of p by p entries exceed kLaneMaxDim^2:
+//   blocks of min(block_size, tile_block_rows(P)) rows are prepared in
+//   groups of 8; the pM by pM lower triangle S (or each G_aa) is split into
+//   column tiles of width 64 within each linear predictor's columns, each
+//   tile adding the group's blocks in order; the score, log likelihood,
+//   extreme probabilities, and design factor are added on the calling thread
+//   in block order.
+//
+// Every choice is a fixed function of p, M, the block size, and the segment
+// lengths, so results are identical for every thread count. Inside a
+// parallel region the engine calls only the C++ model type and Eigen (no R
+// API). An exception thrown there (for example std::bad_alloc) is captured
+// by the reductions of parallel_reduce.h and rethrown on the calling thread
+// when its block is the smallest failing one, which is the block a serial
+// pass would have stopped at; an allocation failure becomes a memory error.
+// It is never reported as an invalid pass (VGLM_PASS_INVALID), which is kept
+// for data the model type rejects.
+
+// Largest number of doubles of the low-rank matrix Z of one thread (16 MB),
+// whatever lowrank_cap allows, so that up to 8 threads stay within 128 MB of
+// such buffers.
+const std::int64_t vglm_thread_zcap = 2097152;
+
+// Rows per block of the lane scheme: block_size, capped as the GLM lanes
+// are (ruling R17) at max(tile_block_rows(d), 2^21 / d) rows for the
+// dimension d = max(P, M(M + 1)/2), so that a thread's scratch of d columns
+// (the low-rank Z, of P columns, or the packed A of the bias reduction, of
+// M(M + 1)/2) takes at most 16 MB. A fixed function of the dimensions and
+// the block size; it is block_size whenever block_size <= 2^21 / d (for
+// example at the default block_size of 8192 whenever d <= 256).
+inline Eigen::Index vglm_lane_rows(Eigen::Index block_size, int P, int Q) {
+    const Eigen::Index d = std::max<Eigen::Index>(1, std::max(P, Q));
+    const Eigen::Index cap =
+        std::max<Eigen::Index>(fglm_par::tile_block_rows(d), Eigen::Index(2097152) / d);
+    return std::max<Eigen::Index>(1, std::min<Eigen::Index>(block_size, cap));
+}
+
+// Accumulator of a pass (a lane, or the total of a pass).
+struct VglmAcc {
+    std::vector<MatrixXd> G;   // packed G_ab (full) or G_aa (diagonal), p by p each
+    bool G_used = false;       // G holds this pass's sums (sized and zeroed)
+    MatrixXd S;                // pM by pM lower triangle
+    bool S_used = false;       // S holds sums
+    bool lowrank = false;      // some block used the low-rank accumulation
+    MatrixXd g;                // p by M score sums
+    double sum = 0, err = 0;   // log likelihood, compensated
+    double pmin = 1, pmax = 0;
+    MatrixXd R;                // design factor (structure passes)
+    bool R_used = false;
+};
+
+// Sizes and zeroes the G of a, with count matrices of p by p, the first time
+// a pass uses it.
+inline void vglm_use_G(VglmAcc& a, int count, int p) {
+    if (a.G_used) return;
+    if (static_cast<int>(a.G.size()) != count) a.G.assign(count, MatrixXd());
+    for (MatrixXd& m : a.G) m.setZero(p, p);
+    a.G_used = true;
+}
+
+// sum += x with the rounding error of the addition added to err (Neumaier).
+inline void vglm_add_compensated(double& sum, double& err, double x) {
+    const double next = sum + x;
+    err += std::abs(sum) >= std::abs(x) ? (sum - next) + x : (x - next) + sum;
+    sum = next;
+}
+
+// Scratch of one thread (lanes) or one group slot (tiles). Nothing in it
+// carries a result from one block to the next except the fields of a block
+// prepared for the tile scheme, which are read before the slot is reused.
+struct VglmWork {
+    MatrixXd eta, eta_prev, direction, u, W, d, C, P, work, stack, Wdiag, Z, Xd, gb;
+    MatrixXd E, two, s, tc, A, t, XF;
+    VectorXd proj;
+    // A block prepared by the tile scheme.
+    int first = 0, rows = 0;
+    double ll = 0, pmin = 1, pmax = 0;
+    const double* x = nullptr;   // its dense rows (the design view, or Xd)
+    Eigen::Index xstride = 0;
+    int kind = 0;                // see vglm_pass
+};
+
+// Accumulators and scratch kept for a fit, so that its passes do not
+// allocate (and page in) them again: the lane accumulators (at most 8 of
+// at most 8 MB each in a full pass, P <= 1024), the total, and the thread
+// or group-slot scratch.
+struct VglmWorkspace {
+    std::vector<VglmAcc> lanes;
+    VglmAcc out;
+    std::vector<VglmWork> slots;
+};
+
+// The scratch of the calling thread in a lane reduction: its slot of the
+// workspace, or (should the thread index exceed the slots) its own.
+struct VglmWorkHandle {
+    VglmWork* w = nullptr;
+    std::unique_ptr<VglmWork> own;
+};
+
+// Sizes the workspace slots for a lane reduction over nblocks blocks (one per
+// running thread) on the calling thread; returns the number of slots.
+inline Eigen::Index vglm_lane_slots(VglmWorkspace& ws, Eigen::Index nblocks) {
+    const Eigen::Index nlanes = std::min<Eigen::Index>(nblocks, fglm_par::kLanes);
+    const Eigen::Index ns =
+        std::min<Eigen::Index>(nlanes, std::max(1, fglm_par::thread_setting()));
+    if (static_cast<Eigen::Index>(ws.slots.size()) < ns) ws.slots.resize(ns);
+    if (static_cast<Eigen::Index>(ws.lanes.size()) < nlanes) ws.lanes.resize(nlanes);
+    return ns;
+}
+
+inline VglmWorkHandle vglm_thread_work(VglmWorkspace& ws, Eigen::Index nslots) {
+    VglmWorkHandle h;
+    const Eigen::Index id = fglm_par::current_thread();
+    if (id < nslots) h.w = &ws.slots[id];
+    else {
+        h.own.reset(new VglmWork());
+        h.w = h.own.get();
+    }
+    return h;
+}
+
+// Stack the rows of a chunk that enter the likelihood under R and replace R
+// by the triangular factor of the stack (Householder QR).
+template <class Chunk>
+inline void vglm_structure_add(const Chunk& chunk, int p, MatrixXd& R, MatrixXd& stack) {
+    const int b = chunk.rows();
+    int used = 0;
+    for (int i = 0; i < b; ++i) used += vglm_row_counts(chunk, i) ? 1 : 0;
+    if (used == 0) return;
+    stack.resize(p + used, p);
+    stack.topRows(p) = R;
+    int r = p;
+    for (int i = 0; i < b; ++i)
+        if (vglm_row_counts(chunk, i)) vglm_copy_row(chunk.design[0], i, stack.row(r++));
+    Eigen::HouseholderQR<MatrixXd> qr(stack);
+    R = qr.matrixQR().topRows(p).template triangularView<Eigen::Upper>();
+}
+
+// R = the triangular factor of [R; R2] (combining design factors).
+inline void vglm_structure_combine(MatrixXd& R, const MatrixXd& R2, MatrixXd& stack) {
+    const Eigen::Index p = R.cols();
+    stack.resize(2 * p, p);
+    stack.topRows(p) = R;
+    stack.bottomRows(p) = R2;
+    Eigen::HouseholderQR<MatrixXd> qr(stack);
+    R = qr.matrixQR().topRows(p).template triangularView<Eigen::Upper>();
+}
+
 // When previous is given and the model type restricts steps, the pass first
 // asks it for the largest valid fraction of the change in eta from previous
 // to beta; if that is below 1 the pass stops with VGLM_PASS_SHRINK and
@@ -392,13 +557,30 @@ inline bool vglm_row_counts(const Chunk& chunk, int i) {
 // sparse block is densified one block at a time (memory O(block x p)) and the
 // factor is computed from the same numbers as for a dense design. The
 // structure uses the shared design view; covariates that differ across
-// linear predictors (0.2.0) will need the factor of each view.
+// linear predictors (0.2.0) will need the factor of each view. Under lanes
+// each lane keeps its own factor and the lane factors are combined in lane
+// order; under tiles the rows are stacked in block order on the calling
+// thread.
+//
+// The outcome is that of a serial pass over the blocks: the first block
+// (in row order) at which the step check fails gives VGLM_PASS_SHRINK, with
+// fraction the smallest fraction over every block, unless an earlier block
+// is invalid (VGLM_PASS_INVALID). The step fractions are computed in a first
+// parallel sweep, so only the blocks before the first failing one are
+// accumulated.
+//
+// workspace, when given, holds the accumulators and scratch kept between
+// passes (vglm_fit keeps one for the fit).
 template <class Data>
 VglmPassStatus vglm_pass(const Data& data, const VectorFamily& fam, const VglmLayout& L,
                          const VglmOptions& opts, const VectorXd& beta,
                          const VectorXd* previous, VglmState& out, double& fraction,
-                         MatrixXd* structure = nullptr, VglmPassMode mode = VGLM_FULL) {
-    const int p = L.p, M = L.M, Q = packed_size(M), K = fam.K();
+                         MatrixXd* structure = nullptr, VglmPassMode mode = VGLM_FULL,
+                         VglmWorkspace* workspace = nullptr) {
+    typedef typename Data::Segment Segment;
+    typedef typename Segment::Chunk Chunk;
+    typedef Eigen::Index Index;
+    const int p = L.p, M = L.M, Q = packed_size(M), K = fam.K(), PM = p * M;
     const bool full = mode == VGLM_FULL;
     // The low-rank accumulation applies to blocks whose linear predictors
     // share one dense design view; other blocks keep the pairwise products.
@@ -412,133 +594,360 @@ VglmPassStatus vglm_pass(const Data& data, const VectorFamily& fam, const VglmLa
     const int diag_rank = opts.force_pairwise ? 0 : fam.information_rank();
     constexpr bool dense_view =
         std::is_same<typename Data::DesignView, Eigen::Ref<const MatrixXd> >::value;
-    MatrixXd S, d, C, Z;
-    bool used_lowrank = false;
     const bool check_step = previous != nullptr && fam.restricts_step();
     const MatrixXd B = L.predictors(beta);
     MatrixXd Bprev;
     if (check_step) Bprev = L.predictors(*previous);
-    // The packed G_ab, or only G_aa (indexed by a) in VGLM_DIAGONAL mode.
-    std::vector<MatrixXd> G(full ? Q : M, MatrixXd::Zero(p, p));
-    MatrixXd g = MatrixXd::Zero(p, M);
-    MatrixXd eta, eta_prev, direction, u, W, P, work, stack, Wdiag;
-    if (structure) structure->setZero(p, p);
+    const std::int64_t zcap = std::min<std::int64_t>(opts.lowrank_cap, vglm_thread_zcap);
+
+    VglmWorkspace local;
+    VglmWorkspace& ws = workspace ? *workspace : local;
+    // The accumulation scheme, from the dimensions alone.
+    const std::int64_t lane_max = static_cast<std::int64_t>(fglm_par::kLaneMaxDim) *
+        fglm_par::kLaneMaxDim;
+    const bool lanes = full ? fglm_par::use_lanes(PM)
+                            : static_cast<std::int64_t>(M) * p * p <= lane_max;
+    // G has M(M + 1)/2 matrices in a full pass and M in a diagonal pass.
+    const int Gcount = full ? Q : M;
+    // Lanes: S holds the low-rank accumulation (full passes over dense data
+    // with rank > 0). Tiles: S holds every dense block of a full pass.
+    const bool lowrank_pass = full && dense_view && rank > 0;
+    const bool S_pass = full && (lanes ? lowrank_pass : dense_view);
+    const Index Rk = lanes ? vglm_lane_rows(data.block_rows(), PM, Q)
+                           : std::min<Index>(data.block_rows(), fglm_par::tile_block_rows(PM));
+    const Index tp = fglm_par::tile_count(p);
+
+    VglmAcc& acc = ws.out;
+    acc.g.setZero(p, M);
+    acc.sum = acc.err = 0;
+    acc.pmin = 1;
+    acc.pmax = 0;
+    acc.lowrank = false;
+    acc.S_used = false;
+    acc.G_used = false;
+    vglm_use_G(acc, Gcount, p);
+    if (S_pass) {
+        acc.S.setZero(PM, PM);
+        acc.S_used = true;
+    }
+    acc.R_used = false;
+    if (structure) acc.R.setZero(p, p);
+
     VglmPassStatus status = VGLM_PASS_OK;
-    double sum = 0, error = 0, pmin = 1, pmax = 0;
+    bool shrinking = false;
     fraction = 1;
 
-    data.visit([&](const typename Data::Chunk& chunk) {
-        if (status == VGLM_PASS_INVALID) return;
+    // The per-block work shared by both schemes: eta, validity, the log
+    // likelihood ll, the row terms (low-rank d and C when terms, else the
+    // packed W), the score sums added to g, the extreme probabilities, and,
+    // in a diagonal pass, Wdiag. Returns false for an invalid block.
+    auto evaluate = [&](const Chunk& chunk, VglmWork& w, MatrixXd& g, bool& terms,
+                        bool& shared, double& ll, double& pmin, double& pmax) -> bool {
         const int b = chunk.rows();
-        if (b == 0) return;
-        const bool shared = vglm_shared_view(chunk, M);
-        vglm_linear(chunk, shared, B, eta);
-        if (check_step) {
-            vglm_linear(chunk, shared, Bprev, eta_prev);
-            direction.noalias() = eta - eta_prev;
-            const double f = fam.max_step_fraction(eta_prev, direction);
-            if (!(f >= 1)) {
-                status = VGLM_PASS_SHRINK;
-                fraction = std::min(fraction, std::isfinite(f) ? std::max(f, 0.0) : 0.0);
-            }
-        }
-        if (status != VGLM_PASS_OK) return;
-
-        const VglmBlock block{eta, chunk.codes, chunk.counts, chunk.weights};
-        if (!fam.valid(block)) { status = VGLM_PASS_INVALID; return; }
-        const double ll = fam.loglik(block, nullptr);
-        if (!std::isfinite(ll)) { status = VGLM_PASS_INVALID; return; }
-        const double next = sum + ll;
-        error += std::abs(sum) >= std::abs(ll) ? (sum - next) + ll : (ll - next) + sum;
-        sum = next;
-
-        const bool lowrank = dense_view && shared && rank > 0;
-        const bool terms = full ? lowrank : diag_rank > 0;
+        shared = vglm_shared_view(chunk, M);
+        vglm_linear(chunk, shared, B, w.eta);
+        const VglmBlock block{w.eta, chunk.codes, chunk.counts, chunk.weights};
+        if (!fam.valid(block)) return false;
+        ll = fam.loglik(block, nullptr);
+        if (!std::isfinite(ll)) return false;
+        terms = full ? (dense_view && shared && rank > 0) : diag_rank > 0;
         if (terms) {
-            fam.score_information_lowrank(block, u, d, C);
-            if (!u.allFinite() || !d.allFinite() || !C.allFinite()) {
-                status = VGLM_PASS_INVALID;
-                return;
-            }
+            fam.score_information_lowrank(block, w.u, w.d, w.C);
+            if (!w.u.allFinite() || !w.d.allFinite() || !w.C.allFinite()) return false;
         } else {
-            fam.score_information(block, u, W);
-            if (!u.allFinite() || !W.allFinite()) { status = VGLM_PASS_INVALID; return; }
+            fam.score_information(block, w.u, w.W);
+            if (!w.u.allFinite() || !w.W.allFinite()) return false;
         }
-        if (shared) vglm_tmul_add(chunk.design[0], u, g);
+        if (shared) vglm_tmul_add(chunk.design[0], w.u, g);
         else
-            for (int a = 0; a < M; ++a) vglm_tmul_add(chunk.design[a], u.col(a), g.col(a));
+            for (int a = 0; a < M; ++a) vglm_tmul_add(chunk.design[a], w.u.col(a), g.col(a));
         if (!full) {
             // Only the diagonal entries W_i[a, a] of the row information:
             // d_i[a] - sum_s C_i[a, s]^2 under the low-rank structure.
             if (terms) {
-                Wdiag = d;
+                w.Wdiag = w.d;
                 for (int s = 0; s < diag_rank; ++s)
-                    Wdiag -= C.middleCols(s * M, M).cwiseAbs2();
+                    w.Wdiag -= w.C.middleCols(s * M, M).cwiseAbs2();
             } else {
-                Wdiag.resize(b, M);
-                for (int a = 0; a < M; ++a) Wdiag.col(a) = W.col(pack_index(a, a, M));
-            }
-            for (int a = 0; a < M; ++a)
-                vglm_add_cross(G[a], chunk.design[a], Wdiag.col(a), chunk.design[a], work);
-        } else if constexpr (dense_view) {
-            if (lowrank) {
-                if (!used_lowrank) { S.setZero(p * M, p * M); used_lowrank = true; }
-                vglm_add_lowrank(G, S, chunk.design[0], d, C, rank, opts.lowrank_cap, Z, work);
+                w.Wdiag.resize(b, M);
+                for (int a = 0; a < M; ++a) w.Wdiag.col(a) = w.W.col(pack_index(a, a, M));
             }
         }
-        if (full && !lowrank)
-            for (int bb = 0; bb < M; ++bb)
-                for (int a = 0; a <= bb; ++a) {
-                    const int q = pack_index(a, bb, M);
-                    vglm_add_cross(G[q], chunk.design[a], W.col(q), chunk.design[bb], work);
-                }
-
         // Extreme fitted probabilities over the rows that enter the likelihood.
-        fam.probabilities(eta, P);
-        int used = 0;
+        fam.probabilities(w.eta, w.P);
         for (int i = 0; i < b; ++i) {
             if (!vglm_row_counts(chunk, i)) continue;
-            ++used;
             for (int k = 0; k < K; ++k) {
-                pmin = std::min(pmin, P(i, k));
-                pmax = std::max(pmax, P(i, k));
+                pmin = std::min(pmin, w.P(i, k));
+                pmax = std::max(pmax, w.P(i, k));
             }
         }
-        if (structure && used > 0) {
-            stack.resize(p + used, p);
-            stack.topRows(p) = *structure;
-            int r = p;
-            for (int i = 0; i < b; ++i)
-                if (vglm_row_counts(chunk, i)) vglm_copy_row(chunk.design[0], i, stack.row(r++));
-            Eigen::HouseholderQR<MatrixXd> qr(stack);
-            *structure = qr.matrixQR().topRows(p).template triangularView<Eigen::Upper>();
+        return true;
+    };
+
+    // The information of a block added to the packed G (lanes, and the
+    // serial blocks of the tile scheme), as in a serial pass.
+    auto add_packed = [&](const Chunk& chunk, VglmWork& w, VglmAcc& a, bool terms) {
+        if (!full) {
+            for (int q = 0; q < M; ++q)
+                vglm_add_cross(a.G[q], chunk.design[q], w.Wdiag.col(q), chunk.design[q], w.work);
+            return;
+        }
+        if (terms) {
+            if constexpr (dense_view) {
+                // The diagonal terms go to G only if some d is negative.
+                if (!(w.d.array() >= 0).all()) vglm_use_G(a, Gcount, p);
+                vglm_add_lowrank(a.G, a.S, chunk.design[0], w.d, w.C, rank, zcap, w.Z, w.work);
+                a.S_used = true;
+                a.lowrank = true;
+            }
+            return;
+        }
+        vglm_use_G(a, Gcount, p);
+        for (int bb = 0; bb < M; ++bb)
+            for (int q0 = 0; q0 <= bb; ++q0) {
+                const int q = pack_index(q0, bb, M);
+                vglm_add_cross(a.G[q], chunk.design[q0], w.W.col(q), chunk.design[bb], w.work);
+            }
+    };
+
+    data.segments([&](const Segment& seg) {
+        if (status == VGLM_PASS_INVALID) return;
+        const int n = seg.n();
+        if (n <= 0) return;
+        const Index nb = (n + Rk - 1) / Rk;
+        Index stop = nb;   // the blocks [0, stop) are accumulated
+        if (check_step) {
+            std::vector<double> f(static_cast<std::size_t>(nb), 1.0);
+            fglm_par::parallel_blocks(n, Rk, [&](Index r, Index k) {
+                const Chunk chunk = seg.chunk(static_cast<int>(r), static_cast<int>(k));
+                const bool shared = vglm_shared_view(chunk, M);
+                MatrixXd eta, eta_prev;
+                vglm_linear(chunk, shared, B, eta);
+                vglm_linear(chunk, shared, Bprev, eta_prev);
+                const MatrixXd direction = eta - eta_prev;
+                f[static_cast<std::size_t>(r / Rk)] = fam.max_step_fraction(eta_prev, direction);
+            });
+            for (Index b = 0; b < nb; ++b) {
+                const double fb = f[static_cast<std::size_t>(b)];
+                if (!(fb >= 1)) {
+                    if (stop == nb) stop = b;
+                    fraction = std::min(fraction, std::isfinite(fb) ? std::max(fb, 0.0) : 0.0);
+                }
+            }
+            // After a block that needs a shorter step, a serial pass only
+            // checks the step of the remaining blocks.
+            if (shrinking) return;
+        }
+        if (stop > 0) {
+            Index failed = -1;
+            bool ok;
+            if (lanes) {
+                const Index nl = std::min<Index>(stop, fglm_par::kLanes);
+                const Index ns = vglm_lane_slots(ws, stop);
+                // Size the lanes here, so that the resets inside the region
+                // do not allocate.
+                for (Index l = 0; l < nl; ++l) {
+                    VglmAcc& a = ws.lanes[l];
+                    a.G_used = false;
+                    if (S_pass) a.S.resize(PM, PM);
+                    if (!lowrank_pass) vglm_use_G(a, Gcount, p);
+                    a.g.resize(p, M);
+                    if (structure) a.R.resize(p, p);
+                }
+                ok = fglm_par::lane_reduce_into(
+                    stop, acc, ws.lanes,
+                    [&](VglmAcc& a) {
+                        a.g.setZero(p, M);
+                        a.sum = a.err = 0;
+                        a.pmin = 1;
+                        a.pmax = 0;
+                        a.lowrank = false;
+                        a.S_used = false;
+                        if (S_pass) a.S.setZero(PM, PM);
+                        a.G_used = false;
+                        if (!lowrank_pass) vglm_use_G(a, Gcount, p);
+                        if (structure) a.R.setZero(p, p);
+                        a.R_used = false;
+                    },
+                    [&]() { return vglm_thread_work(ws, ns); },
+                    [&](Index blk, VglmAcc& a, VglmWorkHandle& h) -> bool {
+                        VglmWork& w = *h.w;
+                        const int first = static_cast<int>(blk * Rk);
+                        const Chunk chunk =
+                            seg.chunk(first, static_cast<int>(std::min<Index>(Rk, n - first)));
+                        bool terms = false, shared = true;
+                        double ll = 0;
+                        if (!evaluate(chunk, w, a.g, terms, shared, ll, a.pmin, a.pmax))
+                            return false;
+                        vglm_add_compensated(a.sum, a.err, ll);
+                        add_packed(chunk, w, a, terms);
+                        if (structure) {
+                            vglm_structure_add(chunk, p, a.R, w.stack);
+                            a.R_used = true;
+                        }
+                        return true;
+                    },
+                    [&](VglmAcc& o, const VglmAcc& a) {
+                        if (a.S_used) o.S.template triangularView<Eigen::Lower>() += a.S;
+                        o.lowrank = o.lowrank || a.lowrank;
+                        if (a.G_used)
+                            for (int q = 0; q < Gcount; ++q) o.G[q] += a.G[q];
+                        o.g += a.g;
+                        vglm_add_compensated(o.sum, o.err, a.sum);
+                        o.err += a.err;
+                        o.pmin = std::min(o.pmin, a.pmin);
+                        o.pmax = std::max(o.pmax, a.pmax);
+                        if (a.R_used) {
+                            if (!o.R_used) o.R = a.R;
+                            else vglm_structure_combine(o.R, a.R, ws.slots[0].stack);
+                            o.R_used = true;
+                        }
+                    },
+                    &failed);
+            } else {
+                // Tile scheme. kind of a prepared block: 0 low-rank (Z and
+                // the diagonal terms d), 1 pairwise (W), 2 diagonal pass
+                // (Wdiag), all into S or G_aa by tiles; 3 serial (sparse or
+                // unshared views), added to G on the calling thread.
+                const Index nslots = std::min<Index>(fglm_par::kGroupBlocks, stop);
+                if (static_cast<Index>(ws.slots.size()) < nslots) ws.slots.resize(nslots);
+                const Index ntiles = static_cast<Index>(M) * tp;
+                ok = fglm_par::tile_reduce(
+                    stop, ntiles, ws.slots,
+                    [&](Index blk, VglmWork& w) -> bool {
+                        w.first = static_cast<int>(blk * Rk);
+                        w.rows = static_cast<int>(std::min<Index>(Rk, n - w.first));
+                        const Chunk chunk = seg.chunk(w.first, w.rows);
+                        const int b = w.rows;
+                        bool terms = false, shared = true;
+                        w.gb.setZero(p, M);
+                        w.pmin = 1;
+                        w.pmax = 0;
+                        if (!evaluate(chunk, w, w.gb, terms, shared, w.ll, w.pmin, w.pmax))
+                            return false;
+                        w.kind = 3;
+                        if constexpr (dense_view) {
+                            if (shared) {
+                                w.x = chunk.design[0].data();
+                                w.xstride = chunk.design[0].outerStride();
+                                w.kind = !full ? 2 : (terms ? 0 : 1);
+                            }
+                        }
+                        if (w.kind == 0) {
+                            // Row (s, i) of Z is C_i[, s]' kron x_i'.
+                            const Eigen::Map<const MatrixXd, 0, Eigen::OuterStride<> > X(
+                                w.x, b, p, Eigen::OuterStride<>(w.xstride));
+                            if (w.Z.rows() < static_cast<Index>(b) * rank || w.Z.cols() != PM)
+                                w.Z.resize(static_cast<Index>(b) * rank, PM);
+                            for (int s = 0; s < rank; ++s)
+                                for (int a = 0; a < M; ++a)
+                                    w.Z.block(static_cast<Index>(s) * b, static_cast<Index>(a) * p, b, p)
+                                        .noalias() = w.C.col(s * M + a).asDiagonal() * X;
+                        }
+                        return true;
+                    },
+                    [&](const VglmWork& w, Index t) {
+                        if (w.kind == 3) return;
+                        const int b = w.rows;
+                        const Eigen::Map<const MatrixXd, 0, Eigen::OuterStride<> > X(
+                            w.x, b, p, Eigen::OuterStride<>(w.xstride));
+                        const int a = static_cast<int>(t / tp);
+                        const Index k0 = (t % tp) * fglm_par::kTileWidth;
+                        const Index wc = std::min<Index>(fglm_par::kTileWidth, p - k0);
+                        const Index c = static_cast<Index>(a) * p + k0;
+                        if (w.kind == 2) {
+                            const MatrixXd T = w.Wdiag.col(a).asDiagonal() * X.middleCols(k0, wc);
+                            acc.G[a].block(k0, k0, p - k0, wc).noalias() +=
+                                X.rightCols(p - k0).transpose() * T;
+                            return;
+                        }
+                        // The diagonal predictor block (a, a): rows k0, ..., p - 1.
+                        {
+                            const auto wa = w.kind == 0 ? w.d.col(a) : w.W.col(pack_index(a, a, M));
+                            const MatrixXd T = wa.asDiagonal() * X.middleCols(k0, wc);
+                            acc.S.block(c, c, p - k0, wc).noalias() +=
+                                X.rightCols(p - k0).transpose() * T;
+                        }
+                        if (w.kind == 1) {
+                            // Pairwise: blocks (bb, a), bb > a, of W_{a, bb}.
+                            for (int bb = a + 1; bb < M; ++bb) {
+                                const MatrixXd T = w.W.col(pack_index(a, bb, M)).asDiagonal() *
+                                    X.middleCols(k0, wc);
+                                acc.S.block(static_cast<Index>(bb) * p, c, p, wc).noalias() +=
+                                    X.transpose() * T;
+                            }
+                            return;
+                        }
+                        // Low rank: S -= Z'Z on rows c, ..., pM - 1 of the tile.
+                        const auto Zb = w.Z.topRows(static_cast<Index>(b) * rank);
+                        acc.S.block(c, c, PM - c, wc).noalias() -=
+                            Zb.rightCols(PM - c).transpose() * Zb.middleCols(c, wc);
+                    },
+                    [&](const VglmWork& w) {
+                        vglm_add_compensated(acc.sum, acc.err, w.ll);
+                        acc.g += w.gb;
+                        acc.pmin = std::min(acc.pmin, w.pmin);
+                        acc.pmax = std::max(acc.pmax, w.pmax);
+                        if (w.kind == 0) acc.lowrank = true;
+                        if (w.kind == 3 || structure) {
+                            const Chunk chunk = seg.chunk(w.first, w.rows);
+                            // const_cast: the slot's scratch, used on the calling thread.
+                            VglmWork& ww = const_cast<VglmWork&>(w);
+                            if (w.kind == 3) add_packed(chunk, ww, acc, false);
+                            if (structure) {
+                                vglm_structure_add(chunk, p, acc.R, ww.stack);
+                                acc.R_used = true;
+                            }
+                        }
+                    },
+                    &failed);
+            }
+            if (!ok) {
+                status = VGLM_PASS_INVALID;
+                return;
+            }
+        }
+        if (stop < nb) {
+            status = VGLM_PASS_SHRINK;
+            shrinking = true;
         }
     });
     if (status != VGLM_PASS_OK) return status;
-    out.loglik = sum + error;
-    out.pmin = pmin;
-    out.pmax = pmax;
-    out.lowrank = used_lowrank;
+    if (structure) *structure = acc.R;
+    out.loglik = acc.sum + acc.err;
+    out.pmin = acc.pmin;
+    out.pmax = acc.pmax;
+    out.lowrank = acc.lowrank;
     out.full = full;
     if (full) {
         out.Gdiag.clear();
-        if (used_lowrank) {
-            vglm_lowrank_unpack(S, p, M, G);
-            S.resize(0, 0);  // free the pM by pM buffer before I is mapped
+        if (acc.S_used) vglm_lowrank_unpack(acc.S, p, M, acc.G);
+        // The tile scheme's S is pM by pM (more than 8 MB); free it before
+        // I is mapped, as is G after.
+        if (!lanes) acc.S.resize(0, 0);
+        L.map(acc.G, acc.g, out.I, out.U);
+        if (!lanes) {
+            acc.G.clear();
+            acc.G_used = false;
         }
-        L.map(G, g, out.I, out.U);
         if (!out.I.allFinite() || !out.U.allFinite()) return VGLM_PASS_INVALID;
         return VGLM_PASS_OK;
     }
-    // Only the upper triangles are read, as by map, so each G_aa is made
-    // symmetric from its upper triangle.
+    // Each G_aa is made symmetric from one triangle: the upper one, as map
+    // reads it, when the blocks were added whole (lanes and serial blocks),
+    // the lower one when they were added by column tiles (dense tile scheme).
+    const bool from_lower = !lanes && dense_view;
     bool finite = true;
+    std::vector<MatrixXd>& G = acc.G;
     for (int a = 0; a < M; ++a) {
-        MatrixXd sym = G[a].template selfadjointView<Eigen::Upper>();
+        MatrixXd sym = from_lower
+            ? MatrixXd(G[a].template selfadjointView<Eigen::Lower>())
+            : MatrixXd(G[a].template selfadjointView<Eigen::Upper>());
         G[a].swap(sym);
         finite = finite && G[a].allFinite();
     }
-    L.score_map(g, out.U);
+    L.score_map(acc.g, out.U);
     if (L.identity) {
         out.I.resize(0, 0);
         out.Gdiag.swap(G);
@@ -547,6 +956,7 @@ VglmPassStatus vglm_pass(const Data& data, const VectorFamily& fam, const VglmLa
         L.map_diagonal(G, out.I);
         finite = finite && out.I.allFinite();
     }
+    acc.G_used = false;
     if (!finite || !out.U.allFinite()) return VGLM_PASS_INVALID;
     return VGLM_PASS_OK;
 }
@@ -578,7 +988,7 @@ VglmPassStatus vglm_pass(const Data& data, const VectorFamily& fam, const VglmLa
 // (unless they would exceed cache->cap doubles, in which case the cache is
 // disabled and every product evaluates the model type, as without a cache);
 // a product with a filled cache forms only t = X T, s_i = W_i t_i, and the
-// sum of X_i*' s_i, reading the terms in visit order. The caller must reset
+// sum of X_i*' s_i, reading the terms in block order. The caller must reset
 // the cache whenever beta changes.
 
 struct VglmProductCache {
@@ -600,112 +1010,155 @@ template <class Data>
 VglmPassStatus vglm_info_product(const Data& data, const VectorFamily& fam, const VglmLayout& L,
                                  const VglmOptions& opts, const VectorXd& beta,
                                  const VectorXd& v, VectorXd& out,
-                                 VglmProductCache* cache = nullptr) {
-    const int p = L.p, M = L.M;
+                                 VglmProductCache* cache = nullptr,
+                                 VglmWorkspace* workspace = nullptr) {
+    typedef typename Data::Segment Segment;
+    typedef typename Segment::Chunk Chunk;
+    typedef Eigen::Index Index;
+    const int p = L.p, M = L.M, Q = packed_size(M);
     const int rank = opts.force_pairwise ? 0 : fam.information_rank();
     const bool use = cache != nullptr && cache->filled && !cache->disabled;
     const bool fill = cache != nullptr && !cache->filled && !cache->disabled;
     MatrixXd BT(p, 2 * M);
     BT << L.predictors(beta), L.predictors(v);
     const MatrixXd T = BT.rightCols(M);
-    // [B_a T_a] for the case of different views per linear predictor, built
-    // on the first block whose views differ.
-    std::vector<MatrixXd> pairs;
-    MatrixXd g = MatrixXd::Zero(p, M);
-    MatrixXd E, two, s, u, W, d, C, tc;
-    VectorXd proj;
+    // [B_a T_a] for blocks whose views differ across linear predictors.
+    std::vector<MatrixXd> pairs(M, MatrixXd(p, 2));
+    for (int a = 0; a < M; ++a) {
+        pairs[a].col(0) = BT.col(a);
+        pairs[a].col(1) = BT.col(M + a);
+    }
+    VglmWorkspace local;
+    VglmWorkspace& ws = workspace ? *workspace : local;
+    VglmAcc& acc = ws.out;
+    acc.g.setZero(p, M);
     VglmPassStatus status = VGLM_PASS_OK;
-    std::size_t index = 0;
+    const Index Rk = vglm_lane_rows(data.block_rows(), L.P, Q);
+    // Doubles of the cached terms per row.
+    const std::int64_t per_row = rank > 0 ? static_cast<std::int64_t>(M) * (1 + rank)
+                                          : static_cast<std::int64_t>(Q);
+    std::size_t base = 0;   // index of the segment's first block among all blocks
+
     // s_i = W_i t_i from the low-rank terms or the packed W.
-    auto form = [&](const auto& t, const MatrixXd& dd, const MatrixXd& CC, const MatrixXd& WW) {
-        const Eigen::Index b = t.rows();
+    auto form = [&](VglmWork& w, const auto& t, const MatrixXd& dd, const MatrixXd& CC,
+                    const MatrixXd& WW) {
+        const Index b = t.rows();
         if (rank > 0) {
-            s = dd.cwiseProduct(t);
+            w.s = dd.cwiseProduct(t);
             for (int q = 0; q < rank; ++q) {
-                proj = CC.middleCols(q * M, M).cwiseProduct(t).rowwise().sum();
-                s.noalias() -= proj.asDiagonal() * CC.middleCols(q * M, M);
+                w.proj = CC.middleCols(q * M, M).cwiseProduct(t).rowwise().sum();
+                w.s.noalias() -= w.proj.asDiagonal() * CC.middleCols(q * M, M);
             }
         } else {
-            s.setZero(b, M);
+            w.s.setZero(b, M);
             for (int bb = 0; bb < M; ++bb)
                 for (int a = 0; a <= bb; ++a) {
                     const int q = pack_index(a, bb, M);
-                    s.col(a) += WW.col(q).cwiseProduct(t.col(bb));
-                    if (a != bb) s.col(bb) += WW.col(q).cwiseProduct(t.col(a));
+                    w.s.col(a) += WW.col(q).cwiseProduct(t.col(bb));
+                    if (a != bb) w.s.col(bb) += WW.col(q).cwiseProduct(t.col(a));
                 }
         }
     };
-    data.visit([&](const typename Data::Chunk& chunk) {
+
+    data.segments([&](const Segment& seg) {
         if (status != VGLM_PASS_OK) return;
-        const int b = chunk.rows();
-        if (b == 0) return;
-        const bool shared = vglm_shared_view(chunk, M);
-        if (use) {
-            // t = X T only; the terms at beta are those of the cache.
-            if (index >= cache->first.size()) { status = VGLM_PASS_INVALID; return; }
-            if (shared) vglm_mul(chunk.design[0], T, tc);
-            else {
-                tc.resize(b, M);
-                for (int a = 0; a < M; ++a) vglm_mul(chunk.design[a], T.col(a), tc.col(a));
-            }
-            const MatrixXd& first = cache->first[index];
-            const MatrixXd& second = cache->second[index];
-            ++index;
-            if (first.rows() != b) { status = VGLM_PASS_INVALID; return; }
-            form(tc, first, second, first);
-        } else {
-            // E = [eta, t]: eta = X B + offset in the left M columns and
-            // t = X T (no offset) in the right M columns.
-            if (shared) vglm_mul(chunk.design[0], BT, E);
-            else {
-                E.resize(b, 2 * M);
-                if (pairs.empty()) {
-                    pairs.assign(M, MatrixXd(p, 2));
-                    for (int a = 0; a < M; ++a) {
-                        pairs[a].col(0) = BT.col(a);
-                        pairs[a].col(1) = BT.col(M + a);
-                    }
-                }
-                for (int a = 0; a < M; ++a) {
-                    vglm_mul(chunk.design[a], pairs[a], two);
-                    E.col(a) = two.col(0);
-                    E.col(M + a) = two.col(1);
-                }
-            }
-            E.leftCols(M) += chunk.offset;
-            const auto t = E.rightCols(M);
-            const VglmBlock block{E.leftCols(M), chunk.codes, chunk.counts, chunk.weights};
-            if (!fam.valid(block)) { status = VGLM_PASS_INVALID; return; }
-            if (rank > 0) fam.score_information_lowrank(block, u, d, C);
-            else fam.score_information(block, u, W);
-            form(t, d, C, W);
-            if (fill && !cache->disabled) {
-                const std::int64_t add = rank > 0 ? static_cast<std::int64_t>(d.size()) + C.size()
-                                                  : static_cast<std::int64_t>(W.size());
-                if (cache->size + add > cache->cap) {
-                    cache->disabled = true;
-                    cache->first.clear();
-                    cache->second.clear();
-                    cache->first.shrink_to_fit();
-                    cache->second.shrink_to_fit();
-                } else {
-                    cache->size += add;
-                    cache->first.push_back(rank > 0 ? d : W);
-                    cache->second.push_back(rank > 0 ? C : MatrixXd());
-                }
+        const int n = seg.n();
+        if (n <= 0) return;
+        const Index nb = (n + Rk - 1) / Rk;
+        // Whether this segment's terms are stored. The cache holds a
+        // segment's terms only if all of them fit, which is the outcome of
+        // storing block by block until the cap is passed.
+        bool fill_seg = false;
+        if (fill && !cache->disabled) {
+            const std::int64_t add = static_cast<std::int64_t>(n) * per_row;
+            if (cache->size + add > cache->cap) {
+                cache->disabled = true;
+                cache->first.clear();
+                cache->second.clear();
+                cache->first.shrink_to_fit();
+                cache->second.shrink_to_fit();
+            } else {
+                cache->size += add;
+                cache->first.resize(base + nb);
+                cache->second.resize(base + nb);
+                fill_seg = true;
             }
         }
-        for (int i = 0; i < b; ++i)
-            if (!vglm_row_counts(chunk, i)) s.row(i).setZero();
-        if (!s.allFinite()) { status = VGLM_PASS_INVALID; return; }
-        if (shared) vglm_tmul_add(chunk.design[0], s, g);
-        else
-            for (int a = 0; a < M; ++a) vglm_tmul_add(chunk.design[a], s.col(a), g.col(a));
+        if (use && base + nb > cache->first.size()) {
+            status = VGLM_PASS_INVALID;
+            return;
+        }
+        const Index nl = std::min<Index>(nb, fglm_par::kLanes);
+        const Index ns = vglm_lane_slots(ws, nb);
+        for (Index l = 0; l < nl; ++l) ws.lanes[l].g.resize(p, M);
+        Index failed = -1;
+        const bool ok = fglm_par::lane_reduce_into(
+            nb, acc, ws.lanes, [&](VglmAcc& a) { a.g.setZero(p, M); },
+            [&]() { return vglm_thread_work(ws, ns); },
+            [&](Index blk, VglmAcc& a, VglmWorkHandle& h) -> bool {
+                VglmWork& w = *h.w;
+                const int first = static_cast<int>(blk * Rk);
+                const int b = static_cast<int>(std::min<Index>(Rk, n - first));
+                const Chunk chunk = seg.chunk(first, b);
+                const bool shared = vglm_shared_view(chunk, M);
+                const std::size_t index = base + static_cast<std::size_t>(blk);
+                if (use) {
+                    // t = X T only; the terms at beta are those of the cache.
+                    if (shared) vglm_mul(chunk.design[0], T, w.tc);
+                    else {
+                        w.tc.resize(b, M);
+                        for (int a2 = 0; a2 < M; ++a2)
+                            vglm_mul(chunk.design[a2], T.col(a2), w.tc.col(a2));
+                    }
+                    const MatrixXd& c1 = cache->first[index];
+                    const MatrixXd& c2 = cache->second[index];
+                    if (c1.rows() != b) return false;
+                    form(w, w.tc, c1, c2, c1);
+                } else {
+                    // E = [eta, t]: eta = X B + offset in the left M columns
+                    // and t = X T (no offset) in the right M columns.
+                    if (shared) vglm_mul(chunk.design[0], BT, w.E);
+                    else {
+                        w.E.resize(b, 2 * M);
+                        for (int a2 = 0; a2 < M; ++a2) {
+                            vglm_mul(chunk.design[a2], pairs[a2], w.two);
+                            w.E.col(a2) = w.two.col(0);
+                            w.E.col(M + a2) = w.two.col(1);
+                        }
+                    }
+                    w.E.leftCols(M) += chunk.offset;
+                    const auto t = w.E.rightCols(M);
+                    const VglmBlock block{w.E.leftCols(M), chunk.codes, chunk.counts,
+                                          chunk.weights};
+                    if (!fam.valid(block)) return false;
+                    if (rank > 0) fam.score_information_lowrank(block, w.u, w.d, w.C);
+                    else fam.score_information(block, w.u, w.W);
+                    form(w, t, w.d, w.C, w.W);
+                    if (fill_seg) {
+                        cache->first[index] = rank > 0 ? w.d : w.W;
+                        cache->second[index] = rank > 0 ? w.C : MatrixXd();
+                    }
+                }
+                for (int i = 0; i < b; ++i)
+                    if (!vglm_row_counts(chunk, i)) w.s.row(i).setZero();
+                if (!w.s.allFinite()) return false;
+                if (shared) vglm_tmul_add(chunk.design[0], w.s, a.g);
+                else
+                    for (int a2 = 0; a2 < M; ++a2)
+                        vglm_tmul_add(chunk.design[a2], w.s.col(a2), a.g.col(a2));
+                return true;
+            },
+            [&](VglmAcc& o, const VglmAcc& a) { o.g += a.g; }, &failed);
+        if (!ok) {
+            status = VGLM_PASS_INVALID;
+            return;
+        }
+        base += static_cast<std::size_t>(nb);
     });
     if (status != VGLM_PASS_OK) return status;
-    if (use && index != cache->first.size()) return VGLM_PASS_INVALID;
+    if (use && base != cache->first.size()) return VGLM_PASS_INVALID;
     if (fill && !cache->disabled) cache->filled = true;
-    L.score_map(g, out);
+    L.score_map(acc.g, out);
     if (!out.allFinite()) return VGLM_PASS_INVALID;
     return VGLM_PASS_OK;
 }
@@ -821,7 +1274,8 @@ template <class Data>
 bool vglm_cg_solve(const Data& data, const VectorFamily& fam, const VglmLayout& L,
                    const VglmOptions& opts, const VectorXd& beta, const VectorXd& U,
                    const std::vector<bool>& aliased, const VglmPreconditioner& pre,
-                   double forcing, int max_products, VectorXd& delta, int& products) {
+                   double forcing, int max_products, VectorXd& delta, int& products,
+                   VglmWorkspace* workspace = nullptr) {
     const int P = L.P;
     delta.setZero(P);
     VectorXd r = U;
@@ -839,7 +1293,8 @@ bool vglm_cg_solve(const Data& data, const VectorFamily& fam, const VglmLayout& 
     for (int k = 0;; ++k) {
         if (k >= max_products) return false;
         ++products;
-        if (vglm_info_product(data, fam, L, opts, beta, d, q, &cache) != VGLM_PASS_OK) return false;
+        if (vglm_info_product(data, fam, L, opts, beta, d, q, &cache, workspace) != VGLM_PASS_OK)
+            return false;
         for (int j = 0; j < P; ++j) if (aliased[j]) q[j] = 0;
         const double dq = d.dot(q);
         if (!(dq > 0) || !std::isfinite(dq)) return k > 0;
@@ -884,31 +1339,59 @@ bool vglm_cg_solve(const Data& data, const VectorFamily& fam, const VglmLayout& 
 // where an exact convergence check matters more than one extra read.
 template <class Data>
 void vglm_adjustment(const Data& data, const VectorFamily& fam, const VglmLayout& L,
-                     const VectorXd& beta, const MatrixXd& V, VectorXd& adjustment) {
+                     const VectorXd& beta, const MatrixXd& V, VectorXd& adjustment,
+                     VglmWorkspace* workspace = nullptr) {
+    typedef typename Data::Segment Segment;
+    typedef typename Segment::Chunk Chunk;
+    typedef Eigen::Index Index;
     const int p = L.p, M = L.M;
     const MatrixXd B = L.predictors(beta);
     std::vector<MatrixXd> F;
     L.eta_inverse(V, F);
-    MatrixXd g = MatrixXd::Zero(p, M), eta, A, t, XF;
-    data.visit([&](const typename Data::Chunk& chunk) {
-        const int b = chunk.rows();
-        if (b == 0) return;
-        const bool shared = vglm_shared_view(chunk, M);
-        vglm_linear(chunk, shared, B, eta);
-        A.resize(b, packed_size(M));
-        for (int bb = 0; bb < M; ++bb)
-            for (int a = 0; a <= bb; ++a) {
-                const int q = pack_index(a, bb, M);
-                vglm_mul(chunk.design[a], F[q], XF);
-                vglm_row_dots(XF, chunk.design[bb], A.col(q));
-            }
-        const VglmBlock block{eta, chunk.codes, chunk.counts, chunk.weights};
-        fam.bias_terms(block, A, t);
-        if (shared) vglm_tmul_add(chunk.design[0], t, g);
-        else
-            for (int a = 0; a < M; ++a) vglm_tmul_add(chunk.design[a], t.col(a), g.col(a));
+    VglmWorkspace local;
+    VglmWorkspace& ws = workspace ? *workspace : local;
+    VglmAcc& acc = ws.out;
+    acc.g.setZero(p, M);
+    const Index Rk = vglm_lane_rows(data.block_rows(), L.P, packed_size(M));
+    data.segments([&](const Segment& seg) {
+        const int n = seg.n();
+        if (n <= 0) return;
+        const Index nb = (n + Rk - 1) / Rk;
+        const Index nl = std::min<Index>(nb, fglm_par::kLanes);
+        const Index ns = vglm_lane_slots(ws, nb);
+        for (Index l = 0; l < nl; ++l) ws.lanes[l].g.resize(p, M);
+        Index failed = -1;
+        const bool ok = fglm_par::lane_reduce_into(
+            nb, acc, ws.lanes, [&](VglmAcc& a) { a.g.setZero(p, M); },
+            [&]() { return vglm_thread_work(ws, ns); },
+            [&](Index blk, VglmAcc& a, VglmWorkHandle& h) -> bool {
+                VglmWork& w = *h.w;
+                const int first = static_cast<int>(blk * Rk);
+                const int b = static_cast<int>(std::min<Index>(Rk, n - first));
+                const Chunk chunk = seg.chunk(first, b);
+                const bool shared = vglm_shared_view(chunk, M);
+                vglm_linear(chunk, shared, B, w.eta);
+                w.A.resize(b, packed_size(M));
+                for (int bb = 0; bb < M; ++bb)
+                    for (int a2 = 0; a2 <= bb; ++a2) {
+                        const int q = pack_index(a2, bb, M);
+                        vglm_mul(chunk.design[a2], F[q], w.XF);
+                        vglm_row_dots(w.XF, chunk.design[bb], w.A.col(q));
+                    }
+                const VglmBlock block{w.eta, chunk.codes, chunk.counts, chunk.weights};
+                fam.bias_terms(block, w.A, w.t);
+                if (shared) vglm_tmul_add(chunk.design[0], w.t, a.g);
+                else
+                    for (int a2 = 0; a2 < M; ++a2)
+                        vglm_tmul_add(chunk.design[a2], w.t.col(a2), a.g.col(a2));
+                return true;
+            },
+            [&](VglmAcc& o, const VglmAcc& a) { o.g += a.g; }, &failed);
+        if (!ok) {
+            Rcpp::stop("the bias reduction adjustment could not be evaluated");
+        }
     });
-    L.score_map(g, adjustment);
+    L.score_map(acc.g, adjustment);
     if (!adjustment.allFinite()) Rcpp::stop("the bias reduction adjustment is not finite");
 }
 
@@ -1250,13 +1733,15 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
     double fraction = 1;
     VglmState current, trial;
     MatrixXd R;
+    // Accumulators and scratch kept for every pass of the fit.
+    VglmWorkspace ws;
     // Some pass that formed the full information used the low-rank
     // accumulation (diagonal passes never do, so they do not count).
     bool any_lowrank = false;
     auto evaluate_current = [&](MatrixXd* structure) {
         ++passes;
         if (vglm_pass(data, fam, L, opts, beta, nullptr, current, fraction, structure,
-                      iterate_mode) != VGLM_PASS_OK)
+                      iterate_mode, &ws) != VGLM_PASS_OK)
             Rcpp::stop("the model cannot be evaluated at the starting values");
         any_lowrank = any_lowrank || (current.full && current.lowrank);
     };
@@ -1264,7 +1749,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
     auto evaluate_full = [&]() {
         ++passes;
         if (vglm_pass(data, fam, L, opts, beta, nullptr, current, fraction, nullptr,
-                      VGLM_FULL) != VGLM_PASS_OK)
+                      VGLM_FULL, &ws) != VGLM_PASS_OK)
             Rcpp::stop("the model cannot be evaluated at the current estimate");
         any_lowrank = any_lowrank || current.lowrank;
     };
@@ -1340,7 +1825,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
                 for (int j = 0; j < P; ++j)
                     if (aliased[j]) { V.row(j).setZero(); V.col(j).setZero(); }
                 ++passes;
-                vglm_adjustment(data, fam, L, beta, V, adjustment);
+                vglm_adjustment(data, fam, L, beta, V, adjustment, &ws);
                 score += adjustment;
             }
             vglm_direction(factor, score, step);
@@ -1387,7 +1872,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
                     ? std::min(forcing_max, std::sqrt(std::max(previous_decrement, 0.0) / (0.1 + std::abs(D))))
                     : forcing_max;
                 solved = vglm_cg_solve(data, fam, L, opts, beta, current.U, aliased, pre,
-                                       forcing, max_products, step.delta, used);
+                                       forcing, max_products, step.delta, used, &ws);
                 passes += used;
                 products += used;
             }
@@ -1429,7 +1914,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
             double shrink = 1;
             ++passes;
             const VglmPassStatus status = vglm_pass(data, fam, L, opts, candidate, &beta, trial,
-                                                    shrink, nullptr, iterate_mode);
+                                                    shrink, nullptr, iterate_mode, &ws);
             any_lowrank = any_lowrank || (status == VGLM_PASS_OK && trial.full && trial.lowrank);
             if (status == VGLM_PASS_SHRINK) {
                 if (!(shrink > 0)) { blocked = true; break; }

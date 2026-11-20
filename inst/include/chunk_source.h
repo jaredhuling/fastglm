@@ -97,9 +97,10 @@ inline void size_row_block_work(RowBlockWork& wk, Eigen::Index brows, Eigen::Ind
     if (wk.v2.size() != brows) wk.v2.resize(brows);
 }
 
-// Raised on the calling thread when a block reduction fails. The block
-// callbacks below never report a data error, so a failure is an exception
-// inside a parallel region, in practice an allocation failure.
+// Raised on the calling thread when a block reduction reports a failed
+// block. The block callbacks below never report a data error, and an
+// exception inside a parallel region (in practice an allocation failure) is
+// rethrown by the reduction itself as a memory error, so this is a guard.
 inline void stop_block_reduction_failed()
 {
     Rcpp::stop("not enough memory to accumulate the weighted cross product in row blocks");

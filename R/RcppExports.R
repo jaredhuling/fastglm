@@ -245,6 +245,10 @@ fastglm_sparse_products_test <- function(x, v, b, off, by_columns, threads) {
     .Call(`_fastglm_fastglm_sparse_products_test`, x, v, b, off, by_columns, threads)
 }
 
+fastglm_reduce_failure_test <- function(scheme, where, throws, invalid, kind, threads) {
+    .Call(`_fastglm_fastglm_reduce_failure_test`, scheme, where, throws, invalid, kind, threads)
+}
+
 prepare_glm_constant <- function(x, weights, leverage, code) {
     .Call(`_fastglm_prepare_glm_constant`, x, weights, leverage, code)
 }

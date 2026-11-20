@@ -542,7 +542,12 @@
     args <- if (is.null(source))
         c(list(x = z$X, y = z$y, weights = z$weights, offset = z$offset), args)
     else c(list(x = source, levels = object$levels), args)
-    fit <- do.call(fastglm_multinom, utils::modifyList(args, control))
+    args <- utils::modifyList(args, control)
+    # Refits take their thread count from the session (one thread in a
+    # bootstrap worker process; control$threads of fastglm_bootstrap()
+    # with one process), never from the refit controls.
+    if (is.list(args$control)) args$control$threads <- NULL
+    fit <- do.call(fastglm_multinom, args)
     for (key in c("terms", "xlevels", "contrasts")) fit[[key]] <- object[[key]]
     fit$call <- object$call
     fit$na.action <- NULL

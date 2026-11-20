@@ -146,7 +146,14 @@ fits (\code{firth = TRUE}), and \code{"cg"} with \code{firth = TRUE} is an error
 source for every conjugate gradient step. The solver used is stored in
 the fit as \code{solver}, with the number of information-vector products as
 \code{products}. Under \code{"cg"}, \code{passes} also counts the information-vector
-products and the passes that confirm convergence.}
+products and the passes that confirm convergence. \code{threads} sets the
+number of threads for the compiled computations of this fit (and of its
+intercept-only fit for \code{null.deviance}); the default \code{NULL} uses the
+session setting of \code{\link[=fastglm_threads]{fastglm_threads()}}. Results are identical for every
+number of threads. The thread count used is stored in the fit as
+\code{threads}. A \code{\link[=fastglm_source]{fastglm_source()}} is read on one thread, and each source
+block is split into blocks of \code{block.size} rows that are processed in
+parallel.}
 
 \item{levels}{for a \code{\link[=fastglm_source]{fastglm_source()}}, the category labels in order. By
 default they are the levels of the prototype's factor response (a
@@ -173,6 +180,7 @@ An object of class \code{c("fastglm_multinom", "fastglm_vglm")} with
 \item \code{solver}: the solver used, \code{"exact"} or \code{"cg"} (see \code{control}).
 \item \code{products}: the number of information-vector products (0 under the
 exact solver).
+\item \code{threads}: the number of threads the fit used (see \code{control}).
 \item \code{accumulation}: how the information was accumulated, \code{"lowrank"} (the
 low-rank form used for dense designs with \code{K - 1} of at least 6) or
 \code{"pairwise"} (one weighted cross product per pair of linear
