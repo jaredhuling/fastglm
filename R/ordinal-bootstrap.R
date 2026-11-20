@@ -153,6 +153,13 @@
         ans
     }
     workers <- min(as.integer(workers),as.integer(R))
+    # A thread count in the refits' optimizer controls is handled like one in
+    # 'control': it is applied around the refits, never passed to them, so
+    # worker processes keep one thread each.
+    if(is.list(control$control) && !is.null(names(control$control)) && "threads" %in% names(control$control)) {
+        if(is.null(threads)) threads <- control$control[["threads"]]
+        control$control <- control$control[names(control$control)!="threads"]
+    }
     # A thread count from 'control' (see fastglm_bootstrap()).
     restore.threads <- .bootstrap_thread_scope(threads,workers)
     on.exit(restore.threads(),add=TRUE)

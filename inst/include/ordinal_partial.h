@@ -33,7 +33,7 @@ struct PartialOrdinalData : OrdinalData {
                 error+=std::abs(sum)>=std::abs(product) ? (sum-next)+product : (product-next)+sum;
                 error+=std::fma(value,coefficient,-product);sum=next;
             };
-            if(with_offset) add(offset[i],-1);
+            if(with_offset) add(off(i),-1);
             for(int j=0;j<p;++j) add(x(i,j),-b[q+j]);
             for(int j=0;j<pn;++j) add(z(i,j),-b[q+p+s*pn+j]);
             eta[s]=sum+error;
@@ -57,31 +57,45 @@ struct PartialOrdinalData : OrdinalData {
         }
         return sum+error;
     }
+    // The largest change in a cumulative predictor, and the largest step
+    // fraction that keeps every row ordered. Blocks run in parallel; a
+    // maximum or minimum does not depend on the order of its terms (NaN terms
+    // are skipped either way), so the results are the serial ones.
     double predictor_step(const VectorXd& direction) const {
-        VectorXd delta(q);double largest=0;
-        for(int first=0;first<n;first+=block) {
-            Rcpp::checkUserInterrupt();
-            for(int i=first;i<std::min(n,first+block);++i) if(totals[i]>0) {
-                predictors(i,direction,delta,false);
-                if(!delta.allFinite()) return std::numeric_limits<double>::infinity();
+        const Eigen::Index nb=(n+block-1)/block;
+        std::vector<double> part(static_cast<std::size_t>(nb),0.0);
+        fglm_par::parallel_blocks(n,block,[&](Eigen::Index first,Eigen::Index length) {
+            VectorXd delta(q);double largest=0;
+            for(Eigen::Index i=first;i<first+length;++i) if(totals[i]>0) {
+                predictors(static_cast<int>(i),direction,delta,false);
+                if(!delta.allFinite()) { largest=std::numeric_limits<double>::infinity();break; }
                 largest=std::max(largest,delta.cwiseAbs().maxCoeff());
             }
-        }
+            part[static_cast<std::size_t>(first/block)]=largest;
+        });
+        Rcpp::checkUserInterrupt();
+        double largest=0;
+        for(double v:part) largest=std::max(largest,v);
         return largest;
     }
     double feasible_fraction(const VectorXd& b,const VectorXd& direction) const {
         if(q==1) return 1;
-        double fraction=1;
-        for(int first=0;first<n;first+=block) {
-            Rcpp::checkUserInterrupt();
-            for(int i=first;i<std::min(n,first+block);++i) if(totals[i]>0) {
+        const Eigen::Index nb=(n+block-1)/block;
+        std::vector<double> part(static_cast<std::size_t>(nb),1.0);
+        fglm_par::parallel_blocks(n,block,[&](Eigen::Index first,Eigen::Index length) {
+            double fraction=1;
+            for(Eigen::Index i=first;i<first+length;++i) if(totals[i]>0) {
                 for(int s=1;s<q;++s) {
-                    const double difference=gap(i,direction,s);
+                    const double difference=gap(static_cast<int>(i),direction,s);
                     if(difference<0)
-                        fraction=std::min(fraction,.9*gap(i,b,s)/(-difference));
+                        fraction=std::min(fraction,.9*gap(static_cast<int>(i),b,s)/(-difference));
                 }
             }
-        }
+            part[static_cast<std::size_t>(first/block)]=fraction;
+        });
+        Rcpp::checkUserInterrupt();
+        double fraction=1;
+        for(double v:part) fraction=std::min(fraction,v);
         return fraction;
     }
 };
@@ -93,16 +107,21 @@ struct PartialOrdinalState : OrdinalState {
 
 // Reuse the common-link tail formulas, rebuilding the gap terms because gaps
 // now depend on the predictor row. No cumulative probabilities are clipped.
+// pre and rm, when given, are the row's staged cumulative predictors and
+// probit terms (see partial_stage_expected); the result is the same as when
+// they are computed here.
 inline void partial_row(const PartialOrdinalData& data,const VectorXd& b,int i,
-    VectorXd& eta,OrdinalRow& row,PartialOrdinalState& state) {
-    data.predictors(i,b,eta);
+    VectorXd& eta,OrdinalRow& row,double& min_logp,double& min_gap,
+    const double* pre=nullptr,const double* rm=nullptr) {
+    if(pre) for(int s=0;s<data.q;++s) eta[s]=pre[s];
+    else data.predictors(i,b,eta);
     if(!eta.allFinite()) throw OrdinalEvaluationError("non-finite ordinal cumulative predictors");
     double previous_gap=0;
     for(int s=1;s<data.q;++s) {
         const double gap=data.gap(i,b,s);
         if(!(gap>0) || !std::isfinite(gap))
             throw OrdinalEvaluationError("nonparallel ordinal cumulative predictors are not strictly ordered on a positive-frequency row");
-        state.minimum_gap=std::min(state.minimum_gap,gap);
+        min_gap=std::min(min_gap,gap);
         if(data.link==0) {
             row.loggap[s]=ordinal_log1mexp(-gap);row.inverse_gap[s]=1/std::expm1(gap);
             // The preceding adjacent gap has already been evaluated with the
@@ -111,120 +130,233 @@ inline void partial_row(const PartialOrdinalData& data,const VectorXd& b,int i,
             previous_gap=gap;
         }
     }
-    row.evaluate(eta,0,data.link);
-    state.min_logp=std::min(state.min_logp,row.logp.minCoeff());
+    row.evaluate(eta,0,data.link,true,rm);
+    min_logp=std::min(min_logp,row.logp.minCoeff());
 }
 
-inline void partial_add_information(const PartialOrdinalData& data,const VectorXd& b,
-    PartialOrdinalState& state) {
+// Stage of the nonparallel expected-information and adjustment passes for
+// the probit link: for the blocks [g, g + count) of rows rows each (slot j =
+// block - g), the cumulative predictors of every positive-frequency row
+// (computed in parallel) into ws.eta and, on the calling thread, the probit
+// terms at each of them into ws.rmath. partial_row evaluates the row at
+// the predictors minus a zero location, so the terms are taken there.
+inline void partial_stage_expected(const PartialOrdinalData& data,const VectorXd& b,
+    Eigen::Index g,Eigen::Index count,int rows,OrdinalWorkspace& ws) {
+    const int q=data.q;
+    const Eigen::Index r0=g*rows,r1=std::min<Eigen::Index>(data.n,(g+count)*rows),m=r1-r0;
+    const Eigen::Index cap=Eigen::Index(fglm_par::kLanes)*rows;
+    if(ws.eta.size()<cap*q) ws.eta.resize(cap*q);
+    if(ws.rmath.size()<cap*3*q) ws.rmath.resize(cap*3*q);
+    fglm_par::parallel_blocks(m,rows,[&](Eigen::Index r,Eigen::Index k) {
+        VectorXd eta(q);
+        for(Eigen::Index j=r;j<r+k;++j) {
+            const int i=static_cast<int>(r0+j);
+            if(!(data.totals[i]>0)) continue;
+            data.predictors(i,b,eta);
+            for(int s=0;s<q;++s) ws.eta[j*q+s]=eta[s];
+        }
+    });
+    for(Eigen::Index j=0;j<m;++j) if(data.totals[r0+j]>0)
+        for(int s=0;s<q;++s) ordinal_probit_terms(ws.eta[j*q+s]-0.0,&ws.rmath[(j*q+s)*3]);
+}
+
+inline void partial_size_work(OrdinalWork& w,int q,int width) {
+    if(w.predictors.size()!=q) w.predictors.resize(q);
+    if(w.threshold_score.size()!=q) w.threshold_score.resize(q);
+    if(w.c.size()!=q) w.c.resize(q);
+    if(w.values.size()!=width) w.values.resize(width);
+    if(static_cast<int>(w.index.size())!=width) w.index.assign(width,0);
+    if(static_cast<int>(w.next.size())!=width) w.next.assign(width,0);
+}
+
+// One row of the expected information: adds its log likelihood, ordinary
+// score, and the upper triangle of its information to I.
+template<class Matrix,class Vector>
+inline void partial_information_row(const PartialOrdinalData& data,const VectorXd& b,int i,OrdinalRow& row,
+    OrdinalWork& w,Matrix& I,Vector& ordinary,double& loglik,double& min_logp,double& min_gap,
+    const double* pre,const double* rm) {
     const int q=data.q,p=data.p,pn=data.pn;
-    VectorXd eta=VectorXd::LinSpaced(q,0,double(q-1)),threshold_score(q),point(pn+1);
-    OrdinalRow row(eta);
-    std::vector<int> index(pn+1),next(pn+1);
-    for(int first=0;first<data.n;first+=data.block) {
-        Rcpp::checkUserInterrupt();
-        for(int i=first;i<std::min(data.n,first+data.block);++i) {
-            const double m=data.totals[i];if(m==0) continue;
-            partial_row(data,b,i,eta,row,state);
-            threshold_score.setZero();double common_score=0;
-            if(data.grouped) {
-                for(int k=0;k<data.K;++k) {
-                    const double y=data.weights[i]*data.counts(i,k);
-                    if(y==0) continue;
-                    state.loglik+=y*row.logp[k];common_score-=y*row.location_score(k);
-                    if(k<q) threshold_score[k]+=y*row.left[k];
-                    if(k>0) threshold_score[k-1]-=y*row.right[k-1];
-                }
-            } else {
-                const int k=data.codes[i]-1;
-                state.loglik+=m*row.logp[k];common_score=-m*row.location_score(k);
-                if(k<q) threshold_score[k]+=m*row.left[k];
-                if(k>0) threshold_score[k-1]-=m*row.right[k-1];
+    const double m=data.totals[i];
+    VectorXd& eta=w.predictors;VectorXd& threshold_score=w.threshold_score;VectorXd& point=w.values;
+    std::vector<int>& index=w.index;std::vector<int>& next=w.next;
+    partial_row(data,b,i,eta,row,min_logp,min_gap,pre,rm);
+    threshold_score.setZero();double common_score=0;
+    if(data.grouped) {
+        for(int k=0;k<data.K;++k) {
+            const double y=data.weight(i)*data.count(i,k);
+            if(y==0) continue;
+            loglik+=y*row.logp[k];common_score-=y*row.location_score(k);
+            if(k<q) threshold_score[k]+=y*row.left[k];
+            if(k>0) threshold_score[k-1]-=y*row.right[k-1];
+        }
+    } else {
+        const int k=data.code(i)-1;
+        loglik+=m*row.logp[k];common_score=-m*row.location_score(k);
+        if(k<q) threshold_score[k]+=m*row.left[k];
+        if(k>0) threshold_score[k-1]-=m*row.right[k-1];
+    }
+    ordinary.head(q)+=threshold_score;
+    for(int j=0;j<p;++j) ordinary[q+j]+=data.x(i,j)*common_score;
+    point[0]=1;
+    for(int j=0;j<pn;++j) point[j+1]=-data.z(i,j);
+    double common_weight=0;
+    for(int s=0;s<q;++s) {
+        index[0]=s;next[0]=s+1;
+        for(int j=0;j<pn;++j) {
+            index[j+1]=q+p+s*pn+j;next[j+1]=q+p+(s+1)*pn+j;
+            ordinary[index[j+1]]-=data.z(i,j)*threshold_score[s];
+        }
+        const double diagonal=m*row.g[s]*(row.left[s]+row.right[s]);
+        for(int a=0;a<=pn;++a) for(int c=a;c<=pn;++c)
+            I(index[a],index[c])+=diagonal*point[a]*point[c];
+        if(s+1<q) {
+            const double off=-m*row.g[s+1]*row.right[s];
+            for(int a=0;a<=pn;++a) for(int c=0;c<=pn;++c) {
+                const int lo=std::min(index[a],next[c]),hi=std::max(index[a],next[c]);
+                I(lo,hi)+=off*point[a]*point[c];
             }
-            state.ordinary.head(q)+=threshold_score;
-            for(int j=0;j<p;++j) state.ordinary[q+j]+=data.x(i,j)*common_score;
-            point[0]=1;
-            for(int j=0;j<pn;++j) point[j+1]=-data.z(i,j);
-            double common_weight=0;
-            for(int s=0;s<q;++s) {
-                index[0]=s;next[0]=s+1;
-                for(int j=0;j<pn;++j) {
-                    index[j+1]=q+p+s*pn+j;next[j+1]=q+p+(s+1)*pn+j;
-                    state.ordinary[index[j+1]]-=data.z(i,j)*threshold_score[s];
-                }
-                const double diagonal=m*row.g[s]*(row.left[s]+row.right[s]);
-                for(int a=0;a<=pn;++a) for(int c=a;c<=pn;++c)
-                    state.information(index[a],index[c])+=diagonal*point[a]*point[c];
-                if(s+1<q) {
-                    const double off=-m*row.g[s+1]*row.right[s];
-                    for(int a=0;a<=pn;++a) for(int c=0;c<=pn;++c) {
-                        const int lo=std::min(index[a],next[c]),hi=std::max(index[a],next[c]);
-                        state.information(lo,hi)+=off*point[a]*point[c];
-                    }
-                }
-                // These stable row sums avoid subtracting large adjacent
-                // derivative ratios when common-slope contributions cancel.
-                const double rowsum=m*row.g[s]*row.neighbor[s];common_weight+=rowsum;
-                for(int j=0;j<p;++j) {
-                    state.information(s,q+j)-=rowsum*data.x(i,j);
-                    for(int k=0;k<pn;++k)
-                        state.information(q+j,q+p+s*pn+k)+=rowsum*data.x(i,j)*data.z(i,k);
-                }
-            }
-            for(int j=0;j<p;++j) for(int k=j;k<p;++k)
-                state.information(q+j,q+k)+=common_weight*data.x(i,j)*data.x(i,k);
+        }
+        // These stable row sums avoid subtracting large adjacent
+        // derivative ratios when common-slope contributions cancel.
+        const double rowsum=m*row.g[s]*row.neighbor[s];common_weight+=rowsum;
+        for(int j=0;j<p;++j) {
+            I(s,q+j)-=rowsum*data.x(i,j);
+            for(int k=0;k<pn;++k)
+                I(q+j,q+p+s*pn+k)+=rowsum*data.x(i,j)*data.z(i,k);
         }
     }
+    for(int j=0;j<p;++j) for(int k=j;k<p;++k)
+        I(q+j,q+k)+=common_weight*data.x(i,j)*data.x(i,k);
+}
+
+// The expected information. Lanes of d by d accumulators when d <= 1024;
+// above that the rows are added on the calling thread in order (each row
+// adds to scattered entries of the d by d matrix, which a column-tile
+// scheme does not fit).
+inline void partial_add_information(const PartialOrdinalData& data,const VectorXd& b,
+    PartialOrdinalState& state,OrdinalWorkspace* workspace=nullptr) {
+    const int q=data.q,p=data.p,pn=data.pn,d=data.d,n=data.n;
+    const VectorXd seed=VectorXd::LinSpaced(q,0,double(q-1));
+    if(!fglm_par::use_lanes(d)) {
+        OrdinalRow row(seed);OrdinalWork w;partial_size_work(w,q,pn+1);
+        for(int first=0;first<n;first+=data.block) {
+            Rcpp::checkUserInterrupt();
+            for(int i=first;i<std::min(n,first+data.block);++i) {
+                if(data.totals[i]==0) continue;
+                partial_information_row(data,b,i,row,w,state.information,state.ordinary,state.loglik,
+                    state.min_logp,state.minimum_gap,nullptr,nullptr);
+            }
+        }
+        state.information=MatrixXd(state.information.selfadjointView<Eigen::Upper>());
+        return;
+    }
+    OrdinalWorkspace local;
+    OrdinalWorkspace& ws=workspace ? *workspace : local;
+    const int rows=ordinal_block_rows(data.block,d,true,data.link,q);
+    const Eigen::Index nb=(Eigen::Index(n)+rows-1)/rows;
+    const bool staged=data.link==1;
+    ordinal_size_lanes(ws,nb,d,q,true);
+    ordinal_lanes(nb,ws,seed,
+        [&](OrdinalAcc& a) { ordinal_reset_acc(a,true); },
+        [&](Eigen::Index blk,OrdinalAcc& a,OrdinalWorkHandle& h) {
+            OrdinalWork& w=*h.w;partial_size_work(w,q,pn+1);
+            const int first=static_cast<int>(blk*rows),length=std::min(rows,n-first);
+            const std::ptrdiff_t at=static_cast<std::ptrdiff_t>(blk%fglm_par::kLanes)*rows;
+            for(int r=0;r<length;++r) {
+                const int i=first+r;
+                if(data.totals[i]==0) continue;
+                partial_information_row(data,b,i,h.row,w,a.M,a.v,a.loglik,a.min_logp,a.min_gap,
+                    staged ? ws.eta.data()+(at+r)*q : nullptr,staged ? ws.rmath.data()+(at+r)*3*q : nullptr);
+            }
+            return true;
+        },
+        [&](OrdinalAcc&,const OrdinalAcc& a) {
+            state.information+=a.M;
+            state.ordinary+=a.v;
+            state.loglik+=a.loglik;
+            state.min_logp=std::min(state.min_logp,a.min_logp);
+            state.minimum_gap=std::min(state.minimum_gap,a.min_gap);
+        },staged,
+        [&](Eigen::Index g,Eigen::Index count) {
+            if(staged) partial_stage_expected(data,b,g,count,rows,ws);
+        });
     state.information=MatrixXd(state.information.selfadjointView<Eigen::Upper>());
 }
 
+// The bias adjustment needs only vector sums, so it always uses lanes.
 inline void partial_add_adjustment(const PartialOrdinalData& data,const VectorXd& b,
-    PartialOrdinalState& state) {
-    const int q=data.q,p=data.p,pn=data.pn,width=1+p+pn;
-    VectorXd eta=VectorXd::LinSpaced(q,0,double(q-1)),values(width),correction(q);
-    OrdinalRow row(eta);std::vector<int> indices(width);
-    for(int first=0;first<data.n;first+=data.block) {
-        Rcpp::checkUserInterrupt();
-        for(int i=first;i<std::min(data.n,first+data.block);++i) {
-            const double m=data.totals[i];if(m==0) continue;
-            partial_row(data,b,i,eta,row,state);values[0]=1;
-            for(int j=0;j<p;++j) {indices[j+1]=q+j;values[j+1]=-data.x(i,j);}
-            for(int j=0;j<pn;++j) values[1+p+j]=-data.z(i,j);
-            for(int s=0;s<q;++s) {
-                indices[0]=s;
-                for(int j=0;j<pn;++j) indices[1+p+j]=q+p+s*pn+j;
-                double variance=0;
-                for(int a=0;a<width;++a) {
-                    variance+=values[a]*values[a]*state.inverse(indices[a],indices[a]);
-                    for(int c=a+1;c<width;++c)
-                        variance+=2*values[a]*values[c]*state.inverse(indices[a],indices[c]);
+    PartialOrdinalState& state,OrdinalWorkspace* workspace=nullptr) {
+    const int q=data.q,p=data.p,pn=data.pn,width=1+p+pn,d=data.d,n=data.n;
+    const VectorXd seed=VectorXd::LinSpaced(q,0,double(q-1));
+    OrdinalWorkspace local;
+    OrdinalWorkspace& ws=workspace ? *workspace : local;
+    const int rows=ordinal_block_rows(data.block,d,true,data.link,q);
+    const Eigen::Index nb=(Eigen::Index(n)+rows-1)/rows;
+    const bool staged=data.link==1;
+    ordinal_size_lanes(ws,nb,d,q,false);
+    ordinal_lanes(nb,ws,seed,
+        [&](OrdinalAcc& a) { ordinal_reset_acc(a,false); },
+        [&](Eigen::Index blk,OrdinalAcc& a,OrdinalWorkHandle& h) {
+            OrdinalWork& w=*h.w;partial_size_work(w,q,width);
+            OrdinalRow& row=h.row;
+            VectorXd& eta=w.predictors;VectorXd& values=w.values;VectorXd& correction=w.c;
+            std::vector<int>& indices=w.index;
+            const int first=static_cast<int>(blk*rows),length=std::min(rows,n-first);
+            const std::ptrdiff_t at=static_cast<std::ptrdiff_t>(blk%fglm_par::kLanes)*rows;
+            for(int r=0;r<length;++r) {
+                const int i=first+r;
+                const double m=data.totals[i];if(m==0) continue;
+                partial_row(data,b,i,eta,row,a.min_logp,a.min_gap,
+                    staged ? ws.eta.data()+(at+r)*q : nullptr,staged ? ws.rmath.data()+(at+r)*3*q : nullptr);
+                values[0]=1;
+                for(int j=0;j<p;++j) {indices[j+1]=q+j;values[j+1]=-data.x(i,j);}
+                for(int j=0;j<pn;++j) values[1+p+j]=-data.z(i,j);
+                for(int s=0;s<q;++s) {
+                    indices[0]=s;
+                    for(int j=0;j<pn;++j) indices[1+p+j]=q+p+s*pn+j;
+                    double variance=0;
+                    for(int c1=0;c1<width;++c1) {
+                        variance+=values[c1]*values[c1]*state.inverse(indices[c1],indices[c1]);
+                        for(int c2=c1+1;c2<width;++c2)
+                            variance+=2*values[c1]*values[c2]*state.inverse(indices[c1],indices[c2]);
+                    }
+                    if(!(variance>0) || !std::isfinite(variance))
+                        throw OrdinalEvaluationError("nonpositive or non-finite cumulative-predictor variance");
+                    const double curvature=data.link==0 ? row.g[s]*(1-2*row.cdf[s]) : row.gprime[s];
+                    correction[s]=.5*m*curvature*variance;
                 }
-                if(!(variance>0) || !std::isfinite(variance))
-                    throw OrdinalEvaluationError("nonpositive or non-finite cumulative-predictor variance");
-                const double curvature=data.link==0 ? row.g[s]*(1-2*row.cdf[s]) : row.gprime[s];
-                correction[s]=.5*m*curvature*variance;
+                double common_adjustment=0;
+                for(int s=0;s<q;++s) {
+                    const double adjusted=(correction[s]-(s ? correction[s-1] : 0))*row.left[s]-
+                        ((s+1<q ? correction[s+1] : 0)-correction[s])*row.right[s];
+                    a.v[s]+=adjusted;
+                    for(int j=0;j<pn;++j) a.v[q+p+s*pn+j]-=data.z(i,j)*adjusted;
+                    common_adjustment-=correction[s]*row.neighbor[s];
+                }
+                for(int j=0;j<p;++j) a.v[q+j]+=data.x(i,j)*common_adjustment;
             }
-            double common_adjustment=0;
-            for(int s=0;s<q;++s) {
-                const double adjusted=(correction[s]-(s ? correction[s-1] : 0))*row.left[s]-
-                    ((s+1<q ? correction[s+1] : 0)-correction[s])*row.right[s];
-                state.adjustment[s]+=adjusted;
-                for(int j=0;j<pn;++j) state.adjustment[q+p+s*pn+j]-=data.z(i,j)*adjusted;
-                common_adjustment-=correction[s]*row.neighbor[s];
-            }
-            for(int j=0;j<p;++j) state.adjustment[q+j]+=data.x(i,j)*common_adjustment;
-        }
-    }
+            return true;
+        },
+        [&](OrdinalAcc&,const OrdinalAcc& a) {
+            state.adjustment+=a.v;
+            state.min_logp=std::min(state.min_logp,a.min_logp);
+            state.minimum_gap=std::min(state.minimum_gap,a.min_gap);
+        },staged,
+        [&](Eigen::Index g,Eigen::Index count) {
+            if(staged) partial_stage_expected(data,b,g,count,rows,ws);
+        });
 }
 
 template<class Data>
 inline PartialOrdinalState partial_evaluate(const Data& data,
-    const VectorXd& b,bool firth,double condition_tol) {
+    const VectorXd& b,bool firth,double condition_tol,OrdinalWorkspace* workspace=nullptr) {
     if(b.size()!=data.d || !b.allFinite()) throw OrdinalEvaluationError("invalid nonparallel ordinal parameters");
+    OrdinalWorkspace local;
+    OrdinalWorkspace* ws=workspace ? workspace : &local;
     PartialOrdinalState state(data.d);
-    data.visit([&](const PartialOrdinalData& block) {partial_add_information(block,b,state);});
+    data.visit([&](const PartialOrdinalData& block) {partial_add_information(block,b,state,ws);});
     ordinal_factor_information(state,data.d-data.q,data.q,condition_tol);
-    if(firth) data.visit([&](const PartialOrdinalData& block) {partial_add_adjustment(block,b,state);});
+    if(firth) data.visit([&](const PartialOrdinalData& block) {partial_add_adjustment(block,b,state,ws);});
     state.score=state.ordinary+state.adjustment;
     if(!state.score.allFinite() || !state.inverse.allFinite())
         throw OrdinalEvaluationError("non-finite nonparallel ordinal score or covariance");
@@ -251,91 +383,205 @@ struct PartialObservedState {
     explicit PartialObservedState(int d=0) : information(MatrixXd::Zero(d,d)),score(VectorXd::Zero(d)) {}
 };
 
-inline void partial_observed_add(const PartialOrdinalData& data,const VectorXd& b,PartialObservedState& out) {
+// The cumulative predictor of row r of a block at threshold s, given the
+// row's location (offset included); the observed pass and its probit stage
+// both use it, so they evaluate the same number.
+template<class Rows>
+inline double partial_threshold_predictor(const Rows& zz,int r,const VectorXd& alpha,double linear,
+    const VectorXd& b,int q,int p,int pn,int s) {
+    return alpha[s]-linear-zz.row(r).dot(b.segment(q+p+s*pn,pn));
+}
+
+// Stage of the nonparallel observed pass for the probit link: for the
+// blocks [g, g + count) of rows rows each (slot j = block - g), in parallel
+// the location of every positive-frequency row (offset included) into
+// ws.linear and its cumulative predictors at the thresholds that bound its
+// observed categories (every threshold for a grouped row) into ws.eta, then
+// on the calling thread the probit terms there into ws.rmath.
+inline void partial_stage_observed(const PartialOrdinalData& data,const VectorXd& b,
+    Eigen::Index g,Eigen::Index count,int rows,OrdinalWorkspace& ws) {
     const int q=data.q,p=data.p,pn=data.pn;
     const VectorXd alpha=b.head(q),beta=b.segment(q,p);
-    const int width=2+p+2*pn;
-    std::vector<int> index(width);
-    VectorXd upper(width),lower(width);
-    VectorXd location,slope;
-    for(int first=0;first<data.n;first+=data.block) {
-        Rcpp::checkUserInterrupt();
-        const int length=std::min(data.block,data.n-first);
+    const Eigen::Index r0=g*rows,r1=std::min<Eigen::Index>(data.n,(g+count)*rows),m=r1-r0;
+    const Eigen::Index cap=Eigen::Index(fglm_par::kLanes)*rows;
+    if(ws.linear.size()<cap) ws.linear.resize(cap);
+    if(ws.eta.size()<cap*q) ws.eta.resize(cap*q);
+    if(ws.rmath.size()<cap*3*q) ws.rmath.resize(cap*3*q);
+    // Whether row i needs the terms at threshold s.
+    const auto needed=[&](int i,int s) {
+        if(data.grouped) return true;
+        const int k=data.code(i)-1;
+        return s==k || s==k-1;
+    };
+    fglm_par::parallel_blocks(m,rows,[&](Eigen::Index r,Eigen::Index k) {
+        const int first=static_cast<int>(r0+r),length=static_cast<int>(k);
         const auto xx=data.x.middleRows(first,length);
         const auto zz=data.z.middleRows(first,length);
-        location.resize(length);
+        VectorXd location(length);
         if(p) location.noalias()=xx*beta; else location.setZero();
-        // Ordering must hold at every positive-frequency row, not only at observed categories.
-        for(int s=1;s<q;++s) {
-            const VectorXd rowgap=VectorXd::Constant(length,alpha[s]-alpha[s-1])-
-                zz*(b.segment(q+p+s*pn,pn)-b.segment(q+p+(s-1)*pn,pn));
-            for(int r=0;r<length;++r) if(data.totals[first+r]>0) {
-                if(!(rowgap[r]>0)) throw OrdinalEvaluationError("nonparallel ordinal cumulative predictors are not strictly ordered");
-                out.minimum_gap=std::min(out.minimum_gap,rowgap[r]);
-            }
-        }
-        for(int r=0;r<length;++r) {
-            const int i=first+r;
+        for(int j=0;j<length;++j) {
+            const int i=first+j;
             if(data.totals[i]==0) continue;
-            const double linear=location[r]+data.offset[i];
-            const auto add=[&](int k,double y) {
-                double eu=0,el=0,gap=0;
-                if(k<q) eu=alpha[k]-linear-zz.row(r).dot(b.segment(q+p+k*pn,pn));
-                if(k>0) el=alpha[k-1]-linear-zz.row(r).dot(b.segment(q+p+(k-1)*pn,pn));
-                if(k>0 && k<q) gap=alpha[k]-alpha[k-1]-zz.row(r).dot(b.segment(q+p+k*pn,pn)-b.segment(q+p+(k-1)*pn,pn));
-                const double one_minus=gap>0 ? -std::expm1(-gap) : 0;
-                const ObservedTerms t=data.link==0 ?
-                    observed_logit(k,q,eu,el,gap>0 ? 1/std::expm1(gap) : 0,gap>0 ? ordinal_log1mexp(-gap) : 0,one_minus) :
-                    observed_general(k,q,data.link,eu,el,gap,one_minus);
-                out.loglik+=y*t.logp;
-                // Gradients of the upper and lower predictors in the coefficients.
-                int used=0;
-                const auto entry=[&](int at,double u,double l) { index[used]=at;upper[used]=u;lower[used]=l;++used; };
-                if(k<q) entry(k,1,0);
-                if(k>0) entry(k-1,0,1);
-                for(int j=0;j<p;++j) entry(q+j,k<q ? -xx(r,j) : 0,k>0 ? -xx(r,j) : 0);
-                for(int j=0;j<pn;++j) {
-                    if(k<q) entry(q+p+k*pn+j,-zz(r,j),0);
-                    if(k>0) entry(q+p+(k-1)*pn+j,0,-zz(r,j));
-                }
-                for(int a=0;a<used;++a) {
-                    out.score[index[a]]+=y*(t.left*upper[a]-t.right*lower[a]);
-                    for(int c=0;c<used;++c) {
-                        const double value=t.upper*upper[a]*upper[c]+t.lower*lower[a]*lower[c]+
-                            t.cross*(upper[a]*lower[c]+lower[a]*upper[c]);
-                        out.information(index[a],index[c])+=y*value;
-                    }
-                }
-            };
-            if(data.grouped) {
-                for(int k=0;k<data.K;++k) {
-                    const double y=data.weights[i]*data.counts(i,k);
-                    if(y!=0) add(k,y);
-                }
-            } else add(data.codes[i]-1,data.totals[i]);
+            const double linear=location[j]+data.off(i);
+            ws.linear[r+j]=linear;
+            for(int s=0;s<q;++s) if(needed(i,s))
+                ws.eta[(r+j)*q+s]=partial_threshold_predictor(zz,j,alpha,linear,b,q,p,pn,s);
         }
+    });
+    for(Eigen::Index j=0;j<m;++j) {
+        const int i=static_cast<int>(r0+j);
+        if(data.totals[i]==0) continue;
+        for(int s=0;s<q;++s) if(needed(i,s))
+            ordinal_probit_terms(ws.eta[j*q+s],&ws.rmath[(j*q+s)*3]);
     }
 }
 
+// The rows of the observed pass for the block of `length` rows from
+// `first`, added to I, score, loglik, and min_gap. lin, pre, and rm, when
+// given, are the block's staged locations, threshold predictors, and probit
+// terms.
+template<class Matrix,class Vector>
+inline void partial_observed_rows(const PartialOrdinalData& data,const VectorXd& b,int first,int length,
+    OrdinalWork& w,Matrix& I,Vector& score,double& loglik,double& min_gap,
+    const double* lin,const double* pre,const double* rm) {
+    const int q=data.q,p=data.p,pn=data.pn;
+    const VectorXd alpha=b.head(q),beta=b.segment(q,p);
+    const int width=2+p+2*pn;
+    if(static_cast<int>(w.index.size())!=width) w.index.assign(width,0);
+    if(w.upper_x.size()!=width) w.upper_x.resize(width);
+    if(w.lower_x.size()!=width) w.lower_x.resize(width);
+    std::vector<int>& index=w.index;VectorXd& upper=w.upper_x;VectorXd& lower=w.lower_x;
+    const auto xx=data.x.middleRows(first,length);
+    const auto zz=data.z.middleRows(first,length);
+    if(!lin) {
+        w.eta.resize(length);
+        if(p) w.eta.noalias()=xx*beta; else w.eta.setZero();
+    }
+    // Ordering must hold at every positive-frequency row, not only at observed categories.
+    for(int s=1;s<q;++s) {
+        const VectorXd rowgap=VectorXd::Constant(length,alpha[s]-alpha[s-1])-
+            zz*(b.segment(q+p+s*pn,pn)-b.segment(q+p+(s-1)*pn,pn));
+        for(int r=0;r<length;++r) if(data.totals[first+r]>0) {
+            if(!(rowgap[r]>0)) throw OrdinalEvaluationError("nonparallel ordinal cumulative predictors are not strictly ordered");
+            min_gap=std::min(min_gap,rowgap[r]);
+        }
+    }
+    for(int r=0;r<length;++r) {
+        const int i=first+r;
+        if(data.totals[i]==0) continue;
+        const double linear=lin ? lin[r] : w.eta[r]+data.off(i);
+        const auto add=[&](int k,double y) {
+            double eu=0,el=0,gap=0;
+            if(pre) {
+                if(k<q) eu=pre[static_cast<std::ptrdiff_t>(r)*q+k];
+                if(k>0) el=pre[static_cast<std::ptrdiff_t>(r)*q+k-1];
+            } else {
+                if(k<q) eu=partial_threshold_predictor(zz,r,alpha,linear,b,q,p,pn,k);
+                if(k>0) el=partial_threshold_predictor(zz,r,alpha,linear,b,q,p,pn,k-1);
+            }
+            if(k>0 && k<q) gap=alpha[k]-alpha[k-1]-zz.row(r).dot(b.segment(q+p+k*pn,pn)-b.segment(q+p+(k-1)*pn,pn));
+            const double one_minus=gap>0 ? -std::expm1(-gap) : 0;
+            const double* rr=rm ? rm+static_cast<std::ptrdiff_t>(r)*3*q : nullptr;
+            const ObservedTerms t=data.link==0 ?
+                observed_logit(k,q,eu,el,gap>0 ? 1/std::expm1(gap) : 0,gap>0 ? ordinal_log1mexp(-gap) : 0,one_minus) :
+                observed_general(k,q,data.link,eu,el,gap,one_minus,rr && k<q ? rr+3*k : nullptr,
+                    rr && k>0 ? rr+3*(k-1) : nullptr);
+            loglik+=y*t.logp;
+            // Gradients of the upper and lower predictors in the coefficients.
+            int used=0;
+            const auto entry=[&](int at,double u,double l) { index[used]=at;upper[used]=u;lower[used]=l;++used; };
+            if(k<q) entry(k,1,0);
+            if(k>0) entry(k-1,0,1);
+            for(int j=0;j<p;++j) entry(q+j,k<q ? -xx(r,j) : 0,k>0 ? -xx(r,j) : 0);
+            for(int j=0;j<pn;++j) {
+                if(k<q) entry(q+p+k*pn+j,-zz(r,j),0);
+                if(k>0) entry(q+p+(k-1)*pn+j,0,-zz(r,j));
+            }
+            for(int a=0;a<used;++a) {
+                score[index[a]]+=y*(t.left*upper[a]-t.right*lower[a]);
+                for(int c=0;c<used;++c) {
+                    const double value=t.upper*upper[a]*upper[c]+t.lower*lower[a]*lower[c]+
+                        t.cross*(upper[a]*lower[c]+lower[a]*upper[c]);
+                    I(index[a],index[c])+=y*value;
+                }
+            }
+        };
+        if(data.grouped) {
+            for(int k=0;k<data.K;++k) {
+                const double y=data.weight(i)*data.count(i,k);
+                if(y!=0) add(k,y);
+            }
+        } else add(data.code(i)-1,data.totals[i]);
+    }
+}
+
+// The observed information. Lanes of d by d accumulators when d <= 1024;
+// above that the blocks are added on the calling thread in order.
+inline void partial_observed_add(const PartialOrdinalData& data,const VectorXd& b,PartialObservedState& out,
+    OrdinalWorkspace* workspace=nullptr) {
+    const int q=data.q,d=data.d,n=data.n;
+    if(!fglm_par::use_lanes(d)) {
+        OrdinalWork w;
+        for(int first=0;first<n;first+=data.block) {
+            Rcpp::checkUserInterrupt();
+            const int length=std::min(data.block,n-first);
+            partial_observed_rows(data,b,first,length,w,out.information,out.score,out.loglik,out.minimum_gap,
+                nullptr,nullptr,nullptr);
+        }
+        return;
+    }
+    OrdinalWorkspace local;
+    OrdinalWorkspace& ws=workspace ? *workspace : local;
+    const int rows=ordinal_block_rows(data.block,d,true,data.link,q);
+    const Eigen::Index nb=(Eigen::Index(n)+rows-1)/rows;
+    const bool staged=data.link==1;
+    const VectorXd seed=VectorXd::LinSpaced(q,0,double(q-1));
+    ordinal_size_lanes(ws,nb,d,q,true);
+    ordinal_lanes(nb,ws,seed,
+        [&](OrdinalAcc& a) { ordinal_reset_acc(a,true); },
+        [&](Eigen::Index blk,OrdinalAcc& a,OrdinalWorkHandle& h) {
+            const int first=static_cast<int>(blk*rows),length=std::min(rows,n-first);
+            const std::ptrdiff_t at=static_cast<std::ptrdiff_t>(blk%fglm_par::kLanes)*rows;
+            partial_observed_rows(data,b,first,length,*h.w,a.M,a.v,a.loglik,a.min_gap,
+                staged ? ws.linear.data()+at : nullptr,staged ? ws.eta.data()+at*q : nullptr,
+                staged ? ws.rmath.data()+at*3*q : nullptr);
+            return true;
+        },
+        [&](OrdinalAcc&,const OrdinalAcc& a) {
+            out.information+=a.M;
+            out.score+=a.v;
+            out.loglik+=a.loglik;
+            out.minimum_gap=std::min(out.minimum_gap,a.min_gap);
+        },staged,
+        [&](Eigen::Index g,Eigen::Index count) {
+            if(staged) partial_stage_observed(data,b,g,count,rows,ws);
+        });
+}
+
 template<class Data>
-PartialObservedState partial_observed_evaluate(const Data& data,const VectorXd& b) {
+PartialObservedState partial_observed_evaluate(const Data& data,const VectorXd& b,OrdinalWorkspace* workspace=nullptr) {
     if(b.size()!=data.d || !b.allFinite()) throw OrdinalEvaluationError("invalid nonparallel ordinal parameters");
     PartialObservedState out(data.d);
-    data.visit([&](const PartialOrdinalData& block) { partial_observed_add(block,b,out); });
+    data.visit([&](const PartialOrdinalData& block) { partial_observed_add(block,b,out,workspace); });
     if(!std::isfinite(out.loglik) || !out.score.allFinite() || !out.information.allFinite())
         throw OrdinalEvaluationError("non-finite observed nonparallel ordinal terms");
     return out;
 }
 
-// The largest predictor change and the largest step that keeps every row ordered.
+// The largest predictor change and the largest step that keeps every row
+// ordered. Blocks run in parallel; the maximum and minimum do not depend on
+// the order of their terms.
 template<class Data>
 void partial_step_limits(const Data& data,const VectorXd& b,const VectorXd& direction,double& change,double& fraction) {
     change=0;fraction=1;
     data.visit([&](const PartialOrdinalData& block) {
         const int q=block.q,p=block.p,pn=block.pn;
-        VectorXd location,value,previous;
-        for(int first=0;first<block.n;first+=block.block) {
-            const int length=std::min(block.block,block.n-first);
+        const Eigen::Index nb=(block.n+block.block-1)/block.block;
+        std::vector<double> changes(static_cast<std::size_t>(nb),0.0),fractions(static_cast<std::size_t>(nb),1.0);
+        fglm_par::parallel_blocks(block.n,block.block,[&](Eigen::Index first_,Eigen::Index length_) {
+            const int first=static_cast<int>(first_),length=static_cast<int>(length_);
+            double ch=0,fr=1;
+            VectorXd location,value,previous;
             const auto xx=block.x.middleRows(first,length);
             const auto zz=block.z.middleRows(first,length);
             if(p) location.noalias()=xx*direction.segment(q,p); else location=VectorXd::Zero(length);
@@ -346,22 +592,26 @@ void partial_step_limits(const Data& data,const VectorXd& b,const VectorXd& dire
                         zz*(b.segment(q+p+s*pn,pn)-b.segment(q+p+(s-1)*pn,pn));
                     for(int r=0;r<length;++r) if(block.totals[first+r]>0) {
                         const double difference=value[r]-previous[r];
-                        if(difference<0) fraction=std::min(fraction,.9*current[r]/(-difference));
+                        if(difference<0) fr=std::min(fr,.9*current[r]/(-difference));
                     }
                 }
-                for(int r=0;r<length;++r) if(block.totals[first+r]>0) change=std::max(change,std::abs(value[r]));
+                for(int r=0;r<length;++r) if(block.totals[first+r]>0) ch=std::max(ch,std::abs(value[r]));
                 previous=value;
             }
-        }
+            changes[static_cast<std::size_t>(first/block.block)]=ch;
+            fractions[static_cast<std::size_t>(first/block.block)]=fr;
+        });
+        for(double v:changes) change=std::max(change,v);
+        for(double v:fractions) fraction=std::min(fraction,v);
     });
 }
 
 template<class Data>
 int partial_observed_newton(const Data& data,VectorXd& b,double score_tol,double step_tol,int maxit,
-    double max_step,int max_halves,bool trace,int& evaluations) {
+    double max_step,int max_halves,bool trace,int& evaluations,OrdinalWorkspace* workspace=nullptr) {
     int iterations=0;
     try {
-        PartialObservedState current=partial_observed_evaluate(data,b);
+        PartialObservedState current=partial_observed_evaluate(data,b,workspace);
         ++evaluations;
         for(;iterations<maxit;++iterations) {
             Rcpp::checkUserInterrupt();
@@ -393,7 +643,7 @@ int partial_observed_newton(const Data& data,VectorXd& b,double score_tol,double
             for(int h=0;h<=max_halves && !accepted;++h) {
                 candidate=b+fraction*direction;
                 try {
-                    trial=partial_observed_evaluate(data,candidate);
+                    trial=partial_observed_evaluate(data,candidate,workspace);
                     ++evaluations;
                     if(ascent<1024*rounding || trial.loglik>=current.loglik+1e-4*fraction*ascent-rounding) accepted=true;
                     else fraction/=2;
@@ -414,11 +664,14 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
        !(condition_tol>0) || !std::isfinite(score_tol+step_tol+max_step+condition_tol))
         Rcpp::stop("invalid nonparallel ordinal optimizer controls");
     VectorXd b=start;int evaluations=0,fallbacks=0,iterations=0;
+    // Lane accumulators and scratch kept for every pass of the fit.
+    OrdinalWorkspace workspace;
     // Bias reduction needs expected-information terms in every iteration.
     const int observed_iterations=!observed || firth || maxit<2 ? 0 :
-        partial_observed_newton(data,b,score_tol,step_tol,std::min(maxit-1,30),max_step,max_halves,trace,evaluations);
+        partial_observed_newton(data,b,score_tol,step_tol,std::min(maxit-1,30),max_step,max_halves,trace,evaluations,
+            &workspace);
     const int expected_limit=maxit-observed_iterations;
-    auto evaluate=[&](const VectorXd& candidate) {++evaluations;return partial_evaluate(data,candidate,firth,condition_tol);};
+    auto evaluate=[&](const VectorXd& candidate) {++evaluations;return partial_evaluate(data,candidate,firth,condition_tol,&workspace);};
     // The certifying iterations restart if the Newton endpoint cannot be evaluated.
     const auto first_state=[&]() {
         if(observed_iterations>0) {

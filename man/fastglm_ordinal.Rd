@@ -112,10 +112,14 @@ predictors and the standardized adjusted score.}
 kernel. The input design is retained in memory.}
 
 \item{control}{named optimizer controls: \code{score.tol}, \code{step.tol},
-\code{max.step}, \code{max.halves}, \code{condition.tol}, \code{standardize}, \code{trace}, and
-\code{observed}. For common-slope maximum likelihood, \code{observed=TRUE} (the default)
+\code{max.step}, \code{max.halves}, \code{condition.tol}, \code{standardize}, \code{trace},
+\code{observed}, and \code{threads}. For common-slope maximum likelihood, \code{observed=TRUE} (the default)
 begins with observed-information Newton steps; expected information still
-certifies convergence and gives the reported covariance.}
+certifies convergence and gives the reported covariance. \code{threads} sets
+the number of threads for the compiled computations of this fit, or
+\code{NULL} (default) for the session setting of \code{\link[=fastglm_threads]{fastglm_threads()}}. Results
+are identical for every number of threads. The thread count used is
+stored in the fit as \code{threads} and is not kept in the fit's \code{control}.}
 
 \item{link}{cumulative link: \code{"logit"} (proportional odds), \code{"probit"},
 or \code{"cloglog"} (complementary log-log). Prepared fits use their saved

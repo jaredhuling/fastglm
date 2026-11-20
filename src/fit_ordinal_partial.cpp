@@ -33,7 +33,8 @@ Rcpp::List ordinal_constrained_native(Rcpp::NumericMatrix x,Rcpp::IntegerVector 
     const fglm_ordinal_constrained::CommonDomain domain{fglm_ordinal_constrained::positive_rows(
         Rcpp::as<Eigen::MatrixXd>(x),positive),categories-1,x.ncol()};
     const fglm_ordinal_constrained::ConstrainedControl ctl{maxit,max_halves,score_tol,step_tol,max_step};
-    const auto evaluate=[&](const Eigen::VectorXd& b) {return fglm_ordinal::ordinal_evaluate(data,b,adjusted,condition_tol);};
+    fglm_ordinal::OrdinalWorkspace workspace;
+    const auto evaluate=[&](const Eigen::VectorXd& b) {return fglm_ordinal::ordinal_evaluate(data,b,adjusted,condition_tol,&workspace);};
     const auto wrap=[](const fglm_ordinal::OrdinalState& state) {return fglm_ordinal::ordinal_state_list(state);};
     return fglm_ordinal_constrained::constrained_fit<fglm_ordinal::OrdinalState>(evaluate,domain,wrap,
         Rcpp::as<Eigen::VectorXd>(start),Rcpp::as<Eigen::MatrixXd>(basis),adjusted,ctl);
@@ -51,7 +52,8 @@ Rcpp::List ordinal_partial_constrained_native(Rcpp::NumericMatrix x,Rcpp::Numeri
         fglm_ordinal_constrained::positive_rows(Rcpp::as<Eigen::MatrixXd>(z),positive),
         categories-1,x.ncol(),z.ncol()};
     const fglm_ordinal_constrained::ConstrainedControl ctl{maxit,max_halves,score_tol,step_tol,max_step};
-    const auto evaluate=[&](const Eigen::VectorXd& b) {return partial_evaluate(data,b,adjusted,condition_tol);};
+    OrdinalWorkspace workspace;
+    const auto evaluate=[&](const Eigen::VectorXd& b) {return partial_evaluate(data,b,adjusted,condition_tol,&workspace);};
     const auto wrap=[](const PartialOrdinalState& state) {return partial_state_list(state);};
     return fglm_ordinal_constrained::constrained_fit<PartialOrdinalState>(evaluate,domain,wrap,
         Rcpp::as<Eigen::VectorXd>(start),Rcpp::as<Eigen::MatrixXd>(basis),adjusted,ctl);

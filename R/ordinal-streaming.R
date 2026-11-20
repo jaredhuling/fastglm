@@ -18,6 +18,8 @@
 #' @param firth,link,tol,maxit,block.size,control as in [fastglm_ordinal()].
 #'   `block.size` limits temporary calculations within a supplied block;
 #'   the source determines the size of the block loaded into memory.
+#'   Each source block is read on one thread; with `control$threads` (see
+#'   [fastglm_ordinal()]) its rows are then processed in parallel.
 #' @param nonparallel predictors whose slopes may differ across thresholds.
 #'   Select complete model terms with a one-sided formula for a formula source,
 #'   or columns by name or index for a matrix source. All declared categories
@@ -65,6 +67,11 @@
 fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FALSE,
     link="logit",tol=1e-8,maxit=200L,block.size=2048L,control=list(),nonparallel=NULL) {
     call <- match.call();call[[1L]] <- quote(fastglm::fastglm_ordinal_streaming)
+    # A thread count in 'control' is held for the whole call (every source
+    # pass) and is not kept in the fit's optimizer controls.
+    split <- .ordinal_split_threads(control); control <- split$control
+    scope <- .fastglm_scope_threads(split$threads)
+    on.exit(scope$restore(),add=TRUE)
     source <- if(inherits(source,"fastglm_source")) source else fastglm_source(source,n_chunks)
     if(!is.null(source$schema$terms) && !inherits(source$schema$terms,"terms"))
         stop("ordinal fitting requires a source with one predictor formula",call.=FALSE)
@@ -197,6 +204,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
     object$prediction.offset.required <- length(source$schema$offset)>0L
     object$source.passes <- state$passes;object$source.reads <- state$reads
     object$maximum.block.rows <- state$maximum.block.rows
+    object$threads <- scope$threads
     object
 }
 

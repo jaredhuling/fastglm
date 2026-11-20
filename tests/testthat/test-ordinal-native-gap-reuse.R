@@ -10,7 +10,14 @@ test_that("partial row evaluations preserve tiny gaps across links and row block
             weights,offset,6L,b,firth,block_size=1L,link=link)
         large<-fastglm:::ordinal_partial_native_evaluate(x,z,integer(),counts,
             weights,offset,6L,b,firth,block_size=2048L,link=link)
-        expect_equal(small,large,tolerance=1e-13)
+        # The block size sets the order in which the threaded passes add
+        # row blocks (lane l receives blocks l, l + 8, ...), so the sums agree
+        # to rounding. The tiny gap makes the information nearly singular,
+        # which magnifies those rounding differences in its inverse and in
+        # the quantities computed from it.
+        for(k in c("loglik","information","minimum.gap","ordinary.score"))
+            expect_equal(small[[k]],large[[k]],tolerance=1e-13,info=k)
+        expect_equal(small,large,tolerance=1e-8)
         expect_equal(small$minimum.gap,2^-20,tolerance=1e-13)
         expect_true(is.finite(small$loglik))
         expect_true(all(is.finite(small$score)))

@@ -1,3 +1,14 @@
+# Splits a thread count from ordinal optimizer controls: returns the controls
+# without it and the requested count (NULL for the session setting).
+.ordinal_split_threads <- function(control) {
+    if(!is.list(control) || is.null(names(control)) || !("threads" %in% names(control)))
+        return(list(control=control,threads=NULL))
+    threads <- control[["threads"]]
+    if(!is.null(threads) && (!is.numeric(threads) || is.na(.fastglm_as_count(threads))))
+        stop("'control$threads' must be a positive integer",call.=FALSE)
+    list(control=control[names(control)!="threads"],threads=threads)
+}
+
 # Fit cumulative links in their threshold/common-slope coordinates. Centering
 # and scaling are linear changes of coordinates, under which mean bias reduction
 # is equivariant. A log-spacing transformation would change its target.

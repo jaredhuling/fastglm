@@ -32,7 +32,9 @@ including categories absent from that block.}
 
 \item{firth, link, tol, maxit, block.size, control}{as in \code{\link[=fastglm_ordinal]{fastglm_ordinal()}}.
 \code{block.size} limits temporary calculations within a supplied block;
-the source determines the size of the block loaded into memory.}
+the source determines the size of the block loaded into memory.
+Each source block is read on one thread; with \code{control$threads} (see
+\code{\link[=fastglm_ordinal]{fastglm_ordinal()}}) its rows are then processed in parallel.}
 
 \item{nonparallel}{predictors whose slopes may differ across thresholds.
 Select complete model terms with a one-sided formula for a formula source,

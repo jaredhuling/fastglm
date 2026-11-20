@@ -37,10 +37,14 @@
 #' @param block.size maximum observations processed together by the numerical
 #'   kernel. The input design is retained in memory.
 #' @param control named optimizer controls: `score.tol`, `step.tol`,
-#'   `max.step`, `max.halves`, `condition.tol`, `standardize`, `trace`, and
-#'   `observed`. For common-slope maximum likelihood, `observed=TRUE` (the default)
+#'   `max.step`, `max.halves`, `condition.tol`, `standardize`, `trace`,
+#'   `observed`, and `threads`. For common-slope maximum likelihood, `observed=TRUE` (the default)
 #'   begins with observed-information Newton steps; expected information still
-#'   certifies convergence and gives the reported covariance.
+#'   certifies convergence and gives the reported covariance. `threads` sets
+#'   the number of threads for the compiled computations of this fit, or
+#'   `NULL` (default) for the session setting of [fastglm_threads()]. Results
+#'   are identical for every number of threads. The thread count used is
+#'   stored in the fit as `threads` and is not kept in the fit's `control`.
 #' @param model retain the formula model frame.
 #' @param ... additional arguments to the default or formula method.
 #' @details By default, thresholds are estimated in increasing order. The same location
@@ -173,6 +177,12 @@ fastglm_ordinal.big.matrix <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
 }
 
 .ordinal_fit_matrix <- function(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache=NULL,link="logit",nonparallel=NULL) {
+    # A thread count in 'control' is held for the whole fit and is not kept
+    # in the fit's optimizer controls, so refits (for example bootstrap
+    # refits) take theirs from the session setting.
+    split <- .ordinal_split_threads(control); control <- split$control
+    scope <- .fastglm_scope_threads(split$threads)
+    on.exit(scope$restore(),add=TRUE)
     if(!is.matrix(x) || !is.numeric(x))
         stop("ordinal fitting currently requires a dense numeric matrix or formula",call.=FALSE)
     if(is.factor(y) && !is.ordered(y) && is.null(levels))
@@ -181,9 +191,12 @@ fastglm_ordinal.big.matrix <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
     if(anyNA(colnames(x)) || any(!nzchar(colnames(x))) || anyDuplicated(colnames(x)))
         stop("ordinal predictor column names must be distinct and nonmissing",call.=FALSE)
     selected <- .ordinal_nonparallel_columns(nonparallel,colnames(x))
-    if(length(selected))
-        return(.ordinal_partial_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,
-            block.size,control,link,selected,cache))
+    if(length(selected)) {
+        fit <- .ordinal_partial_fit_matrix(x,y,weights,offset,levels,firth,tol,maxit,
+            block.size,control,link,selected,cache)
+        fit$threads <- scope$threads
+        return(fit)
+    }
     fit <- .ordinal_fit_core(x,y,weights,offset,levels,firth,tol,maxit,block.size,control,cache,link)
     q <- length(fit$alpha)
     names(fit$coefficients) <- c(paste0("threshold:",names(fit$alpha)),names(fit$beta))
@@ -194,6 +207,7 @@ fastglm_ordinal.big.matrix <- function(x,y,weights=NULL,offset=NULL,levels=NULL,
         duplicated(fit$threshold.map,fromLast=TRUE)
     fit$x <- x; fit$y <- y; fit$design.columns <- colnames(x)
     fit$nobs.rows <- fit$nobs; fit$nobs <- fit$frequency
+    fit$threads <- scope$threads
     class(fit) <- "fastglm_ordinal"
     fit
 }
