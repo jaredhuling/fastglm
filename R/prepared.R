@@ -138,6 +138,12 @@ fastglm_prepare <- function(x, data = NULL, weights = NULL, offset = NULL, firth
 #' @param dist count distribution for truncated, hurdle, and zero-inflated
 #'   models: `"negbin"` or `"poisson"`.
 #' @param link link of the binary or inflation part of two-component models.
+#' @param threads the number of threads for the compiled computations of each
+#'   fit when `workers = 1`, or `NULL` (default) for the session setting of
+#'   [fastglm_threads()]. With `workers > 1`, each worker process fits with
+#'   one thread, so that the processes together use no more cores than
+#'   requested; the setting of the calling session is not changed. Results
+#'   are identical for every number of threads.
 #' @details For count models, `offset` applies to the count (or positive)
 #'   part, `inference` must be `"full"`, `method` and `retain.data` apply only
 #'   to GLMs, and `warm.start` starts each negative binomial fit from the
@@ -152,8 +158,13 @@ fastglm_batch <- function(design, y, family = gaussian(), weights = NULL,
                           inference = c("full", "diagonal", "none"), retain.data = TRUE,
                           firth = NULL,
                           model = c("glm", "negbin", "truncated", "hurdle", "zeroinfl", "twopart"),
-                          z = NULL, dist = c("negbin", "poisson"), link = "logit") {
+                          z = NULL, dist = c("negbin", "poisson"), link = "logit",
+                          threads = NULL) {
     model <- match.arg(model)
+    # Sequential fits use this setting (fits called with threads = NULL take
+    # it from the scope); worker processes set one thread each (see below).
+    scope <- .fastglm_scope_threads(threads)
+    on.exit(scope$restore(), add = TRUE)
     if (!inherits(design,"fastglm_design")) design <- fastglm_prepare(design)
     if (model != "glm")
         return(.count_batch(design, y, model, z, match.arg(dist), link, weights, offset, tol, maxit,
@@ -228,18 +239,23 @@ fastglm_batch <- function(design, y, family = gaussian(), weights = NULL,
         if (inference == "none") fit$se <- NULL
         fit$inference <- inference
         if (!retain.data) { fit$x <- NULL; fit$y <- NULL }
+        # Fits built from the shared factor run no threaded code of their
+        # own; record the setting in effect, as fastglm() does.
+        if (is.null(fit$threads)) fit$threads <- .fastglm_resolve_threads(NULL)
         fit
     }
     workers <- min(as.integer(workers),length(y))
     if (workers > 1L) {
         # Each process owns its R callbacks and numerical workspace.
         if (.Platform$OS.type == "windows") {
-            cl <- parallel::makeCluster(workers); on.exit(parallel::stopCluster(cl))
-            initialize <- function(paths) {.libPaths(paths);loadNamespace("fastglm");NULL}
+            cl <- parallel::makeCluster(workers); on.exit(parallel::stopCluster(cl), add = TRUE)
+            # Each worker fits with one thread, so that workers times
+            # threads does not exceed the request.
+            initialize <- function(paths) {.libPaths(paths);loadNamespace("fastglm");fastglm::fastglm_threads(1L);NULL}
             environment(initialize) <- baseenv()
             parallel::clusterCall(cl,initialize,.libPaths())
             out <- parallel::parLapply(cl,seq_along(y),one)
-        } else out <- parallel::mclapply(seq_along(y),one,mc.cores=workers)
+        } else out <- parallel::mclapply(seq_along(y),.fastglm_one_thread(one),mc.cores=workers)
         bad <- vapply(out,inherits,logical(1),"try-error")
         if (any(bad)) stop("a batch worker failed: ",out[[which(bad)[1L]]],call.=FALSE)
     } else {
@@ -309,12 +325,14 @@ fastglm_batch <- function(design, y, family = gaussian(), weights = NULL,
     workers <- min(as.integer(workers),length(y))
     if (workers > 1L) {
         if (.Platform$OS.type == "windows") {
-            cl <- parallel::makeCluster(workers); on.exit(parallel::stopCluster(cl))
-            initialize <- function(paths) {.libPaths(paths);loadNamespace("fastglm");NULL}
+            cl <- parallel::makeCluster(workers); on.exit(parallel::stopCluster(cl), add = TRUE)
+            # Each worker fits with one thread, so that workers times
+            # threads does not exceed the request.
+            initialize <- function(paths) {.libPaths(paths);loadNamespace("fastglm");fastglm::fastglm_threads(1L);NULL}
             environment(initialize) <- baseenv()
             parallel::clusterCall(cl,initialize,.libPaths())
             out <- parallel::parLapply(cl,seq_along(y),one)
-        } else out <- parallel::mclapply(seq_along(y),one,mc.cores=workers)
+        } else out <- parallel::mclapply(seq_along(y),.fastglm_one_thread(one),mc.cores=workers)
         bad <- vapply(out,inherits,logical(1),"try-error")
         if (any(bad)) stop("a batch worker failed: ",out[[which(bad)[1L]]],call.=FALSE)
     } else {

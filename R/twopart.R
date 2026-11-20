@@ -16,13 +16,20 @@
 #'   the positive-component matrix. Source blocks can supply `Z` and `X`.
 #' @param block.size maximum number of matrix rows processed together for
 #'   model validation. A source determines its own block sizes.
+#' @param threads the number of threads for the compiled computations of both
+#'   component fits, or `NULL` (default) for the session setting of
+#'   [fastglm_threads()]. Results are identical for every number of threads.
 #' @returns A `fastglm_twopart` model supporting prediction, delta-method
-#'   standard errors, simulation, and component summaries.
+#'   standard errors, simulation, and component summaries. Its element
+#'   `threads` records the thread setting of the fit.
 #' @export
 fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
                             link = "logit", method = "auto", tol = 1e-8,
                             maxit = 100L, firth = FALSE,
-                            response = NULL, z = NULL, block.size = 8192L) {
+                            response = NULL, z = NULL, block.size = 8192L, threads = NULL) {
+    scope <- .fastglm_scope_threads(threads)
+    on.exit(scope$restore(), add = TRUE)
+    threads <- scope$threads
     if(is.matrix(formula) || inherits(formula,c("dgCMatrix","big.matrix","fastglm_source"))) {
         if(!missing(subset) || !missing(na.action))
             stop("subset and na.action apply only to formula fits; prepare matrix or source rows first",call.=FALSE)
@@ -30,6 +37,7 @@ fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
             if(missing(weights)) NULL else weights,if(missing(offset)) NULL else offset,
             link,method,tol,maxit,firth,block.size)
         out$call <- match.call()
+        out$threads <- threads
         return(out)
     }
     cl <- match.call(); f <- Formula::Formula(formula)
@@ -63,7 +71,8 @@ fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
         levels=lapply(mf[vapply(mf,is.factor,logical(1))],levels),
         contrasts=lapply(x,attr,"contrasts"), na.action=attr(mf,"na.action"),
         call=cl, df.residual=sum(w>0)-pc-pz-1, firth=firth,
-        refit.controls=list(link=link,method=method,tol=tol,maxit=maxit,firth=firth,block.size=block.size))
+        refit.controls=list(link=link,method=method,tol=tol,maxit=maxit,firth=firth,block.size=block.size),
+        threads=threads)
     class(out) <- c("fastglm_twopart","fastglm_hurdle")
     out
 }

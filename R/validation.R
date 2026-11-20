@@ -156,9 +156,7 @@
                 null.intercept <- .gamma_log_null_total(y,w,offset)-log(sum(w))
                 res$null.deviance <- sum(fam$dev.resids(y,exp(offset+null.intercept),w))
             } else {
-                nf <- stats::glm.fit(matrix(1, length(y), 1L), y, weights = w,
-                                     offset = offset, family = fam,
-                                     control = stats::glm.control(maxit = 100))
+                nf <- .null_glm_fit(y, w, offset, fam)
                 res$null.deviance <- nf$deviance
             }
         } else if (native) {
@@ -326,4 +324,31 @@ BOUNDARY_WARNING <- paste("the estimate is on the boundary of the valid region f
         return(start)
     }
     NULL
+}
+
+# The intercept-only fit with offsets, for the null deviance. glm.fit's
+# default start (the family's starting means) can be invalid with a bounded
+# link and a varying offset (for example binomial("log"), where it can put a
+# fitted probability above one, and glm.fit then stops with "no valid set of
+# coefficients has been found"). It is then repeated from the first
+# intercept that is valid in every row among a few candidates, including
+# linkfun(ybar / 2) - max(offset), which is valid for the log link.
+.null_glm_fit <- function(y, w, offset, fam) {
+    fit <- function(start) stats::glm.fit(matrix(1, length(y), 1L), y, weights = w,
+                                          offset = offset, family = fam, start = start,
+                                          control = stats::glm.control(maxit = 100))
+    first <- tryCatch(fit(NULL), error = function(e) e)
+    if (!inherits(first, "error")) return(first)
+    ybar <- sum(w * y) / sum(w)
+    cand <- suppressWarnings(c(fam$linkfun(ybar) - mean(offset), fam$linkfun(ybar / 2) - max(offset),
+                               fam$linkfun(ybar) - max(offset), fam$linkfun(ybar) - min(offset)))
+    valideta <- if (is.null(fam$valideta)) function(e) TRUE else fam$valideta
+    validmu <- if (is.null(fam$validmu)) function(m) TRUE else fam$validmu
+    for (b in cand[is.finite(cand)]) {
+        ok <- tryCatch({ eta <- offset + b
+                         isTRUE(valideta(eta)) && isTRUE(validmu(fam$linkinv(eta))) },
+                       error = function(e) FALSE)
+        if (ok) return(fit(b))
+    }
+    stop(first)
 }

@@ -27,6 +27,8 @@
 #include <boost/math/special_functions/digamma.hpp>
 #include "families.h"
 #include "nb_theta.h"
+#include "chunk_source.h"
+#include "parallel_reduce.h"
 #include <cmath>
 #include <limits>
 
@@ -40,6 +42,53 @@ using Eigen::VectorXd;
 static inline double log1pe(double x) {
     if (x > 0) return x + std::log1p(std::exp(-x));
     return std::log1p(std::exp(x));
+}
+
+// The zero-model link function g(mu) for the binomial zero links: the
+// linear predictor at which the zero probability is mu (0 < mu < 1). Used
+// for starting values, which must be valid for the chosen link: the log link
+// requires eta < 0, so a start computed on the logit scale (positive for
+// mu > 1/2) is invalid there. Called on the calling thread only (the probit
+// link uses R's math library).
+inline double zero_linkfun(int zero_fam_code, double mu)
+{
+    switch (zero_fam_code) {
+    case FAM_BINOMIAL_PROBIT:  return R::qnorm5(mu, 0.0, 1.0, 1, 0);
+    case FAM_BINOMIAL_CLOGLOG: return std::log(-std::log1p(-mu));
+    case FAM_BINOMIAL_LOG:     return std::log(mu);
+    case FAM_BINOMIAL_LOGIT:
+    default:                   return std::log(mu / (1.0 - mu));
+    }
+}
+
+// Starting coefficients for the zero model's IRLS. The IRLS halves a step
+// that leaves the valid region back toward these coefficients, so they must
+// give a valid linear predictor. Zero coefficients do (eta = offset) for the
+// logit, probit, and cloglog links, but not for the log link, where eta = 0
+// is a zero probability of one. For the log link, with an intercept column
+// (a column with one nonzero value c in every row), the intercept is set so
+// that eta = log(pbar / 2) + offset - max(offset) <= log(pbar / 2) < 0, where
+// pbar is the weighted mean response (clamped to [1e-4, 1 - 1e-4]). Without
+// an intercept column the start stays zero, and the IRLS reports that it
+// cannot find valid starting values.
+inline VectorXd zero_model_start(int zero_fam_code,
+                                 const Eigen::Ref<const MatrixXd>& Z,
+                                 const Eigen::Ref<const VectorXd>& y,
+                                 const Eigen::Ref<const VectorXd>& w,
+                                 const Eigen::Ref<const VectorXd>& offset)
+{
+    VectorXd start = VectorXd::Zero(Z.cols());
+    if (zero_fam_code != FAM_BINOMIAL_LOG || Z.rows() == 0) return start;
+    for (Eigen::Index j = 0; j < Z.cols(); ++j) {
+        const double c = Z(0, j);
+        if (c == 0.0 || !((Z.col(j).array() == c).all())) continue;
+        const double sw = w.sum();
+        double pbar = sw > 0 ? w.dot(y) / sw : 0.5;
+        pbar = std::min(1.0 - 1e-4, std::max(1e-4, pbar));
+        start[j] = (std::log(0.5 * pbar) - offset.maxCoeff()) / c;
+        break;
+    }
+    return start;
 }
 
 // log(pi_i) and log(1 - pi_i) from eta_z.  Stable for both signs.
@@ -135,28 +184,42 @@ inline double obs_loglik_and_tau(
     const Eigen::Ref<const VectorXd>& weights,
     Eigen::Ref<VectorXd>      tau)
 {
-    double ll = 0.0;
-    const Eigen::Index n = y.size();
-    for (Eigen::Index i = 0; i < n; ++i) {
-        double log_pi, log_1m_pi;
-        log_pi_and_log1m(zero_fam_code, eta_z[i], log_pi, log_1m_pi);
-        if (y[i] > 0.0) {
-            const double lf = log_f_count(dist_code, theta, y[i], mu[i]);
-            ll += weights[i] * (log_1m_pi + lf);
-            tau[i] = 0.0;
-        } else {
-            // y_i == 0: posterior tau = pi / (pi + (1-pi)*f_0)
-            const double log_f0 = log_f_zero(dist_code, theta, mu[i]);
-            // log_pi vs log_1m_pi + log_f0  -- logsumexp
-            const double a = log_pi;
-            const double b = log_1m_pi + log_f0;
-            const double m = std::max(a, b);
-            const double log_denom = m + std::log1p(std::exp(std::min(a, b) - m));
-            ll += weights[i] * log_denom;
-            tau[i] = std::exp(a - log_denom);
+    // The log likelihood of the rows [r, r + k), writing their tau. The rows
+    // are read and written through plain pointers (Ref has unit inner
+    // stride).
+    const double *yp = y.data(), *mp = mu.data(), *ep = eta_z.data(), *wp = weights.data();
+    double* tp = tau.data();
+    auto block = [=](Eigen::Index r, Eigen::Index k) {
+        double ll = 0.0;
+        for (Eigen::Index i = r; i < r + k; ++i) {
+            double log_pi, log_1m_pi;
+            log_pi_and_log1m(zero_fam_code, ep[i], log_pi, log_1m_pi);
+            if (yp[i] > 0.0) {
+                const double lf = log_f_count(dist_code, theta, yp[i], mp[i]);
+                ll += wp[i] * (log_1m_pi + lf);
+                tp[i] = 0.0;
+            } else {
+                // y_i == 0: posterior tau = pi / (pi + (1-pi)*f_0)
+                const double log_f0 = log_f_zero(dist_code, theta, mp[i]);
+                // log_pi vs log_1m_pi + log_f0  -- logsumexp
+                const double a = log_pi;
+                const double b = log_1m_pi + log_f0;
+                const double m = std::max(a, b);
+                const double log_denom = m + std::log1p(std::exp(std::min(a, b) - m));
+                ll += wp[i] * log_denom;
+                tp[i] = std::exp(a - log_denom);
+            }
         }
-    }
-    return ll;
+        return ll;
+    };
+    // Row blocks summed in a fixed order (fglm_par::ordered_block_sum), in
+    // parallel when there are several: the same result for every thread
+    // count. The probit link calls R's math library (R::pnorm5), which must
+    // not run inside a parallel region, so it is evaluated serially, in the
+    // same block order.
+    const Eigen::Index n = y.size();
+    const Eigen::Index B = default_chunk_rows();
+    return fglm_par::ordered_block_sum(n, B, block, zero_fam_code != FAM_BINOMIAL_PROBIT);
 }
 
 // Score wrt eta_z (per-observation):  s_z_i = tau_i - pi_i  for logit;

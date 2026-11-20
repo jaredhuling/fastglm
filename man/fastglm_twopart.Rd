@@ -18,7 +18,8 @@ fastglm_twopart(
   firth = FALSE,
   response = NULL,
   z = NULL,
-  block.size = 8192L
+  block.size = 8192L,
+  threads = NULL
 )
 }
 \arguments{
@@ -42,10 +43,15 @@ the positive-component matrix. Source blocks can supply `Z` and `X`.}
 
 \item{block.size}{maximum number of matrix rows processed together for
 model validation. A source determines its own block sizes.}
+
+\item{threads}{the number of threads for the compiled computations of both
+component fits, or `NULL` (default) for the session setting of
+[fastglm_threads()]. Results are identical for every number of threads.}
 }
 \value{
 A `fastglm_twopart` model supporting prediction, delta-method
-  standard errors, simulation, and component summaries.
+  standard errors, simulation, and component summaries. Its element
+  `threads` records the thread setting of the fit.
 }
 \description{
 Fits a binomial model for a positive outcome and a Gamma model with a log

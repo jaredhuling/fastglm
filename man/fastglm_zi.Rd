@@ -24,7 +24,8 @@ fastglm_zi(
   y = TRUE,
   x = FALSE,
   response = NULL,
-  z = NULL
+  z = NULL,
+  threads = NULL
 )
 }
 \arguments{
@@ -70,13 +71,18 @@ the inner theta MLE (only used when `dist = "negbin"`).}
 
 \item{z}{optional inflation-design matrix for a matrix fit; defaults to the
 count design.}
+
+\item{threads}{the number of threads for the compiled computations of this
+fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+Results are identical for every number of threads.}
 }
 \value{
 A list of class `c("fastglm_zi", "fastglm")` with elements
   `coefficients` (a list with `count` and `zero`), `se` (likewise),
   `vcov` (full, including theta if NB), `loglik`, `theta`, `SE.theta`,
   `tau` (posterior P(Z=1|y)), `em_iter`, `newton.iter`, `em.decrement`,
-  `converged`, and `convergence.reason`.
+  `converged`, `convergence.reason`, and `threads` (the thread setting of
+  the fit).
 }
 \description{
 Fits a zero-inflated count model: a binary inflation component combined

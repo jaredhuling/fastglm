@@ -37,6 +37,11 @@ once per session.
 
 The setting is stored in \code{options(fastglm.threads = )}, which can also be
 set before the package is loaded.
+
+A fit holds its thread setting for the whole call and then restores the
+session setting, so a call to \code{fastglm_threads()} made during a fit (for
+example from a \code{\link{fastglm_source}} callback) is undone when the fit
+returns.
 }
 \examples{
 fastglm_threads()

@@ -15,6 +15,8 @@
 #include <boost/math/special_functions/trigamma.hpp>
 #include <boost/math/tools/roots.hpp>
 #include "brent.h"
+#include "chunk_source.h"
+#include "parallel_reduce.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -74,12 +76,19 @@ inline double score_theta(double theta,
 {
     using boost::math::digamma;
     const double dig_th = digamma(theta);
-    double s = 0.0;
-    for (Eigen::Index i = 0; i < y.size(); ++i) {
-        const double yi = y[i], mi = mu[i], wi = wt[i];
-        s += wi * score_theta_row(theta, yi, mi, dig_th);
-    }
-    return s;
+    // Row blocks summed in a fixed order (fglm_par::ordered_block_sum), in
+    // parallel when there are several: the same result for every thread
+    // count, and the serial row-order sum when there is one block.
+    // The blocks read the data through plain pointers (Ref has unit inner
+    // stride), which keeps the serial loop as fast as a plain loop.
+    const double *yp = y.data(), *mp = mu.data(), *wp = wt.data();
+    return fglm_par::ordered_block_sum(y.size(), default_chunk_rows(),
+                                       [=](Eigen::Index r, Eigen::Index k) {
+        double s = 0.0;
+        for (Eigen::Index i = r; i < r + k; ++i)
+            s += wp[i] * score_theta_row(theta, yp[i], mp[i], dig_th);
+        return s;
+    });
 }
 
 // Observed information for theta at fixed mu, as in MASS::theta.ml:
@@ -99,26 +108,31 @@ inline double info_theta(double theta,
     using boost::math::trigamma;
     const double tri_th = trigamma(theta);
     const double inv_th = 1.0 / theta;
-    double I = 0.0;
-    for (Eigen::Index i = 0; i < y.size(); ++i) {
-        const double yi = y[i], mi = mu[i], wi = wt[i];
-        if (theta > 1e4 * std::max(1.0, std::max(yi, mi))) {
-            const double c2 = (yi - (yi - mi) * (yi - mi)) / 2.0;
-            const double c3 = yi * (yi - 1.0) * (2.0 * yi - 1.0) / 6.0
-                              + 2.0 * mi * mi * mi / 3.0 - yi * mi * mi;
-            const double c4 = -yi * yi * (yi - 1.0) * (yi - 1.0) / 4.0
-                              - 3.0 * mi * mi * mi * mi / 4.0 + yi * mi * mi * mi;
-            I += wi * (2.0 * c2 + (3.0 * c3 + 4.0 * c4 / theta) / theta)
-                 / (theta * theta * theta);
-            continue;
+    // Summed over row blocks as in score_theta.
+    const double *yp = y.data(), *mp = mu.data(), *wp = wt.data();
+    return fglm_par::ordered_block_sum(y.size(), default_chunk_rows(),
+                                       [=](Eigen::Index r, Eigen::Index k) {
+        double I = 0.0;
+        for (Eigen::Index i = r; i < r + k; ++i) {
+            const double yi = yp[i], mi = mp[i], wi = wp[i];
+            if (theta > 1e4 * std::max(1.0, std::max(yi, mi))) {
+                const double c2 = (yi - (yi - mi) * (yi - mi)) / 2.0;
+                const double c3 = yi * (yi - 1.0) * (2.0 * yi - 1.0) / 6.0
+                                  + 2.0 * mi * mi * mi / 3.0 - yi * mi * mi;
+                const double c4 = -yi * yi * (yi - 1.0) * (yi - 1.0) / 4.0
+                                  - 3.0 * mi * mi * mi * mi / 4.0 + yi * mi * mi * mi;
+                I += wi * (2.0 * c2 + (3.0 * c3 + 4.0 * c4 / theta) / theta)
+                     / (theta * theta * theta);
+                continue;
+            }
+            const double tm  = theta + mi;
+            const double tm2 = tm * tm;
+            I += wi * (-trigamma(yi + theta) + tri_th
+                       - inv_th + 2.0 / tm
+                       - (yi + theta) / tm2);
         }
-        const double tm  = theta + mi;
-        const double tm2 = tm * tm;
-        I += wi * (-trigamma(yi + theta) + tri_th
-                   - inv_th + 2.0 / tm
-                   - (yi + theta) / tm2);
-    }
-    return I;
+        return I;
+    });
 }
 
 // Method-of-moments initializer matching MASS::theta.ml's starting value.

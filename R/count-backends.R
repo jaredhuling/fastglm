@@ -624,7 +624,10 @@
     if(reader$state$npositive<=reader$state$p[1L] || reader$state$npositive==reader$state$nobs)
         stop("hurdle models require zeros and enough positive observations for the count design",call.=FALSE)
     if(reader$state$nobs<=reader$state$p[2L]) stop("not enough observations for the binary design",call.=FALSE)
-    binary <- .count_backend_glm(reader,"zero",binomial(link),binary=TRUE,method=method,tol=tol,maxit=maxit)
+    # The log link needs a valid start (zero coefficients give probability one).
+    bstart <- if(link=="log") .count_backend_log_start(reader,"positive",all.rows=TRUE)
+    binary <- .count_backend_glm(reader,"zero",binomial(link),binary=TRUE,start=bstart,
+                                 method=method,tol=tol,maxit=maxit)
     positive <- .count_backend_truncated(reader,dist,tol,maxit,init.theta,outer.tol,outer.maxit,theta.tol,theta.maxit)
     controls <- list(dist=dist,link=link,method=method,tol=tol,maxit=maxit,outer.tol=outer.tol,
         outer.maxit=outer.maxit,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
@@ -637,7 +640,9 @@
     if(reader$state$npositive<=reader$state$p[1L] || reader$state$npositive==reader$state$nobs)
         stop("two-part models require zeros and enough positive observations for the positive design",call.=FALSE)
     if(reader$state$nobs<=reader$state$p[2L]) stop("not enough observations for the binary design",call.=FALSE)
-    binary <- .count_backend_glm(reader,"zero",binomial(link),binary=TRUE,method=method,tol=tol,maxit=maxit,firth=firth)
+    bstart <- if(identical(link,"log")) .count_backend_log_start(reader,"positive",all.rows=TRUE)
+    binary <- .count_backend_glm(reader,"zero",binomial(link),binary=TRUE,start=bstart,
+                                 method=method,tol=tol,maxit=maxit,firth=firth)
     positive <- .count_backend_glm(reader,"count",Gamma("log"),positive=TRUE,method=method,tol=tol,maxit=maxit,firth=firth)
     controls <- list(link=link,method=method,tol=tol,maxit=maxit,firth=firth,block.size=block.size)
     .count_backend_model(reader,positive,binary,"Gamma",link,controls,continuous=TRUE,firth=firth)
@@ -668,11 +673,14 @@
     beta <- fit$coefficients; names(beta) <- cn
     rn <- c(cn,if(estimated) "theta")
     vfull <- fit$vcov.full; dimnames(vfull) <- list(rn,rn)
-    v <- vfull[cn,cn,drop=FALSE]
+    # Positional indexing: design column names can be empty (for example the
+    # unnamed first column of cbind(1, x1, x2)), which name indexing rejects.
+    jc <- seq_along(cn)
+    v <- vfull[jc,jc,drop=FALSE]
     loglik <- .count_backend_count_summary(reader,beta,theta.value,TRUE,"log")$loglik
     out <- list(coefficients=beta,se=sqrt(diag(v)),cov.unscaled=v,vcov.full=vfull,
         loglik=loglik,theta=theta.value,
-        SE.theta=if(estimated) sqrt(vfull["theta","theta"]) else NULL,
+        SE.theta=if(estimated) sqrt(vfull[length(rn),length(rn)]) else NULL,
         converged=isTRUE(fit[["converged"]]),
         convergence.reason=if(isTRUE(fit[["converged"]])) "converged" else "iteration_limit",
         iter=fit[["iter"]],outer.iter=fit[["outer.iter"]],outer.decrement=fit[["outer.decrement"]],
@@ -689,7 +697,7 @@
     }
     class(out) <- "fastglm_truncated"
     if(out$theta.boundary) { out$SE.theta <- NA_real_; out$vcov.full[,] <- NA_real_
-        out$vcov.full[cn,cn] <- v }
+        out$vcov.full[jc,jc] <- v }
     if(!out$converged) warning("truncated-count model did not converge",call.=FALSE)
     out
 }
@@ -762,6 +770,39 @@
     }
     acc
 }
+# Starting coefficients for a binary component with the log link, where
+# zero coefficients (eta = offset, a probability of one at a zero offset)
+# are not valid. With an intercept column (one nonzero value c in every row
+# of every block), the intercept gives
+#   eta = log(p / 2) + offset - max(offset) < 0,
+# where p is the weighted fraction of zero responses (event = "zero", the
+# inflation model of zero-inflated fits, as the dense fitter,
+# fglm::zi::zero_model_start in inst/include/zi.h) or of positive responses
+# (event = "positive", the binary part of hurdle and two-part fits). The
+# maximum offset is over the rows with positive weight, or over all rows when
+# all.rows is TRUE (fastglm() checks the fitted probabilities of every row).
+# Without an intercept column the start stays zero.
+.count_backend_log_start <- function(reader,event=c("zero","positive"),all.rows=FALSE) {
+    event <- match.arg(event)
+    pz <- reader$state$p[2L];const <- NULL;value <- rep(NA_real_,pz)
+    sw <- sz <- 0;maxoff <- -Inf
+    for(k in seq_len(reader$source$n_chunks)) {
+        a <- reader$fetch(k);zz <- a$Z
+        lo <- apply(zz,2L,min);hi <- apply(zz,2L,max)
+        same <- lo==hi & lo!=0
+        if(is.null(const)) {const <- same;value <- lo} else const <- const & same & lo==value
+        hit <- if(event=="zero") a$y==0 else a$y>0
+        keep <- if(all.rows) rep(TRUE,length(a$y)) else a$weights>0
+        sw <- sw+sum(a$weights);sz <- sz+sum(a$weights*hit)
+        if(any(keep)) maxoff <- max(maxoff,a$offset$zero[keep])
+    }
+    gamma <- numeric(pz);j <- which(const)[1L]
+    if(!is.na(j)) {
+        p <- min(1-1e-4,max(1e-4,if(sw>0) sz/sw else .5))
+        gamma[j] <- (log(p/2)-if(is.finite(maxoff)) maxoff else 0)/value[j]
+    }
+    gamma
+}
 .count_backend_zi <- function(x,response=NULL,z=NULL,weights=NULL,offset=NULL,dist="poisson",
                               link="logit",init.theta=NULL,em.tol=1e-8,em.maxit=100L,
                               tol=1e-9,maxit=100L,theta.tol=1e-8,theta.maxit=100L,block.size=8192L) {
@@ -779,7 +820,7 @@
     # intercept at the fitted zero excess, and theta = 1.
     pilot <- .count_backend_glm(reader,"count",poisson(),method=2L,tol=1e-6,maxit=50L)
     beta <- unname(coef(pilot));if(any(!is.finite(beta))) beta[!is.finite(beta)] <- 0
-    gamma <- numeric(pz)
+    gamma <- if(link=="log") .count_backend_log_start(reader,"zero") else numeric(pz)
     theta <- if(!nb) NULL else if(is.null(init.theta)) 1 else init.theta
     ll <- loglik(beta,gamma,theta)
     # EM (one scoring step per conditional maximization), with step halving

@@ -40,6 +40,10 @@
 #'   estimation and joint inference. A source determines its own block sizes.
 #' @param poisson.limit whether to compare the fit with its `theta = Inf`
 #'   limit, the Poisson model (see Details).
+#' @param threads the number of threads for the compiled computations of this
+#'   fit, including its pilot, Poisson-limit, and covariance passes, or `NULL`
+#'   (default) for the session setting of [fastglm_threads()]. Results are
+#'   identical for every number of threads.
 #' @param data,subset,na.action,contrasts model-frame arguments used when `x`
 #'   is a formula, as in [stats::glm()].
 #'
@@ -73,8 +77,9 @@
 #' fallback.
 #'
 #' @returns A list of class `c("fastglm_nb", "fastglm")` with the usual
-#'   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
-#'   `twologlik` (twice the maximized NB log-likelihood).
+#'   fastglm components plus `theta`, `SE.theta`, `iter.theta`,
+#'   `twologlik` (twice the maximized NB log-likelihood), and `threads` (the
+#'   thread setting of the fit).
 #'   `SE.theta` uses the joint observed information for coefficients and theta.
 #'   The default coefficient covariance retains the GLM expected-information
 #'   convention; `vcov(fit, full=TRUE)` returns the joint observed covariance.
@@ -111,10 +116,16 @@ fastglm_nb <- function(x, y = NULL,
                        theta.maxit = 100L,
                        block.size  = 8192L,
                        poisson.limit = TRUE,
+                       threads     = NULL,
                        data        = NULL,
                        subset, na.action, contrasts = NULL)
 {
     link <- match.arg(link)
+    # The thread setting holds for every fit and pass below, including the
+    # pilot, Poisson-limit, and covariance passes after the main fit.
+    scope <- .fastglm_scope_threads(threads)
+    on.exit(scope$restore(), add = TRUE)
+    threads <- scope$threads
     if (inherits(x, "formula")) {
         # Build the design from the formula, fit with the matrix interface,
         # and keep what predict() and model.matrix() need.
@@ -134,7 +145,8 @@ fastglm_nb <- function(x, y = NULL,
         fit <- fastglm_nb(X, yy, weights = w, offset = off, start = start, init.theta = init.theta,
                           link = link, method = method, tol = tol, maxit = maxit,
                           outer.maxit = outer.maxit, outer.tol = outer.tol, theta.tol = theta.tol,
-                          theta.maxit = theta.maxit, block.size = block.size, poisson.limit = poisson.limit)
+                          theta.maxit = theta.maxit, block.size = block.size, poisson.limit = poisson.limit,
+                          threads = threads)
         fit$terms <- mt
         fit$model <- mf
         fit$xlevels <- stats::.getXlevels(mt, mf)
@@ -146,6 +158,7 @@ fastglm_nb <- function(x, y = NULL,
         out <- .count_backend_nb(x,y,weights,offset,start,init.theta,link,method,tol,maxit,
                                  outer.maxit,outer.tol,theta.tol,theta.maxit,block.size,poisson.limit)
         out$call <- match.call()
+        out$threads <- threads
         return(out)
     }
     if (!is.matrix(x)) stop("'x' must be a numeric matrix.", call. = FALSE)
@@ -347,6 +360,7 @@ fastglm_nb <- function(x, y = NULL,
                                  excess = sum(weights[keep] * ((y[keep] - mu[keep])^2 - y[keep])),
                                  musq = sum(weights[keep] * mu[keep]^2), link, refit)
     }
+    res$threads <- threads
     if (!res$converged) warning("negative-binomial fit did not converge", call. = FALSE)
     if (identical(res$convergence.reason, "converged_boundary"))
         warning("negative-binomial fit: ", BOUNDARY_WARNING, call. = FALSE)

@@ -52,6 +52,9 @@
 #' @param y,x logical; retain the response and, for formula fits, design
 #'   matrices. Matrix fits retain their supplied designs for prediction;
 #'   source fits retain the reader instead of observation-level data.
+#' @param threads the number of threads for the compiled computations of this
+#'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+#'   Results are identical for every number of threads.
 #'
 #' @returns A list of class `c("fastglm_hurdle", "fastglm")` with elements
 #'   `coefficients` (a list with `count` and `zero`), `se` (likewise),
@@ -92,7 +95,8 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
                            theta.tol   = 1e-8,
                            theta.maxit = 100L,
                            model = TRUE, y = TRUE, x = FALSE,
-                           response = NULL, z = NULL, method = 2L, block.size = 8192L)
+                           response = NULL, z = NULL, method = 2L, block.size = 8192L,
+                           threads = NULL)
 {
     if (!requireNamespace("Formula", quietly = TRUE))
         stop("Package 'Formula' is required for fastglm_hurdle(); install it.",
@@ -101,6 +105,9 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     dist      <- match.arg(dist)
     link      <- match.arg(link)
     zero.dist <- match.arg(zero.dist, choices = "binomial")
+    scope <- .fastglm_scope_threads(threads)
+    on.exit(scope$restore(), add = TRUE)
+    threads <- scope$threads
     if(is.matrix(formula) || inherits(formula,c("dgCMatrix","big.matrix","fastglm_source"))) {
         if(!missing(subset) || !missing(na.action))
             stop("subset and na.action apply only to formula fits; prepare matrix or source rows first",call.=FALSE)
@@ -108,6 +115,7 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
             if(missing(weights)) NULL else weights,if(missing(offset)) NULL else offset,
             dist,link,init.theta,method,tol,maxit,outer.tol,outer.maxit,theta.tol,theta.maxit,block.size)
         out$call <- match.call()
+        out$threads <- threads
         if(!isTRUE(y)) out$y <- NULL
         return(out)
     }
@@ -124,7 +132,7 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     mf$tol  <- mf$maxit  <- mf$outer.tol <- mf$outer.maxit <- NULL
     mf$theta.tol <- mf$theta.maxit <- NULL
     mf$model <- mf$y <- mf$x <- NULL
-    mf$response <- mf$z <- mf$method <- mf$block.size <- NULL
+    mf$response <- mf$z <- mf$method <- mf$block.size <- mf$threads <- NULL
     mf[[1L]] <- as.name("model.frame")
     mf <- eval(mf, parent.frame())
 
@@ -260,7 +268,8 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
         lambda         = res$lambda,
         eta_zero       = res$eta_zero,
         mu_zero        = res$mu_zero,
-        call           = cl
+        call           = cl,
+        threads        = threads
     )
     out$vcov.full <- out$vcov
     out$theta.estimated <- dist == "negbin"

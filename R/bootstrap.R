@@ -21,9 +21,15 @@
 #'   A custom statistic must capture external objects, such as new prediction
 #'   data, in its function environment; worker processes do not inherit objects
 #'   from the calling session's global environment.
+#'   Each worker process refits with one thread (see [fastglm_threads()]).
 #' @param level confidence level for percentile intervals.
 #' @param control named list of arguments passed to each fitting function,
-#'   such as `tol`, `maxit`, or `outer.maxit`.
+#'   such as `tol`, `maxit`, or `outer.maxit`. A `threads` entry is not passed
+#'   to the fitting function: with `workers = 1` it sets the number of threads
+#'   used by the refits, for every model type (as [fastglm_threads()] would,
+#'   and the session setting is restored afterwards); with `workers > 1`, where
+#'   each worker refits with one thread, a value other than one is ignored
+#'   with a warning.
 #' @details Pair resampling treats rows as independent sampling units. Cluster
 #'   resampling treats the supplied clusters as independent and retains all rows
 #'   from each sampled cluster. The original observation weights and offsets are
@@ -96,13 +102,20 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
                               type=c("pairs","cluster","parametric"),
                               cluster=NULL,seed=NULL,workers=1L,level=.95,
                               control=list()) {
+    # A thread count in 'control' is not passed to the fitting function: it
+    # is applied around the refits (.bootstrap_thread_scope), which works for
+    # every fitting path, and is replaced by one thread per worker process.
+    threads<-NULL
+    if(is.list(control) && !is.null(names(control)) && "threads" %in% names(control)) {
+        threads<-control[["threads"]];control<-control[names(control)!="threads"]
+    }
     if(inherits(object,"fastglm_vglm") && inherits(object$x,"big.matrix") && workers>1L)
         stop("memory-mapped (big.matrix) bootstrap uses workers = 1",call.=FALSE)
     if(inherits(object,"fastglm_ordinal_stream"))
         stop("bootstrap refitting is not yet available for ordinal source fits",call.=FALSE)
     if(inherits(object,"fastglm_ordinal"))
         return(.ordinal_bootstrap(object,R,statistic,type,cluster,seed,workers,level,control,
-                                  call=match.call()))
+                                  call=match.call(),threads=threads))
     type<-match.arg(type)
     if(inherits(object,"fastglm_vglm") && type=="parametric")
         stop("parametric bootstrap is not available for multinomial fits",call.=FALSE)
@@ -175,9 +188,13 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
         ans$warning<-paste(unique(warnings),collapse="; ");ans
     }
     workers<-min(as.integer(workers),as.integer(R))
+    restore.threads<-.bootstrap_thread_scope(threads,workers)
+    on.exit(restore.threads(),add=TRUE)
     if(workers==1L) out<-lapply(seq_len(R),one) else {
         cl<-parallel::makePSOCKcluster(workers);on.exit(parallel::stopCluster(cl),add=TRUE)
-        initialize<-function(paths) {.libPaths(paths);loadNamespace("fastglm");NULL}
+        # Each worker refits with one thread, so that workers times threads
+        # does not exceed the request.
+        initialize<-function(paths) {.libPaths(paths);loadNamespace("fastglm");fastglm::fastglm_threads(1L);NULL}
         # Serializing a function from this namespace would load fastglm before
         # the worker receives the caller's library paths. Use a base closure.
         environment(initialize)<-baseenv()
@@ -400,4 +417,21 @@ print.fastglm_bootstrap <- function(x,digits=max(3L,getOption("digits")-3L),...)
     available <- if(is.null(x$inference.available)) isTRUE(x$successful==x$R) else isTRUE(x$inference.available)
     if(!available) .fastglm_print_field("Inference","Unavailable; inspect the refit diagnostics")
     invisible(x)
+}
+
+# The thread setting of bootstrap refits for a thread count supplied in
+# 'control' (NULL when none was). With one process (workers = 1) the refits
+# run in this session with that count, for every fitting path (fits called
+# with threads = NULL take it from the scope); the returned function restores
+# the session setting. Worker processes always refit with one thread, so a
+# count other than 1 is then ignored with a warning. Called after argument
+# validation.
+.bootstrap_thread_scope <- function(threads,workers) {
+    if(workers>1L) {
+        if(!is.null(threads) && !isTRUE(suppressWarnings(as.numeric(threads))==1))
+            warning("control$threads is ignored with workers > 1: each worker refits with one thread",call.=FALSE)
+        return(function() invisible(NULL))
+    }
+    if(is.null(threads)) return(function() invisible(NULL))
+    .fastglm_scope_threads(threads)$restore
 }

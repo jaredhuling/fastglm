@@ -32,6 +32,8 @@
 #include <boost/math/tools/roots.hpp>
 #include "glm_base.h"
 #include "nb_theta.h"
+#include "chunk_source.h"
+#include "parallel_reduce.h"
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -167,35 +169,43 @@ inline double trunc_nb_score_theta(double theta,
 {
     using boost::math::digamma;
     const double dig_th = digamma(theta);
-    double s = 0.0;
-    for (Eigen::Index i = 0; i < y.size(); ++i) {
-        const double yi = y[i], lam = lambda[i], wi = wt[i];
-        const double tlam = theta + lam;
-        const double lam_over_tlam = lam / tlam;             // 1 - c
-        // log_c = log(theta/tlam); use log1p when lambda << theta.
-        const double log_c = (lam < 1e-3 * theta)
-                              ? -std::log1p(lam / theta)
-                              : std::log(theta / tlam);
-        const double log_p0 = theta * log_c;
-        // Standard NB2 score row: digamma(y+t) - digamma(t) + log_c + (lam - y)/tlam
-        const double base = fglm::nb::score_theta_row(theta, yi, lam, dig_th);
+    // Row blocks summed in a fixed order, in parallel when there are several
+    // (fglm_par::ordered_block_sum): the same result for every thread count.
+    // The blocks read the data through plain pointers (Ref has unit inner
+    // stride), which keeps the serial loop as fast as a plain loop.
+    const double *yp = y.data(), *lp = lambda.data(), *wp = wt.data();
+    return fglm_par::ordered_block_sum(y.size(), default_chunk_rows(),
+                                       [=](Eigen::Index r0, Eigen::Index k0) {
+        double s = 0.0;
+        for (Eigen::Index i = r0; i < r0 + k0; ++i) {
+            const double yi = yp[i], lam = lp[i], wi = wp[i];
+            const double tlam = theta + lam;
+            const double lam_over_tlam = lam / tlam;             // 1 - c
+            // log_c = log(theta/tlam); use log1p when lambda << theta.
+            const double log_c = (lam < 1e-3 * theta)
+                                  ? -std::log1p(lam / theta)
+                                  : std::log(theta / tlam);
+            const double log_p0 = theta * log_c;
+            // Standard NB2 score row: digamma(y+t) - digamma(t) + log_c + (lam - y)/tlam
+            const double base = fglm::nb::score_theta_row(theta, yi, lam, dig_th);
 
-        // Truncation correction: + p_0/(1 - p_0) * [log_c + lam/tlam]
-        // Compute p_0/(1 - p_0) = exp(log_p0) / (-expm1(log_p0)) for stability.
-        const double r = lam / theta;
-        const double inner = r < 1e-4
-            ? r * r * (-0.5 + r * (2.0/3.0 + r * (-3.0/4.0 + r * 4.0/5.0)))
-            : log_c + lam_over_tlam;
-        double ratio;
-        if (log_p0 < -50.0) {
-            ratio = std::exp(log_p0);  // negligible truncation
-        } else {
-            const double q = -std::expm1(log_p0);
-            ratio = (q > 1e-300) ? std::exp(log_p0) / q : 1e300;
+            // Truncation correction: + p_0/(1 - p_0) * [log_c + lam/tlam]
+            // Compute p_0/(1 - p_0) = exp(log_p0) / (-expm1(log_p0)) for stability.
+            const double r = lam / theta;
+            const double inner = r < 1e-4
+                ? r * r * (-0.5 + r * (2.0/3.0 + r * (-3.0/4.0 + r * 4.0/5.0)))
+                : log_c + lam_over_tlam;
+            double ratio;
+            if (log_p0 < -50.0) {
+                ratio = std::exp(log_p0);  // negligible truncation
+            } else {
+                const double q = -std::expm1(log_p0);
+                ratio = (q > 1e-300) ? std::exp(log_p0) / q : 1e300;
+            }
+            s += wi * (base + ratio * inner);
         }
-        s += wi * (base + ratio * inner);
-    }
-    return s;
+        return s;
+    });
 }
 
 // Bracket theta around theta0 by multiplicative expansion.  Same shape as
@@ -306,9 +316,10 @@ protected:
     VectorXd c_vec_;
     VectorXd log_q_;
 
-    // LLT (type = 2) WLS workspace -- preallocated like glm.h.
-    MatrixXd WX_;
-    VectorXd wz_;
+    // LLT (type = 2) WLS workspace: X' W X, X' W z, and the row-block
+    // workspaces of add_xtwx_xtwz_blocked, kept between iterations.
+    VectorXd xtwz_;
+    RowBlockPool pool_;
     MatrixXd XtWX_buf_;
     LLT<MatrixXd> Ch_;
     bool ch_ok_;
@@ -319,33 +330,45 @@ protected:
     // dmu_T/deta into a scratch that update_mu_eta() copies into `mu_eta`.
     void refresh_kernels()
     {
-        for (int i = 0; i < nobs; ++i) {
-            const double e_i = eta[i];
-            const double lam = std::isfinite(e_i) ? std::exp(e_i) : 1e300;
-            lambda_[i] = lam;
-            if (!is_negbin_) {
-                double mt, dm, lq;
-                eval_pois(lam, mt, dm, lq);
-                mu[i]      = mt;
-                mu_eta[i]  = dm;
-                c_vec_[i]  = 1.0;
-                log_q_[i]  = lq;
-            } else {
-                double mt, dm, ci, lq, lp0;
-                eval_nb(lam, theta_, mt, dm, ci, lq, lp0);
-                mu[i]      = mt;
-                mu_eta[i]  = dm;
-                c_vec_[i]  = ci;
-                log_q_[i]  = lq;
+        // Elementwise over fixed row blocks, in parallel when there are
+        // several; each row's values do not depend on the blocks. The rows
+        // are read and written through plain pointers.
+        const double* ep = eta.data();
+        double *lamp = lambda_.data(), *mup = mu.data(), *dmp = mu_eta.data(),
+               *cp = c_vec_.data(), *lqp = log_q_.data();
+        const bool negbin = is_negbin_;
+        const double theta = theta_;
+        fglm_par::parallel_blocks(nobs, default_chunk_rows(), [=](Eigen::Index r, Eigen::Index k) {
+            for (Eigen::Index i = r; i < r + k; ++i) {
+                const double e_i = ep[i];
+                const double lam = std::isfinite(e_i) ? std::exp(e_i) : 1e300;
+                lamp[i] = lam;
+                if (!negbin) {
+                    double mt, dm, lq;
+                    eval_pois(lam, mt, dm, lq);
+                    mup[i] = mt;
+                    dmp[i] = dm;
+                    cp[i]  = 1.0;
+                    lqp[i] = lq;
+                } else {
+                    double mt, dm, ci, lq, lp0;
+                    eval_nb(lam, theta, mt, dm, ci, lq, lp0);
+                    mup[i] = mt;
+                    dmp[i] = dm;
+                    cp[i]  = ci;
+                    lqp[i] = lq;
+                }
             }
-        }
+        });
     }
 
     // ---------------- GlmBase virtual hooks --------------------------------
 
     virtual void update_eta() override
     {
-        eta.noalias() = X_ * beta + offset_;
+        // X * beta + offset over fixed row blocks (in parallel when there
+        // are several).
+        apply_X_streamed(X_, beta, offset_, eta);
     }
 
     virtual void update_mu() override
@@ -454,16 +477,20 @@ protected:
     {
         beta_prev = beta;
 
-        WX_.noalias() = w.asDiagonal() * X_;
+        // X' W X (lower triangle) and X' W z in one pass over fixed row
+        // blocks (fglm::add_xtwx_xtwz_blocked): the n x p weighted design is
+        // not formed, and the sums are the same for every thread count.
         XtWX_buf_.setZero();
-        XtWX_buf_.template selfadjointView<Lower>().rankUpdate(WX_.adjoint());
+        xtwz_.setZero(nvars);
+        MatrixXd wb_unused;   // unused by add_xtwx_xtwz_blocked (kept in its signature)
+        VectorXd wzb_unused;
+        add_xtwx_xtwz_blocked(X_, w, z, XtWX_buf_, xtwz_, wb_unused, wzb_unused, -1, &pool_);
         Ch_.compute(XtWX_buf_.template selfadjointView<Lower>());
         ch_ok_ = (Ch_.info() == Eigen::Success);
         if (!ch_ok_ || Ch_.rcond() < 1e-12)
             Rcpp::stop("truncated-count information is singular or ill-conditioned");
 
-        wz_.noalias() = w.cwiseProduct(z);
-        beta = Ch_.solve(WX_.adjoint() * wz_);
+        beta = Ch_.solve(xtwz_);
     }
 
     virtual void save_vcov() override
@@ -495,7 +522,7 @@ public:
         X_(X), Y_(Y), weights_(weights), offset_(offset),
         is_negbin_(is_negbin), theta_(theta),
         lambda_(X.rows()), c_vec_(X.rows()), log_q_(X.rows()),
-        WX_(X.rows(), X.cols()), wz_(X.rows()),
+        xtwz_(X.cols()),
         XtWX_buf_(X.cols(), X.cols()),
         ch_ok_(false)
     {}
@@ -529,30 +556,40 @@ public:
     double compute_loglik() const
     {
         using boost::math::lgamma;
-        double ll = 0.0;
-        if (!is_negbin_) {
-            for (int i = 0; i < nobs; ++i) {
-                const double lam = lambda_[i], yi = Y_[i];
-                const double log_lam = std::log(lam > 1e-300 ? lam : 1e-300);
-                ll += weights_[i] * (yi * log_lam - lam - log_q_[i] - lgamma(yi + 1.0));
+        // Row blocks summed in a fixed order, in parallel when there are
+        // several (fglm_par::ordered_block_sum), reading the rows through
+        // plain pointers.
+        const bool negbin = is_negbin_;
+        const double theta = theta_;
+        const double lg_th = negbin ? lgamma(theta) : 0.0;
+        const double *lamp = lambda_.data(), *yp = Y_.data(), *wp = weights_.data(),
+                     *lqp = log_q_.data();
+        return fglm_par::ordered_block_sum(nobs, default_chunk_rows(),
+                                           [=](Eigen::Index r, Eigen::Index k) {
+            double ll = 0.0;
+            if (!negbin) {
+                for (Eigen::Index i = r; i < r + k; ++i) {
+                    const double lam = lamp[i], yi = yp[i];
+                    const double log_lam = std::log(lam > 1e-300 ? lam : 1e-300);
+                    ll += wp[i] * (yi * log_lam - lam - lqp[i] - lgamma(yi + 1.0));
+                }
+            } else {
+                for (Eigen::Index i = r; i < r + k; ++i) {
+                    const double lam = lamp[i], yi = yp[i];
+                    const double tlam = theta + lam;
+                    const double log_c = (lam < 1e-3 * theta)
+                                          ? -std::log1p(lam / theta)
+                                          : std::log(theta / tlam);
+                    const double log_p0 = theta * log_c;
+                    const double y_part = (yi > 0.0)
+                                           ? yi * (std::log(lam > 1e-300 ? lam : 1e-300) - std::log(tlam))
+                                           : 0.0;
+                    ll += wp[i] * (lgamma(yi + theta) - lg_th - lgamma(yi + 1.0)
+                                   + log_p0 + y_part - lqp[i]);
+                }
             }
-        } else {
-            const double lg_th = lgamma(theta_);
-            for (int i = 0; i < nobs; ++i) {
-                const double lam = lambda_[i], yi = Y_[i];
-                const double tlam = theta_ + lam;
-                const double log_c = (lam < 1e-3 * theta_)
-                                      ? -std::log1p(lam / theta_)
-                                      : std::log(theta_ / tlam);
-                const double log_p0 = theta_ * log_c;
-                const double y_part = (yi > 0.0)
-                                       ? yi * (std::log(lam > 1e-300 ? lam : 1e-300) - std::log(tlam))
-                                       : 0.0;
-                ll += weights_[i] * (lgamma(yi + theta_) - lg_th - lgamma(yi + 1.0)
-                                     + log_p0 + y_part - log_q_[i]);
-            }
-        }
-        return ll;
+            return ll;
+        });
     }
 };
 
@@ -644,15 +681,29 @@ inline bool joint_nb_score_information(
     VectorXd par(p + 1); par.head(p) = beta; par[p] = std::log(theta);
     auto score = [&](const VectorXd& z) {
         double th = std::exp(z[p]);
-        ArrayXd lam = (X * z.head(p) + offset).array().exp();
-        VectorXd row(y.size());
-        for (int i = 0; i < y.size(); ++i) {
-            double mu, dmu, c, lq, lp;
-            eval_nb(lam[i], th, mu, dmu, c, lq, lp);
-            row[i] = wt[i] * c * (y[i] - mu);
-        }
+        // Linear predictor, rates, and row scores over fixed row blocks, and
+        // X' row summed over row blocks in a fixed order: in parallel when
+        // there are several blocks, with the same result for every thread
+        // count.
+        const Eigen::Index n = y.size();
+        VectorXd eta_z(n);
+        apply_X_streamed(X, z.head(p), offset, eta_z);
+        ArrayXd lam(n);
+        VectorXd row(n);
+        const double *yp = y.data(), *wp = wt.data();
+        double *lp = lam.data(), *rp = row.data();
+        fglm_par::parallel_blocks(n, default_chunk_rows(), [&](Eigen::Index r, Eigen::Index k) {
+            lam.segment(r, k) = eta_z.segment(r, k).array().exp();
+            for (Eigen::Index i = r; i < r + k; ++i) {
+                double mu, dmu, c, lq, lp0;
+                eval_nb(lp[i], th, mu, dmu, c, lq, lp0);
+                rp[i] = wp[i] * c * (yp[i] - mu);
+            }
+        });
         VectorXd out(p + 1);
-        out.head(p) = X.transpose() * row;
+        VectorXd xr;
+        accumulate_xtv_blocked(X, row, xr);
+        out.head(p) = xr;
         out[p] = th * trunc_nb_score_theta(th, ArrayXd(y), lam, ArrayXd(wt));
         return out;
     };

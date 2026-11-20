@@ -46,12 +46,16 @@
 #' @param response non-negative integer response for a matrix design.
 #' @param z optional inflation-design matrix for a matrix fit; defaults to the
 #'   count design.
+#' @param threads the number of threads for the compiled computations of this
+#'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+#'   Results are identical for every number of threads.
 #'
 #' @returns A list of class `c("fastglm_zi", "fastglm")` with elements
 #'   `coefficients` (a list with `count` and `zero`), `se` (likewise),
 #'   `vcov` (full, including theta if NB), `loglik`, `theta`, `SE.theta`,
 #'   `tau` (posterior P(Z=1|y)), `em_iter`, `newton.iter`, `em.decrement`,
-#'   `converged`, and `convergence.reason`.
+#'   `converged`, `convergence.reason`, and `threads` (the thread setting of
+#'   the fit).
 #'
 #' @details
 #' The fit runs EM iterations with SQUAREM acceleration (with `theta` on the
@@ -96,7 +100,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
                        theta.tol   = 1e-8,
                        theta.maxit = 100L,
                        model = TRUE, y = TRUE, x = FALSE,
-                       response = NULL, z = NULL)
+                       response = NULL, z = NULL, threads = NULL)
 {
     if (!requireNamespace("Formula", quietly = TRUE))
         stop("Package 'Formula' is required for fastglm_zi(); install it.",
@@ -104,6 +108,9 @@ fastglm_zi <- function(formula, data, subset, na.action,
 
     dist <- match.arg(dist)
     link <- match.arg(link)
+    scope <- .fastglm_scope_threads(threads)
+    on.exit(scope$restore(), add = TRUE)
+    threads <- scope$threads
 
     cl <- match.call()
     if (inherits(formula, c("dgCMatrix", "big.matrix", "fastglm_source"))) {
@@ -113,6 +120,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
                                  if (missing(offset)) NULL else offset, dist, link, init.theta,
                                  em.tol, em.maxit, tol, maxit, theta.tol, theta.maxit)
         out$call <- cl
+        out$threads <- threads
         return(out)
     }
     matrix.fit <- is.matrix(formula)
@@ -149,7 +157,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
     mf$dist <- mf$link <- mf$init.theta <- NULL
     mf$em.tol <- mf$em.maxit <- NULL
     mf$tol <- mf$maxit <- mf$theta.tol <- mf$theta.maxit <- NULL
-    mf$model <- mf$y <- mf$x <- NULL
+    mf$model <- mf$y <- mf$x <- mf$threads <- NULL
     mf[[1L]] <- as.name("model.frame")
     mf <- eval(mf, parent.frame())
 
@@ -288,7 +296,8 @@ fastglm_zi <- function(formula, data, subset, na.action,
         eta_count      = res$eta_count,
         mu_count       = res$mu_count,
         eta_zero       = res$eta_zero,
-        call           = cl
+        call           = cl,
+        threads        = threads
     )
     out$vcov.full <- out$vcov
     out$vcov <- out$vcov[seq_len(p_c + p_z), seq_len(p_c + p_z), drop = FALSE]

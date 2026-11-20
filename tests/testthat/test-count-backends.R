@@ -224,3 +224,26 @@ test_that("hurdle NB with a weakly identified size parameter converges to the op
     expect_true(sparse$converged)
     expect_equal(coef(sparse), coef(f), tolerance = 1e-6)
 })
+
+test_that("sparse truncated fits accept a design with an unnamed column", {
+    skip_if_not_installed("MASS")
+    skip_if_not_installed("Matrix")
+    set.seed(41)
+    n <- 500L; x1 <- rnorm(n); x2 <- rnorm(n)
+    x <- cbind(1, x1, x2)            # colnames c("", "x1", "x2")
+    xs <- Matrix::Matrix(x, sparse = TRUE)
+    y <- rpois(n, exp(0.3 + 0.2 * x1)) + 1
+    for (dist in c("poisson", "negbin")) {
+        sp <- suppressWarnings(fastglm_truncated(xs, y, dist = dist))
+        de <- suppressWarnings(fastglm_truncated(x, y, dist = dist))
+        expect_equal(unname(coef(sp)), unname(coef(de)), tolerance = 1e-5, info = dist)
+        expect_equal(unname(sp$se), unname(de$se), tolerance = 1e-4, info = dist)
+        expect_identical(names(coef(sp)), colnames(x), info = dist)
+    }
+    # The other sparse count backends with the same design.
+    ynb <- MASS::rnegbin(n, exp(0.3 + 0.2 * x1), 2)
+    yz <- rbinom(n, 1L, 0.7) * rpois(n, exp(0.3 + 0.2 * x1))
+    expect_true(all(is.finite(coef(fastglm_nb(xs, ynb)))))
+    expect_true(all(is.finite(unlist(coef(fastglm_hurdle(xs, response = ynb))))))
+    expect_true(all(is.finite(unlist(coef(fastglm_zi(xs, response = yz))))))
+})

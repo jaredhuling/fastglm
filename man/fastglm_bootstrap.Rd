@@ -41,12 +41,18 @@ number state. Each replicate has its own seed, independent of scheduling.}
 process because database connections may not be transferable.
 A custom statistic must capture external objects, such as new prediction
 data, in its function environment; worker processes do not inherit objects
-from the calling session's global environment.}
+from the calling session's global environment.
+Each worker process refits with one thread (see [fastglm_threads()]).}
 
 \item{level}{confidence level for percentile intervals.}
 
 \item{control}{named list of arguments passed to each fitting function,
-such as `tol`, `maxit`, or `outer.maxit`.}
+such as `tol`, `maxit`, or `outer.maxit`. A `threads` entry is not passed
+to the fitting function: with `workers = 1` it sets the number of threads
+used by the refits, for every model type (as [fastglm_threads()] would,
+and the session setting is restored afterwards); with `workers > 1`, where
+each worker refits with one thread, a value other than one is ignored
+with a warning.}
 
 \item{x}{a `fastglm_bootstrap` result.}
 

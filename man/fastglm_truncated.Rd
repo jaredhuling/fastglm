@@ -16,7 +16,8 @@ fastglm_truncated(
   tol = 1e-08,
   maxit = 100L,
   outer.tol = 1e-08,
-  outer.maxit = 100L
+  outer.maxit = 100L,
+  threads = NULL
 )
 }
 \arguments{
@@ -42,9 +43,14 @@ are read in row blocks.}
 the loop stops when the joint Newton decrement in the coefficients and
 `log(theta)` is below `outer.tol` times `0.1 + |2 * loglik|` (see
 [fastglm_hurdle()]).}
+
+\item{threads}{the number of threads for the compiled computations of this
+fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+Results are identical for every number of threads.}
 }
 \value{
-A `fastglm_truncated` model with joint covariance when theta is estimated.
+A `fastglm_truncated` model with joint covariance when theta is
+  estimated. Its element `threads` records the thread setting of the fit.
 }
 \description{
 Fits Poisson or negative-binomial regression conditional on a strictly

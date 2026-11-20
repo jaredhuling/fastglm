@@ -18,13 +18,20 @@
 #'   the loop stops when the joint Newton decrement in the coefficients and
 #'   `log(theta)` is below `outer.tol` times `0.1 + |2 * loglik|` (see
 #'   [fastglm_hurdle()]).
-#' @returns A `fastglm_truncated` model with joint covariance when theta is estimated.
+#' @param threads the number of threads for the compiled computations of this
+#'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+#'   Results are identical for every number of threads.
+#' @returns A `fastglm_truncated` model with joint covariance when theta is
+#'   estimated. Its element `threads` records the thread setting of the fit.
 #' @export
 fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "negbin"),
                               weights = NULL, offset = NULL, theta = NULL,
                               start = NULL, tol = 1e-8, maxit = 100L,
-                              outer.tol = 1e-8, outer.maxit = 100L) {
+                              outer.tol = 1e-8, outer.maxit = 100L, threads = NULL) {
     cl <- match.call(); dist <- match.arg(dist)
+    scope <- .fastglm_scope_threads(threads)
+    on.exit(scope$restore(), add = TRUE)
+    threads <- scope$threads
     frame <- tt <- NULL
     if (inherits(x, "formula")) {
         mc <- match.call(expand.dots = FALSE)
@@ -38,6 +45,7 @@ fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "neg
         out <- .count_backend_truncated_model(x, y, weights, offset, dist, theta, tol, maxit,
                                               outer.tol, outer.maxit)
         out$call <- cl
+        out$threads <- threads
         return(out)
     }
     if (is.null(weights)) weights <- rep(1, length(y))
@@ -66,7 +74,7 @@ fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "neg
     res$dist <- dist; res$theta.estimated <- dist == "negbin" && is.null(theta)
     res$rank <- ncol(x); res$nobs <- sum(weights > 0); res$df.residual <- res$nobs - length(rn)
     res$dispersion <- 1; res$aic <- -2*res$loglik + 2*length(rn)
-    res$terms <- tt; res$model <- frame; res$call <- cl
+    res$terms <- tt; res$model <- frame; res$call <- cl; res$threads <- threads
     if (!is.null(tt)) {
         res$xlevels <- .getXlevels(tt, frame); res$contrasts <- attr(x, "contrasts")
         res$na.action <- attr(frame, "na.action")

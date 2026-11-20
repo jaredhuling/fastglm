@@ -24,20 +24,26 @@ static double nb_loglik(double theta,
 {
     using boost::math::lgamma;
     const double lg_th = lgamma(theta);
-    double s = 0.0;
-    for (Eigen::Index i = 0; i < y.size(); ++i) {
-        const double yi = y[i], mi = mu[i], wi = wt[i];
-        const double tm = theta + mi;
-        // log(theta / tm) = -log1p(mu/theta) when mu << theta.
-        double log_ratio_th = (mi < 1e-3 * theta)
-                              ? -std::log1p(mi / theta)
-                              : std::log(theta / tm);
-        // log(mu / tm) = log(mu) - log(tm); skip if y == 0.
-        double y_part = (yi > 0.0) ? yi * (std::log(mi) - std::log(tm)) : 0.0;
-        s += wi * (lgamma(yi + theta) - lg_th - lgamma(yi + 1.0)
-                   + theta * log_ratio_th + y_part);
-    }
-    return s;
+    // Row blocks summed in a fixed order, in parallel when there are several
+    // (fglm_par::ordered_block_sum): the same result for every thread count.
+    const double *yp = y.data(), *mp = mu.data(), *wp = wt.data();
+    return fglm_par::ordered_block_sum(y.size(), fglm::default_chunk_rows(),
+                                       [=](Eigen::Index r, Eigen::Index k) {
+        double s = 0.0;
+        for (Eigen::Index i = r; i < r + k; ++i) {
+            const double yi = yp[i], mi = mp[i], wi = wp[i];
+            const double tm = theta + mi;
+            // log(theta / tm) = -log1p(mu/theta) when mu << theta.
+            double log_ratio_th = (mi < 1e-3 * theta)
+                                  ? -std::log1p(mi / theta)
+                                  : std::log(theta / tm);
+            // log(mu / tm) = log(mu) - log(tm); skip if y == 0.
+            double y_part = (yi > 0.0) ? yi * (std::log(mi) - std::log(tm)) : 0.0;
+            s += wi * (lgamma(yi + theta) - lg_th - lgamma(yi + 1.0)
+                       + theta * log_ratio_th + y_part);
+        }
+        return s;
+    });
 }
 
 // [[Rcpp::export]]

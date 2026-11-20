@@ -27,7 +27,8 @@ fastglm_hurdle(
   response = NULL,
   z = NULL,
   method = 2L,
-  block.size = 8192L
+  block.size = 8192L,
+  threads = NULL
 )
 }
 \arguments{
@@ -88,6 +89,10 @@ the count design. Source blocks can supply `Z` separately from `X`.}
 
 \item{block.size}{maximum number of matrix rows processed together for the
 truncated count component. A source determines its own block sizes.}
+
+\item{threads}{the number of threads for the compiled computations of this
+fit, or `NULL` (default) for the session setting of [fastglm_threads()].
+Results are identical for every number of threads.}
 }
 \value{
 A list of class `c("fastglm_hurdle", "fastglm")` with elements

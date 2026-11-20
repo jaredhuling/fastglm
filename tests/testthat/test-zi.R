@@ -170,3 +170,58 @@ test_that("zero-inflated NB theta is not trapped at its upper bound", {
     expect_lt(abs(as.numeric(logLik(f)) - (-300.405901)), 1e-5)
     expect_equal(f$theta, 0.92174, tolerance = 1e-3)
 })
+
+test_that("the log zero link starts from valid values and reaches the maximum likelihood", {
+    skip_if_not_installed("Formula")
+    skip_if_not_installed("Matrix")
+    set.seed(2)
+    n <- 4000L; x <- rnorm(n); z <- rnorm(n)
+    pz <- exp(-1.2 + 0.3 * z)                  # below 1 for these z
+    y <- rbinom(n, 1L, 1 - pz) * rpois(n, exp(0.5 + 0.3 * x))
+    d <- data.frame(y, x, z)
+    # The pilot used to start on the logit scale (eta > 0, invalid for the
+    # log link) and stopped with "cannot find valid starting values".
+    fit <- fastglm_zi(y ~ x | z, data = d, link = "log")
+    expect_true(fit$converged)
+    nll <- function(p) {
+        mu <- exp(p[1] + p[2] * x); pi <- exp(p[3] + p[4] * z)
+        if (any(pi >= 1)) return(1e10)
+        -sum(ifelse(y == 0, log(pi + (1 - pi) * exp(-mu)), log1p(-pi) + dpois(y, mu, log = TRUE)))
+    }
+    o <- optim(c(0.4, 0.2, -1, 0.2), nll, method = "BFGS", control = list(reltol = 1e-15, maxit = 1000))
+    o <- optim(o$par, nll, method = "Nelder-Mead", control = list(reltol = 1e-15, maxit = 5000))
+    o <- optim(o$par, nll, method = "BFGS", control = list(reltol = 1e-15, maxit = 1000))
+    expect_equal(unname(c(fit$coefficients$count, fit$coefficients$zero)), o$par, tolerance = 1e-5)
+    expect_gte(fit$loglik, -o$value - 1e-8)
+    # Sparse designs start from a valid intercept as well.
+    X <- cbind(1, x); Z <- cbind(1, z)
+    sp <- fastglm_zi(Matrix::Matrix(X, sparse = TRUE), response = y,
+                     z = Matrix::Matrix(Z, sparse = TRUE), link = "log")
+    expect_equal(unname(unlist(sp$coefficients)), unname(c(fit$coefficients$count, fit$coefficients$zero)),
+                 tolerance = 1e-5)
+    # Hurdle zero part with the log link: the binomial log-link GLM of y > 0.
+    h <- fastglm_hurdle(y ~ x | z, data = d, link = "log", tol = 1e-12)
+    ref <- suppressWarnings(glm(as.numeric(y > 0) ~ z, family = binomial(link = "log"),
+               start = c(log(mean(y > 0)) - 0.1, 0), control = list(epsilon = 1e-14, maxit = 200)))
+    expect_equal(unname(h$coefficients$zero), unname(coef(ref)), tolerance = 1e-6)
+})
+
+test_that("a log-link zero model whose probabilities approach one keeps them below one", {
+    skip_if_not_installed("Formula")
+    set.seed(2)
+    n <- 4000L; x <- rnorm(n); z <- rnorm(n)
+    pz <- pmin(exp(-0.05 + 0.8 * z), 0.999)    # not log-linear: the maximum is on the boundary
+    y <- rbinom(n, 1L, 1 - pz) * rpois(n, exp(0.5 + 0.3 * x))
+    msgs <- character()
+    fit <- withCallingHandlers(fastglm_zi(y ~ x | z, data = data.frame(y, x, z), link = "log"),
+                               warning = function(w) {
+                                   msgs <<- c(msgs, conditionMessage(w)); invokeRestart("muffleWarning")
+                               })
+    eta <- drop(cbind(1, z) %*% fit$coefficients$zero)
+    expect_true(all(eta < 0))
+    expect_true(is.finite(fit$loglik))
+    # The maximum is on the boundary pi = 1: the fit says so rather than
+    # stopping or leaving the valid region.
+    expect_false(fit$converged)
+    expect_true(any(grepl("did not converge", msgs)))
+})

@@ -4,6 +4,8 @@
 #include "../inst/include/glm.h"
 #include "../inst/include/nb_theta.h"
 #include "../inst/include/zi.h"
+#include "../inst/include/chunk_source.h"
+#include "../inst/include/parallel_reduce.h"
 #include <RcppEigen.h>
 #include <boost/math/special_functions/digamma.hpp>
 #include <boost/math/special_functions/trigamma.hpp>
@@ -34,14 +36,53 @@ using Eigen::VectorXd;
 using Eigen::MatrixXd;
 using Eigen::ArrayXd;
 using Eigen::Map;
+typedef Eigen::Ref<const MatrixXd> MatRef;
+typedef Eigen::Ref<const VectorXd> VecRef;
+
+// Threading. The row loops below run over fixed row blocks of
+// fglm::default_chunk_rows() rows, in parallel when there are several:
+// elementwise work with fglm_par::parallel_blocks, sums over rows with
+// fglm_par::ordered_block_sum, and products X' v with
+// fglm::accumulate_xtv_blocked. The blocks and the order of the additions
+// do not depend on the thread count, so every result is the same for every
+// thread count. The probit zero link calls R's math library (R::pnorm5,
+// R::dnorm4) and is evaluated serially.
+
+// out = A b + off, over fixed row blocks.
+static VectorXd lin_pred(const MatRef& A, const VecRef& b,
+                         const Eigen::Ref<const VectorXd>& off)
+{
+    VectorXd out(A.rows());
+    fglm::apply_X_streamed(A, b, off, out);
+    return out;
+}
+
+// exp(eta) elementwise, over fixed row blocks.
+static VectorXd exp_blocks(const VectorXd& eta)
+{
+    VectorXd out(eta.size());
+    fglm_par::parallel_blocks(eta.size(), fglm::default_chunk_rows(),
+                              [&](Eigen::Index r, Eigen::Index k) {
+        out.segment(r, k) = eta.segment(r, k).array().exp().matrix();
+    });
+    return out;
+}
+
+// A' v, summed over row blocks in a fixed order.
+static VectorXd xtv(const MatRef& A, const VectorXd& v)
+{
+    VectorXd out;
+    fglm::accumulate_xtv_blocked(A, v, out);
+    return out;
+}
 
 // ---------------------------------------------------------------------------
 // Score helpers (analytical, vectorized where possible).
 // ---------------------------------------------------------------------------
 
 static VectorXd score_gamma(int zero_fam_code,
-                            const VectorXd& tau, const VectorXd& eta_z,
-                            const VectorXd& wts, const MatrixXd& Z)
+                            const VecRef& tau, const VecRef& eta_z,
+                            const VecRef& wts, const MatRef& Z)
 {
     const Eigen::Index n = Z.rows();
     VectorXd s_per_obs(n);
@@ -49,16 +90,22 @@ static VectorXd score_gamma(int zero_fam_code,
         ArrayXd pi = 1.0 / (1.0 + (-eta_z.array()).exp());
         s_per_obs = (wts.array() * (tau.array() - pi)).matrix();
     } else {
-        for (Eigen::Index i = 0; i < n; ++i)
-            s_per_obs[i] = wts[i] * fglm::zi::score_eta_z(zero_fam_code, tau[i], eta_z[i]);
+        const double *wp = wts.data(), *tp = tau.data(), *ep = eta_z.data();
+        double* sp = s_per_obs.data();
+        auto rows = [=](Eigen::Index r, Eigen::Index k) {
+            for (Eigen::Index i = r; i < r + k; ++i)
+                sp[i] = wp[i] * fglm::zi::score_eta_z(zero_fam_code, tp[i], ep[i]);
+        };
+        if (zero_fam_code == fglm::FAM_BINOMIAL_PROBIT) rows(0, n);
+        else fglm_par::parallel_blocks(n, fglm::default_chunk_rows(), rows);
     }
-    return Z.transpose() * s_per_obs;
+    return xtv(Z, s_per_obs);
 }
 
 static VectorXd score_beta(int dist_code, double theta,
-                           const VectorXd& tau, const VectorXd& y,
-                           const VectorXd& mu,
-                           const VectorXd& wts, const MatrixXd& X)
+                           const VecRef& tau, const VecRef& y,
+                           const VecRef& mu,
+                           const VecRef& wts, const MatRef& X)
 {
     ArrayXd w = wts.array() * (1.0 - tau.array());
     VectorXd s_per_obs;
@@ -67,30 +114,32 @@ static VectorXd score_beta(int dist_code, double theta,
     } else {
         s_per_obs = (w * theta * (y.array() - mu.array()) / (theta + mu.array())).matrix();
     }
-    return X.transpose() * s_per_obs;
+    return xtv(X, s_per_obs);
 }
 
 static double score_theta_zi(double theta,
-                             const VectorXd& tau, const VectorXd& y,
-                             const VectorXd& mu, const VectorXd& wts)
+                             const VecRef& tau, const VecRef& y,
+                             const VecRef& mu, const VecRef& wts)
 {
     // Cancellation-free per-row score (see fglm::zi::score_theta_one), with
     // digamma(theta) computed once.
     const double dig_th = boost::math::digamma(theta);
-    double s = 0.0;
-    for (Eigen::Index i = 0; i < y.size(); ++i) {
-        s += wts[i] * (1.0 - tau[i])
-             * fglm::nb::score_theta_row(theta, y[i], mu[i], dig_th);
-    }
-    return s;
+    const double *tp = tau.data(), *yp = y.data(), *mp = mu.data(), *wp = wts.data();
+    return fglm_par::ordered_block_sum(y.size(), fglm::default_chunk_rows(),
+                                       [=](Eigen::Index r, Eigen::Index k) {
+        double s = 0.0;
+        for (Eigen::Index i = r; i < r + k; ++i)
+            s += wp[i] * (1.0 - tp[i]) * fglm::nb::score_theta_row(theta, yp[i], mp[i], dig_th);
+        return s;
+    });
 }
 
 // ---------------------------------------------------------------------------
 // Theta MLE for the ZI count component (NB only).
 // ---------------------------------------------------------------------------
 static double mle_theta_zi(double theta_init,
-                           const VectorXd& tau, const VectorXd& y,
-                           const VectorXd& mu, const VectorXd& wts,
+                           const VecRef& tau, const VecRef& y,
+                           const VecRef& mu, const VecRef& wts,
                            double tol = 1e-8, int maxit = 100,
                            double theta_lo = 1e-6, double theta_hi = 1e8)
 {
@@ -128,8 +177,8 @@ static double mle_theta_zi(double theta_init,
 // Observed log-likelihood + posterior tau.
 // ---------------------------------------------------------------------------
 static double obs_loglik(int dist_code, int zero_fam_code, double theta,
-                         const VectorXd& y, const VectorXd& mu,
-                         const VectorXd& eta_z, const VectorXd& wts,
+                         const VecRef& y, const VecRef& mu,
+                         const VecRef& eta_z, const VecRef& wts,
                          VectorXd& tau)
 {
     return fglm::zi::obs_loglik_and_tau(
@@ -140,18 +189,18 @@ static double obs_loglik(int dist_code, int zero_fam_code, double theta,
 // Full analytical score vector.
 // ---------------------------------------------------------------------------
 static VectorXd full_score(int dist_code, int zero_fam_code,
-                           const VectorXd& gamma, const VectorXd& beta,
+                           const VecRef& gamma, const VecRef& beta,
                            double theta,
-                           const MatrixXd& Z, const MatrixXd& X,
-                           const VectorXd& y, const VectorXd& wts,
-                           const VectorXd& off_z, const VectorXd& off_c)
+                           const MatRef& Z, const MatRef& X,
+                           const VecRef& y, const VecRef& wts,
+                           const VecRef& off_z, const VecRef& off_c)
 {
     const Eigen::Index n   = X.rows();
     const Eigen::Index p_z = Z.cols();
     const Eigen::Index p_c = X.cols();
-    VectorXd eta_z = Z * gamma + off_z;
-    VectorXd eta_c = X * beta  + off_c;
-    VectorXd mu = eta_c.array().exp();
+    VectorXd eta_z = lin_pred(Z, gamma, off_z);
+    VectorXd eta_c = lin_pred(X, beta, off_c);
+    VectorXd mu = exp_blocks(eta_c);
     VectorXd tau(n);
     obs_loglik(dist_code, zero_fam_code, theta, y, mu, eta_z, wts, tau);
 
@@ -171,11 +220,11 @@ static VectorXd full_score(int dist_code, int zero_fam_code,
 // Numerical Jacobian of full_score (= negative observed information).
 // ---------------------------------------------------------------------------
 static MatrixXd obs_info_numjac(int dist_code, int zero_fam_code,
-                                const VectorXd& gamma, const VectorXd& beta,
+                                const VecRef& gamma, const VecRef& beta,
                                 double theta,
-                                const MatrixXd& Z, const MatrixXd& X,
-                                const VectorXd& y, const VectorXd& wts,
-                                const VectorXd& off_z, const VectorXd& off_c)
+                                const MatRef& Z, const MatRef& X,
+                                const VecRef& y, const VecRef& wts,
+                                const VecRef& off_z, const VecRef& off_c)
 {
     const Eigen::Index p_z = Z.cols();
     const Eigen::Index p_c = X.cols();
@@ -236,9 +285,10 @@ static PilotResult pilot_init(const Map<MatrixXd>& X, const Map<MatrixXd>& Z,
     for (Eigen::Index i = 0; i < n; ++i) {
         double mi = (y0[i] + 0.5) / 2.0;
         mu0_z[i] = mi;
-        eta0_z[i] = std::log(mi / (1.0 - mi));
+        eta0_z[i] = fglm::zi::zero_linkfun(zero_fam_code, mi);   // on the zero link's scale
     }
-    VectorXd zero_start = VectorXd::Zero(Z.cols());
+    // Valid for the zero link (see fglm::zi::zero_model_start).
+    VectorXd zero_start = fglm::zi::zero_model_start(zero_fam_code, Z, y0, wts, off_z);
 
     fglm::FamilyParams fp_empty;
     glm gamma_solver(Z,
@@ -352,9 +402,9 @@ List fit_glm_zi(
         : std::numeric_limits<double>::quiet_NaN();
 
     // ---------------- initial E-step ----------------------------------------
-    VectorXd eta_z = Z * gamma + OffZ;
-    VectorXd eta_c = X * beta  + OffC;
-    VectorXd mu_c  = eta_c.array().exp();
+    VectorXd eta_z = lin_pred(Z, gamma, OffZ);
+    VectorXd eta_c = lin_pred(X, beta, OffC);
+    VectorXd mu_c  = exp_blocks(eta_c);
     VectorXd tau(n);
     double ll = obs_loglik(dist_code, zero_fam_code,
                            (dist_code == 1 ? theta : 1.0),
@@ -468,7 +518,7 @@ List fit_glm_zi(
     // Recompute eta/mu/warm-starts from current gamma,beta (not from IRLS)
     auto set_warm_from_params = [&]() {
         gamma_warm = gamma;
-        eta_z = Z * gamma + OffZ;
+        eta_z = lin_pred(Z, gamma, OffZ);
         eta_z_warm = eta_z;
         ArrayXd eta_arr = eta_z.array();
         ArrayXd mu_arr(n);
@@ -476,9 +526,9 @@ List fit_glm_zi(
         mu_z_warm = mu_arr.array().max(1e-6).min(1.0 - 1e-6);
 
         beta_warm  = beta;
-        eta_c = X * beta + OffC;
+        eta_c = lin_pred(X, beta, OffC);
         eta_c_warm = eta_c;
-        mu_c  = eta_c.array().exp().matrix();
+        mu_c  = exp_blocks(eta_c);
         mu_c_warm  = mu_c;
     };
 
@@ -561,8 +611,8 @@ List fit_glm_zi(
     {
         const double th_lo = 1e-6, th_hi = 1e8;
         auto loglik_at = [&](const VectorXd& g, const VectorXd& b, double th) {
-            const VectorXd ez = Z * g + OffZ;
-            const VectorXd mc = (X * b + OffC).array().exp().matrix();
+            const VectorXd ez = lin_pred(Z, g, OffZ);
+            const VectorXd mc = exp_blocks(lin_pred(X, b, OffC));
             VectorXd tau_tmp(n);
             return obs_loglik(dist_code, zero_fam_code, (dist_code == 1 ? th : 1.0),
                               Y, mc, ez, W, tau_tmp);

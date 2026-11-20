@@ -76,7 +76,7 @@
          endpoints=z$empty.end.categories,frequency=sum(z$totals))
 }
 
-.ordinal_bootstrap <- function(object,R,statistic,type,cluster,seed,workers,level,control,call) {
+.ordinal_bootstrap <- function(object,R,statistic,type,cluster,seed,workers,level,control,call,threads=NULL) {
     type <- match.arg(type,c("pairs","cluster","parametric"))
     .check_iterations(1e-8,R); .check_iterations(1e-8,workers)
     if(R<2L) stop("'R' must be at least two",call.=FALSE)
@@ -153,10 +153,15 @@
         ans
     }
     workers <- min(as.integer(workers),as.integer(R))
+    # A thread count from 'control' (see fastglm_bootstrap()).
+    restore.threads <- .bootstrap_thread_scope(threads,workers)
+    on.exit(restore.threads(),add=TRUE)
     if(workers==1L) out <- lapply(seq_len(R),one) else {
         cl <- parallel::makePSOCKcluster(workers)
         on.exit(parallel::stopCluster(cl),add=TRUE)
-        initialize <- function(paths) {.libPaths(paths);loadNamespace("fastglm");NULL}
+        # Each worker refits with one thread, so that workers times threads
+        # does not exceed the request.
+        initialize <- function(paths) {.libPaths(paths);loadNamespace("fastglm");fastglm::fastglm_threads(1L);NULL}
         environment(initialize) <- baseenv()
         parallel::clusterCall(cl,initialize,.libPaths())
         out <- parallel::parLapply(cl,seq_len(R),one)

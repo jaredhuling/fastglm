@@ -21,6 +21,7 @@ fastglm_nb(
   theta.maxit = 100L,
   block.size = 8192L,
   poisson.limit = TRUE,
+  threads = NULL,
   data = NULL,
   subset,
   na.action,
@@ -77,13 +78,19 @@ estimation and joint inference. A source determines its own block sizes.}
 \item{poisson.limit}{whether to compare the fit with its `theta = Inf`
 limit, the Poisson model (see Details).}
 
+\item{threads}{the number of threads for the compiled computations of this
+fit, including its pilot, Poisson-limit, and covariance passes, or `NULL`
+(default) for the session setting of [fastglm_threads()]. Results are
+identical for every number of threads.}
+
 \item{data, subset, na.action, contrasts}{model-frame arguments used when `x`
 is a formula, as in [stats::glm()].}
 }
 \value{
 A list of class `c("fastglm_nb", "fastglm")` with the usual
-  fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
-  `twologlik` (twice the maximized NB log-likelihood).
+  fastglm components plus `theta`, `SE.theta`, `iter.theta`,
+  `twologlik` (twice the maximized NB log-likelihood), and `threads` (the
+  thread setting of the fit).
   `SE.theta` uses the joint observed information for coefficients and theta.
   The default coefficient covariance retains the GLM expected-information
   convention; `vcov(fit, full=TRUE)` returns the joint observed covariance.

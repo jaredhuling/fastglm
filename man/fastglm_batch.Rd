@@ -21,7 +21,8 @@ fastglm_batch(
   model = c("glm", "negbin", "truncated", "hurdle", "zeroinfl", "twopart"),
   z = NULL,
   dist = c("negbin", "poisson"),
-  link = "logit"
+  link = "logit",
+  threads = NULL
 )
 }
 \arguments{
@@ -63,6 +64,13 @@ defaults to `design`. Its offset is the binary-part offset.}
 models: `"negbin"` or `"poisson"`.}
 
 \item{link}{link of the binary or inflation part of two-component models.}
+
+\item{threads}{the number of threads for the compiled computations of each
+fit when `workers = 1`, or `NULL` (default) for the session setting of
+[fastglm_threads()]. With `workers > 1`, each worker process fits with
+one thread, so that the processes together use no more cores than
+requested; the setting of the calling session is not changed. Results
+are identical for every number of threads.}
 }
 \value{
 A named list of fitted models.

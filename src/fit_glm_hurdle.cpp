@@ -3,6 +3,7 @@
 #include <Rcpp.h>
 #include "../inst/include/glm.h"
 #include "../inst/include/trunc_count.h"
+#include "../inst/include/zi.h"
 #include <RcppEigen.h>
 #include <cmath>
 
@@ -90,13 +91,14 @@ List fit_glm_hurdle(
     for (Eigen::Index i = 0; i < n; ++i) {
         const double mi = (y0[i] + 0.5) / 2.0;
         mu0_nv[i]  = mi;
-        eta0_nv[i] = std::log(mi / (1.0 - mi));   // logit; close enough for any link
+        eta0_nv[i] = fglm::zi::zero_linkfun(zero_fam_code, mi);   // on the zero link scale (the log link needs eta < 0)
     }
     Map<VectorXd> mu0(as<Map<VectorXd> >(mu0_nv));
     Map<VectorXd> eta0(as<Map<VectorXd> >(eta0_nv));
 
-    NumericVector zero_start_nv(p_z, 0.0);
-    Map<VectorXd> zero_start(as<Map<VectorXd> >(zero_start_nv));
+    // Valid for the zero link (see fglm::zi::zero_model_start).
+    VectorXd zero_start_v = fglm::zi::zero_model_start(zero_fam_code, Z, y0_eig, W, OffZ);
+    Map<VectorXd> zero_start(zero_start_v.data(), zero_start_v.size());
 
     fglm::FamilyParams empty_params;
     glm zero_solver(Z, y0, W, OffZ,

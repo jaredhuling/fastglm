@@ -177,3 +177,48 @@ test_that("Hurdle with zero.dist != binomial errors clearly", {
                                 zero.dist = "poisson"),
                  regexp = "binomial")
 })
+
+test_that("log-link hurdle zero parts with a varying offset fit for every design representation", {
+    skip_if_not_installed("Formula")
+    skip_if_not_installed("Matrix")
+    set.seed(4)
+    n <- 4000L; x <- rnorm(n); zc <- rnorm(n); oo <- rnorm(n, 0, 0.3)
+    pp <- exp(-2 + 0.3 * zc + oo)                      # below one for these data
+    cnt <- rpois(n, exp(0.5 + 0.3 * x))
+    while (any(cnt == 0)) cnt[cnt == 0] <- rpois(sum(cnt == 0), exp(0.5 + 0.3 * x[cnt == 0]))
+    yo <- rbinom(n, 1L, pp) * cnt
+    X <- cbind(1, x); Z <- cbind(1, zc); b <- as.numeric(yo > 0)
+    ref <- suppressWarnings(glm(b ~ zc + offset(oo), family = binomial(link = "log"),
+                                start = c(log(mean(b)) - 1, 0),
+                                control = list(epsilon = 1e-15, maxit = 500)))
+    off <- list(count = rep(0, n), zero = oo)
+    src <- fastglm_source(function(k) {
+        i <- ((k - 1L) * 1000L + 1L):(k * 1000L)
+        list(X = X[i, ], Z = Z[i, ], y = yo[i], offset = list(count = rep(0, 1000L), zero = oo[i]))
+    }, 4L)
+    fits <- list(
+        formula = function() fastglm_hurdle(yo ~ x | zc + offset(oo), data = data.frame(yo, x, zc, oo),
+                                            link = "log", tol = 1e-12),
+        matrix = function() fastglm_hurdle(X, response = yo, z = Z, offset = off, link = "log", tol = 1e-12),
+        sparse = function() fastglm_hurdle(Matrix::Matrix(X, sparse = TRUE), response = yo,
+                                           z = Matrix::Matrix(Z, sparse = TRUE), offset = off,
+                                           link = "log", tol = 1e-12),
+        source = function() fastglm_hurdle(src, link = "log", tol = 1e-12))
+    if (requireNamespace("bigmemory", quietly = TRUE))
+        fits$big.matrix <- function() fastglm_hurdle(bigmemory::as.big.matrix(X), response = yo,
+                                                     z = bigmemory::as.big.matrix(Z), offset = off,
+                                                     link = "log", tol = 1e-12)
+    for (nm in names(fits)) {
+        f <- fits[[nm]]()
+        expect_equal(unname(f$coefficients$zero), unname(coef(ref)), tolerance = 1e-6, info = nm)
+    }
+    # The null deviance of a log-link binomial GLM with a varying offset
+    # (previously glm.fit's default start failed there).
+    g <- fastglm(Z, b, family = binomial(link = "log"), offset = oo)
+    expect_equal(g$null.deviance, ref$null.deviance, tolerance = 1e-8)
+    expect_equal(unname(coef(g)), unname(coef(ref)), tolerance = 1e-5)
+    # Two-part binary part with the log link, matrix interface.
+    yp <- b * rgamma(n, 2, 2)
+    tp <- fastglm_twopart(X, response = yp, z = Z, offset = off, link = "log", tol = 1e-12)
+    expect_equal(unname(tp$coefficients$zero), unname(coef(ref)), tolerance = 1e-6)
+})
