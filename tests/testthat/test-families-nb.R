@@ -70,3 +70,22 @@ test_that("NB SE / vcov are unaffected by Pearson-disp override (disp = 1)", {
     expect_equal(unname(ffit$se), unname(sqrt(diag(vcov(gfit, dispersion = 1)))),
                  tolerance = 1e-7)
 })
+
+test_that("NB deviance stays accurate for very large theta (Poisson limit)", {
+    # The NB deviance tends to the Poisson deviance as theta grows, with a
+    # relative gap of order mean(mu) / theta. An earlier expansion of the
+    # deviance into terms of order theta * log(theta) lost this to cancellation
+    # (relative error 1.6e-3 at theta = 1e12 and 0.29 at 1e14).
+    set.seed(20261120)
+    n <- 400
+    X <- cbind(1, rnorm(n))
+    y <- rpois(n, exp(0.5 + 0.3 * X[, 2]))
+    fp <- fastglm(X, y, family = poisson(), method = 2)
+    for (theta in c(1e8, 1e12, 1e14)) {
+        fnb <- fastglm(X, y, family = MASS::negative.binomial(theta = theta), method = 2)
+        expect_equal(fnb$deviance, fp$deviance, tolerance = 1e-6,
+                     info = paste0("theta = ", theta))
+        expect_equal(unname(coef(fnb)), unname(coef(fp)), tolerance = 1e-6,
+                     info = paste0("theta = ", theta))
+    }
+})

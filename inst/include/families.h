@@ -2,6 +2,7 @@
 #define FASTGLM_FAMILIES_H
 
 #include <RcppEigen.h>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -438,17 +439,25 @@ inline double dev_resids_sum_block(int code,
     case FAM_NB_LOG:
     case FAM_NB_SQRT:
     case FAM_NB_IDENTITY: {
-        // Stable NB deviance avoiding cancellation for large mu.
-        // d_i = 2*[y*log(y) - (y+t)*log(y+t) + y*log1p(t/mu) + t*log(mu+t)]
-        // For y=0: y.max(1).log() = log(1) = 0, so the y*log(y) term vanishes.
+        // MASS::negative.binomial's deviance,
+        //   d_i = 2 [y log(max(y, 1)/mu) - (y + t) log((y + t)/(mu + t))],
+        // with the second logarithm as log1p((y - mu)/(mu + t)) when
+        // |y - mu| <= (mu + t)/2. The earlier expansion into separate
+        // y log y, (y + t) log(y + t) and t log(mu + t) terms cancelled
+        // catastrophically for large theta (terms of order t log t): against
+        // the Poisson limit its relative error was 3e-6 at theta = 1e10,
+        // 1.6e-3 at 1e12 and 0.29 at 1e14. The log1p form is accurate there,
+        // and the direct ratio is accurate when mu and y differ by more than
+        // half of mu + t (no cancellation in the ratio).
         const double theta = params.theta;
-        Eigen::ArrayXd yt  = y + theta;
-        Eigen::ArrayXd mt  = mu + theta;
-        Eigen::ArrayXd ysf = y.max(1.0);
-        Eigen::ArrayXd d   = 2.0 * (y * ysf.log() - yt * yt.log()
-                                     + y * (theta / mu).log1p()
-                                     + theta * mt.log());
-        s = (wt * d).sum();
+        for (Eigen::Index i = 0; i < n; ++i) {
+            const double yi = y[i], mi = mu[i];
+            const double a = yi > 0.0 ? yi * std::log(std::max(yi, 1.0) / mi) : 0.0;
+            const double mt = mi + theta, diff = yi - mi;
+            const double lr = std::fabs(diff) <= 0.5 * mt ? std::log1p(diff / mt)
+                                                           : std::log((yi + theta) / mt);
+            s += 2.0 * wt[i] * (a - (yi + theta) * lr);
+        }
         break;
     }
 
