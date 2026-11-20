@@ -129,6 +129,8 @@ fastglm_zi <- function(formula, data, subset, na.action,
                                  em.tol, em.maxit, tol, maxit, theta.tol, theta.maxit)
         out$call <- cl
         out$threads <- threads
+        out$compare.controls <- list(init.theta = init.theta, em.tol = em.tol, em.maxit = em.maxit,
+                                     tol = tol, maxit = maxit, theta.tol = theta.tol, theta.maxit = theta.maxit)
         return(out)
     }
     matrix.fit <- is.matrix(formula)
@@ -317,6 +319,8 @@ fastglm_zi <- function(formula, data, subset, na.action,
     # inference.
     if (x || matrix.fit) out$x <- list(count = X_count, zero = Z_zero)
     class(out) <- "fastglm_zi"
+    out$compare.controls <- list(init.theta = init.theta, em.tol = em.tol, em.maxit = em.maxit,
+                                 tol = tol, maxit = maxit, theta.tol = theta.tol, theta.maxit = theta.maxit)
     out$theta.estimated <- dist=="negbin"
     out$theta.boundary <- .count_theta_boundary(out)
     if(out$theta.boundary) {

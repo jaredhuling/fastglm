@@ -774,6 +774,13 @@ fastglm.default <- function(x, y,
     on.exit(restore.threads(), add = TRUE)
     res <- .finish_glm(res, offset)
     if (res$inference != "full") res$cov.unscaled <- NULL
+    # The response fingerprint used by model comparisons, recorded while the
+    # response is at hand (a big.matrix design, or a fit that drops the data).
+    if (is.big.matrix(x) || !retain.data)
+        res$response.fingerprint <- .fastglm_fingerprint(res$y, res$prior.weights)
+    # The controls of the fit, for refits by model comparisons.
+    res$compare.controls <- list(method = method, tol = tol, maxit = maxit, firth = firth,
+                                 covariance = match.arg(covariance))
     if (!retain.data) { res$x <- NULL; res$y <- NULL }
     res$call <- match.call()
     class(res) <- if (isTRUE(res$firth)) c("fastglm_firth", "fastglm") else "fastglm"

@@ -40,13 +40,24 @@
 #'   garbage collected or the session ends; a named directory is kept. The
 #'   cached blocks are those of the first pass, so later passes see the same
 #'   data even if the underlying source changes.
+#' @param reusable `TRUE` (default) if the blocks can be read again, with the
+#'   same rows and values, after a fit is complete. `FALSE` declares a source
+#'   that serves only the fit it is passed to, for example a stream that
+#'   cannot be rewound or a table that will change; comparisons that refit
+#'   the model on the same data (such as `drop1()` or a sequential `anova()`)
+#'   then stop with an error before any refit. A fit still reads the blocks
+#'   several times, so a source that can be read only once also needs
+#'   `cache`.
 #' @returns A `fastglm_source` object for [fastglm_streaming()],
 #'   [fastglm_ordinal_streaming()], [fastglm_multinom()], or the count and
 #'   two-part fitting functions.
 #' @export
 fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
-                           prototype = NULL, weights = NULL, offset = NULL, cache = FALSE) {
+                           prototype = NULL, weights = NULL, offset = NULL, cache = FALSE,
+                           reusable = TRUE) {
     .check_iterations(1e-8,n_chunks)
+    if(!is.logical(reusable) || length(reusable)!=1L || is.na(reusable))
+        stop("'reusable' must be TRUE or FALSE",call.=FALSE)
     if (!is.function(callback) || (!is.null(reset) && !is.function(reset))) stop("callback and reset must be functions",call.=FALSE)
     if(!is.null(weights) && (!is.character(weights) || length(weights)!=1L || is.na(weights)))
         stop("weights must name one data column",call.=FALSE)
@@ -129,8 +140,15 @@ fastglm_source <- function(callback, n_chunks, reset = NULL, formula = NULL,
             inner(k)
         }
     }
+    # What a source with a changed formula needs (update() of the source);
+    # these are references to objects the block reader already holds.
+    spec <- if(!is.null(schema)) list(callback=callback,reset=reset,prototype=prototype,
+        weights=weights,offset=offset,cache=!isFALSE(cache))
+    # The block reader does not use the prototype; keeping it only in spec
+    # stores it once when the source (or a fit) is saved.
+    rm(prototype)
     structure(list(callback=cached$fetch,n_chunks=as.integer(n_chunks),schema=schema,
-                   cache=cached$directory),class="fastglm_source")
+                   cache=cached$directory,reusable=reusable,spec=spec),class="fastglm_source")
 }
 
 # Wrap a block reader so that each block, as returned, is written to an
@@ -210,5 +228,6 @@ print.fastglm_source <- function(x, ...) {
         .fastglm_print_field("Offset columns",s$offset)
     }
     .fastglm_print_field("Block cache",if(is.null(x$cache)) "none" else x$cache)
+    if(isFALSE(x$reusable)) .fastglm_print_field("Reusable","no (one fit only)")
     invisible(x)
 }

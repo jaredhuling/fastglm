@@ -144,7 +144,7 @@ fastglm_nb <- function(x, y = NULL,
         keep <- match(c("x", "data", "subset", "weights", "na.action", "offset"), names(mc), 0L)
         mf <- mc[c(1L, keep)]
         names(mf)[names(mf) == "x"] <- "formula"
-        if (is.null(mf$data)) mf$data <- quote(environment(x))
+        if (is.null(mf$data)) mf$data <- environment(x)
         mf$drop.unused.levels <- TRUE
         mf[[1L]] <- quote(stats::model.frame)
         mf <- eval(mf, parent.frame())
@@ -170,6 +170,7 @@ fastglm_nb <- function(x, y = NULL,
                                  outer.maxit,outer.tol,theta.tol,theta.maxit,block.size,poisson.limit)
         out$call <- match.call()
         out$threads <- threads
+        out$compare.controls <- list(poisson.limit = poisson.limit)
         return(out)
     }
     if (!is.matrix(x)) stop("'x' must be a numeric matrix.", call. = FALSE)
@@ -372,6 +373,7 @@ fastglm_nb <- function(x, y = NULL,
                                  musq = sum(weights[keep] * mu[keep]^2), link, refit)
     }
     res$threads <- threads
+    res$compare.controls <- list(poisson.limit = poisson.limit)
     if (!res$converged) warning("negative-binomial fit did not converge", call. = FALSE)
     if (identical(res$convergence.reason, "converged_boundary"))
         warning("negative-binomial fit: ", BOUNDARY_WARNING, call. = FALSE)

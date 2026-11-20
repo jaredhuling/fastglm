@@ -12,7 +12,8 @@ fastglm_source(
   prototype = NULL,
   weights = NULL,
   offset = NULL,
-  cache = FALSE
+  cache = FALSE,
+  reusable = TRUE
 )
 }
 \arguments{
@@ -51,6 +52,15 @@ A cache in a temporary directory (`TRUE`) is deleted when the source is
 garbage collected or the session ends; a named directory is kept. The
 cached blocks are those of the first pass, so later passes see the same
 data even if the underlying source changes.}
+
+\item{reusable}{`TRUE` (default) if the blocks can be read again, with the
+same rows and values, after a fit is complete. `FALSE` declares a source
+that serves only the fit it is passed to, for example a stream that
+cannot be rewound or a table that will change; comparisons that refit
+the model on the same data (such as `drop1()` or a sequential `anova()`)
+then stop with an error before any refit. A fit still reads the blocks
+several times, so a source that can be read only once also needs
+`cache`.}
 }
 \value{
 A `fastglm_source` object for [fastglm_streaming()],

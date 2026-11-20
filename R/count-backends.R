@@ -96,6 +96,7 @@
     # The tally has its own frame so the retained reader does not keep a block.
     tally <- function(a,k) {
         positive <- a$weights>0
+        state$fingerprint <- .fastglm_fingerprint_add(state$fingerprint,a$y,a$weights)
         state$nobs <- state$nobs+sum(positive)
         state$positive[k] <- sum(positive & a$y>0)
     }
@@ -446,6 +447,7 @@
     dimnames(joint) <- rep(list(c(names(beta),"theta")),2L)
     fit$vcov.full <- joint;fit$SE.theta <- sqrt(joint[length(beta)+1L,length(beta)+1L])
     fit$outer.decrement <- decrement
+    fit$response.fingerprint <- reader$state$fingerprint
     fit$aic <- -2*final$loglik+2*(length(beta)+1L)
     fit$refit.controls <- list(link=link,method=method,tol=tol,maxit=maxit,outer.maxit=outer.maxit,
         outer.tol=outer.tol,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
@@ -607,7 +609,8 @@
         nobs=reader$state$nobs,n=sum(reader$state$rows),n_positive=reader$state$npositive,rank=pp,
         iter_count=positive$iter,iter_zero=binary$iter,outer_iter=positive$outer.iter,
         theta_iter=positive$theta.iter,refit.controls=controls,
-        df.residual=reader$state$nobs-pp-as.integer(continuous || dist=="negbin")),
+        df.residual=reader$state$nobs-pp-as.integer(continuous || dist=="negbin"),
+        response.fingerprint=reader$state$fingerprint),
         .count_backend_schema(reader))
     if(dist=="negbin") {
         full <- matrix(0,pp+1L,pp+1L,dimnames=rep(list(c(cn,"theta")),2L))
@@ -695,7 +698,7 @@
         iter=fit[["iter"]],outer.iter=fit[["outer.iter"]],outer.decrement=fit[["outer.decrement"]],
         dist=dist,theta.estimated=estimated,theta.boundary=isTRUE(fit[["theta.boundary"]]),
         rank=length(cn),nobs=reader$state$nobs,df.residual=reader$state$nobs-length(rn),
-        dispersion=1,aic=-2*loglik+2*length(rn))
+        dispersion=1,aic=-2*loglik+2*length(rn),response.fingerprint=reader$state$fingerprint)
     if(reader$streaming) {
         out$source <- reader$source; out$state <- reader$state
         out$fetch <- function(k) {a<-reader$fetch(k);list(X=a$X,y=a$y,weights=a$weights,offset=a$offset$count)}
@@ -926,7 +929,8 @@
         em_iter=em.iter,newton.iter=newton.iter,em.decrement=decrement,converged=converged,
         convergence.reason=if(!converged) "not_converged" else if(boundary) "theta_boundary" else "converged",
         n=sum(reader$state$rows),nobs=reader$state$nobs,df.residual=reader$state$nobs-p.all,
-        dist=dist,link=link,theta.estimated=nb,theta.boundary=boundary)
+        dist=dist,link=link,theta.estimated=nb,theta.boundary=boundary,
+        response.fingerprint=reader$state$fingerprint)
     out <- c(out,.count_backend_schema(reader))
     if(reader$streaming) {
         out$source <- reader$source;out$fetch <- reader$fetch;out$state <- reader$state

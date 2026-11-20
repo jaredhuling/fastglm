@@ -185,8 +185,11 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     # follows from the final deviance without another pass (see below).
     closed.loglik <- .stream_closed_loglik(family, firth)
     saturated <- 0; sum.log.w <- 0; sum.w.log.y <- 0
+    # Response fingerprint for comparisons of fits (see .fastglm_fingerprint).
+    fingerprint <- NULL
     for(k in seq_len(n_chunks)) {
         z <- fetch(k); x <- z$X; w <- z$weights
+        fingerprint <- .fastglm_fingerprint_add(fingerprint, z$y, w)
         has.offset <- has.offset || any(z$offset != 0)
         if(any(w > 0)) { off.lo <- min(off.lo, z$offset[w > 0]); off.hi <- max(off.hi, z$offset[w > 0]) }
         sumwo <- sumwo + sum(w * z$offset)
@@ -338,6 +341,8 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
         res$null.deviance <- nf$deviance
     }
     res$passes <- state$passes; res$chunk.reads <- state$reads
+    res$response.fingerprint <- fingerprint
+    res$compare.controls <- list(tol = tol, maxit = maxit, covariance = covariance[1L])
     res$threads <- threads
     if(!res$converged) warning("streaming GLM did not converge",call.=FALSE)
     if(identical(res$convergence.reason,"converged_boundary"))

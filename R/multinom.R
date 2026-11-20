@@ -239,6 +239,7 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     # intercept, the first design column that is constant and nonzero over
     # every row (the rule of the in-memory fits).
     totals <- NULL
+    fingerprint <- NULL
     used <- 0L
     lsat <- 0
     offset.used <- FALSE
@@ -252,6 +253,7 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
             constant <- first != 0
         }
         b <- nrow(z$X)
+        fingerprint <- .fastglm_category_fingerprint_add(fingerprint, z$codes, z$counts, z$weights)
         if (state$grouped) {
             totals <- totals + colSums(z$counts * z$weights)
             used <- used + sum(z$weights > 0 & rowSums(z$counts) > 0)
@@ -309,6 +311,7 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     out$source.offset.used <- offset.used
     out$source.passes <- state$passes
     out$source.reads <- state$reads
+    out$response.fingerprint <- fingerprint
     out$threads <- scope$threads
     .multinom_warnings(out)
 }
@@ -491,6 +494,8 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
                                      xlevels = stats::.getXlevels(terms, mf),
                                      contrasts = attr(design, "contrasts"),
                                      na.action = attr(mf, "na.action")))
+    # The model frame, from which model comparisons rebuild reduced designs.
+    fit$model <- mf
     # Store the formula under the name `formula` so that update() can replace
     # it; the generic maps it back to `x` when the call is evaluated.
     names(call)[names(call) == "x"] <- "formula"

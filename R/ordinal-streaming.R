@@ -105,8 +105,10 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
     read <- .ordinal_stream_reader(source,state)
     frequency <- positive.rows <- saturated <- 0;center <- NULL;offset.mean <- 0;category.totals <- NULL
     selected <- boundary.check <- NULL
+    fingerprint <- NULL
     for(k in seq_len(source$n_chunks)) {
         z <- read(k,summaries=TRUE);total <- sum(z$totals);good <- z$totals>0
+        fingerprint <- .fastglm_category_fingerprint_add(fingerprint,z$codes,z$counts,z$weights)
         if(is.null(center)) {
             center <- numeric(ncol(z$X));category.totals <- numeric(length(state$levels))
             selected <- if(!is.null(source$schema$terms))
@@ -201,6 +203,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
             firth,link,ctl,tol,maxit,block.size,state$columns)
     }
     object$source <- source;object$fetch <- read;object$state <- state;object$call <- call
+    object$response.fingerprint <- fingerprint
     object$deviance <- 2*(saturated-fit$loglik)
     object$terms <- source$schema$terms;object$xlevels <- source$schema$xlevels
     object$contrasts <- source$schema$contrasts

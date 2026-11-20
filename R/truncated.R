@@ -56,6 +56,8 @@ fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "neg
                                               outer.tol, outer.maxit)
         out$call <- cl
         out$threads <- threads
+        out$compare.controls <- list(theta = theta, tol = tol, maxit = maxit,
+                                     outer.tol = outer.tol, outer.maxit = outer.maxit)
         return(out)
     }
     if (is.null(weights)) weights <- rep(1, length(y))
@@ -85,6 +87,8 @@ fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "neg
     res$rank <- ncol(x); res$nobs <- sum(weights > 0); res$df.residual <- res$nobs - length(rn)
     res$dispersion <- 1; res$aic <- -2*res$loglik + 2*length(rn)
     res$terms <- tt; res$model <- frame; res$call <- cl; res$threads <- threads
+    res$compare.controls <- list(theta = theta, tol = tol, maxit = maxit,
+                                 outer.tol = outer.tol, outer.maxit = outer.maxit)
     if (!is.null(tt)) {
         res$xlevels <- .getXlevels(tt, frame); res$contrasts <- attr(x, "contrasts")
         res$na.action <- attr(frame, "na.action")
