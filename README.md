@@ -46,7 +46,10 @@ hurdle, and zero-inflated count fitting uses ML.
 - Large datasets. Dense, sparse, mapped, and repeatable-source inputs
   serve different model classes. Streaming supports GLMs,
   negative-binomial, hurdle, two-part, and multinomial models, and
-  ordinal models with common or threshold-specific slopes.
+  ordinal models with common or threshold-specific slopes. Compiled
+  computations can run on several threads (`fastglm_threads()`) with
+  identical results for every number of threads, and `trace=TRUE` prints
+  the progress of each iteration.
 - Repeated fitting and numerical control. Prepared GLM and ordinal
   designs reuse predictor setup across responses. GLMs offer six
   decompositions and an automatic choice, with diagnostics for

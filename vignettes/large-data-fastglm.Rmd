@@ -72,6 +72,31 @@ A file or database reader may need to return to its starting position before a n
 
 The algorithm reuses weighted-regression summaries calculated while checking a proposed coefficient update. Additional passes can still be needed to obtain starting values, shorten an unsuccessful step, fit the intercept-only comparison model, or calculate final summaries. The recorded `passes` and `chunk.reads` values help assess this cost when reading the data is slower than the regression calculations.
 
+# Threads and progress
+
+Each pass forms sums over blocks of rows, such as $X^\top W X=\sum_b X_b^\top W_b X_b$ and $X^\top W z=\sum_b X_b^\top W_b z_b$. With OpenMP, `fastglm_threads()` sets the number of threads that compute the block terms. The block sizes are set by the dimensions of the problem and by block-size settings such as `block.size` or the blocks of a source, never by the number of threads, and the block terms are added in a fixed order. A fit therefore returns identical results for every number of threads, while a change of block size can change results at the level of rounding error. A fit uses the session setting unless `threads` is given (`control=list(threads=)` for multinomial and ordinal models), and records the number it used. Data that form a single block are processed on one thread, so the comparison below uses 40,000 rows, which form three blocks of the default size.
+
+```{r threads}
+fastglm_threads()$threads
+n_big <- 40000L
+X_big <- cbind(1,matrix(rnorm(n_big*4),n_big))
+y_big <- rpois(n_big,exp(.2+.3*X_big[,2]))
+fit_1 <- fastglm(X_big,y_big,poisson(),method="llt",threads=1)
+fit_2 <- fastglm(X_big,y_big,poisson(),method="llt",threads=2)
+c(fit_1$threads,fit_2$threads)
+identical(coef(fit_1),coef(fit_2))
+```
+
+Dense QR and SVD decompositions, the evaluation of probit links and of families written in R, and the reading of each source block run on one thread, although the cross products of such fits are still threaded; `?fastglm_threads` lists the threaded computations and the default number of threads.
+
+With `trace=TRUE`, a fit prints one line per iteration: the iteration number, the passes over the data so far, the deviance or log likelihood, the number of step halvings, and the elapsed time. Streamed fits trace by default in an interactive session; otherwise, including when a document is knitted, the trace is off unless requested.
+
+```{r trace}
+stream_traced <- fastglm_streaming(source,family=poisson(),trace=TRUE)
+```
+
+A fit can be interrupted between groups of row blocks, and the thread setting is restored afterward.
+
 # QR updates for nearly collinear predictors
 
 Streaming fits use the `"llt"` Cholesky method by default. At each coefficient update, this method combines weighted products of predictor columns into a small matrix. These products are inexpensive to accumulate across blocks, but they can lose precision when predictors are nearly linear combinations of one another. For example, two measurements may differ only slightly while still carrying distinct information. Rescaling their units can help with differences in magnitude, but it cannot remove their near redundancy.

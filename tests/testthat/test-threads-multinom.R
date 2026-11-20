@@ -206,7 +206,8 @@ test_that("bootstrap refits of a multinomial fit ignore the original fit's threa
     b <- fastglm_bootstrap(fit, R = 2L, statistic = stat, seed = 1L,
                            control = list(threads = 1L))
     expect_identical(b$successful, 2L)
-    # The first value is the statistic of the original fit (2 threads).
-    expect_identical(seen, c(2L, 1L, 1L))
+    # The first value is the statistic of the original fit (2 threads, or 1
+    # on a build without OpenMP).
+    expect_identical(seen, c(if (fastglm_threads()$openmp) 2L else 1L, 1L, 1L))
     expect_identical(fastglm_threads()$threads, old)
 })

@@ -24,3 +24,10 @@ expect_thread_invariant <- function(fit, fields, threads = threads_to_test(), ro
     }
     invisible(ref)
 }
+
+# On a build without OpenMP, the first request for more than one thread warns
+# once per session. Trigger that warning here, silently, so that it does not
+# surface in whichever test happens to request threads first; the warning
+# itself is tested in test-threads.R.
+if (!fastglm::fastglm_threads()$openmp)
+    invisible(suppressWarnings(fastglm:::.fastglm_resolve_threads(2L)))

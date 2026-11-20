@@ -71,6 +71,7 @@ test_that("an R-side family is identical with 1 and 4 threads", {
 })
 
 test_that("p = 600 (lanes) and p = 1100 (column tiles, 2 groups) are identical for every thread count", {
+    skip_on_cran()  # about 5 seconds even with 2 thread counts
     set.seed(6)
     n <- 3000L
     for (cs in list(list(p = 600L, rows = 300L), list(p = 1100L, rows = 256L))) {
@@ -135,6 +136,7 @@ test_that("sparse Poisson, LDLT, weighted, and bias-reduced fits are identical f
 })
 
 test_that("wide sparse fits (row sweep and column scheme) match dense fits and are thread invariant", {
+    skip_on_cran()  # about 5 seconds even with 2 thread counts
     skip_if_not_installed("Matrix")
     make <- function(n, p, density, seed) {
         set.seed(seed)
@@ -304,7 +306,9 @@ test_that("a non-finite design value gives the same error for every thread count
 
 test_that("fits record the thread count used and diagnostics print it", {
     d <- thread_glm_data(n = 2000L)
-    cap <- function(n) fastglm:::.fastglm_check_cap(min(n, fastglm_threads()$logical.cores))
+    # A build without OpenMP always uses 1 thread.
+    cap <- function(n) if (!fastglm_threads()$openmp) 1L else
+        fastglm:::.fastglm_check_cap(min(n, fastglm_threads()$logical.cores))
     for (req in c(1L, 2L, 4L)) {
         fit <- fastglm(d$x, d$yb, family = binomial(), method = 2L, threads = req)
         expect_identical(fit$threads, cap(req))

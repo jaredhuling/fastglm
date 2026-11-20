@@ -21,3 +21,20 @@ test_that("the default follows the core count and the environment limits", {
     expect_identical(d(physical = 14L, logical = 14L, env = list(`_R_CHECK_LIMIT_CORES_` = "TRUE")), 2L)
     expect_identical(d(physical = 14L, logical = 14L, env = list(`_R_CHECK_LIMIT_CORES_` = "false")), 7L)
 })
+
+test_that("a build without OpenMP warns once and uses 1 thread", {
+    skip_if(fastglm_threads()$openmp, "built with OpenMP")
+    state <- fastglm:::.fastglm_state
+    old_flag <- state$warned_serial
+    old <- fastglm_threads()$threads
+    on.exit({
+        state$warned_serial <- old_flag
+        fastglm_threads(old)
+    }, add = TRUE)
+    state$warned_serial <- NULL
+    expect_warning(res <- fastglm_threads(4L), "without OpenMP")
+    expect_identical(res$threads, 1L)
+    expect_no_warning(res <- fastglm_threads(4L))
+    expect_identical(res$threads, 1L)
+    expect_identical(fastglm_threads()$threads, 1L)
+})

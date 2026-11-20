@@ -259,6 +259,21 @@ test_that("a near-collinear but estimable design is not aliased", {
     expect_max_diff(fit$loglik, ref$loglik, 1e-10)
     expect_max_diff(fit$coefficients, as.vector(ref$coefficients), 1e-8)
 
+    d2 <- vglm_sim_data(3000L, 3L, 2L, seed = 16L)
+    x2 <- cbind(d2$x, x4 = d2$x[, "x1"] + rnorm(nrow(d2$x), sd = 1e-4))
+    f2 <- engine_fit(x2, d2$y, tol = 1e-12)
+    gl <- fastglm::fastglm(x2, as.numeric(d2$y == "B"), family = binomial(),
+                           tol = 1e-12)
+    expect_false(any(f2$aliased))
+    expect_max_diff(f2$coefficients, unname(coef(gl)), 1e-8)
+})
+
+test_that("a design whose information is past the LLT cutoff is not aliased", {
+    # The reference fit takes about 10 seconds here, so this runs off CRAN.
+    skip_on_cran()
+    d <- vglm_sim_data(3000L, 3L, 4L, seed = 14L)
+    set.seed(15L)
+    invisible(rnorm(nrow(d$x)))     # the sd = 1e-4 noise of the test above
     # Noise of sd 3e-7: the information has condition number near 1e14, past
     # the LLT cutoff, yet the design (condition near 1e7) has full rank. The
     # individual coefficients are determined only to about cond * eps, so
@@ -271,14 +286,6 @@ test_that("a near-collinear but estimable design is not aliased", {
     expect_max_diff(fs$loglik, rs$loglik, 1e-10)
     expect_max_diff(xs %*% t(matrix(fs$coefficients, 3L)),
                     xs %*% t(rs$coefficients), 1e-6)
-
-    d2 <- vglm_sim_data(3000L, 3L, 2L, seed = 16L)
-    x2 <- cbind(d2$x, x4 = d2$x[, "x1"] + rnorm(nrow(d2$x), sd = 1e-4))
-    f2 <- engine_fit(x2, d2$y, tol = 1e-12)
-    gl <- fastglm::fastglm(x2, as.numeric(d2$y == "B"), family = binomial(),
-                           tol = 1e-12)
-    expect_false(any(f2$aliased))
-    expect_max_diff(f2$coefficients, unname(coef(gl)), 1e-8)
 })
 
 test_that("columns with no data on the rows used are aliased", {

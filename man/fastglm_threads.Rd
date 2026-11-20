@@ -23,6 +23,30 @@ compiled computations in this session. Results do not depend on the
 number of threads.
 }
 \details{
+Results are identical, not merely close, for every number of threads. The
+rows are divided into blocks whose size is set by the dimensions of the
+problem and by block-size settings (a \code{block.size} argument, the
+blocks of a source, or the \code{FASTGLM_CHUNK_ROWS} environment
+variable), never by the number of threads, and the block sums are added
+in a fixed order: into 8 fixed partial sums when the accumulated matrix
+has at most 1024 rows, and in column tiles of width 64 above that.
+Changing a block-size setting can therefore change results at the level of
+rounding error.
+
+Threaded computations include the weighted cross products, linear
+predictors, and native family evaluations of dense, sparse,
+\code{big.matrix}, and streamed GLM fits with the Cholesky methods; the
+count, zero-inflated, hurdle, and two-part models; and the multinomial
+and ordinal engines. The following run on one thread: the dense QR and SVD
+methods (\code{method} 0, 1, 4, and 5), the evaluation of calculations
+that use R's distribution functions (such as probit links), the functions
+of families written in R, sparse Cholesky factorizations, and the reading
+of source blocks; the cross products of probit fits and of fits with
+families written in R are still threaded. Small
+fits with a single row block also run on one thread. Worker processes of
+\code{\link{fastglm_bootstrap}} and \code{\link{fastglm_batch}} use one
+thread each.
+
 The default is half the physical cores (half the logical cores when the
 physical count is unavailable), at most 8 and at least 1. It is reduced to
 the values of the environment variables \code{OMP_THREAD_LIMIT} and

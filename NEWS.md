@@ -1,5 +1,152 @@
 # fastglm 0.1.5
 
+## Threads
+
+* The compiled computations of every model class can run on several
+  threads through OpenMP. `fastglm_threads()` reports or sets the number of
+  threads for the session (also settable as `options(fastglm.threads = )`).
+  `fastglm()`, `fastglmPure()`, `fastglm_control()`, `fastglm_streaming()`,
+  `fastglm_nb()`, `fastglm_truncated()`, `fastglm_hurdle()`, `fastglm_zi()`,
+  `fastglm_twopart()`, and `fastglm_batch()` take `threads`;
+  `fastglm_multinom()`, `fastglm_ordinal()`, and
+  `fastglm_ordinal_streaming()` take `control = list(threads = )`. Each fit
+  records the number it used in `threads`, and the request covers every pass
+  of the call, including pilot, component, covariance, and null-deviance
+  fits.
+* The default is half the physical cores (half the logical cores when the
+  physical count is unavailable), at most 8 and at least 1. It is reduced to
+  `OMP_THREAD_LIMIT` and `OMP_NUM_THREADS` when they are set, and to at most 2
+  when `_R_CHECK_LIMIT_CORES_` is set to anything but `"false"`, as during
+  `R CMD check`; that cap also applies to explicit requests. A request is never
+  above the number of logical cores.
+* Results are identical for every number of threads: coefficients, deviance
+  or log likelihood, iterations, passes, and covariance. Rows are divided into
+  blocks whose size is set by the dimensions of the problem and by block-size
+  settings (the `block.size` argument, the blocks of a source, and the
+  `FASTGLM_CHUNK_ROWS` environment variable), never by the number of threads,
+  and the block sums are added in a fixed order. Changing a block-size setting
+  can therefore change results at the level of rounding error. When
+  the accumulated matrix has at most 1024 rows (8 copies of it take at most
+  64 MiB), blocks are added into 8 fixed partial sums; above that, the matrix
+  is formed in tiles of 64 columns.
+* Because sums now run over row blocks in this fixed order, estimates differ
+  from 0.1.4 at the level of rounding error. The largest differences measured
+  were 2.6e-15 in GLM coefficients (dense, `big.matrix`, and streamed fits,
+  with deviances within 1.6e-14 relative), 1.9e-14 in sparse GLM coefficients,
+  2.2e-16 in ordinal coefficients, and 1e-9 in a hurdle negative binomial
+  coefficient at n = 1e6. Iteration counts were unchanged in these
+  comparisons. A line search near a step bound can occasionally take one or
+  two evaluations more or fewer, and so one or two passes; on one ordinal
+  logit fit at n = 1e6 the number of evaluations went from 8 to 9.
+* Speed with 4 threads compared with 1, at n = 1e6 (logistic GLMs with
+  Cholesky methods), measured on a shared machine: dense p = 20 2.1 times
+  faster and p = 200 3.6 times; `big.matrix` 1.8 and 2.9 times; streamed
+  p = 200 2.1 times; sparse (p = 200, 5 percent nonzero) 1.8 times; negative
+  binomial 1.8 times, zero-inflated Poisson 2.5 times, hurdle negative
+  binomial 2.9 times, zero-truncated Poisson 1.5 times; multinomial (K = 5)
+  3.4 to 3.6 times and (K = 50, n = 2.5e5) 3.7 to 3.9 times in the compiled
+  fit; ordinal logit 3.7 times and probit 2.0 times in the compiled fit.
+* Streamed GLM fits with few columns gain less, about 1.3 times at p = 20
+  with 4 threads; they stay threaded because results do not change and they
+  were not slower than one thread in our measurements. Two-part fits gain about 1.4 times,
+  through their GLM components.
+* With one thread, GLM fits with at most 1024 columns ran within about 5
+  percent of the speed of 0.1.4 in our measurements, count fits at most 4.7
+  percent slower, and multinomial fits at most 3.0 percent slower. An ordinal
+  logit fit at n = 1e6 took 15 percent longer on one thread because it made
+  one extra line-search evaluation, a rounding-level outcome to which 0.1.4
+  is equally subject; over 12 seeds at n = 2e5 the one-thread total was 2.5
+  percent longer. Ordinal probit fits were 4.2 percent slower.
+* For GLMs whose accumulated matrix has more than 1024 rows (more than 1024
+  columns), the column-tile scheme made fits 9 to 13 percent slower than
+  0.1.4 on one thread, and 2.9 to 3.3 times faster than one thread of the
+  same build on 4 threads. One-thread timings above 1024 coefficients were
+  measured for GLMs only.
+* Sparse (`dgCMatrix`) GLM fits form X'WX from a row-compressed copy of the
+  design built once per fit, instead of transposing the design at every
+  iteration. A logistic fit with n = 1e6, p = 200, and 5 percent nonzeros
+  is about 7 times faster on one thread (0.66 seconds instead of 4.8), and
+  peak memory fell from 1.56 to 1.30 GB; designs with thousands of columns
+  gain little (p = 2000: 2 percent faster). The row-compressed copy (12 bytes
+  per nonzero and 8 per row) is held for the whole fit, and with at most 1024
+  columns the reduction holds up to about 72 MiB of extra working memory.
+* Left on one thread:
+  * dense QR and SVD methods (`method` 0, 1, 4, and 5), whose
+    decompositions are serial; such fits record `threads = 1`, and so does a
+    Cholesky fit that falls back to QR;
+  * the evaluation of probit links and other calculations that use R's
+    distribution functions (GLMs, zero-inflated models, the negative binomial
+    joint covariance, `big.matrix` count blocks, and ordinal fits, where this
+    caps probit near 2 times); the cross products of such fits are still
+    threaded;
+  * families written in R, whose functions are evaluated on one thread (the
+    cross products are still threaded);
+  * the row loops of sparse, `big.matrix`, and source count fits, which are
+    written in R and gain only through their inner GLM fits;
+  * sparse Cholesky factorizations and covariance inverses, so sparse designs
+    with thousands of columns gain little;
+  * the information of sparse multinomial fits with (K - 1) p above 1024 and
+    of nonparallel ordinal models with more than 1024 coefficients;
+  * ordinal robust covariances, score tests, and profile scans;
+  * reading a source block, which happens on one thread before its rows are
+    processed in parallel.
+* With the default `block.size`, large multinomial and ordinal problems use
+  row blocks smaller than `block.size`, so their estimates may change in the
+  last bits.
+* Worker processes of `fastglm_bootstrap()` and `fastglm_batch(workers > 1)`
+  use one thread each, so the number of processes times threads never exceeds
+  the request. A `threads` entry in the bootstrap `control` (or, for ordinal
+  fits, in `control$control`) sets the refits' threads when `workers = 1`; with
+  `workers > 1` a value other than 1 is ignored with a warning. Refits never
+  inherit the original fit's thread count.
+* An allocation failure inside a parallel computation stops the fit with
+  "not enough memory: an allocation failed inside a parallel computation",
+  the same message for every number of threads.
+* On macOS the `configure` script probes for the OpenMP runtime that ships
+  with R and builds without threads when it is not found. On Linux it uses
+  R's OpenMP flags without a probe, so a compiler without OpenMP support fails
+  at link time. Setting `FASTGLM_DISABLE_OPENMP=1` at installation forces a
+  build without threads (not on Windows). In such a build
+  `fastglm_threads()` reports 1 and a request for more warns once per
+  session.
+
+## Progress and interrupts
+
+* `trace = TRUE` (or `control = list(trace = TRUE)` for `fastglm_multinom()`
+  and ordinal fits, or `options(fastglm.trace = TRUE)`) prints one line per
+  iteration: the iteration, the passes over the data so far, the deviance or
+  log likelihood, the step halvings, and the elapsed seconds. It is on by
+  default only for streamed fits in an interactive session that is not
+  knitting a document, and off otherwise. `trace` was added to `fastglm()`,
+  `fastglmPure()`, `fastglm_control()` (so
+  `glm(method = fastglm_fit, control = list(trace = TRUE))` works),
+  `fastglm_streaming()`, `fastglm_nb()`, `fastglm_truncated()`,
+  `fastglm_hurdle()`, `fastglm_zi()`, and `fastglm_twopart()`. Tracing does
+  not change any result.
+* What `passes` counts depends on the model: reads of the source for streamed
+  fits, evaluations of the deviance or log likelihood for fits in memory, and
+  inner iterations plus `theta` updates for the outer loops of negative
+  binomial and truncated negative binomial fits.
+* Tracing a negative binomial fit computes the log likelihood at each outer
+  iteration, so a traced source-backed fit reads the source once more per
+  outer iteration and reports more `passes` than an untraced one.
+* The `trace` controls of `fastglm_ordinal()` and
+  `fastglm_ordinal_streaming()`, and the trace of multinomial fits, now print
+  the common one-line format; the former score, step-bound, boundary-step, and
+  solver text is gone. The ordinal `control$trace` default is now `NULL` (the
+  option), and fits store `control$trace = FALSE`, so refits from
+  `object$control` are silent.
+* Bootstrap and batch refits are not traced (except that
+  `fastglm_ordinal_batch()` honors an explicit `control$trace = TRUE`), and
+  inference functions that
+  refit internally (profile, score, and likelihood-ratio tests, profile
+  intervals, `anova()`, `drop1()`, `add1()`, and `profile()`) do not trace
+  their refits.
+* Fits check for a user interrupt every 8 row blocks within a pass, instead of
+  once per pass, and at each outer iteration of negative binomial,
+  zero-inflated, and truncated negative binomial fits. The thread setting and
+  the trace option are restored after an interrupt.
+
 ## Convergence
 
 * A fit is now reported as converged only when one more step would barely
@@ -140,6 +287,38 @@
 
 ## Other changes
 
+* `fastglm_zi()` and `fastglm_hurdle()` with `link = "log"` now start the
+  zero model from valid values; in 0.1.4 they stopped with "cannot find valid
+  starting values". This applies to the formula, matrix, sparse,
+  `big.matrix`, and source interfaces. The start needs an intercept in the
+  zero-model design; without one the fit still stops with that message.
+  `fastglm_twopart()` with `link = "log"` also passes a valid start to its
+  binary part.
+* With the log zero link and a maximum on the boundary (a zero probability of
+  one), step halving keeps the fitted probabilities below one, and the fit
+  reports non-convergence and an unavailable covariance instead of stopping.
+* The starting linear predictor of the zero model in `fastglm_zi()` and
+  `fastglm_hurdle()` is now computed on the scale of the chosen link (it was
+  on the logit scale for every link). Logit fits are unchanged; probit and
+  cloglog estimates can differ from 0.1.4 within the convergence tolerance,
+  up to about 1e-5 at the default `tol`.
+* `fastglm()` with a varying offset no longer fails when computing the null
+  deviance if the default start of `glm.fit()` is invalid for the link (for
+  example `binomial("log")`, which stopped with "no valid set of coefficients
+  has been found"). The intercept-only model is then refitted from a valid
+  start; fits that worked before are unchanged.
+* Sparse zero-truncated fits whose design has an unnamed column (for example
+  from `cbind(1, x)`) no longer stop with "subscript out of bounds".
+* `drop1()`, `add1()`, and `profile()` now work on fits from
+  `glm(method = fastglm_fit)`; they failed with an unused-argument error from
+  `glm.control()`. They refit by maximum likelihood with `glm.fit()`, so they
+  stop with an error for bias-reduced (`firth = TRUE`) fits. `drop1()`,
+  `add1()`, and `anova()` match `stats::glm()` to about 1e-8. `profile()`
+  matches to about 1e-8 with `covariance = "previous"` and to about 1e-5 with
+  the default `covariance = "estimate"`, because its grid of steps is set by
+  the standard errors, which differ at the 1e-6 level.
+* Multinomial fits compute fitted probabilities faster (row maxima without
+  `apply()`).
 * Printing a `fastglm_bootstrap()` result for a GLM, count, or multinomial
   fit no longer reports "Inference: Unavailable" when every refit
   succeeded.
