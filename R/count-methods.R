@@ -257,7 +257,7 @@ residuals.fastglm_hurdle <- function(object, type = c("response", "pearson"), si
         for(k in seq_len(object$source$n_chunks)) {
             z<-.count_normalize_block(object$fetch(k),TRUE)
             d<-list(x=list(count=z$X,zero=z$Z),offset=z$offset)
-            r<-.count_residual_result(object,z$y,d,type)
+            r<-.count_residual_result(object,z$y,d,type,z$weights)
             if(is.null(sink)) out[[k]]<-r else sink(r,k)
         }
         if(is.null(sink)) return(unlist(out,use.names=FALSE))
@@ -265,11 +265,11 @@ residuals.fastglm_hurdle <- function(object, type = c("response", "pearson"), si
     }
     if(!is.null(sink)) stop("a residual sink requires a streaming fit",call.=FALSE)
     if (is.null(object$y)) stop("response was not retained", call. = FALSE)
-    r<-.count_residual_result(object,object$y,.count_design(object),type)
+    r<-.count_residual_result(object,object$y,.count_design(object),type,object$weights)
     if (!is.null(object$na.action)) r <- naresid(object$na.action, r)
     r
 }
-.count_residual_result <- function(object,y,d,type) {
+.count_residual_result <- function(object,y,d,type,w=NULL) {
     pars <- coef(object)
     if (object$dist == "negbin") pars <- c(pars, theta = object$theta)
     m <- .count_predict(object, d, pars, "response", NULL)
@@ -286,6 +286,8 @@ residuals.fastglm_hurdle <- function(object, type = c("response", "pearson"), si
             variance <- pi*mm$variance + pi*(1-pi)*mm$mean^2
         }
         r <- r / sqrt(variance)
+        # As glm and pscl do, Pearson residuals carry the square root of the prior weight.
+        if (!is.null(w)) r <- r * sqrt(w)
     }
     r
 }

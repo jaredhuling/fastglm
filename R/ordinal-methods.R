@@ -244,6 +244,10 @@ glance.fastglm_ordinal <- function(x,...) {
 #'   probabilities, an ordered-factor column \code{.class}, and, for training
 #'   rows, probability-scale residuals in \code{.resid}. The optional matrix
 #'   column \code{.se.fit} contains model-based probability standard errors.
+#'   The same probabilities are also supplied one column per category as
+#'   \code{.prob_<level>}, the shape used by the multinomial method
+#'   (\code{\link{fastglm-augment}}); the matrix column \code{.fitted} keeps
+#'   its existing shape.
 #'   When original data are not supplied, retained model-frame or design values
 #'   are used; covariates in omitted rows are unavailable and restored as missing.
 #' @exportS3Method broom::augment fastglm_ordinal
@@ -264,7 +268,8 @@ augment.fastglm_ordinal <- function(x,data=NULL,newdata=NULL,se_fit=FALSE,...) {
             frame <- frame[rows,,drop=FALSE]
         }
     } else frame <- as.data.frame(input)
-    reserved <- c(".fitted",".class",".resid",".se.fit")
+    probcols <- paste0(".prob_",x$levels)
+    reserved <- c(".fitted",".class",".resid",".se.fit",probcols)
     if(any(reserved %in% names(frame)))
         stop("augmentation data already contain reserved prediction columns",call.=FALSE)
     prediction <- predict(x,newdata=newdata,se.fit=se_fit)
@@ -277,5 +282,8 @@ augment.fastglm_ordinal <- function(x,data=NULL,newdata=NULL,se_fit=FALSE,...) {
     frame$.class <- ordered(x$levels[code],levels=x$levels)
     if(is.null(newdata)) frame$.resid <- residuals(x)
     if(se_fit) frame$.se.fit <- I(prediction$se.fit)
+    # The same probabilities, one column per category as in the multinomial
+    # method (see fastglm-augment); the matrix column .fitted is unchanged.
+    for(j in seq_along(x$levels)) frame[[probcols[j]]] <- unname(probability[,j])
     frame
 }

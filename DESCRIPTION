@@ -52,12 +52,20 @@ Suggests:
     tweedie,
     ggplot2,
     broom,
+    tibble,
     DBI,
     RSQLite,
     numDeriv,
     nnet,
     VGAM,
-    arrow
+    arrow,
+    emmeans,
+    estimability,
+    parsnip,
+    poissonreg,
+    ordered,
+    workflows,
+    recipes
 Config/testthat/edition: 3
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr

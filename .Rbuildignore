@@ -27,3 +27,4 @@ docs
 ^tests/testthat/_problems$
 ^vignettes/multinom-data$
 ^src/Makevars$
+^README\.html$

@@ -65,6 +65,10 @@ Thresholds have no reported zero-null statistic or p-value.
   probabilities, an ordered-factor column \code{.class}, and, for training
   rows, probability-scale residuals in \code{.resid}. The optional matrix
   column \code{.se.fit} contains model-based probability standard errors.
+  The same probabilities are also supplied one column per category as
+  \code{.prob_<level>}, the shape used by the multinomial method
+  (\code{\link{fastglm-augment}}); the matrix column \code{.fitted} keeps
+  its existing shape.
   When original data are not supplied, retained model-frame or design values
   are used; covariates in omitted rows are unavailable and restored as missing.
 }

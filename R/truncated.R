@@ -163,7 +163,10 @@ summary.fastglm_truncated <- function(object,...) {
 #' @export
 residuals.fastglm_truncated <- function(object,type=c("response","pearson"),...) {
     type <- match.arg(type); r <- object$y-object$fitted.values
-    if(type=="pearson") r <- r/sqrt(.count_moments(object$lambda,object$dist,object$theta)$variance)
+    if(type=="pearson") {
+        r <- r/sqrt(.count_moments(object$lambda,object$dist,object$theta)$variance)
+        if(!is.null(object$prior.weights)) r <- r*sqrt(object$prior.weights)
+    }
     if(!is.null(object$na.action)) r <- naresid(object$na.action,r)
     r
 }

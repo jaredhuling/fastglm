@@ -15,4 +15,9 @@
         registerS3method("bread",  "fastglm",    bread.fastglm,     envir = sw)
         registerS3method("bread",  "fastglmFit", bread.fastglmFit,  envir = sw)
     }
+
+    ## parsnip engines, registered now or when the defining package loads.
+    .fastglm_on_package_load("parsnip", .fastglm_register_parsnip)
+    .fastglm_on_package_load("poissonreg", .fastglm_register_poissonreg)
+    .fastglm_on_package_load("ordered", .fastglm_register_ordered)
 }
