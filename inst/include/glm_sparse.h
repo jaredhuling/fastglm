@@ -9,6 +9,7 @@
 
 #include <Eigen/SparseCore>
 #include <Eigen/SparseCholesky>
+#include "sparse_products.h"
 
 class glm_sparse : public GlmBase<Eigen::VectorXd, Eigen::MatrixXd>
 {
@@ -74,6 +75,17 @@ protected:
     SpMat  XtWX;
     Eigen::VectorXd Xtwz;
 
+    // Threaded products with X (row-compressed copy and pattern of X'X),
+    // built at the first use.
+    fglm::SparseDesignProducts products;
+    fglm::SparseDesignProducts& design_products()
+    {
+        if (!products.ready()) products.init(X);
+        return products;
+    }
+    // XtWX = X' diag(w2) X.
+    void form_XtWX(const Eigen::VectorXd& w2) { design_products().cross_product(X, w2, XtWX); }
+
     // ------------------------------------------------------------------
     // family helpers (mirror glm::update_*)
     // ------------------------------------------------------------------
@@ -119,8 +131,7 @@ protected:
     void update_eta() override
     {
         binomial_current=false;
-        eta.noalias() = X * beta;
-        eta += offset;
+        design_products().times(beta, offset, eta);
     }
 
     void update_z() override
@@ -505,7 +516,7 @@ protected:
         bool reuse_factor = constant_weights && factor_ready;
         Eigen::VectorXd w2 = w.array().square();
         if (!reuse_factor)
-            XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
+            form_XtWX(w2);
 
         if ((fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) ||
             fglm::bounded_firth_predictors(fam_code)) {
@@ -538,7 +549,8 @@ protected:
                 if (weights[i] > 0 && w2[i] != 0 && mu_eta[i] != 0)
                     zstar[i] += phi * h_lev[i] * (d2mu[i] / mu_eta[i]) / (2 * w2[i]);
         }
-        Xtwz.noalias() = X.adjoint() * (stable_binomial ? numerator : Eigen::VectorXd((w2.array()*zstar.array()).matrix()));
+        design_products().adjoint_times(X, stable_binomial ? numerator :
+            Eigen::VectorXd((w2.array()*zstar.array()).matrix()), Xtwz);
         beta = reuse_factor ? solve_factored(Xtwz) : factorize_and_solve(XtWX, Xtwz);
         rank = nvars;
         if (!reuse_factor) {
@@ -557,10 +569,10 @@ protected:
         beta_prev = beta;
 
         Eigen::VectorXd w2 = w.array().square();
-        // X' W^2 X.  selfadjoint product would be ideal but Eigen's sparse
-        // path here is already efficient.
-        XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
-        Xtwz.noalias() = X.adjoint() * (w2.array() * z.array()).matrix();
+        // X' W^2 X and X' W^2 z (SparseDesignProducts: X'WX by a row sweep
+        // reduced in lanes for p <= 1024, by columns above; X'Wz by columns).
+        form_XtWX(w2);
+        design_products().adjoint_times(X, (w2.array() * z.array()).matrix(), Xtwz);
 
         beta = factorize_and_solve(XtWX, Xtwz);
         rank = nvars;  // assume full rank for sparse Cholesky (factorize will fail otherwise)
@@ -575,7 +587,7 @@ protected:
         update_w();
         if (!(firth_ && constant_weights && factor_ready)) {
             Eigen::VectorXd w2 = w.array().square();
-            XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
+            form_XtWX(w2);
             factorize_information(XtWX);
             factor_ready = true;
         }

@@ -6,6 +6,7 @@
 #include <string>
 #include "parallel_reduce.h"
 #include "chunk_source.h"
+#include "sparse_products.h"
 #include <stdexcept>
 #include <new>
 #include <vector>
@@ -227,4 +228,30 @@ Eigen::MatrixXd fastglm_block_reduce_test(const Eigen::MatrixXd& X, const Eigen:
     }
     out.triangularView<Eigen::StrictlyUpper>() = out.adjoint();
     return out;
+}
+
+// The products of fglm::SparseDesignProducts with the given thread setting:
+// xtvx = X' diag(v) X (with the full pattern of X'X), eta = X b + off, and
+// xtv = X' v. With by_columns = TRUE the cross product uses the column
+// scheme for every p, for both the pattern and the values (it is otherwise
+// used only for p > 1024).
+// [[Rcpp::export]]
+Rcpp::List fastglm_sparse_products_test(SEXP x, const Eigen::VectorXd& v, const Eigen::VectorXd& b,
+                                        const Eigen::VectorXd& off, bool by_columns, int threads)
+{
+    typedef Eigen::SparseMatrix<double> SpMat;
+    const Eigen::Map<SpMat> X(Rcpp::as<Eigen::Map<SpMat> >(x));
+    SpMat xtvx;
+    Eigen::VectorXd eta, xtv;
+    {
+        ThreadSettingGuard guard(threads);
+        fglm::SparseDesignProducts prod;
+        if (by_columns) prod.set_row_sweep_max(0);
+        prod.init(X);
+        prod.cross_product(X, v, xtvx);
+        prod.times(b, off, eta);
+        prod.adjoint_times(X, v, xtv);
+    }
+    return Rcpp::List::create(Rcpp::Named("xtvx") = Rcpp::wrap(xtvx),
+                              Rcpp::Named("eta") = eta, Rcpp::Named("xtv") = xtv);
 }

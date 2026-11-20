@@ -115,6 +115,89 @@ test_that("sparse fits are identical for every thread count", {
         fastglm(xs, d$yb, family = binomial(), method = 2L, threads = t), glm_fields)
 })
 
+test_that("sparse Poisson, LDLT, weighted, and bias-reduced fits are identical for every thread count", {
+    skip_if_not_installed("Matrix")
+    d <- thread_glm_data()
+    xs <- Matrix::Matrix(d$x * (abs(d$x) > 0.5 | col(d$x) == 1L), sparse = TRUE)
+    expect_thread_invariant(function(t)
+        fastglm(xs, d$yp, family = poisson(), method = 2L, threads = t), glm_fields)
+    expect_thread_invariant(function(t)
+        fastglm(xs, d$yb, family = binomial(), method = 3L, threads = t), glm_fields)
+    set.seed(13)
+    wt <- runif(nrow(xs), 0.5, 2)
+    off <- rnorm(nrow(xs), sd = 0.2)
+    expect_thread_invariant(function(t)
+        fastglm(xs, d$yp, family = poisson(), weights = wt, offset = off,
+                method = 2L, threads = t), glm_fields)
+    expect_thread_invariant(function(t)
+        fastglm(xs, d$yp, family = poisson(), method = 2L, firth = TRUE, threads = t),
+        c("coefficients", "deviance", "iter", "cov.unscaled"))
+})
+
+test_that("wide sparse fits (row sweep and column scheme) match dense fits and are thread invariant", {
+    skip_if_not_installed("Matrix")
+    make <- function(n, p, density, seed) {
+        set.seed(seed)
+        x <- as(cbind(1, Matrix::rsparsematrix(n, p - 1L, density = density)), "CsparseMatrix")
+        eta <- as.numeric(x %*% c(0.3, rnorm(p - 1L, sd = 0.05)))
+        list(x = x, y = rpois(n, exp(eta)))
+    }
+    # p = 600 uses the row sweep (with prior weights and an offset); p = 1100
+    # the column scheme. Blocks of 250 rows give several blocks in each.
+    d6 <- make(5000L, 600L, 0.03, 15L)
+    set.seed(16)
+    wt <- runif(5000L, 0.5, 2)
+    off <- rnorm(5000L, sd = 0.1)
+    d11 <- make(3000L, 1100L, 0.02, 17L)
+    cases <- list(
+        p600 = list(d = d6, fit = function(x, t) fastglm(x, d6$y, family = poisson(), weights = wt,
+                                                         offset = off, method = 2L, threads = t)),
+        p1100 = list(d = d11, fit = function(x, t) fastglm(x, d11$y, family = poisson(),
+                                                           method = 2L, threads = t)))
+    for (nm in names(cases)) {
+        cs <- cases[[nm]]
+        sp <- expect_thread_invariant(function(t) cs$fit(cs$d$x, t),
+                                      c("coefficients", "deviance", "iter", "cov.unscaled"),
+                                      rows = 250L)
+        dn <- cs$fit(as.matrix(cs$d$x), 1L)
+        expect_true(sp$converged, info = nm)
+        expect_equal(sp$coefficients, dn$coefficients, tolerance = 1e-10, info = nm)
+        expect_equal(sp$cov.unscaled, dn$cov.unscaled, tolerance = 1e-10, info = nm)
+        expect_equal(sp$deviance, dn$deviance, tolerance = 1e-10, info = nm)
+    }
+})
+
+test_that("sparse design products match Matrix and are identical for every thread count", {
+    skip_if_not_installed("Matrix")
+    old <- Sys.getenv("FASTGLM_CHUNK_ROWS", unset = NA)
+    on.exit(if (is.na(old)) Sys.unsetenv("FASTGLM_CHUNK_ROWS")
+            else Sys.setenv(FASTGLM_CHUNK_ROWS = old), add = TRUE)
+    Sys.setenv(FASTGLM_CHUNK_ROWS = "100")
+    set.seed(14)
+    # p = 40 uses the dense row sweep, p = 1100 the column scheme.
+    for (dims in list(c(3000, 40, 0.1), c(2000, 1100, 0.01))) {
+        n <- dims[1]; p <- dims[2]
+        x <- cbind(1, Matrix::rsparsematrix(n, p - 1, density = dims[3]))
+        x <- as(x, "CsparseMatrix")
+        v <- runif(n, 0.1, 2); b <- rnorm(p); off <- rnorm(n)
+        ref <- fastglm:::fastglm_sparse_products_test(x, v, b, off, FALSE, 1L)
+        expect_equal(as.matrix(ref$xtvx), as.matrix(Matrix::crossprod(x, x * v)),
+                     tolerance = 1e-12, info = paste("p =", p))
+        expect_equal(ref$eta, as.numeric(x %*% b) + off, tolerance = 1e-12)
+        expect_equal(ref$xtv, as.numeric(Matrix::crossprod(x, v)), tolerance = 1e-12)
+        expect_true(Matrix::isSymmetric(ref$xtvx))
+        # The column scheme (used for p > 1024) on the same design.
+        cols <- fastglm:::fastglm_sparse_products_test(x, v, b, off, TRUE, 1L)
+        expect_equal(cols, ref, tolerance = 1e-13, info = paste("schemes, p =", p))
+        for (t in setdiff(threads_to_test(), 1L)) {
+            expect_identical(fastglm:::fastglm_sparse_products_test(x, v, b, off, FALSE, t), ref,
+                             info = paste("threads =", t, "p =", p))
+            expect_identical(fastglm:::fastglm_sparse_products_test(x, v, b, off, TRUE, t), cols,
+                             info = paste("column scheme, threads =", t, "p =", p))
+        }
+    }
+})
+
 test_that("prior weights, offsets, and covariance = 'previous' are identical for every thread count", {
     d <- thread_glm_data()
     set.seed(11)

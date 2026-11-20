@@ -1211,6 +1211,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fastglm_sparse_products_test
+Rcpp::List fastglm_sparse_products_test(SEXP x, const Eigen::VectorXd& v, const Eigen::VectorXd& b, const Eigen::VectorXd& off, bool by_columns, int threads);
+RcppExport SEXP _fastglm_fastglm_sparse_products_test(SEXP xSEXP, SEXP vSEXP, SEXP bSEXP, SEXP offSEXP, SEXP by_columnsSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type x(xSEXP);
+    Rcpp::traits::input_parameter< const Eigen::VectorXd& >::type v(vSEXP);
+    Rcpp::traits::input_parameter< const Eigen::VectorXd& >::type b(bSEXP);
+    Rcpp::traits::input_parameter< const Eigen::VectorXd& >::type off(offSEXP);
+    Rcpp::traits::input_parameter< bool >::type by_columns(by_columnsSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_sparse_products_test(x, v, b, off, by_columns, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepare_glm_constant
 SEXP prepare_glm_constant(NumericMatrix x, NumericVector weights, bool leverage, int code);
 RcppExport SEXP _fastglm_prepare_glm_constant(SEXP xSEXP, SEXP weightsSEXP, SEXP leverageSEXP, SEXP codeSEXP) {
@@ -1338,6 +1354,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_fastglm_max_team_size_test", (DL_FUNC) &_fastglm_fastglm_max_team_size_test, 1},
     {"_fastglm_fastglm_parallel_blocks_test", (DL_FUNC) &_fastglm_fastglm_parallel_blocks_test, 4},
     {"_fastglm_fastglm_block_reduce_test", (DL_FUNC) &_fastglm_fastglm_block_reduce_test, 4},
+    {"_fastglm_fastglm_sparse_products_test", (DL_FUNC) &_fastglm_fastglm_sparse_products_test, 6},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
     {"_fastglm_fastglm_set_threads_cpp", (DL_FUNC) &_fastglm_fastglm_set_threads_cpp, 1},
     {"_fastglm_fastglm_has_openmp_cpp", (DL_FUNC) &_fastglm_fastglm_has_openmp_cpp, 0},
