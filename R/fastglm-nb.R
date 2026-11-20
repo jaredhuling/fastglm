@@ -44,6 +44,14 @@
 #'   fit, including its pilot, Poisson-limit, and covariance passes, or `NULL`
 #'   (default) for the session setting of [fastglm_threads()]. Results are
 #'   identical for every number of threads.
+#' @param trace `TRUE` to print one line per outer (coefficient and theta)
+#'   iteration (the iteration, the passes over the data so far, the log
+#'   likelihood at the updated theta, the step halvings of the coefficient
+#'   fit, and the elapsed seconds; the log likelihood takes one more pass
+#'   over the data per iteration, made only when tracing),
+#'   `FALSE` for none, or `NULL` (default) for `getOption("fastglm.trace")`,
+#'   which defaults to `TRUE` for a [fastglm_source()] in an interactive
+#'   session and `FALSE` otherwise.
 #' @param data,subset,na.action,contrasts model-frame arguments used when `x`
 #'   is a formula, as in [stats::glm()].
 #'
@@ -117,6 +125,7 @@ fastglm_nb <- function(x, y = NULL,
                        block.size  = 8192L,
                        poisson.limit = TRUE,
                        threads     = NULL,
+                       trace       = NULL,
                        data        = NULL,
                        subset, na.action, contrasts = NULL)
 {
@@ -126,6 +135,8 @@ fastglm_nb <- function(x, y = NULL,
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
     threads <- scope$threads
+    tr <- .fastglm_scope_trace(trace, streamed = inherits(x, "fastglm_source"))
+    on.exit(tr$restore(), add = TRUE)
     if (inherits(x, "formula")) {
         # Build the design from the formula, fit with the matrix interface,
         # and keep what predict() and model.matrix() need.
@@ -146,7 +157,7 @@ fastglm_nb <- function(x, y = NULL,
                           link = link, method = method, tol = tol, maxit = maxit,
                           outer.maxit = outer.maxit, outer.tol = outer.tol, theta.tol = theta.tol,
                           theta.maxit = theta.maxit, block.size = block.size, poisson.limit = poisson.limit,
-                          threads = threads)
+                          threads = threads, trace = tr$trace)
         fit$terms <- mt
         fit$model <- mf
         fit$xlevels <- stats::.getXlevels(mt, mf)

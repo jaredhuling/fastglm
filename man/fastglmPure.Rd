@@ -19,7 +19,8 @@ fastglmPure(
   firth = FALSE,
   inference = c("full", "diagonal", "none"),
   covariance = c("estimate", "previous"),
-  threads = NULL
+  threads = NULL,
+  trace = NULL
 )
 }
 \arguments{
@@ -98,6 +99,12 @@ decomposition is serial; so does the pivoted QR refit after a failed
 Cholesky factorization. Cholesky fits of dense, sparse (`dgCMatrix`), and
 `big.matrix` designs are threaded. Fits with fewer than two row blocks
 of observations (16384 rows each by default) run on one thread.}
+
+\item{trace}{`TRUE` to print one line per iteration (the iteration,
+the passes over the data so far, the deviance, the step halvings of the
+iteration, and the elapsed seconds), `FALSE` for none, or `NULL`
+(default) for `getOption("fastglm.trace", FALSE)`. Lines are printed
+between iterations, so tracing off costs nothing.}
 }
 \value{
 A list with the elements

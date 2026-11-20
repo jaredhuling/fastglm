@@ -158,6 +158,9 @@ print.fastglm_ordinal_partial <- function(x,digits=max(3L,getOption("digits")-3L
 #'   [fastglm_score_test()].
 #' @export
 confint.fastglm_ordinal_partial <- function(object,parm,level=.95,method=c("wald","profile"),control=list(),...) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     if(length(list(...))) stop("unused nonparallel confidence-interval arguments",call.=FALSE)
     method <- match.arg(method)
     if(!is.numeric(level) || is.complex(level) || length(level)!=1L || !is.finite(level) || level<=0 || level>=1)

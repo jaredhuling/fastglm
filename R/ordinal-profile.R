@@ -337,6 +337,9 @@
 #' @export
 fastglm_score_test <- function(object,terms=NULL,contrast=NULL,null=0,
                                null.estimation=c("ML","meanBR"),control=list()) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     data.name <- deparse(substitute(object));null.estimation <- match.arg(null.estimation)
     if(!inherits(object,"fastglm_ordinal") && .glm_ml_inference_model(object)) {
         if(!is.null(contrast)) stop("score tests of GLMs take 'terms'; linear contrasts are available for ordinal fits",call.=FALSE)

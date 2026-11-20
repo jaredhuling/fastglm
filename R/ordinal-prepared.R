@@ -147,6 +147,9 @@ fastglm_ordinal_batch <- function(design,y,weights=NULL,offset=NULL,levels=NULL,
                                   tol=1e-8,maxit=200L,block.size=2048L,control=list(),link=NULL,nonparallel=NULL) {
     if(!inherits(design,"fastglm_ordinal_design")) design <- fastglm_ordinal_prepare(design)
     if(missing(nonparallel)) nonparallel <- design$nonparallel
+    # The fits of a batch are not traced unless control$trace asks for it.
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(),add=TRUE)
     if(!is.list(y) || is.data.frame(y))
         stop("'y' must be a list of ordinal responses; a count matrix is one response",call.=FALSE)
     if(!length(y)) return(list())

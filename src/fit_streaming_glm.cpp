@@ -8,6 +8,7 @@
 #include "../inst/include/streaming_qr.h"
 #include "../inst/include/conv_rule.h"
 #include "../inst/include/boundary_step.h"
+#include "../inst/include/trace.h"
 
 #include <stdexcept>
 #include <string>
@@ -144,11 +145,18 @@ static ArrayXd block_eta(const Chunk& c, const VectorXd& beta)
     return eta;
 }
 
+// Passes over the source made by the running fit, for the trace: a pass
+// starts each time block 1 is read. fit_streaming_glm saves and restores
+// it, so a fit run from a callback does not disturb its caller's count.
+static int stream_passes = 0;
+
 // Pull the k-th chunk via the user's R callback.  k is 1-based for the
-// closure, matching the R-side documentation.
+// closure, matching the R-side documentation. The interrupt check runs on
+// the calling thread before every source block.
 static Chunk pull_chunk(Function& callback, int k, int expected_p)
 {
     Rcpp::checkUserInterrupt();
+    if (k == 1) ++stream_passes;
     SEXP res = callback(k);
     if (TYPEOF(res) != VECSXP)
         Rcpp::stop("chunk_callback must return a list");
@@ -823,6 +831,14 @@ List fit_streaming_glm(Function chunk_callback,
     const int conv_rule = fastglm_conv_rule_default();
     std::string stop_reason = "iteration_limit";
     if (n_chunks < 1) Rcpp::stop("n_chunks must be >= 1");
+    // Trace: one line per coefficient update; passes include the caller's
+    // validation pass (counted as 1).
+    struct PassCount {
+        int saved;
+        PassCount() : saved(stream_passes) { stream_passes = 1; }
+        ~PassCount() { stream_passes = saved; }
+    } pass_count;
+    const fglm_trace::Tracer tracer;
     if (type != 0 && type != 2 && type != 3)
         Rcpp::stop("for streaming fits, 'method' must be 0 (QR), 2 (LLT), or 3 (LDLT).");
 
@@ -881,6 +897,9 @@ List fit_streaming_glm(Function chunk_callback,
             if (anchor_beta.size() != p || ++halves > maxit) break;
             beta = 0.5 * (beta + anchor_beta);
         }
+        // The caller's start is the first coefficient update.
+        if (iteration_offset > 0 && !firth)
+            tracer.iteration(iteration_offset, stream_passes, dev_curr, halves, "deviance");
     }
 
     bool converged = false;
@@ -976,6 +995,7 @@ List fit_streaming_glm(Function chunk_callback,
                 if(gamma_step_failed) break;
                 beta=proposed; phi_prev=phi_proposed; phi_next=phi_after; dev_curr=dev_new;
                 qr_stationarity_current=false;
+                tracer.iteration(iter,stream_passes,dev_curr,halves,"deviance");
                 Rcpp::checkUserInterrupt();
             }
         } else for(iter=1;iter<=maxit-iteration_offset;++iter) {
@@ -1006,6 +1026,7 @@ List fit_streaming_glm(Function chunk_callback,
                 previous=qr; leverage_beta=beta;
                 beta=proposed;phi_prev=phi_new;
                 qr_stationarity_current=false;
+                tracer.iteration(iter,stream_passes,dev_curr,0,"deviance");
             } else if(conv_rule==0) {
                 // Rule 0: behavior of fastglm 0.1.4.
                 double dev_new=0; bool valid=false; int halves=0;
@@ -1022,6 +1043,7 @@ List fit_streaming_glm(Function chunk_callback,
                 if(!valid || dev_new>dev_curr*(1+tol)) Rcpp::stop("streaming QR step halving failed");
                 const double change=std::abs(dev_new-dev_curr)/(0.1+std::abs(dev_new));
                 beta=proposed;dev_curr=dev_new;
+                tracer.iteration(iter,stream_passes,dev_curr,halves,"deviance");
                 if(change<tol) {converged=true;stop_reason="converged";break;}
             } else {
                 // Rules 1 and 2: Fisher decrement from the factor at the
@@ -1059,6 +1081,7 @@ List fit_streaming_glm(Function chunk_callback,
                 const double change=std::abs(dev_new-dev_curr)/(0.1+std::abs(dev_new));
                 beta=proposed;dev_curr=dev_new;
                 ++accepted_steps;
+                tracer.iteration(iteration_offset+accepted_steps,stream_passes,dev_curr,halves_used,"deviance");
                 if(conv_rule==2 && small && halves_used==0 && change<tol) {
                     qr=current; converged=true; stop_reason="converged"; break;   // glm.fit convention
                 }
@@ -1125,6 +1148,7 @@ List fit_streaming_glm(Function chunk_callback,
             }
             if (gamma_step_failed) break;
             beta = proposed; phi_prev = phi_proposed; dev_curr = dev_new; phi_next = phi_after;
+            tracer.iteration(iter, stream_passes, dev_curr, halves, "deviance");
             VectorXd score_step;
             if (type == 2) score_step = llt.solve(Xtwz)-beta;
             else score_step = ldlt.solve(Xtwz)-beta;
@@ -1193,6 +1217,7 @@ List fit_streaming_glm(Function chunk_callback,
             if(firth_step_failed) break;
             double beta_change = (beta_new - beta).cwiseAbs().maxCoeff();
             beta = beta_new;
+            tracer.iteration(iter, stream_passes, dev_curr, limited ? 1 : 0, "deviance");
             if (!limited && beta_change < tol && phi_change < tol) { converged = true; break; }
         } else if (conv_rule == 0) {
             // Rule 0: behavior of fastglm 0.1.4.
@@ -1224,6 +1249,7 @@ List fit_streaming_glm(Function chunk_callback,
             double rel = std::abs(dev_new - dev_curr) / (0.1 + std::abs(dev_new));
             beta     = beta_new;
             dev_curr = dev_new;
+            tracer.iteration(iter, stream_passes, dev_curr, halv, "deviance");
             if (rel < tol) { converged = true; stop_reason = "converged"; break; }
         } else {
             // Rules 1 and 2. XtWX and Xtwz are at the current estimate, so
@@ -1281,6 +1307,7 @@ List fit_streaming_glm(Function chunk_callback,
             beta     = beta_new;
             dev_curr = dev_new;
             ++accepted_steps;
+            tracer.iteration(iteration_offset + accepted_steps, stream_passes, dev_curr, halves_used, "deviance");
             if (conv_rule == 2 && small && halves_used == 0 && rel < tol) {
                 XtWX = XtWX_current; converged = true; stop_reason = "converged"; break;
             }

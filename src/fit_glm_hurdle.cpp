@@ -108,6 +108,8 @@ List fit_glm_hurdle(
                     /*is_big_matrix=*/false,
                     zero_fam_code, empty_params);
     zero_solver.init_parms(zero_start, mu0, eta0);
+    // The zero part is traced per IRLS iteration (trace.h), then the count part.
+    zero_solver.set_trace(fglm_trace::trace_setting());
     int zero_iter        = zero_solver.solve(maxit);
     bool zero_conv       = zero_solver.get_converged();
     VectorXd beta_zero   = zero_solver.get_beta();

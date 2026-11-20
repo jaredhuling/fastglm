@@ -21,17 +21,27 @@
 #' @param threads the number of threads for the compiled computations of this
 #'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 #'   Results are identical for every number of threads.
+#' @param trace `TRUE` to print one line per iteration (per outer
+#'   coefficient and theta iteration when theta is estimated: the iteration,
+#'   the passes over the data so far, the deviance or log likelihood, the step
+#'   halvings of the iteration, and the elapsed seconds), `FALSE` for none, or
+#'   `NULL` (default) for `getOption("fastglm.trace")`, which defaults to
+#'   `TRUE` for a [fastglm_source()] in an interactive session and `FALSE`
+#'   otherwise.
 #' @returns A `fastglm_truncated` model with joint covariance when theta is
 #'   estimated. Its element `threads` records the thread setting of the fit.
 #' @export
 fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "negbin"),
                               weights = NULL, offset = NULL, theta = NULL,
                               start = NULL, tol = 1e-8, maxit = 100L,
-                              outer.tol = 1e-8, outer.maxit = 100L, threads = NULL) {
+                              outer.tol = 1e-8, outer.maxit = 100L, threads = NULL,
+                              trace = NULL) {
     cl <- match.call(); dist <- match.arg(dist)
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
     threads <- scope$threads
+    tr <- .fastglm_scope_trace(trace, streamed = inherits(x, "fastglm_source"))
+    on.exit(tr$restore(), add = TRUE)
     frame <- tt <- NULL
     if (inherits(x, "formula")) {
         mc <- match.call(expand.dots = FALSE)

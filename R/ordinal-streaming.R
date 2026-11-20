@@ -83,7 +83,11 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
     if(!is.list(control) || (length(control) && (is.null(names(control)) || anyNA(names(control)) ||
        any(!nzchar(names(control))) || anyDuplicated(names(control)))) || length(setdiff(names(control),names(defaults))))
         stop("unknown or duplicated ordinal optimizer control",call.=FALSE)
-    ctl <- utils::modifyList(defaults,control)
+    split <- .ordinal_split_trace(control,streamed=TRUE)
+    ctl <- utils::modifyList(defaults,split$control);ctl$trace <- split$trace
+    # The trace scope starts the elapsed-time clock of this fit.
+    trace.scope <- .fastglm_scope_trace(ctl$trace,streamed=TRUE)
+    on.exit(trace.scope$restore(),add=TRUE)
     for(nm in c("score.tol","step.tol","max.step","max.halves","condition.tol")) {
         z <- ctl[[nm]]
         if(!is.numeric(z) || is.complex(z) || length(z)!=1L || !is.finite(z) || z<=0 ||
@@ -321,7 +325,7 @@ fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FAL
         last.rejected.evaluation=fit$last.rejected.evaluation,history=fit$history,loglik=fit$loglik,
         rank=d,df.residual=frequency-d,nobs=frequency,nobs.rows=positive.rows,frequency=frequency,
         category=response,response=response,preparation.reused=FALSE,firth=firth,link=link,
-        method=if(firth) "meanBR" else "ML",control=ctl,tol=tol,maxit=as.integer(maxit),
+        method=if(firth) "meanBR" else "ML",control=.ordinal_stored_control(ctl),tol=tol,maxit=as.integer(maxit),
         block.size=as.integer(block.size),design.columns=columns)
     class(object) <- c("fastglm_ordinal_stream","fastglm_ordinal")
     names(object$alpha) <- names(object$thresholds) <- sub("^threshold:","",names(object$alpha))

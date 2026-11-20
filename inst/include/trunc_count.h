@@ -429,6 +429,7 @@ protected:
 
     virtual void step_halve() override
     {
+        ++halvings_;
         beta = 0.5 * (beta.array() + beta_prev.array());
         update_eta();
         update_mu();
@@ -610,6 +611,8 @@ inline TruncFitResult fit_trunc_count(
 {
     glm_trunc solver(X, y, wt, offset, is_negbin, theta, tol, maxit);
     solver.init_from_beta(beta_init);
+    // A fit at fixed theta is traced per IRLS iteration (trace.h).
+    solver.set_trace(fglm_trace::trace_setting());
     int iters = solver.solve(maxit);
 
     TruncFitResult res;
@@ -794,11 +797,19 @@ inline TruncNbJointResult fit_trunc_nb_joint(
     // theta is updated in-place between outer iterations.
     glm_trunc nb_solver(X, y, wt, offset, /*is_negbin=*/true, theta, tol, maxit);
 
+    // Trace (trace.h): one line per outer iteration, after its joint Newton
+    // step, with the log likelihood; passes count the IRLS iterations and
+    // theta updates so far, halvings those of the outer iteration's IRLS.
+    const fglm_trace::Tracer tracer;
+    int irls_total = iters;
     for (outer_iter = 0; outer_iter < outer_maxit; ++outer_iter) {
+        Rcpp::checkUserInterrupt();
+        const int halvings_before = nb_solver.get_halvings();
         // beta-step at fixed theta, warm-started from beta_curr.
         nb_solver.set_theta(theta);
         nb_solver.init_from_beta(beta_curr);
         iters     = nb_solver.solve(maxit);
+        irls_total += iters;
         inner_conv = nb_solver.get_converged();
         beta_curr  = nb_solver.get_beta();
         lam_curr   = nb_solver.get_lambda();
@@ -844,6 +855,8 @@ inline TruncNbJointResult fit_trunc_nb_joint(
             return false;
         };
         newton_step();
+        tracer.iteration(outer_iter + 1, irls_total + theta_iter, ll,
+                         nb_solver.get_halvings() - halvings_before, "loglik");
 
         // Convergence: joint Newton decrement relative to minus twice the
         // log likelihood (as fastglm_nb, src/fit_glm_nb.cpp), then up to two

@@ -49,6 +49,12 @@
 #' @param threads the number of threads for the compiled computations of this
 #'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 #'   Results are identical for every number of threads.
+#' @param trace `TRUE` to print one line per iteration (EM and Newton
+#'   iterations, with the iteration, the passes over the data so far, the log
+#'   likelihood, the step halvings of the iteration, and the elapsed seconds),
+#'   `FALSE` for none, or `NULL` (default) for `getOption("fastglm.trace")`,
+#'   which defaults to `TRUE` for a [fastglm_source()] in an interactive
+#'   session and `FALSE` otherwise.
 #'
 #' @returns A list of class `c("fastglm_zi", "fastglm")` with elements
 #'   `coefficients` (a list with `count` and `zero`), `se` (likewise),
@@ -100,7 +106,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
                        theta.tol   = 1e-8,
                        theta.maxit = 100L,
                        model = TRUE, y = TRUE, x = FALSE,
-                       response = NULL, z = NULL, threads = NULL)
+                       response = NULL, z = NULL, threads = NULL, trace = NULL)
 {
     if (!requireNamespace("Formula", quietly = TRUE))
         stop("Package 'Formula' is required for fastglm_zi(); install it.",
@@ -111,6 +117,8 @@ fastglm_zi <- function(formula, data, subset, na.action,
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
     threads <- scope$threads
+    tr <- .fastglm_scope_trace(trace, streamed = inherits(formula, "fastglm_source"))
+    on.exit(tr$restore(), add = TRUE)
 
     cl <- match.call()
     if (inherits(formula, c("dgCMatrix", "big.matrix", "fastglm_source"))) {
@@ -157,7 +165,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
     mf$dist <- mf$link <- mf$init.theta <- NULL
     mf$em.tol <- mf$em.maxit <- NULL
     mf$tol <- mf$maxit <- mf$theta.tol <- mf$theta.maxit <- NULL
-    mf$model <- mf$y <- mf$x <- mf$threads <- NULL
+    mf$model <- mf$y <- mf$x <- mf$threads <- mf$trace <- NULL
     mf[[1L]] <- as.name("model.frame")
     mf <- eval(mf, parent.frame())
 

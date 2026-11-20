@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include "parallel_reduce.h"
+#include "trace.h"
 namespace fglm_ordinal {
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
@@ -1202,6 +1203,10 @@ int observed_newton(const Data& data,VectorXd& parameters,double score_tol,doubl
     double max_step,int max_halves,bool trace,int& evaluations,OrdinalWorkspace* workspace=nullptr) {
     const int q=data.q,p=data.p,d=data.d;
     int iterations=0;
+    // Trace: one line per iteration (trace.h), at its start; passes are the
+    // evaluations over the data so far.
+    const fglm_trace::Tracer tracer(trace);
+    int halvings=0;
     try {
         ObservedState current=observed_evaluate(data,parameters,nullptr,workspace);
         ++evaluations;
@@ -1223,7 +1228,7 @@ int observed_newton(const Data& data,VectorXd& parameters,double score_tol,doubl
             if(!direction.allFinite()) return iterations;
             const double scaled=current.score.cwiseProduct(inverse_scale).cwiseAbs().maxCoeff();
             const double bound=direction.head(q).cwiseAbs().maxCoeff()+row_norm*(p ? direction.tail(p).norm() : 0);
-            if(trace) Rcpp::Rcout<<"observed iteration "<<iterations<<": score "<<scaled<<", step bound "<<bound<<"\n";
+            tracer.iteration(iterations+1,evaluations,current.loglik,halvings,"loglik");
             double fraction=1;
             for(int s=1;s<q;++s) {
                 const double change=direction[s]-direction[s-1];
@@ -1239,6 +1244,7 @@ int observed_newton(const Data& data,VectorXd& parameters,double score_tol,doubl
             VectorXd candidate(d);
             ObservedState trial;
             for(int h=0;h<=max_halves && !accepted;++h) {
+                halvings=h;
                 candidate=parameters+fraction*direction;
                 const VectorXd scaled_direction=fraction*direction;
                 const bool measure=fraction*bound>max_step;
@@ -1294,13 +1300,17 @@ Rcpp::List ordinal_fit(const Data& data,const VectorXd& start,bool firth,
     // along this non-gradient direction, even on a path to a regular root.
     const bool binary_scoring=firth && data.q==1 && data.link!=0;
     MatrixXd history(expected_limit,4);
+    // Trace: one line per iteration at its start (numbered after the
+    // observed Newton iterations); passes are the evaluations so far and
+    // halvings those of the step that led to the current estimate.
+    const fglm_trace::Tracer tracer(trace);
+    int halvings=0;
     for(int iter=1;iter<=expected_limit;++iter) {
         Rcpp::checkUserInterrupt();iterations=iter;
         double gap=std::numeric_limits<double>::infinity();
         for(int s=1;s<data.q;++s) gap=std::min(gap,parameters[s]-parameters[s-1]);
         history.row(iter-1)<<current.loglik,current.scaled_score,current.predictor_step,gap;
-        if(trace) Rcpp::Rcout<<"iteration "<<iter<<": score "<<current.scaled_score<<
-            ", predictor step "<<current.predictor_step<<"\n";
+        tracer.iteration(observed_iterations+iter,evaluations,current.loglik,halvings,"loglik");
         if(current.scaled_score<score_tol && current.predictor_step<step_tol) {
             converged=true;reason="score_and_predictor_step";break;
         }
@@ -1323,7 +1333,7 @@ Rcpp::List ordinal_fit(const Data& data,const VectorXd& start,bool firth,
                     OrdinalState trial=evaluate(candidate);
                     const double merit=.5*trial.score.dot(metric*trial.score);
                     if(std::isfinite(merit) && (binary_scoring || merit<=(1-1e-4*fraction)*merit0)) {
-                        accepted_parameters=candidate;accepted_state=std::move(trial);return true;
+                        accepted_parameters=candidate;accepted_state=std::move(trial);halvings=h;return true;
                     }
                 } catch(const OrdinalEvaluationError& error) { last_rejection=error.what(); }
                 fraction/=2;

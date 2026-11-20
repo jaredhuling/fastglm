@@ -312,6 +312,7 @@ protected:
     virtual void step_halve() override
     {
         firth_step_halved_ = true;
+        ++halvings_;
         // take half step
         beta = 0.5 * (beta.array() + beta_prev.array());
 

@@ -17,7 +17,8 @@ fastglm_truncated(
   maxit = 100L,
   outer.tol = 1e-08,
   outer.maxit = 100L,
-  threads = NULL
+  threads = NULL,
+  trace = NULL
 )
 }
 \arguments{
@@ -47,6 +48,14 @@ the loop stops when the joint Newton decrement in the coefficients and
 \item{threads}{the number of threads for the compiled computations of this
 fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 Results are identical for every number of threads.}
+
+\item{trace}{`TRUE` to print one line per iteration (per outer
+coefficient and theta iteration when theta is estimated: the iteration,
+the passes over the data so far, the deviance or log likelihood, the step
+halvings of the iteration, and the elapsed seconds), `FALSE` for none, or
+`NULL` (default) for `getOption("fastglm.trace")`, which defaults to
+`TRUE` for a [fastglm_source()] in an interactive session and `FALSE`
+otherwise.}
 }
 \value{
 A `fastglm_truncated` model with joint covariance when theta is

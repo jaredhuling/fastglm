@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <atomic>
 #include <exception>
+#include <memory>
 #include <new>
 #include <stdexcept>
 #include <vector>
@@ -293,57 +294,75 @@ bool lane_reduce_into(Eigen::Index nblocks, Acc& out, std::vector<Acc>& lanes, R
     // exception from reset or make_work of each lane's thread.
     std::vector<std::exception_ptr> lane_exc(nlanes), setup_exc(nlanes);
     const int nt = std::min(threads_for(nblocks), nlanes);
-    (void) nt;
-#ifdef _OPENMP
-#pragma omp parallel num_threads(nt) if (nt > 1)
-#endif
-    {
-        const int t = current_thread();
-        const int T = team_size();
-        note_team_size();
-        std::exception_ptr setup;
-        try {
-            for (int l = t; l < nlanes; l += T) reset(lanes[l]);
-        } catch (...) {
-            setup = std::current_exception();
-        }
-        if (!setup) {
-            try {
-                auto work = make_work();
-                for (Eigen::Index b = 0; b < nblocks; ++b) {
-                    const int l = static_cast<int>(b % kLanes);
-                    if (l % T != t || lane_fail[l] >= 0) continue;
-                    bool ok = false;
-                    try {
-                        ok = add(b, lanes[l], work);
-                    } catch (...) {
-                        lane_exc[l] = std::current_exception();
-                        ok = false;
-                    }
-                    if (!ok) lane_fail[l] = b;
-                }
-            } catch (...) {
-                setup = std::current_exception();
-            }
-        }
-        if (setup)
-            for (int l = t; l < nlanes; l += T) setup_exc[l] = setup;
-    }
+    // One workspace per thread, made by make_work() on that thread in the
+    // first round and kept for the later rounds.
+    using Work = decltype(make_work());
+    std::vector<std::unique_ptr<Work>> works(static_cast<std::size_t>(std::max(nt, 1)));
 
-    Rcpp::checkUserInterrupt();
-    for (int l = 0; l < nlanes; ++l)
-        if (setup_exc[l]) rethrow_region_exception(setup_exc[l]);
-    Eigen::Index first = -1;
-    int first_lane = -1;
-    for (int l = 0; l < nlanes; ++l)
-        if (lane_fail[l] >= 0 && (first < 0 || lane_fail[l] < first)) {
-            first = lane_fail[l];
-            first_lane = l;
+    // The blocks are processed in rounds of kLanes (8) blocks, one per lane,
+    // with Rcpp::checkUserInterrupt() on the calling thread after each round,
+    // so a long pass can be interrupted within about one round. Lane l still
+    // receives blocks l, l + 8, ... in increasing order, so the result is
+    // that of a single pass. A round with a failing block is the last: the
+    // blocks of later rounds are all larger than any block of this round.
+    for (Eigen::Index first = 0; first < nblocks; first += kLanes) {
+        const int count = static_cast<int>(std::min<Eigen::Index>(kLanes, nblocks - first));
+        const bool initial = first == 0;
+        const int ntr = std::min(nt, count);
+        (void) ntr;
+#ifdef _OPENMP
+#pragma omp parallel num_threads(ntr) if (ntr > 1)
+#endif
+        {
+            const int t = current_thread();
+            const int T = team_size();
+            note_team_size();
+            std::exception_ptr setup;
+            if (initial) {
+                try {
+                    for (int l = t; l < nlanes; l += T) reset(lanes[l]);
+                } catch (...) {
+                    setup = std::current_exception();
+                }
+            }
+            if (!setup) {
+                try {
+                    std::unique_ptr<Work>& work = works[static_cast<std::size_t>(t)];
+                    if (!work) work.reset(new Work(make_work()));
+                    for (int l = t; l < count; l += T) {
+                        const Eigen::Index b = first + l;
+                        bool ok = false;
+                        try {
+                            ok = add(b, lanes[l], *work);
+                        } catch (...) {
+                            lane_exc[l] = std::current_exception();
+                            ok = false;
+                        }
+                        if (!ok) lane_fail[l] = b;
+                    }
+                } catch (...) {
+                    setup = std::current_exception();
+                }
+            }
+            if (setup)
+                for (int l = t; l < nlanes; l += T) setup_exc[l] = setup;
         }
-    if (first >= 0) {
-        if (lane_exc[first_lane]) rethrow_region_exception(lane_exc[first_lane]);
-        if (failed_block) *failed_block = first;
-        return false;
+
+        Rcpp::checkUserInterrupt();
+        for (int l = 0; l < nlanes; ++l)
+            if (setup_exc[l]) rethrow_region_exception(setup_exc[l]);
+        Eigen::Index first_fail = -1;
+        int first_lane = -1;
+        for (int l = 0; l < nlanes; ++l)
+            if (lane_fail[l] >= 0 && (first_fail < 0 || lane_fail[l] < first_fail)) {
+                first_fail = lane_fail[l];
+                first_lane = l;
+            }
+        if (first_fail >= 0) {
+            if (lane_exc[first_lane]) rethrow_region_exception(lane_exc[first_lane]);
+            if (failed_block) *failed_block = first_fail;
+            return false;
+        }
     }
     for (int l = 0; l < nlanes; ++l) combine(out, static_cast<const Acc&>(lanes[l]));
     return true;

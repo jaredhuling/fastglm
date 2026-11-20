@@ -165,6 +165,10 @@ fastglm_batch <- function(design, y, family = gaussian(), weights = NULL,
     # it from the scope); worker processes set one thread each (see below).
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
+    # The fits of a batch are not traced (a line per iteration of every fit
+    # would flood the console).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     if (!inherits(design,"fastglm_design")) design <- fastglm_prepare(design)
     if (model != "glm")
         return(.count_batch(design, y, model, z, match.arg(dist), link, weights, offset, tol, maxit,

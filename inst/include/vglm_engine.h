@@ -13,6 +13,7 @@
 #include "vglm_family.h"
 #include "vglm_data.h"
 #include "parallel_reduce.h"
+#include "trace.h"
 namespace fglm_vglm {
 
 // Fisher scoring for vector GLMs (design document, Sections 5 and 7).
@@ -1730,6 +1731,14 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
 
     VectorXd beta = start;
     int passes = 0, updates = 0, products = 0;
+    // Progress trace (trace.h): one line per accepted update, printed on the
+    // calling thread between passes.
+    const fglm_trace::Tracer tracer(trace);
+    // How each iteration's step was computed ("exact", "cg", "fallback" for
+    // the exact step after a failed CG solve, "retry" for the exact step
+    // repeating a CG step that could not be taken), returned as
+    // solver.steps for tests of the solver paths.
+    std::vector<std::string> step_kinds;
     double fraction = 1;
     VglmState current, trial;
     MatrixXd R;
@@ -1831,9 +1840,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
             vglm_direction(factor, score, step);
             const double lambda2 = step.decrement, measure = lambda2 + step.residual;
             small = decrement_small(measure);
-            if (trace)
-                Rcpp::Rcout << "iteration " << updates << ": deviance " << D
-                            << ", Fisher decrement " << lambda2 << "\n";
+            step_kinds.push_back("exact");
             if (pending && small) { converged = true; reason = "converged"; break; }
         } else if (exact_phase || pending || retry_exact) {
             // Exact steps from the full information: from the first time the
@@ -1852,10 +1859,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
                 --reject_confirmations;
                 small = false;
             }
-            if (trace)
-                Rcpp::Rcout << "iteration " << updates << ": deviance " << D
-                            << ", solver exact" << (retry_exact ? " (retry)" : "")
-                            << ", Fisher decrement " << step.decrement << "\n";
+            step_kinds.push_back(retry_exact ? "retry" : "exact");
             // Converged as in the exact solver: pending and small. After a CG
             // step that could not be taken (retry_exact), the exact step is
             // tried first, and the "no acceptable step" rule below decides.
@@ -1881,10 +1885,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
                 step.decrement = 0;
                 for (int j = 0; j < P; ++j)
                     if (!aliased[j]) step.decrement += current.U[j] * step.delta[j];
-                if (trace)
-                    Rcpp::Rcout << "iteration " << updates << ": deviance " << D
-                                << ", solver cg, products " << used
-                                << ", CG decrement " << step.decrement << "\n";
+                step_kinds.push_back("cg");
             } else {
                 // Fallback: the exact step from the full information. The
                 // deviance rule is not pending here, so this is not a
@@ -1892,10 +1893,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
                 if (!current.full) evaluate_full();
                 exact_direction();
                 small = decrement_small(step.decrement + step.residual);
-                if (trace)
-                    Rcpp::Rcout << "iteration " << updates << ": deviance " << D
-                                << ", solver exact (fallback), products " << used
-                                << ", Fisher decrement " << step.decrement << "\n";
+                step_kinds.push_back("fallback");
                 exact_step = true;
             }
         }
@@ -1906,6 +1904,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
         const double rounding = 64 * eps * (1 + std::abs(current_objective));
         double f = 1, trial_objective = current_objective;
         bool accepted = false, blocked = false;
+        int halvings = 0;   // trial passes rejected before the accepted one
         // Test only: treat the halving of this CG step as failed.
         const bool forced_reject = !exact_step && reject_steps > 0;
         if (forced_reject) --reject_steps;
@@ -1923,7 +1922,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
             }
             if (status == VGLM_PASS_OK) {
                 trial_objective = objective(trial);
-                if (trial_objective >= current_objective - rounding) { accepted = true; continue; }
+                if (trial_objective >= current_objective - rounding) { accepted = true; halvings = h; continue; }
             }
             f /= 2;
         }
@@ -1946,6 +1945,8 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
         previous_decrement = step.decrement;
         const double D_old = D;
         D = -2 * current_objective;
+        // One trace line per accepted update, between passes.
+        tracer.iteration(updates, passes, D, halvings, "deviance");
         if (std::abs(D - D_old) / (0.1 + std::abs(D)) < tol) pending = true;
     }
 
@@ -1978,7 +1979,7 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
     const bool separation = current.pmin < edge || current.pmax > 1 - edge;
     // accumulation reports the full-information passes only: "lowrank" when
     // some VGLM_FULL pass used the low-rank accumulation.
-    return Rcpp::List::create(
+    Rcpp::List out = Rcpp::List::create(
         Rcpp::Named("coefficients") = coefficients,
         Rcpp::Named("cov.unscaled") = Rcpp::wrap(factor.cov),
         Rcpp::Named("information") = Rcpp::wrap(current.I),
@@ -1999,6 +2000,8 @@ Rcpp::List vglm_fit(const Data& data, const VectorFamily& fam, const std::vector
         Rcpp::Named("accumulation") = any_lowrank ? "lowrank" : "pairwise",
         Rcpp::Named("solver") = opts.solver,
         Rcpp::Named("products") = products);
+    out.push_back(Rcpp::wrap(step_kinds), "solver.steps");
+    return out;
 }
 
 } // namespace fglm_vglm

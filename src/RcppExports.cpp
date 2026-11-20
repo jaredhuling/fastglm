@@ -1288,6 +1288,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fastglm_set_trace_cpp
+bool fastglm_set_trace_cpp(bool on, bool restart);
+RcppExport SEXP _fastglm_fastglm_set_trace_cpp(SEXP onSEXP, SEXP restartSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< bool >::type on(onSEXP);
+    Rcpp::traits::input_parameter< bool >::type restart(restartSEXP);
+    rcpp_result_gen = Rcpp::wrap(fastglm_set_trace_cpp(on, restart));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fastglm_trace_on_cpp
+bool fastglm_trace_on_cpp();
+RcppExport SEXP _fastglm_fastglm_trace_on_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(fastglm_trace_on_cpp());
+    return rcpp_result_gen;
+END_RCPP
+}
+// fastglm_trace_line_cpp
+void fastglm_trace_line_cpp(int iter, int passes, double criterion, int halvings, std::string label);
+RcppExport SEXP _fastglm_fastglm_trace_line_cpp(SEXP iterSEXP, SEXP passesSEXP, SEXP criterionSEXP, SEXP halvingsSEXP, SEXP labelSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< int >::type passes(passesSEXP);
+    Rcpp::traits::input_parameter< double >::type criterion(criterionSEXP);
+    Rcpp::traits::input_parameter< int >::type halvings(halvingsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type label(labelSEXP);
+    fastglm_trace_line_cpp(iter, passes, criterion, halvings, label);
+    return R_NilValue;
+END_RCPP
+}
 // validate_glm_vectors
 Rcpp::NumericVector validate_glm_vectors(Rcpp::NumericVector y, Rcpp::NumericVector weights, Rcpp::NumericVector offset);
 RcppExport SEXP _fastglm_validate_glm_vectors(SEXP ySEXP, SEXP weightsSEXP, SEXP offsetSEXP) {
@@ -1376,6 +1412,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_fastglm_set_threads_cpp", (DL_FUNC) &_fastglm_fastglm_set_threads_cpp, 1},
     {"_fastglm_fastglm_has_openmp_cpp", (DL_FUNC) &_fastglm_fastglm_has_openmp_cpp, 0},
     {"_fastglm_fastglm_logical_cores_cpp", (DL_FUNC) &_fastglm_fastglm_logical_cores_cpp, 0},
+    {"_fastglm_fastglm_set_trace_cpp", (DL_FUNC) &_fastglm_fastglm_set_trace_cpp, 2},
+    {"_fastglm_fastglm_trace_on_cpp", (DL_FUNC) &_fastglm_fastglm_trace_on_cpp, 0},
+    {"_fastglm_fastglm_trace_line_cpp", (DL_FUNC) &_fastglm_fastglm_trace_line_cpp, 5},
     {"_fastglm_validate_glm_vectors", (DL_FUNC) &_fastglm_validate_glm_vectors, 3},
     {"colmax_big",         (DL_FUNC) &colmax_big,         1},
     {"colmin_big",         (DL_FUNC) &colmin_big,         1},

@@ -535,13 +535,19 @@ List fit_glm_zi(
     // ---------------- EM + SQUAREM loop -------------------------------------
     bool   conv    = false;
     int    em_iter = 0;
+    // Trace (trace.h): one line per EM step and per Newton step below, on
+    // the calling thread; passes count the log likelihood evaluations.
+    const fglm_trace::Tracer tracer;
+    int evaluations = 0;
 
     for (; em_iter < em_maxit; ) {
+        Rcpp::checkUserInterrupt();
         VectorXd x0 = pack_params();
 
         // -- First EM step --
         double ll1 = do_em_step();
-        ++em_iter;
+        ++em_iter; ++evaluations;
+        tracer.iteration(em_iter, evaluations, ll1, 0, "loglik");
         double rel = std::fabs(ll1 - ll) / (std::fabs(ll1) + 0.1);
         ll = ll1;
         if (rel < em_tol && em_iter > 1) { conv = true; break; }
@@ -551,7 +557,8 @@ List fit_glm_zi(
 
         // -- Second EM step --
         double ll2 = do_em_step();
-        ++em_iter;
+        ++em_iter; ++evaluations;
+        tracer.iteration(em_iter, evaluations, ll2, 0, "loglik");
         rel = std::fabs(ll2 - ll) / (std::fabs(ll2) + 0.1);
         ll = ll2;
         if (rel < em_tol && em_iter > 1) { conv = true; break; }
@@ -578,6 +585,7 @@ List fit_glm_zi(
             double ll_try = obs_loglik(dist_code, zero_fam_code,
                                        (dist_code == 1 ? theta : 1.0),
                                        Y, mu_c, eta_z, W, tau);
+            ++evaluations;
             if (std::isfinite(ll_try) && ll_try >= ll2) {
                 ll = ll_try;
                 sq_accepted = true;
@@ -623,6 +631,7 @@ List fit_glm_zi(
         // the remaining log likelihood, so certification can take dozens.
         const int newton_max = 100;
         for (int k = 0; k <= newton_max; ++k) {
+            Rcpp::checkUserInterrupt();
             VectorXd s = full_score(dist_code, zero_fam_code, gamma, beta,
                                     (dist_code == 1 ? theta : 1.0), Z, X, Y, W, OffZ, OffC);
             MatrixXd I = obs_info_numjac(dist_code, zero_fam_code, gamma, beta,
@@ -668,6 +677,7 @@ List fit_glm_zi(
                     const double phi = fc >= fd ? c : d, lc = std::max(fc, fd);
                     if (std::isfinite(lc) && lc > ll + rounding) {
                         theta = std::exp(phi); ll = lc; ++newton_iter;
+                        tracer.iteration(em_iter + newton_iter, evaluations, ll, 0, "loglik");
                         continue;
                     }
                 }
@@ -686,8 +696,9 @@ List fit_glm_zi(
             // visible coefficient error.
             if (small) certified = true;
             const double rounding = 64 * std::numeric_limits<double>::epsilon() * (1 + std::abs(ll));
-            double frac = 1; bool accepted = false;
+            double frac = 1; bool accepted = false; int halvings = 0;
             for (int half = 0; half < 30; ++half, frac *= 0.5) {
+                ++evaluations; halvings = half;
                 const VectorXd g = gamma + frac * step.head(p_z);
                 const VectorXd b = beta + frac * step.segment(p_z, p_c);
                 double th = theta;
@@ -699,6 +710,7 @@ List fit_glm_zi(
             }
             if (!accepted) break;
             ++newton_iter;
+            tracer.iteration(em_iter + newton_iter, evaluations, ll, halvings, "loglik");
             if (certified) break;
         }
         conv = certified;

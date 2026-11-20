@@ -265,6 +265,18 @@ fastglm_logical_cores_cpp <- function() {
     .Call(`_fastglm_fastglm_logical_cores_cpp`)
 }
 
+fastglm_set_trace_cpp <- function(on, restart = TRUE) {
+    .Call(`_fastglm_fastglm_set_trace_cpp`, on, restart)
+}
+
+fastglm_trace_on_cpp <- function() {
+    .Call(`_fastglm_fastglm_trace_on_cpp`)
+}
+
+fastglm_trace_line_cpp <- function(iter, passes, criterion, halvings, label) {
+    invisible(.Call(`_fastglm_fastglm_trace_line_cpp`, iter, passes, criterion, halvings, label))
+}
+
 validate_glm_vectors <- function(y, weights, offset) {
     .Call(`_fastglm_validate_glm_vectors`, y, weights, offset)
 }

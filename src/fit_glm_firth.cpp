@@ -80,6 +80,7 @@ List fit_glm_firth(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
                /*firth=*/true, prepared.isNotNull()?&info:nullptr);
     solver.init_parms(beta_init, mu_init, eta_init);
 
+    solver.set_trace(fglm_trace::trace_setting());
     int iters = solver.solve(maxit, inference);
 
     VectorXd b   = solver.get_beta();

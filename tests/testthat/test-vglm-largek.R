@@ -726,7 +726,10 @@ test_that("cg_maxit_state", {
         expect_identical(fit$iter, case[1])
         expect_false(fit$converged)
         expect_identical(fit$convergence.reason, "iteration_limit")
-        if (case[1] == 3L) expect_match(out[length(out)], "solver exact \\(fallback\\)")
+        # The trace prints the common one-line format; the solver path is
+        # recorded in solver.steps.
+        expect_match(out, "^iter ")
+        if (case[1] == 3L) expect_identical(fit$solver.steps[length(fit$solver.steps)], "fallback")
         ref <- largek_product(d$x, fit$coefficients, rep(0, length(fit$coefficients)),
                               y = d$y)
         expect_max_diff(fit$information, ref$information, 1e-10)
@@ -752,7 +755,7 @@ test_that("cg_retry_and_halving_failed", {
                                        a$constraints, "multinomial", a$K, 1L, FALSE,
                                        1e-12, 100L, 173L, TRUE,
                                        list(solver = "cg", cg_reject_steps = 2L)))
-    expect_identical(sum(grepl("solver exact \\(retry\\)", out)), 2L)
+    expect_identical(sum(rt$solver.steps == "retry"), 2L)
     expect_true(rt$converged)
     expect_cg_exact(rt, ex)
     # Every CG step rejected: only exact steps are taken, as in the exact

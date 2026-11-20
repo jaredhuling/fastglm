@@ -119,7 +119,13 @@ certifies convergence and gives the reported covariance. \code{threads} sets
 the number of threads for the compiled computations of this fit, or
 \code{NULL} (default) for the session setting of \code{\link[=fastglm_threads]{fastglm_threads()}}. Results
 are identical for every number of threads. The thread count used is
-stored in the fit as \code{threads} and is not kept in the fit's \code{control}.}
+stored in the fit as \code{threads} and is not kept in the fit's \code{control}.
+\code{trace = TRUE} prints one line per iteration (the iteration, the
+evaluations over the data so far, the log likelihood, the step halvings
+that led to the current estimate, and the elapsed seconds); \code{FALSE}
+prints none, and the default \code{NULL} uses \code{getOption("fastglm.trace")},
+which defaults to \code{TRUE} for \code{\link[=fastglm_ordinal_streaming]{fastglm_ordinal_streaming()}} in an
+interactive session and \code{FALSE} otherwise.}
 
 \item{link}{cumulative link: \code{"logit"} (proportional odds), \code{"probit"},
 or \code{"cloglog"} (complementary log-log). Prepared fits use their saved

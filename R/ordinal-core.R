@@ -9,6 +9,21 @@
     list(control=control[names(control)!="threads"],threads=threads)
 }
 
+# The optimizer controls kept in a fit: trace is FALSE, so that refits made
+# from the fit's controls (bootstrap, tests) are not traced.
+.ordinal_stored_control <- function(ctl) {ctl$trace <- FALSE; ctl}
+
+# The trace flag of ordinal optimizer controls: control$trace when given (TRUE
+# or FALSE), otherwise options(fastglm.trace) (see .fastglm_resolve_trace()).
+# Returns the controls without trace and the flag; the fit stores the flag
+# in its controls.
+.ordinal_split_trace <- function(control,streamed=FALSE) {
+    trace <- if(is.list(control)) control[["trace"]] else NULL
+    trace <- .fastglm_resolve_trace(trace,streamed,name="control$trace")
+    if(is.list(control) && "trace" %in% names(control)) control <- control[names(control)!="trace"]
+    list(control=control,trace=trace)
+}
+
 # Fit cumulative links in their threshold/common-slope coordinates. Centering
 # and scaling are linear changes of coordinates, under which mean bias reduction
 # is equivariant. A log-spacing transformation would change its target.
@@ -38,7 +53,11 @@
        (is.null(names(control)) || anyNA(names(control)) || any(!nzchar(names(control))) ||
         anyDuplicated(names(control)))) || length(setdiff(names(control),names(defaults))))
         stop("unknown or duplicated ordinal optimizer control",call.=FALSE)
-    ctl<-utils::modifyList(defaults,control)
+    split<-.ordinal_split_trace(control)
+    ctl<-utils::modifyList(defaults,split$control);ctl$trace<-split$trace
+    # The trace scope starts the elapsed-time clock of this fit.
+    trace.scope<-.fastglm_scope_trace(ctl$trace)
+    on.exit(trace.scope$restore(),add=TRUE)
     for(nm in c("score.tol","step.tol","max.step","max.halves","condition.tol"))
         if(!positive.scalar(ctl[[nm]],nm=="max.halves"))
             stop("invalid ordinal optimizer control: ",nm,call.=FALSE)
@@ -114,7 +133,7 @@
          loglik=fit$loglik,rank=d,df.residual=frequency-d,nobs=sum(good),
          frequency=frequency,weights=response$weights,offset=offset,response=response,category=response,
          preparation.reused=setup$reused,
-         firth=firth,link=link,method=if(firth) "meanBR" else "ML",control=ctl,
+         firth=firth,link=link,method=if(firth) "meanBR" else "ML",control=.ordinal_stored_control(ctl),
          tol=tol,maxit=as.integer(maxit),block.size=as.integer(block.size))
 }
 

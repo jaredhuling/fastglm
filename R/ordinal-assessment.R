@@ -302,6 +302,9 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
         offset=NULL,bins=10L,proportional.odds=FALSE,po.control=list(),
         po.test=c("none","score"),po.terms=NULL,po.test.control=list(),
         po.estimation=c("ML","meanBR"),keep.rows=NULL,sink=NULL) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     if(!inherits(object,"fastglm_ordinal") || !isTRUE(object$converged))
         stop("ordinal assessment requires a converged fastglm_ordinal fit",call.=FALSE)
     if(!is.numeric(bins) || is.complex(bins) || length(bins)!=1L || !is.finite(bins) ||

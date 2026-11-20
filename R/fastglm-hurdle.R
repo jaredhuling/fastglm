@@ -55,6 +55,14 @@
 #' @param threads the number of threads for the compiled computations of this
 #'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 #'   Results are identical for every number of threads.
+#' @param trace `TRUE` to print one line per iteration of each component
+#'   fit (the binary part, then the count part: the iteration, the passes
+#'   over the data so far, the deviance or log likelihood, the step halvings
+#'   of the iteration, and the elapsed seconds; a negative binomial count part
+#'   prints one line per outer iteration), `FALSE` for none, or `NULL`
+#'   (default) for `getOption("fastglm.trace")`, which defaults to `TRUE`
+#'   for a [fastglm_source()] in an interactive session and `FALSE`
+#'   otherwise.
 #'
 #' @returns A list of class `c("fastglm_hurdle", "fastglm")` with elements
 #'   `coefficients` (a list with `count` and `zero`), `se` (likewise),
@@ -96,7 +104,7 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
                            theta.maxit = 100L,
                            model = TRUE, y = TRUE, x = FALSE,
                            response = NULL, z = NULL, method = 2L, block.size = 8192L,
-                           threads = NULL)
+                           threads = NULL, trace = NULL)
 {
     if (!requireNamespace("Formula", quietly = TRUE))
         stop("Package 'Formula' is required for fastglm_hurdle(); install it.",
@@ -108,6 +116,10 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
     threads <- scope$threads
+    # The component fits are traced (nested = TRUE): their iterations are the
+    # hurdle model's.
+    tr <- .fastglm_scope_trace(trace, streamed = inherits(formula, "fastglm_source"), nested = TRUE)
+    on.exit(tr$restore(), add = TRUE)
     if(is.matrix(formula) || inherits(formula,c("dgCMatrix","big.matrix","fastglm_source"))) {
         if(!missing(subset) || !missing(na.action))
             stop("subset and na.action apply only to formula fits; prepare matrix or source rows first",call.=FALSE)
@@ -132,7 +144,7 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     mf$tol  <- mf$maxit  <- mf$outer.tol <- mf$outer.maxit <- NULL
     mf$theta.tol <- mf$theta.maxit <- NULL
     mf$model <- mf$y <- mf$x <- NULL
-    mf$response <- mf$z <- mf$method <- mf$block.size <- mf$threads <- NULL
+    mf$response <- mf$z <- mf$method <- mf$block.size <- mf$threads <- mf$trace <- NULL
     mf[[1L]] <- as.name("model.frame")
     mf <- eval(mf, parent.frame())
 

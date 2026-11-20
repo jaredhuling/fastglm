@@ -30,6 +30,11 @@
 #' @param threads the number of threads for the compiled computations, or
 #'   `NULL` (default) for the session setting of [fastglm_threads()]. Results
 #'   are identical for every number of threads.
+#' @param trace `TRUE` to print one line per iteration (the iteration,
+#'   the passes over the data so far, the deviance, the step halvings of the
+#'   iteration, and the elapsed seconds), `FALSE` for none, or `NULL`
+#'   (default) for `getOption("fastglm.trace", FALSE)`. Lines are printed
+#'   between iterations, so tracing off costs nothing.
 #' @param object a `fastglmFit` object; the output of a call to `glm()` with `method = fastglm_fit`.
 #' @param \dots for `vcov()` and `summary()`, other arguments passed downstream.
 #'
@@ -138,12 +143,17 @@ fastglm_fit <- function(x, y,
 {
     control <- do.call(fastglm_control, control)
     firth <- firth || isTRUE(control$firth)
+    # With an offset, stats::glm() refits the intercept-only model for the
+    # null deviance with the same control (x is its "(Intercept)" column and
+    # mustart the fitted values of the main fit); that refit is not traced.
+    if (intercept && identical(colnames(x), "(Intercept)") && !is.null(mustart))
+        control$trace <- FALSE
     res <- fastglmPure(x, y, .resolve_family(family),
                       if (is.null(weights)) rep(1, NROW(y)) else weights,
                       if (is.null(offset)) rep(0, NROW(y)) else offset,
                       start, etastart, mustart, control$method, control$tol,
                       control$maxit, firth = firth, covariance = control$covariance,
-                      threads = control$threads)
+                      threads = control$threads, trace = control$trace)
     # The post-fit pass runs at the fit's thread count.
     restore.threads <- .fastglm_with_threads(res$threads)
     on.exit(restore.threads(), add = TRUE)
@@ -156,7 +166,8 @@ fastglm_fit <- function(x, y,
 #' @export
 #' @rdname fastglm_fit
 fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = FALSE,
-                            covariance = c("estimate", "previous"), threads = NULL, ...) {
+                            covariance = c("estimate", "previous"), threads = NULL,
+                            trace = NULL, ...) {
     covariance <- match.arg(covariance)
     if (...length() > 0L && "method" %in% ...names() && identical(fastmethod, 0L)) {
         fastmethod <- ...elt(which(...names() == "method")[1L])
@@ -170,8 +181,9 @@ fastglm_control <- function(fastmethod = 0L, tol = 1e-7, maxit = 100L, firth = F
     .check_iterations(tol, maxit)
 
     if (!is.null(threads)) .fastglm_resolve_threads(threads)   # validates the request
+    if (!is.null(trace)) .fastglm_resolve_trace(trace)         # validates the request
     list(method = fastmethod, tol = tol, maxit = maxit, firth = firth, covariance = covariance,
-         threads = threads)
+         threads = threads, trace = trace)
 }
 
 #' @exportS3Method stats::vcov fastglmFit
@@ -187,3 +199,63 @@ summary.fastglmFit <- function(object, ...) {
 
 #' @exportS3Method print fastglmFit
 print.fastglmFit <- function(x,...) print.fastglm(x,...)
+
+## Methods of stats that refit a formula fit (anova(), drop1(), add1(),
+## profile()). anova.glm() refits with method = fastglm_fit and the fit's
+## controls; drop1.glm(), add1.glm(), and profile.glm() refit with
+## stats::glm.fit(), which accepts only glm.control() fields, so they get the
+## fit's tolerance and iteration limit in that form. The refits are not
+## traced, and refits by glm.fit() (maximum likelihood) are refused for
+## bias-reduced fits.
+.fastglm_stats_refit <- function(object, what, glm.fit = TRUE)
+{
+    ctl <- object$control
+    if (glm.fit) {
+        if (isTRUE(ctl$firth) || isTRUE(object$firth))
+            stop(sprintf("%s() refits by maximum likelihood with stats::glm.fit() and is not available for bias-reduced (firth = TRUE) fits", what),
+                 call. = FALSE)
+        object$control <- stats::glm.control(
+            epsilon = if (is.null(ctl$tol)) 1e-8 else ctl$tol,
+            maxit = if (is.null(ctl$maxit)) 100L else ctl$maxit)
+    } else if (is.list(ctl)) {
+        ctl$trace <- FALSE
+        object$control <- ctl
+    }
+    object
+}
+
+#' @exportS3Method stats::anova fastglmFit
+anova.fastglmFit <- function(object, ...)
+{
+    object <- .fastglm_stats_refit(object, "anova", glm.fit = FALSE)
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
+    NextMethod()
+}
+
+#' @exportS3Method stats::drop1 fastglmFit
+drop1.fastglmFit <- function(object, ...)
+{
+    object <- .fastglm_stats_refit(object, "drop1")
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
+    NextMethod()
+}
+
+#' @exportS3Method stats::add1 fastglmFit
+add1.fastglmFit <- function(object, ...)
+{
+    object <- .fastglm_stats_refit(object, "add1")
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
+    NextMethod()
+}
+
+#' @exportS3Method stats::profile fastglmFit
+profile.fastglmFit <- function(fitted, ...)
+{
+    fitted <- .fastglm_stats_refit(fitted, "profile")
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
+    NextMethod()
+}

@@ -610,6 +610,10 @@ template<class Data>
 int partial_observed_newton(const Data& data,VectorXd& b,double score_tol,double step_tol,int maxit,
     double max_step,int max_halves,bool trace,int& evaluations,OrdinalWorkspace* workspace=nullptr) {
     int iterations=0;
+    // Trace: one line per iteration (trace.h), at its start; passes are the
+    // evaluations over the data so far.
+    const fglm_trace::Tracer tracer(trace);
+    int halvings=0;
     try {
         PartialObservedState current=partial_observed_evaluate(data,b,workspace);
         ++evaluations;
@@ -628,7 +632,7 @@ int partial_observed_newton(const Data& data,VectorXd& b,double score_tol,double
             const double scaled=current.score.cwiseProduct(inverse_scale).cwiseAbs().maxCoeff();
             double change=0,fraction=1;
             partial_step_limits(data,b,direction,change,fraction);
-            if(trace) Rcpp::Rcout<<"observed iteration "<<iterations<<": score "<<scaled<<", predictor step "<<change<<"\n";
+            tracer.iteration(iterations+1,evaluations,current.loglik,halvings,"loglik");
             if(scaled<score_tol && change<step_tol) {
                 if(fraction==1) b+=direction;
                 return iterations+1;
@@ -641,6 +645,7 @@ int partial_observed_newton(const Data& data,VectorXd& b,double score_tol,double
             VectorXd candidate(b.size());
             PartialObservedState trial;
             for(int h=0;h<=max_halves && !accepted;++h) {
+                halvings=h;
                 candidate=b+fraction*direction;
                 try {
                     trial=partial_observed_evaluate(data,candidate,workspace);
@@ -827,11 +832,15 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
         }
         return false;
     };
+    // Trace: one line per iteration at its start (numbered after the
+    // observed Newton iterations); passes are the evaluations so far and
+    // halvings those of the step that led to the current estimate.
+    const fglm_trace::Tracer tracer(trace);
+    int halvings=0;
     for(int iter=1;iter<=expected_limit;++iter) {
         Rcpp::checkUserInterrupt();iterations=iter;
         history.row(iter-1)<<current.loglik,current.scaled_score,current.predictor_step,current.minimum_gap;
-        if(trace) Rcpp::Rcout<<"iteration "<<iter<<": score "<<current.scaled_score<<
-            ", predictor step "<<current.predictor_step<<", minimum gap "<<current.minimum_gap<<"\n";
+        tracer.iteration(observed_iterations+iter,evaluations,current.loglik,halvings,"loglik");
         if(certify()) break;
         const MatrixXd metric=current.inverse;const VectorXd score=current.score;
         const double merit0=.5*score.dot(metric*score);
@@ -859,7 +868,7 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
                     const bool accepted=firth ? (std::isfinite(merit) &&
                         (binary_scoring || merit<=(1-1e-4*fraction)*merit0)) :
                         trial.loglik-current.loglik>=.1*fraction*ascent-rounding;
-                    if(accepted) {accepted_b=candidate;accepted_state=std::move(trial);return true;}
+                    if(accepted) {accepted_b=candidate;accepted_state=std::move(trial);halvings=h;return true;}
                     last_rejection=firth ? "adjusted-score norm did not decrease sufficiently" :
                         "likelihood did not increase sufficiently";
                 } catch(const OrdinalEvaluationError& error) {last_rejection=error.what();}
@@ -872,9 +881,6 @@ inline Rcpp::List partial_fit(const Data& data,const VectorXd& start,
             VectorXd direction;int held=0;
             const bool built=boundary_direction(direction,held);
             if(built && held>0) accepted=search(direction);
-            if(trace && (held>0 || !built)) Rcpp::Rcout<<"  boundary step: "<<(built ? "built" : "not built")<<
-                ", held "<<held<<", "<<(accepted ? "accepted" : "rejected")<<
-                (accepted ? "" : std::string(" (")+last_rejection+")")<<"\n";
         }
         if(!accepted) accepted=search(current.step,current.predictor_step);
         if(!accepted) {

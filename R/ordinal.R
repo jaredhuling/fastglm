@@ -45,6 +45,12 @@
 #'   `NULL` (default) for the session setting of [fastglm_threads()]. Results
 #'   are identical for every number of threads. The thread count used is
 #'   stored in the fit as `threads` and is not kept in the fit's `control`.
+#'   `trace = TRUE` prints one line per iteration (the iteration, the
+#'   evaluations over the data so far, the log likelihood, the step halvings
+#'   that led to the current estimate, and the elapsed seconds); `FALSE`
+#'   prints none, and the default `NULL` uses `getOption("fastglm.trace")`,
+#'   which defaults to `TRUE` for [fastglm_ordinal_streaming()] in an
+#'   interactive session and `FALSE` otherwise.
 #' @param model retain the formula model frame.
 #' @param ... additional arguments to the default or formula method.
 #' @details By default, thresholds are estimated in increasing order. The same location
@@ -457,6 +463,9 @@ deviance.fastglm_ordinal <- function(object,...) {
 #'   intervals, not exact small-sample or cluster-robust intervals.
 #' @export
 confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profile"),control=list(),...) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     if(length(list(...))) stop("unused ordinal confidence-interval arguments",call.=FALSE)
     method <- match.arg(method)
     if(length(level)!=1L || !is.finite(level) || level<=0 || level>=1)

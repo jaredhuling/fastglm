@@ -3,6 +3,7 @@
 #include <Rcpp.h>
 #include "../inst/include/glm.h"
 #include "../inst/include/nb_theta.h"
+#include "../inst/include/trace.h"
 #include <RcppEigen.h>
 #include <boost/math/special_functions/digamma.hpp>
 #include <boost/math/special_functions/trigamma.hpp>
@@ -134,7 +135,15 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
     bool   outer_conv   = false;
     bool   inner_conv_last = true;
 
+    // Trace (trace.h): one line per outer iteration, after the theta update,
+    // with the log likelihood at the updated theta (the deviance changes
+    // with theta, so it is not comparable across outer iterations); the log
+    // likelihood is computed only when tracing. passes count the IRLS
+    // iterations and theta updates so far.
+    const fglm_trace::Tracer tracer;
     for (outer_iter = 0; outer_iter < outer_maxit; ++outer_iter) {
+        Rcpp::checkUserInterrupt();
+        const int halvings_before = solver.get_halvings();
         // (a) beta-step: IRLS at fixed theta.
         inner_iters       += solver.solve(maxit);
         inner_conv_last    = solver.get_converged();
@@ -150,6 +159,10 @@ List fit_glm_nb(Rcpp::NumericMatrix x, Rcpp::NumericVector y,
         theta = fglm::nb::mle_theta(theta, y_arr, mu_arr, w_arr,
                                     theta_tol, theta_maxit);
         ++theta_iters;
+        if (tracer.on)
+            tracer.iteration(outer_iter + 1, inner_iters + theta_iters,
+                             nb_loglik(theta, y_arr, mu_arr, w_arr),
+                             solver.get_halvings() - halvings_before, "loglik");
 
         // (c) convergence: the joint Fisher decrement at (beta_now, theta),
         // the deviance decrease predicted by one more scoring step in both

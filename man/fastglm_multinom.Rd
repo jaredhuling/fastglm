@@ -153,7 +153,11 @@ session setting of \code{\link[=fastglm_threads]{fastglm_threads()}}. Results ar
 number of threads. The thread count used is stored in the fit as
 \code{threads}. A \code{\link[=fastglm_source]{fastglm_source()}} is read on one thread, and each source
 block is split into blocks of \code{block.size} rows that are processed in
-parallel.}
+parallel. \code{trace = TRUE} prints one line per iteration (the iteration,
+the passes over the data so far, the deviance, the step halvings of the
+iteration, and the elapsed seconds) and \code{FALSE} prints none; the default
+\code{NULL} uses \code{getOption("fastglm.trace")}, which defaults to \code{TRUE} for a
+\code{\link[=fastglm_source]{fastglm_source()}} in an interactive session and \code{FALSE} otherwise.}
 
 \item{levels}{for a \code{\link[=fastglm_source]{fastglm_source()}}, the category labels in order. By
 default they are the levels of the prototype's factor response (a

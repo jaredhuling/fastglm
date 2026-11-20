@@ -58,7 +58,11 @@
        any(!nzchar(names(control))) || anyDuplicated(names(control)))) ||
        length(setdiff(names(control),names(defaults))))
         stop("unknown or duplicated ordinal optimizer control",call.=FALSE)
-    ctl <- utils::modifyList(defaults,control)
+    split <- .ordinal_split_trace(control)
+    ctl <- utils::modifyList(defaults,split$control);ctl$trace <- split$trace
+    # The trace scope starts the elapsed-time clock of this fit.
+    trace.scope <- .fastglm_scope_trace(ctl$trace)
+    on.exit(trace.scope$restore(),add=TRUE)
     for(nm in c("score.tol","step.tol","max.step","max.halves","condition.tol"))
         if(!positive(ctl[[nm]],nm=="max.halves"))
             stop("invalid ordinal optimizer control: ",nm,call.=FALSE)
@@ -164,7 +168,7 @@
         loglik=fit$loglik,rank=d,df.residual=frequency-d,nobs=frequency,
         nobs.rows=positive.rows,frequency=frequency,
         response=response,category=response,design.columns=columns,preparation.reused=FALSE,
-        firth=firth,link=link,method=if(firth) "meanBR" else "ML",control=ctl,tol=tol,
+        firth=firth,link=link,method=if(firth) "meanBR" else "ML",control=.ordinal_stored_control(ctl),tol=tol,
         maxit=as.integer(maxit),block.size=as.integer(block.size))
     class(object) <- c("fastglm_ordinal_partial","fastglm_ordinal")
     object

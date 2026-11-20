@@ -201,6 +201,7 @@ protected:
     void step_halve() override
     {
         firth_step_halved_ = true;
+        ++halvings_;
         beta = 0.5 * (beta.array() + beta_prev.array());
         update_eta();
         update_mu();

@@ -19,6 +19,7 @@
   firth = FALSE,
   covariance = c("estimate", "previous"),
   threads = NULL,
+  trace = NULL,
   ...
 )
 }
@@ -49,6 +50,12 @@ are not affected.}
 \item{threads}{the number of threads for the compiled computations, or
 `NULL` (default) for the session setting of [fastglm_threads()]. Results
 are identical for every number of threads.}
+
+\item{trace}{`TRUE` to print one line per iteration (the iteration,
+the passes over the data so far, the deviance, the step halvings of the
+iteration, and the elapsed seconds), `FALSE` for none, or `NULL`
+(default) for `getOption("fastglm.trace", FALSE)`. Lines are printed
+between iterations, so tracing off costs nothing.}
 
 \item{...}{additional arguments to [stats::glm()].}
 }

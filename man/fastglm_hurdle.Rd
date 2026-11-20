@@ -28,7 +28,8 @@ fastglm_hurdle(
   z = NULL,
   method = 2L,
   block.size = 8192L,
-  threads = NULL
+  threads = NULL,
+  trace = NULL
 )
 }
 \arguments{
@@ -93,6 +94,15 @@ truncated count component. A source determines its own block sizes.}
 \item{threads}{the number of threads for the compiled computations of this
 fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 Results are identical for every number of threads.}
+
+\item{trace}{`TRUE` to print one line per iteration of each component
+fit (the binary part, then the count part: the iteration, the passes
+over the data so far, the deviance or log likelihood, the step halvings
+of the iteration, and the elapsed seconds; a negative binomial count part
+prints one line per outer iteration), `FALSE` for none, or `NULL`
+(default) for `getOption("fastglm.trace")`, which defaults to `TRUE`
+for a [fastglm_source()] in an interactive session and `FALSE`
+otherwise.}
 }
 \value{
 A list of class `c("fastglm_hurdle", "fastglm")` with elements

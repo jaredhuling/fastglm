@@ -73,7 +73,11 @@
 #'   number of threads. The thread count used is stored in the fit as
 #'   `threads`. A [fastglm_source()] is read on one thread, and each source
 #'   block is split into blocks of `block.size` rows that are processed in
-#'   parallel.
+#'   parallel. `trace = TRUE` prints one line per iteration (the iteration,
+#'   the passes over the data so far, the deviance, the step halvings of the
+#'   iteration, and the elapsed seconds) and `FALSE` prints none; the default
+#'   `NULL` uses `getOption("fastglm.trace")`, which defaults to `TRUE` for a
+#'   [fastglm_source()] in an interactive session and `FALSE` otherwise.
 #' @param ... additional arguments to the default or formula method (not used).
 #' @details A [fastglm_source()] is read one block at a time, so the
 #'   design is never held in memory as a whole. Each block (a data frame for a
@@ -221,6 +225,10 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     scope <- .fastglm_scope_threads(control[["threads"]])
     on.exit(scope$restore(), add = TRUE)
     control$threads <- NULL
+    # The trace applies to this fit only (not its intercept-only fit or refits).
+    tr <- .fastglm_scope_trace(control[["trace"]], streamed = TRUE)
+    on.exit(tr$restore(), add = TRUE)
+    control$trace <- NULL
     # Fail fast on "cg" with bias reduction, before any pass over the source.
     .vglm_control_solver(control, 1L, 1L, firth, streamed = TRUE)
     read <- .vglm_stream_reader(source, levels)
@@ -271,13 +279,13 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
         warning("fastglm_multinom: solver = \"cg\" reads the whole source for every conjugate gradient step",
                 call. = FALSE)
     control <- .vglm_control_solver(control, p, M, firth, streamed = TRUE)
-    engine <- function(fetch, p, intercept, value, constraints, firth, ctl = control)
+    engine <- function(fetch, p, intercept, value, constraints, firth, ctl = control, trace = FALSE)
         .multinom_engine_errors(vglm_fit_source(
             fetch, source$n_chunks, as.integer(p), totals, as.integer(intercept), value,
             constraints, "multinomial", as.integer(K), as.integer(ref), firth, tol,
-            as.integer(maxit), block.size, FALSE, ctl))
+            as.integer(maxit), block.size, trace, ctl))
     constraints <- rep(list(diag(M)), p)
-    fit <- engine(read, p, intercept, value, constraints, firth)
+    fit <- engine(read, p, intercept, value, constraints, firth, trace = tr$trace)
     null <- engine(function(k) {
         z <- read(k)
         z$X <- matrix(1, nrow(z$X), 1L)
@@ -524,6 +532,9 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
     scope <- .fastglm_scope_threads(control[["threads"]])
     on.exit(scope$restore(), add = TRUE)
     control$threads <- NULL
+    tr <- .fastglm_scope_trace(control[["trace"]])
+    on.exit(tr$restore(), add = TRUE)
+    control$trace <- NULL
 
     # Response: factor (individual) or count matrix (grouped).
     grouped <- FALSE
@@ -597,10 +608,10 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
     constraints <- rep(list(diag(M)), ncol(x))
     control.null <- .vglm_control_solver(control, 1L, M, FALSE)
     control <- .vglm_control_solver(control, ncol(x), M, firth)
-    run <- function(xx, cons, fth, ctl) .multinom_engine(
+    run <- function(xx, cons, fth, ctl, trace = FALSE) .multinom_engine(
         xx, codes, counts, weights, offset, cons, K, ref, fth, tol, maxit,
-        block.size, ctl)
-    fit <- run(x, constraints, firth, control)
+        block.size, ctl, trace)
+    fit <- run(x, constraints, firth, control, tr$trace)
     null <- run(matrix(1, n, 1L), list(diag(M)), FALSE, control.null)
 
     info <- c(info, list(x = x, y = yout, weights = weights, offset = offset,
@@ -639,6 +650,9 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
     threads <- control[["threads"]]
     if (!is.null(threads) && (!is.numeric(threads) || is.na(.fastglm_as_count(threads))))
         err("'control$threads' must be a positive integer")
+    trace <- control[["trace"]]
+    if (!is.null(trace) && (!is.logical(trace) || length(trace) != 1L || is.na(trace)))
+        err("'control$trace' must be TRUE, FALSE, or NULL")
     solver <- control[["solver"]]
     if (!is.null(solver) &&
         !(is.character(solver) && length(solver) == 1L && !is.na(solver) &&
@@ -712,7 +726,8 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
 
 # Call the compiled engine; engine errors are rethrown with a clear prefix.
 .multinom_engine <- function(x, codes, counts, weights, offset, constraints, K,
-                             reference, firth, tol, maxit, block.size, control) {
+                             reference, firth, tol, maxit, block.size, control,
+                             trace = FALSE) {
     # A sparse design is passed transposed, so a block of rows is a
     # contiguous range of columns of the column-compressed matrix.
     sparse <- inherits(x, "dgCMatrix")
@@ -721,7 +736,7 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
         (if (sparse) vglm_fit_sparse else if (big) vglm_fit_big else vglm_fit_dense)(
             if (sparse) Matrix::t(x) else if (big) x@address else x, codes, counts, weights, offset,
             constraints, "multinomial", as.integer(K), as.integer(reference),
-            firth, tol, as.integer(maxit), as.integer(block.size), FALSE, control))
+            firth, tol, as.integer(maxit), as.integer(block.size), trace, control))
 }
 
 # Evaluate an engine call, rethrowing its errors with a clear prefix.

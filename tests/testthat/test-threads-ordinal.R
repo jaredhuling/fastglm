@@ -160,8 +160,8 @@ test_that("control$threads is validated, recorded, and kept out of the fit's con
     fit2 <- fastglm_ordinal(d$x, d$y, control = list(threads = 2L))
     expect_identical(fit2$threads, if (fastglm_threads()$openmp) min(2L, fastglm_threads()$logical.cores) else 1L)
     expect_identical(fastglm_threads()$threads, old)
-    # The trace argument keeps printing.
-    expect_output(fastglm_ordinal(d$x, d$y, control = list(threads = 2L, trace = TRUE)), "iteration")
+    # The trace argument keeps printing (in the common trace format).
+    expect_output(fastglm_ordinal(d$x, d$y, control = list(threads = 2L, trace = TRUE)), "iter +1 ")
 })
 
 test_that("threads are used for an ordinal fit with several blocks, and not with one", {

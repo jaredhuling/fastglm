@@ -18,7 +18,8 @@ fastglm_streaming(
   weights = NULL,
   offset = NULL,
   block.size = 100000L,
-  threads = NULL
+  threads = NULL,
+  trace = NULL
 )
 }
 \arguments{
@@ -84,6 +85,13 @@ tolerance. Bias-reduced fits (\code{firth = TRUE}) are not affected.}
 each block of observations, or \code{NULL} (default) for the session setting
 of \code{\link[=fastglm_threads]{fastglm_threads()}}. Blocks are still read one at a time. Results are
 identical for every number of threads.}
+
+\item{trace}{\code{TRUE} to print one line per coefficient update (the
+iteration, the passes over the source so far including the validation
+pass, the deviance, the step halvings of the iteration, and the elapsed
+seconds), \code{FALSE} for none, or \code{NULL} (default) for
+\code{getOption("fastglm.trace")}, which defaults to \code{TRUE} in an interactive
+session and \code{FALSE} otherwise (in scripts, knitr, and tests).}
 }
 \value{
 An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing

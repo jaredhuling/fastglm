@@ -67,6 +67,7 @@ List fastglm(Rcpp::NumericMatrix Xs,
 
 
     // maximize likelihood
+    glm_solver->set_trace(fglm_trace::trace_setting());
     int iters = glm_solver->solve(maxit, inference);
     
     VectorXd beta      = glm_solver->get_beta();
@@ -190,6 +191,7 @@ List bigfastglm(XPtr<BigMatrix> Xs,
 
 
     // maximize likelihood
+    solver->set_trace(fglm_trace::trace_setting());
     int iters = solver->solve(maxit, inference);
 
     VectorXd beta      = solver->get_beta();
@@ -292,6 +294,7 @@ List fit_sparse_glm(SEXP x_sparse,
                       valideta, validmu,
                       tol, maxit, type, fam_code, fp, firth);
     solver.init_parms(beta_init, mu_init, eta_init);
+    solver.set_trace(fglm_trace::trace_setting());
     int iters = solver.solve(maxit, inference);
 
     VectorXd b   = solver.get_beta();

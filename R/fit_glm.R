@@ -189,6 +189,11 @@ tweedie_link_power <- function(family) {
 #'   Cholesky factorization. Cholesky fits of dense, sparse (`dgCMatrix`), and
 #'   `big.matrix` designs are threaded. Fits with fewer than two row blocks
 #'   of observations (16384 rows each by default) run on one thread.
+#' @param trace `TRUE` to print one line per iteration (the iteration,
+#'   the passes over the data so far, the deviance, the step halvings of the
+#'   iteration, and the elapsed seconds), `FALSE` for none, or `NULL`
+#'   (default) for `getOption("fastglm.trace", FALSE)`. Lines are printed
+#'   between iterations, so tracing off costs nothing.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -270,11 +275,14 @@ fastglmPure <- function(x, y,
                         firth    = FALSE,
                         inference = c("full", "diagonal", "none"),
                         covariance = c("estimate", "previous"),
-                        threads  = NULL)
+                        threads  = NULL,
+                        trace    = NULL)
 {
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE.", call. = FALSE)
     threads <- .fastglm_resolve_threads(threads)
+    tr <- .fastglm_scope_trace(trace)
+    on.exit(tr$restore(), add = TRUE)
     inference <- match.arg(inference)
     old.rule <- set_conv_rule(.covariance_rule(covariance))
     on.exit(set_conv_rule(old.rule), add = TRUE)
@@ -619,6 +627,11 @@ fastglmPure <- function(x, y,
 #' @param threads the number of threads for the compiled computations of this
 #'   fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 #'   Results are identical for every number of threads.
+#' @param trace `TRUE` to print one line per iteration (the iteration,
+#'   the passes over the data so far, the deviance, the step halvings of the
+#'   iteration, and the elapsed seconds), `FALSE` for none, or `NULL`
+#'   (default) for `getOption("fastglm.trace", FALSE)`. Lines are printed
+#'   between iterations, so tracing off costs nothing.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -747,6 +760,7 @@ fastglm.default <- function(x, y,
                             retain.data = TRUE,
                             covariance = c("estimate", "previous"),
                             threads = NULL,
+                            trace = NULL,
                             ...)
 {
     family <- .resolve_family(family)
@@ -754,7 +768,7 @@ fastglm.default <- function(x, y,
     if (is.null(offset)) offset <- rep(0, NROW(y))
     res <- fastglmPure(x, y, family, weights, offset, start, etastart,
                       mustart, method, tol, maxit, firth = firth, inference = match.arg(inference),
-                      covariance = match.arg(covariance), threads = threads)
+                      covariance = match.arg(covariance), threads = threads, trace = trace)
     # The post-fit pass runs at the fit's thread count.
     restore.threads <- .fastglm_with_threads(res$threads)
     on.exit(restore.threads(), add = TRUE)

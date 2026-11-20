@@ -13,6 +13,7 @@ using Eigen::Map;
 
 
 #include "conv_rule.h"
+#include "trace.h"
 
 template<typename VecTypeX, typename MatTypeX>
 class GlmBase
@@ -41,6 +42,12 @@ protected:
     
     
     virtual bool failed() const { return false; }
+
+    // Progress trace (trace.h): off unless the caller enables it with
+    // set_trace(). halvings_ counts the step halvings of the fit; solvers
+    // that halve steps increment it in step_halve().
+    bool trace_ = false;
+    int halvings_ = 0;
 
     // Hooks for the decrement-based convergence check (see solve()). The
     // defaults keep the original behavior for solvers that do not opt in.
@@ -205,6 +212,12 @@ public:
     // score is zero, so it separates a converged fit from one whose steps
     // were halved to nothing.
     void set_conv_rule(int rule) { conv_rule = rule; }
+    // One trace line per iteration of solve() when on (trace.h). Count
+    // models that run solve() inside an outer loop trace the outer loop
+    // instead and leave this off.
+    void set_trace(bool on) { trace_ = on; }
+    // Step halvings of all solve() calls so far (for outer-loop traces).
+    int get_halvings() const { return halvings_; }
     std::string get_stop_reason() const { return stop_reason; }
 
     int solve(int maxit, bool inference = true)
@@ -216,6 +229,10 @@ public:
         bool pending = false;     // deviance rule fired; confirm with the decrement
         int updates = 0;          // accepted coefficient updates (reported iterations)
         int i;
+        // Trace: passes are evaluations of the deviance over all rows (one
+        // per iteration and one per halving); one line per accepted update.
+        const fglm_trace::Tracer tracer(trace_);
+        int passes = 0;
         VecTypeX eta_before;
         // One confirmation pass is allowed beyond maxit when the deviance
         // rule fires on the last iteration.
@@ -267,6 +284,7 @@ public:
                     break;
                 }
                 ++updates;
+                tracer.iteration(updates, ++passes, dev, 0, "deviance");
                 if (std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol) {
                     conv = true; info_current = true; stop_reason = "converged";
                     break;
@@ -278,7 +296,10 @@ public:
 
             update_mu();
             update_dev_resids();
+            const int halvings_before = halvings_;
             run_step_halving(i);
+            const int halved = halvings_ - halvings_before;
+            passes += 1 + halved;
             if (failed()) { stop_reason = "step_halving_failed"; break; }
             if (!std::isfinite(dev) && i == 0)
                 stop("cannot find valid starting values: please specify some");
@@ -294,6 +315,7 @@ public:
                 break;
             }
             ++updates;
+            tracer.iteration(updates, passes, dev, halved, "deviance");
 
             if (conv_rule == 1 && converged()) pending = true;
         }
@@ -317,6 +339,8 @@ public:
         int i;
 
         conv = false;
+        const fglm_trace::Tracer tracer(trace_);
+        int passes = 0;
 
         for(i = 0; i < maxit; ++i)
         {
@@ -338,13 +362,17 @@ public:
 
             update_dev_resids();
 
+            const int halvings_before = halvings_;
             run_step_halving(i);
+            const int halved = halvings_ - halvings_before;
+            passes += 1 + halved;
             if (failed()) break;
 
             if (!std::isfinite(dev) && i == 0)
             {
                 stop("cannot find valid starting values: please specify some");
             }
+            tracer.iteration(i + 1, passes, dev, halved, "deviance");
 
             if(converged())
             {

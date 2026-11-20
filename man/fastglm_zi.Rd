@@ -25,7 +25,8 @@ fastglm_zi(
   x = FALSE,
   response = NULL,
   z = NULL,
-  threads = NULL
+  threads = NULL,
+  trace = NULL
 )
 }
 \arguments{
@@ -75,6 +76,13 @@ count design.}
 \item{threads}{the number of threads for the compiled computations of this
 fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 Results are identical for every number of threads.}
+
+\item{trace}{`TRUE` to print one line per iteration (EM and Newton
+iterations, with the iteration, the passes over the data so far, the log
+likelihood, the step halvings of the iteration, and the elapsed seconds),
+`FALSE` for none, or `NULL` (default) for `getOption("fastglm.trace")`,
+which defaults to `TRUE` for a [fastglm_source()] in an interactive
+session and `FALSE` otherwise.}
 }
 \value{
 A list of class `c("fastglm_zi", "fastglm")` with elements

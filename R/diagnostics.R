@@ -191,6 +191,9 @@ fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
 #' @returns A named interval for theta with the evaluated profile attached.
 #' @export
 fastglm_confint_theta <- function(object,level=.95,tol=1e-5,maxit=200L) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     if(is.null(object$theta) || !is.finite(object$theta) || object$theta<=0 ||
        identical(object$theta.estimated,FALSE)) stop("model must estimate theta",call.=FALSE)
     if(isTRUE(object$firth) || inherits(object,"fastglm_zi")) stop("theta profiles currently support ordinary NB, truncated NB, and hurdle NB fits",call.=FALSE)

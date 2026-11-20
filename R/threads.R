@@ -192,3 +192,59 @@ fastglm_threads <- function(n = NULL)
         fun(...)
     }
 }
+
+## The trace flag for a call: trace when it is given (TRUE or FALSE),
+## otherwise options(fastglm.trace), which defaults to TRUE only for a
+## streamed fit in an interactive session that is not knitting a document
+## (so it is off in knitr, even when knitting from an interactive session,
+## and in tests and Rscript).
+.fastglm_resolve_trace <- function(trace = NULL, streamed = FALSE, name = "trace")
+{
+    if (!is.null(trace)) {
+        if (!is.logical(trace) || length(trace) != 1L || is.na(trace))
+            stop(sprintf("'%s' must be TRUE, FALSE, or NULL", name), call. = FALSE)
+        return(isTRUE(trace))
+    }
+    isTRUE(getOption("fastglm.trace", streamed && interactive() &&
+                                      !isTRUE(getOption("knitr.in.progress"))))
+}
+
+## Sets the C++ trace flag for everything an entry point runs and returns a
+## list with the effective flag (trace) and a function (restore) that
+## restores the previous flag and options(fastglm.trace). For the duration
+## of the call, options(fastglm.trace) is FALSE, so that the fits an entry
+## point runs internally with trace = NULL (pilot fits, refits, component
+## fits) print nothing; with nested = TRUE it is the effective flag instead,
+## for entry points whose iterations are those of the fits they call (the
+## components of a two-part model). Callers use
+##   tr <- .fastglm_scope_trace(trace, streamed); on.exit(tr$restore(), add = TRUE)
+.fastglm_scope_trace <- function(trace = NULL, streamed = FALSE, nested = FALSE)
+{
+    eff <- .fastglm_resolve_trace(trace, streamed)
+    old <- options(fastglm.trace = if (nested) eff else FALSE)
+    prev <- fastglm_set_trace_cpp(eff)
+    list(trace = eff,
+         restore = function() {
+             fastglm_set_trace_cpp(prev, FALSE)
+             options(old)
+             invisible(NULL)
+         })
+}
+
+## Evaluates expr with the trace off (an internal fit whose iterations are
+## not those of the traced fit), restoring the flag afterwards.
+.fastglm_untraced <- function(expr)
+{
+    prev <- fastglm_set_trace_cpp(FALSE)
+    on.exit(fastglm_set_trace_cpp(prev, FALSE), add = TRUE)
+    expr
+}
+
+## One trace line in the common format from an iteration loop written in R;
+## prints only when the trace is on.
+.fastglm_trace_line <- function(iter, passes, criterion, halvings = 0L, label = "deviance")
+{
+    fastglm_trace_line_cpp(as.integer(iter), as.integer(passes), as.numeric(criterion),
+                           as.integer(halvings), label)
+    invisible(NULL)
+}

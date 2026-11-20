@@ -415,6 +415,11 @@
         decrement <- .count_backend_nb_decrement(reader,beta,theta,link,
                                                  identical(fit$convergence.reason,"converged_boundary"),
                                                  outer.tol*(0.1+abs(fit$deviance)))
+        # One trace line per outer iteration (when the trace is on), with the
+        # log likelihood (one more pass, made only when tracing).
+        if(fastglm_trace_on_cpp())
+            .fastglm_trace_line(iter,reader$state$passes,
+                .count_backend_count_summary(reader,beta,theta,FALSE,link)$loglik,0L,"loglik")
         if(fit$converged && th$converged && decrement/(0.1+abs(fit$deviance))<outer.tol) {
             # Two polishing rounds, as in the dense driver.
             for(polish in 1:2) th <- step()
@@ -455,8 +460,8 @@
         names(pilot$coefficients) <- names(pilot$se) <- cn;dimnames(pilot$cov.unscaled) <- list(cn,cn)
         pois.ll <- .count_backend_count_summary(reader,coef(pilot),NULL,FALSE,link)$loglik
         od <- .count_backend_overdispersion(reader,coef(pilot),link)
-        refit <- function(theta0) tryCatch(suppressWarnings(.count_backend_nb(x,y,weights,offset,unname(coef(pilot)),
-            theta0,link,method,tol,maxit,outer.maxit,outer.tol,theta.tol,theta.maxit,block.size,FALSE)),
+        refit <- function(theta0) tryCatch(suppressWarnings(.fastglm_untraced(.count_backend_nb(x,y,weights,offset,
+            unname(coef(pilot)),theta0,link,method,tol,maxit,outer.maxit,outer.tol,theta.tol,theta.maxit,block.size,FALSE))),
             error=function(e) NULL)
         fit <- .nb_poisson_limit(fit,pilot,pois.ll,od[["excess"]],od[["musq"]],link,refit)
         converged <- isTRUE(fit$converged)
@@ -465,7 +470,7 @@
     fit
 }
 
-.count_backend_trunc_beta <- function(reader,theta=NULL,start=NULL,tol=1e-8,maxit=100L) {
+.count_backend_trunc_beta <- function(reader,theta=NULL,start=NULL,tol=1e-8,maxit=100L,trace=FALSE) {
     p <- reader$state$p[1L]
     if(is.null(start)) {
         a <- matrix(0,p,p);rhs <- numeric(p)
@@ -494,6 +499,7 @@
         }
         if(!accepted) break
         change <- max(abs(candidate-beta));beta <- candidate;current <- nextvalue
+        if(trace) .fastglm_trace_line(iter,reader$state$passes,current$loglik,half,"loglik")
         # A small change certifies convergence only for a full Newton step; a
         # step halved toward zero changes little wherever the iteration stalls.
         if(half==0L && change<tol*(1+max(abs(beta)))) {converged<-TRUE;break}
@@ -506,7 +512,9 @@
     .check_iterations(tol,maxit);.check_iterations(outer.tol,outer.maxit);.check_iterations(theta.tol,theta.maxit)
     if(!is.null(init.theta) && (length(init.theta)!=1L || !is.finite(init.theta) || init.theta<=0))
         stop("init.theta must be a positive finite scalar",call.=FALSE)
-    fit <- .count_backend_trunc_beta(reader,tol=tol,maxit=maxit)
+    # A Poisson fit is traced per Newton iteration, a negative binomial fit
+    # per outer iteration.
+    fit <- .count_backend_trunc_beta(reader,tol=tol,maxit=maxit,trace=dist=="poisson")
     theta <- NULL;outer <- theta.iter <- 0L
     if(dist=="negbin") {
         theta <- if(is.null(init.theta)) 1 else init.theta
@@ -538,6 +546,7 @@
                 FALSE
             }
             newton()
+            .fastglm_trace_line(outer,reader$state$passes,ll,0L,"loglik")
             decrement <- jd$decrement
             if(fit$converged && th$converged && decrement/(0.1+abs(2*ll))<outer.tol) {
                 for(polish in 1:2) if(!newton()) break
@@ -662,7 +671,7 @@
         fit <- .count_backend_truncated(reader,dist,tol,maxit,NULL,outer.tol,outer.maxit)
     } else {
         fixed <- if(dist=="negbin") theta else NULL
-        fit <- .count_backend_trunc_beta(reader,fixed,tol=tol,maxit=maxit)
+        fit <- .count_backend_trunc_beta(reader,fixed,tol=tol,maxit=maxit,trace=TRUE)
         fit$theta.boundary <- FALSE
         fit$vcov.full <- .count_backend_joint(reader,fit$coefficients,fixed,TRUE,theta.estimated=FALSE)
     }
@@ -845,6 +854,7 @@
         em.iter <- iter
         if(!accepted) break
         change <- l1-ll;ll <- l1
+        .fastglm_trace_line(iter,reader$state$passes,ll,half,"loglik")
         if(abs(change)<1e-6*(0.1+abs(2*ll))) break
     }
     # Newton steps with the joint observed information.
@@ -894,6 +904,7 @@
         }
         newton.iter <- k
         if(!accepted) {if(certified>0L) converged <- TRUE;break}
+        .fastglm_trace_line(em.iter+k,reader$state$passes,ll,half,"loglik")
     }
     if(!converged && certified>0L) converged <- TRUE
     obj <- template(boundary)

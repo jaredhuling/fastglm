@@ -57,6 +57,12 @@
 #'   each block of observations, or `NULL` (default) for the session setting
 #'   of [fastglm_threads()]. Blocks are still read one at a time. Results are
 #'   identical for every number of threads.
+#' @param trace `TRUE` to print one line per coefficient update (the
+#'   iteration, the passes over the source so far including the validation
+#'   pass, the deviance, the step halvings of the iteration, and the elapsed
+#'   seconds), `FALSE` for none, or `NULL` (default) for
+#'   `getOption("fastglm.trace")`, which defaults to `TRUE` in an interactive
+#'   session and `FALSE` otherwise (in scripts, knitr, and tests).
 #'
 #' @returns An object with classes `"fastglm_stream"` and `"fastglm"` containing
 #'   coefficient estimates and model summaries as in
@@ -140,11 +146,13 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
                               tol = 1e-8, maxit = 100L, firth = FALSE,
                               covariance = c("estimate", "previous"),
                               y = NULL, weights = NULL, offset = NULL, block.size = 100000L,
-                              threads = NULL) {
+                              threads = NULL, trace = NULL) {
     method.supplied <- !missing(method)
     threads <- .fastglm_resolve_threads(threads)
     restore.threads <- .fastglm_with_threads(threads)
     on.exit(restore.threads(), add = TRUE)
+    tr <- .fastglm_scope_trace(trace, streamed = TRUE)
+    on.exit(tr$restore(), add = TRUE)
     if (is.matrix(chunk_callback) || inherits(chunk_callback, c("dgCMatrix", "big.matrix"))) {
         chunk_callback <- .matrix_source(chunk_callback, y, weights, offset, block.size)
     } else if (!is.null(y) || !is.null(weights) || !is.null(offset))
@@ -246,7 +254,7 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     if (qr.fallback) {
         return(fastglm_streaming(source, family = family, start = if (start.from.means) NULL else start,
                                  method = 0L, tol = tol, maxit = maxit, firth = firth, covariance = covariance,
-                                 threads = threads))
+                                 threads = threads, trace = tr$trace))
     }
     if(!firth && start.from.means) res$iter <- res$iter + 1L
     cn <- state$columns
@@ -322,11 +330,11 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
     if(res$intercept && has.offset && fc!=10L && !boundary.null) {
         nullfetch <- function(k) { z <- fetch(k); z$X <- matrix(1,length(z$y),1L); z }
         eta0 <- family$linkfun(sumwy/sumw)
-        nf <- fit_streaming_glm(nullfetch,n_chunks,1L,if(method==0L) 0L else 2L,tol,as.integer(maxit),fc,
+        nf <- .fastglm_untraced(fit_streaming_glm(nullfetch,n_chunks,1L,if(method==0L) 0L else 2L,tol,as.integer(maxit),fc,
             family$variance,family$mu.eta,family$linkinv,family$dev.resids,
             if(is.null(family$valideta)) function(x) TRUE else family$valideta,
             if(is.null(family$validmu)) function(x) TRUE else family$validmu,
-            as.numeric(eta0),family_params(family),FALSE)
+            as.numeric(eta0),family_params(family),FALSE))
         res$null.deviance <- nf$deviance
     }
     res$passes <- state$passes; res$chunk.reads <- state$reads

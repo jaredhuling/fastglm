@@ -35,6 +35,8 @@
                  nonparallel=if(inherits(object,"fastglm_ordinal_partial"))
                      object$design.columns[object$nonparallel])
     args <- utils::modifyList(args,control)
+    # Refits are not traced (a bootstrap would print a trace for every refit).
+    args$control$trace <- FALSE
     fit <- if(reuse) {
         # NULL overrides remove arguments in modifyList(). The public fitting
         # method would then use these defaults, which must remain identical on
@@ -163,6 +165,9 @@
     # A thread count from 'control' (see fastglm_bootstrap()).
     restore.threads <- .bootstrap_thread_scope(threads,workers)
     on.exit(restore.threads(),add=TRUE)
+    # Refits are not traced (see fastglm_bootstrap()).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(),add=TRUE)
     if(workers==1L) out <- lapply(seq_len(R),one) else {
         cl <- parallel::makePSOCKcluster(workers)
         on.exit(parallel::stopCluster(cl),add=TRUE)

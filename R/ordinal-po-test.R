@@ -539,6 +539,9 @@
 fastglm_po_test <- function(object,terms=NULL,null.estimation=c("ML","meanBR"),
                             newdata=NULL,y=NULL,weights=NULL,offset=NULL,control=list(),by.term=FALSE,
                             method=c("score","lr")) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     if(!inherits(object,"fastglm_ordinal")) stop("supply a fastglm_ordinal fit",call.=FALSE)
     null.estimation <- match.arg(null.estimation);method <- match.arg(method)
     if(method=="lr" && null.estimation!="ML")

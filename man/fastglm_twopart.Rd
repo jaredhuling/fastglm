@@ -19,7 +19,8 @@ fastglm_twopart(
   response = NULL,
   z = NULL,
   block.size = 8192L,
-  threads = NULL
+  threads = NULL,
+  trace = NULL
 )
 }
 \arguments{
@@ -47,6 +48,12 @@ model validation. A source determines its own block sizes.}
 \item{threads}{the number of threads for the compiled computations of both
 component fits, or `NULL` (default) for the session setting of
 [fastglm_threads()]. Results are identical for every number of threads.}
+
+\item{trace}{`TRUE` to print one line per iteration of each component
+fit (the binary part, then the positive part; see [fastglm()]), `FALSE`
+for none, or `NULL` (default) for `getOption("fastglm.trace")`, which
+defaults to `TRUE` for a [fastglm_source()] in an interactive session
+and `FALSE` otherwise.}
 }
 \value{
 A `fastglm_twopart` model supporting prediction, delta-method

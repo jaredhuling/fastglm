@@ -236,6 +236,9 @@
 #' @md
 #' @export
 fastglm_profile_test <- function(object,parm,null=0,control=list(),contrast=NULL) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     data.name<-deparse(substitute(object))
     if(inherits(object,"fastglm_ordinal"))
         return(.ordinal_profile_test(object,if(missing(parm)) NULL else parm,null,control,data.name,contrast=contrast))

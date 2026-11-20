@@ -22,6 +22,7 @@ fastglm_nb(
   block.size = 8192L,
   poisson.limit = TRUE,
   threads = NULL,
+  trace = NULL,
   data = NULL,
   subset,
   na.action,
@@ -82,6 +83,15 @@ limit, the Poisson model (see Details).}
 fit, including its pilot, Poisson-limit, and covariance passes, or `NULL`
 (default) for the session setting of [fastglm_threads()]. Results are
 identical for every number of threads.}
+
+\item{trace}{`TRUE` to print one line per outer (coefficient and theta)
+iteration (the iteration, the passes over the data so far, the log
+likelihood at the updated theta, the step halvings of the coefficient
+fit, and the elapsed seconds; the log likelihood takes one more pass
+over the data per iteration, made only when tracing),
+`FALSE` for none, or `NULL` (default) for `getOption("fastglm.trace")`,
+which defaults to `TRUE` for a [fastglm_source()] in an interactive
+session and `FALSE` otherwise.}
 
 \item{data, subset, na.action, contrasts}{model-frame arguments used when `x`
 is a formula, as in [stats::glm()].}

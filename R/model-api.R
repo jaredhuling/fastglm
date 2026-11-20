@@ -22,22 +22,28 @@
 #' @param threads the number of threads for the compiled computations, or
 #'   `NULL` (default) for the session setting of [fastglm_threads()]. Results
 #'   are identical for every number of threads.
+#' @param trace `TRUE` to print one line per iteration (the iteration,
+#'   the passes over the data so far, the deviance, the step halvings of the
+#'   iteration, and the elapsed seconds), `FALSE` for none, or `NULL`
+#'   (default) for `getOption("fastglm.trace", FALSE)`. Lines are printed
+#'   between iterations, so tracing off costs nothing.
 #' @param ... additional arguments to [stats::glm()].
 #' @returns A fitted model inheriting from `fastglmFit`, `glm`, and `lm`.
 #' @export
 fastglm.formula <- function(x, data, family = gaussian(), subset, na.action,
                             weights, offset, contrasts = NULL, method = 0L,
                             tol = 1e-8, maxit = 100L, firth = FALSE,
-                            covariance = c("estimate", "previous"), threads = NULL, ...) {
+                            covariance = c("estimate", "previous"), threads = NULL,
+                            trace = NULL, ...) {
     covariance <- match.arg(covariance)
     cl <- match.call(expand.dots = TRUE)
     cl[[1L]] <- quote(stats::glm)
     cl$formula <- cl$x
     cl$x <- TRUE
     cl$method <- quote(fastglm::fastglm_fit)
-    cl$tol <- cl$maxit <- cl$firth <- cl$covariance <- cl$threads <- NULL
+    cl$tol <- cl$maxit <- cl$firth <- cl$covariance <- cl$threads <- cl$trace <- NULL
     cl$control <- list(fastmethod = method, tol = tol, maxit = maxit, firth = firth, covariance = covariance,
-                       threads = threads)
+                       threads = threads, trace = trace)
     out <- eval(cl, parent.frame())
     out$call <- match.call()
     out$call[[1L]] <- quote(fastglm::fastglm)
@@ -205,6 +211,9 @@ hatvalues.fastglmFit <- hatvalues.fastglm
 #' @export
 confint.fastglm <- function(object, parm, level = 0.95, ...,
                             method = c("wald", "profile"), control = list()) {
+    # Internal refits are not traced, even under options(fastglm.trace = TRUE).
+    no.trace <- .fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(), add = TRUE)
     b <- coef(object)
     if (missing(parm)) parm <- seq_along(b)
     method <- match.arg(method)

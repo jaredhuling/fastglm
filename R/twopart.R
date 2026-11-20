@@ -19,6 +19,11 @@
 #' @param threads the number of threads for the compiled computations of both
 #'   component fits, or `NULL` (default) for the session setting of
 #'   [fastglm_threads()]. Results are identical for every number of threads.
+#' @param trace `TRUE` to print one line per iteration of each component
+#'   fit (the binary part, then the positive part; see [fastglm()]), `FALSE`
+#'   for none, or `NULL` (default) for `getOption("fastglm.trace")`, which
+#'   defaults to `TRUE` for a [fastglm_source()] in an interactive session
+#'   and `FALSE` otherwise.
 #' @returns A `fastglm_twopart` model supporting prediction, delta-method
 #'   standard errors, simulation, and component summaries. Its element
 #'   `threads` records the thread setting of the fit.
@@ -26,10 +31,14 @@
 fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
                             link = "logit", method = "auto", tol = 1e-8,
                             maxit = 100L, firth = FALSE,
-                            response = NULL, z = NULL, block.size = 8192L, threads = NULL) {
+                            response = NULL, z = NULL, block.size = 8192L, threads = NULL,
+                            trace = NULL) {
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
     threads <- scope$threads
+    # The component fits are traced (nested = TRUE).
+    tr <- .fastglm_scope_trace(trace, streamed = inherits(formula, "fastglm_source"), nested = TRUE)
+    on.exit(tr$restore(), add = TRUE)
     if(is.matrix(formula) || inherits(formula,c("dgCMatrix","big.matrix","fastglm_source"))) {
         if(!missing(subset) || !missing(na.action))
             stop("subset and na.action apply only to formula fits; prepare matrix or source rows first",call.=FALSE)

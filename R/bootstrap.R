@@ -190,6 +190,10 @@ fastglm_bootstrap <- function(object,R=199L,statistic=NULL,
     workers<-min(as.integer(workers),as.integer(R))
     restore.threads<-.bootstrap_thread_scope(threads,workers)
     on.exit(restore.threads(),add=TRUE)
+    # Refits are not traced: a trace line per iteration of every refit would
+    # flood the console (fits called with trace = NULL take the scope's FALSE).
+    no.trace<-.fastglm_scope_trace(FALSE)
+    on.exit(no.trace$restore(),add=TRUE)
     if(workers==1L) out<-lapply(seq_len(R),one) else {
         cl<-parallel::makePSOCKcluster(workers);on.exit(parallel::stopCluster(cl),add=TRUE)
         # Each worker refits with one thread, so that workers times threads
