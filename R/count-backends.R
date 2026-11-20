@@ -97,6 +97,9 @@
     tally <- function(a,k) {
         positive <- a$weights>0
         state$fingerprint <- .fastglm_fingerprint_add(state$fingerprint,a$y,a$weights)
+        state$offset.fingerprint <- list(
+            count=.fastglm_offset_fingerprint_add(state$offset.fingerprint$count,a$offset$count,a$weights),
+            zero=.fastglm_offset_fingerprint_add(state$offset.fingerprint$zero,a$offset$zero,a$weights))
         state$nobs <- state$nobs+sum(positive)
         state$positive[k] <- sum(positive & a$y>0)
     }
@@ -447,7 +450,8 @@
     dimnames(joint) <- rep(list(c(names(beta),"theta")),2L)
     fit$vcov.full <- joint;fit$SE.theta <- sqrt(joint[length(beta)+1L,length(beta)+1L])
     fit$outer.decrement <- decrement
-    fit$response.fingerprint <- reader$state$fingerprint
+    fit$fingerprint.response <- reader$state$fingerprint
+    fit$fingerprint.offset <- list(main=reader$state$offset.fingerprint$count)
     fit$aic <- -2*final$loglik+2*(length(beta)+1L)
     fit$refit.controls <- list(link=link,method=method,tol=tol,maxit=maxit,outer.maxit=outer.maxit,
         outer.tol=outer.tol,theta.tol=theta.tol,theta.maxit=theta.maxit,block.size=block.size)
@@ -599,8 +603,11 @@
     vc <- if(continuous) vcov(positive) else positive$vcov.full[seq_len(pc),seq_len(pc),drop=FALSE]
     vz <- vcov(binary);v <- matrix(0,pp,pp,dimnames=list(cn,cn))
     v[seq_len(pc),seq_len(pc)] <- vc;v[pc+seq_len(pz),pc+seq_len(pz)] <- vz
-    llc <- if(continuous) as.numeric(logLik(positive)) else positive$loglik
-    llz <- as.numeric(logLik(binary));theta <- positive$theta
+    # Two-part fits: the Gamma shape at its maximum likelihood estimate and
+    # the Bernoulli log likelihood of the binary part (see .twopart_loglik).
+    tp <- if(continuous) .twopart_loglik(positive,binary)
+    llc <- if(continuous) tp$loglik_count else positive$loglik
+    llz <- if(continuous) tp$loglik_zero else as.numeric(logLik(binary));theta <- positive$theta
     out <- c(list(coefficients=list(count=bc,zero=bz),se=list(count=sqrt(diag(vc)),zero=sqrt(diag(vz))),
         vcov=v,vcov.full=v,positive=positive,binary=binary,loglik=llc+llz,
         loglik_count=llc,loglik_zero=llz,converged=positive$converged && binary$converged,
@@ -610,8 +617,9 @@
         iter_count=positive$iter,iter_zero=binary$iter,outer_iter=positive$outer.iter,
         theta_iter=positive$theta.iter,refit.controls=controls,
         df.residual=reader$state$nobs-pp-as.integer(continuous || dist=="negbin"),
-        response.fingerprint=reader$state$fingerprint),
+        fingerprint.response=reader$state$fingerprint,fingerprint.offset=reader$state$offset.fingerprint),
         .count_backend_schema(reader))
+    if(continuous) out$shape <- tp$shape
     if(dist=="negbin") {
         full <- matrix(0,pp+1L,pp+1L,dimnames=rep(list(c(cn,"theta")),2L))
         full[seq_len(pp),seq_len(pp)] <- v
@@ -698,7 +706,8 @@
         iter=fit[["iter"]],outer.iter=fit[["outer.iter"]],outer.decrement=fit[["outer.decrement"]],
         dist=dist,theta.estimated=estimated,theta.boundary=isTRUE(fit[["theta.boundary"]]),
         rank=length(cn),nobs=reader$state$nobs,df.residual=reader$state$nobs-length(rn),
-        dispersion=1,aic=-2*loglik+2*length(rn),response.fingerprint=reader$state$fingerprint)
+        dispersion=1,aic=-2*loglik+2*length(rn),fingerprint.response=reader$state$fingerprint,
+        fingerprint.offset=list(main=reader$state$offset.fingerprint$count))
     if(reader$streaming) {
         out$source <- reader$source; out$state <- reader$state
         out$fetch <- function(k) {a<-reader$fetch(k);list(X=a$X,y=a$y,weights=a$weights,offset=a$offset$count)}
@@ -930,7 +939,7 @@
         convergence.reason=if(!converged) "not_converged" else if(boundary) "theta_boundary" else "converged",
         n=sum(reader$state$rows),nobs=reader$state$nobs,df.residual=reader$state$nobs-p.all,
         dist=dist,link=link,theta.estimated=nb,theta.boundary=boundary,
-        response.fingerprint=reader$state$fingerprint)
+        fingerprint.response=reader$state$fingerprint,fingerprint.offset=reader$state$offset.fingerprint)
     out <- c(out,.count_backend_schema(reader))
     if(reader$streaming) {
         out$source <- reader$source;out$fetch <- reader$fetch;out$state <- reader$state

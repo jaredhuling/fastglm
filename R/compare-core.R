@@ -90,6 +90,75 @@
 
 .fastglm_fingerprint_na <- c(n = NA_real_, wsum = NA_real_, sy = NA_real_, syy = NA_real_)
 
+## The offset fingerprint: the sums of the offset and of its square over the
+## rows with positive weight (all entries of a matrix offset, one column per
+## equation). Adds one block of rows (NULL starts a new one); a NULL offset
+## adds nothing (a zero offset).
+.fastglm_offset_fingerprint_add <- function(fingerprint, offset, weights = NULL)
+{
+    if (is.null(fingerprint)) fingerprint <- c(so = 0, soo = 0)
+    if (is.null(offset) || !length(offset)) return(fingerprint)
+    keep <- if (is.null(weights)) rep(TRUE, NROW(offset)) else weights > 0
+    o <- if (is.matrix(offset)) offset[keep, , drop = FALSE] else as.numeric(offset)[keep]
+    fingerprint + c(sum(o), sum(o^2))
+}
+
+## The offsets of an in-memory fit, by part (main; count and zero), as stored;
+## NULL entries are zero offsets. NULL when the fit reads a source.
+.fastglm_cmp_offset_values <- function(object)
+{
+    if (!is.null(object$source)) return(NULL)
+    if (.fastglm_two_part(object)) {
+        off <- tryCatch(.count_design(object)$offset, error = function(e) NULL)
+        if (is.null(off)) off <- object$offset
+        if (!is.list(off)) off <- list(count = off, zero = NULL)
+        return(list(count = off$count, zero = off$zero))
+    }
+    list(main = object$offset)
+}
+
+## The offset fingerprint of a fit, by part: recorded at fit time, or computed
+## from the stored offsets; NULL when neither is available.
+.fastglm_cmp_offset_fingerprint <- function(object)
+{
+    if (!is.null(object$fingerprint.offset)) return(object$fingerprint.offset)
+    if (!is.null(object$source)) return(NULL)
+    off <- .fastglm_cmp_offset_values(object)
+    w <- if (.fastglm_two_part(object)) object$weights else
+        if (inherits(object, "fastglm_ordinal")) object$weights else object$prior.weights
+    lapply(off, function(o) .fastglm_offset_fingerprint_add(NULL, o, if (length(w) == NROW(o)) w))
+}
+
+## Weighted category frequencies of an in-memory categorical response, named
+## by category label (independent of row order and of the level order); NULL
+## when unavailable.
+.fastglm_cmp_cells <- function(object)
+{
+    if (!is.null(object$source)) return(NULL)
+    if (inherits(object, "fastglm_ordinal")) {
+        r <- object$response; lev <- if (!is.null(object$levels)) object$levels else r$levels
+        if (is.null(r) || is.null(lev)) return(NULL)
+        w <- if (length(r$weights)) r$weights else NULL
+        if (length(r$counts) && is.matrix(r$counts) && nrow(r$counts)) {
+            f <- colSums(r$counts * (if (is.null(w)) 1 else w))
+            if (length(f) != length(lev)) return(NULL)
+            return(stats::setNames(f, lev))
+        }
+        codes <- if (length(r$original.codes)) r$original.codes else r$codes
+        if (is.null(w)) w <- rep(1, length(codes))
+        return(stats::setNames(vapply(seq_along(lev), function(j) sum(w[codes == j]), 0), lev))
+    }
+    if (inherits(object, "fastglm_vglm")) {
+        y <- object$y; w <- object$prior.weights; lev <- object$levels
+        if (is.null(y) || is.null(lev)) return(NULL)
+        if (is.null(w)) w <- rep(1, NROW(y))
+        if (is.matrix(y)) return(stats::setNames(colSums(y * w), if (is.null(colnames(y))) lev else colnames(y)))
+        y <- as.character(y)
+        return(stats::setNames(vapply(lev, function(l) sum(w[y == l]), 0), lev))
+    }
+    NULL
+}
+
 ## The response of a two-part fit: retained, or from the retained model frame.
 .fastglm_cmp_twopart_y <- function(object)
 {
@@ -103,7 +172,7 @@
 ## retained response and weights; NA when neither is available.
 .fastglm_cmp_fingerprint <- function(object)
 {
-    if (!is.null(object$response.fingerprint)) return(object$response.fingerprint)
+    if (!is.null(object$fingerprint.response)) return(object$fingerprint.response)
     if (inherits(object, c("fastglm_zi", "fastglm_hurdle"))) {
         y <- .fastglm_cmp_twopart_y(object)
         return(if (is.null(y)) .fastglm_fingerprint_na else .fastglm_fingerprint(y, object$weights))
@@ -175,6 +244,8 @@
          lr_method = lr_method,
          lr_available = lr_method != "none",
          dispersion = dispersion,
+         offset_fingerprint = .fastglm_cmp_offset_fingerprint(object),
+         cells = .fastglm_cmp_cells(object),
          streamed = streamed,
          source_reusable = !streamed || !isFALSE(object$source$reusable))
 }
@@ -314,9 +385,17 @@
 ## without a formula; part selects the design of a two-part model. Further
 ## named arguments replace fitting arguments (trace = TRUE traces the refit).
 ## check = FALSE skips the same-data check.
+## columns = TRUE allows drop_columns for a fit with a formula: the columns
+## are removed from the stored design (or, for a streamed formula source,
+## from each block as read), with no recoding of the remaining terms, as
+## stats::drop1.glm() and stats::anova.glm() do (GLM and negative binomial
+## fits only).
+## nb_theta_fixed = TRUE refits a negative binomial fit as a GLM with theta
+## held at the fit's estimate (family negbin(theta)), as stats::drop1.glm()
+## and MASS's anova.negbin() for one model do.
 #' @exportS3Method .fastglm_refit fastglm
 .fastglm_refit.fastglm <- function(object, formula = NULL, drop_columns = NULL, part = NULL, ...,
-                                   check = TRUE)
+                                   check = TRUE, columns = FALSE, nb_theta_fixed = FALSE)
 {
     extras <- list(...)
     if (!is.null(formula) && !is.null(drop_columns))
@@ -329,10 +408,18 @@
     extras$trace <- NULL
     scope <- .fastglm_scope_threads(object$threads)
     on.exit(scope$restore(), add = TRUE)
-    tr <- .fastglm_scope_trace(trace)
+    # trace = TRUE: the option is on inside the scope, so the fitting
+    # function (called with trace = NULL) traces the refit.
+    tr <- .fastglm_scope_trace(trace, nested = isTRUE(trace))
     on.exit(tr$restore(), add = TRUE)
-    fit <- if (streamed) .fastglm_refit_streamed(object, formula, drop_columns, part, extras)
-           else .fastglm_refit_memory(object, formula, drop_columns, part, extras)
+    if (columns && !inherits(object, c("fastglm", "fastglmFit")))
+        stop("column refits of a formula fit are available only for GLM and negative binomial fits",
+             call. = FALSE)
+    if (nb_theta_fixed && !inherits(object, "fastglm_nb"))
+        stop("'nb_theta_fixed' applies only to negative binomial fits", call. = FALSE)
+    opts <- list(columns = columns, nb_theta_fixed = nb_theta_fixed)
+    fit <- if (streamed) .fastglm_refit_streamed(object, formula, drop_columns, part, extras, opts)
+           else .fastglm_refit_memory(object, formula, drop_columns, part, extras, opts)
     if (check) .fastglm_refit_check(object, fit)
     fit
 }
@@ -542,7 +629,7 @@
          assign = attr(X, "assign"), frame = object$model, contrasts = object$contrasts)
 }
 
-.fastglm_refit_memory <- function(object, formula, drop_columns, part, extras)
+.fastglm_refit_memory <- function(object, formula, drop_columns, part, extras, opts = list())
 {
     d <- .fastglm_refit_data(object)
     two <- .fastglm_two_part(object)
@@ -575,7 +662,7 @@
             d$X <- .fastglm_refit_new_design(d$terms, d$X, d$assign, d$frame, d$contrasts, formula)$x
         }
     } else if (!is.null(drop_columns)) {
-        if (!is.null(d$terms))
+        if (!is.null(d$terms) && !isTRUE(opts$columns))
             stop("this fit uses a formula; refit it with 'formula'", call. = FALSE)
         if (two) {
             part <- if (is.null(part)) "count" else match.arg(part, c("count", "zero"))
@@ -591,7 +678,33 @@
         }
     } else if (inherits(object, "fastglm_ordinal_partial")) np <- object$nonparallel
     if (ordinal && is.null(np) && inherits(object, "fastglm_ordinal_partial")) np <- object$nonparallel
-    .fastglm_refit_fit(object, d, np, extras)
+    .fastglm_refit_fit(object, d, np, extras, nb_theta_fixed = isTRUE(opts$nb_theta_fixed))
+}
+
+## The GLM fitting controls of a refit: family, tolerance, iteration limit,
+## bias reduction, covariance rule, and decomposition (an integer method code
+## for in-memory designs; the fit's solver name for streamed ones). A
+## negative binomial fit with theta held fixed is refitted as a GLM with
+## family negbin(theta), with the tolerance, iteration limit, and method of
+## its own fit.
+.fastglm_refit_glm_controls <- function(object, nb_theta_fixed = FALSE)
+{
+    if (nb_theta_fixed) {
+        rc <- object$refit.controls
+        link <- if (!is.null(object$family$link)) object$family$link else "log"
+        return(list(family = negbin(object$theta, link = link),
+                    tol = if (is.null(rc$tol)) 1e-8 else rc$tol,
+                    maxit = if (is.null(rc$maxit)) 100L else rc$maxit,
+                    firth = FALSE, covariance = "estimate",
+                    method = if (is.null(rc$method)) 2L else rc$method))
+    }
+    ctl <- if (inherits(object, "fastglmFit")) object$control else object$compare.controls
+    method <- if (!is.null(ctl$fastmethod)) ctl$fastmethod else if (!is.null(ctl$method)) ctl$method else 0L
+    list(family = object$family, tol = if (is.null(ctl$tol)) 1e-8 else ctl$tol,
+         maxit = if (is.null(ctl$maxit)) 100L else ctl$maxit,
+         firth = isTRUE(object$firth) || isTRUE(ctl$firth),
+         covariance = if (is.null(ctl$covariance)) "estimate" else ctl$covariance,
+         method = method)
 }
 
 ## A row-block source over designs held in memory or in a big.matrix, keeping
@@ -635,7 +748,7 @@
 }
 
 ## Fits a refit of an in-memory model from its stored data (d) and controls.
-.fastglm_refit_fit <- function(object, d, np, extras)
+.fastglm_refit_fit <- function(object, d, np, extras, nb_theta_fixed = FALSE)
 {
     g <- .fastglm_refit_designs(d)
     src <- g$source
@@ -685,7 +798,7 @@
                   list(dist = object$dist), cc[names(cc) %in% names(formals(fastglm_truncated))])
         return(call.fit(fastglm_truncated, args))
     }
-    if (inherits(object, "fastglm_nb")) {
+    if (inherits(object, "fastglm_nb") && !nb_theta_fixed) {
         rc <- object$refit.controls
         rc <- rc[names(rc) %in% names(formals(fastglm_nb))]
         if (!is.null(object$compare.controls$poisson.limit)) rc$poisson.limit <- object$compare.controls$poisson.limit
@@ -693,17 +806,14 @@
                   else list(x = src), rc)
         return(call.fit(fastglm_nb, args))
     }
-    # GLMs: the controls of a formula fit (control) or a matrix fit.
-    ctl <- if (inherits(object, "fastglmFit")) object$control else object$compare.controls
-    method <- if (!is.null(ctl$fastmethod)) ctl$fastmethod else if (!is.null(ctl$method)) ctl$method else 0L
-    common <- list(family = object$family, tol = if (is.null(ctl$tol)) 1e-8 else ctl$tol,
-                   maxit = if (is.null(ctl$maxit)) 100L else ctl$maxit,
-                   firth = isTRUE(object$firth) || isTRUE(ctl$firth),
-                   covariance = if (is.null(ctl$covariance)) "estimate" else ctl$covariance)
+    # GLMs: the controls of a formula fit (control) or a matrix fit, or a
+    # negative binomial fit with theta held fixed.
+    common <- .fastglm_refit_glm_controls(object, nb_theta_fixed)
+    method <- common$method; common$method <- NULL
     if (!is.null(src)) {
         # A big.matrix design: read the kept columns in row blocks.
         return(call.fit(fastglm_streaming, c(list(chunk_callback = src,
-                                                  method = if (object$solver %in% c("llt", "ldlt")) object$solver else "llt"),
+                                                  method = if (isTRUE(object$solver %in% c("llt", "ldlt"))) object$solver else "llt"),
                                              common)))
     }
     call.fit(fastglm, c(list(x = g$X, y = d$y, weights = d$weights, offset = d$offset, method = method), common))
@@ -762,8 +872,11 @@
 
 ## A source that reads the original one and keeps some design columns (for
 ## sources without a formula, whose columns have a fixed coding): keep is a
-## list with count (X) and, optionally, zero (Z) column indices.
-.fastglm_refit_subset_source <- function(source, keep, two = FALSE)
+## list with count (X) and, optionally, zero (Z) column indices. With
+## schema = FALSE the new source has no formula schema, so a formula source's
+## blocks are read as built (the kept columns keep their coding) and the
+## refit is a design-matrix fit.
+.fastglm_refit_subset_source <- function(source, keep, two = FALSE, schema = TRUE)
 {
     force(source); force(keep); force(two)
     callback <- function(k, ...) {
@@ -774,12 +887,12 @@
         if (!is.null(keep$zero)) z$Z <- z$Z[, keep$zero, drop = FALSE]
         z
     }
-    structure(list(callback = callback, n_chunks = source$n_chunks, schema = source$schema,
+    structure(list(callback = callback, n_chunks = source$n_chunks, schema = if (schema) source$schema,
                    cache = NULL, reusable = source$reusable, origin = source$origin),
               class = "fastglm_source")
 }
 
-.fastglm_refit_streamed <- function(object, formula, drop_columns, part, extras)
+.fastglm_refit_streamed <- function(object, formula, drop_columns, part, extras, opts = list())
 {
     source <- object$source
     two <- .fastglm_two_part(object)
@@ -809,6 +922,12 @@
         # No block cache: a refit would otherwise write a copy of its design
         # to disk; it reads the source's blocks directly.
         source <- .fastglm_source_reformulate(source, new, cache = FALSE)
+    } else if (!is.null(drop_columns) && isTRUE(opts$columns) && !is.null(source$schema$terms)) {
+        # Columns of a formula source's blocks, with no recoding (GLM and
+        # negative binomial fits).
+        cn <- names(object$coefficients)
+        keep <- .fastglm_refit_keep(drop_columns, cn, length(cn))
+        source <- .fastglm_refit_subset_source(source, list(count = keep), schema = FALSE)
     } else if (!is.null(drop_columns)) {
         if (!is.null(source$schema$terms))
             stop("this fit reads a formula source; refit it with 'formula'", call. = FALSE)
@@ -857,17 +976,15 @@
         return(call.fit(fastglm_truncated, c(list(x = source, dist = object$dist),
                                              cc[names(cc) %in% names(formals(fastglm_truncated))])))
     }
-    if (inherits(object, "fastglm_nb")) {
+    if (inherits(object, "fastglm_nb") && !isTRUE(opts$nb_theta_fixed)) {
         rc <- object$refit.controls
         rc <- rc[names(rc) %in% names(formals(fastglm_nb))]
         if (!is.null(object$compare.controls$poisson.limit)) rc$poisson.limit <- object$compare.controls$poisson.limit
         return(call.fit(fastglm_nb, c(list(x = source), rc)))
     }
-    cc <- object$compare.controls
-    call.fit(fastglm_streaming, list(chunk_callback = source, family = object$family,
-        method = object$solver, tol = if (is.null(cc$tol)) 1e-8 else cc$tol,
-        maxit = if (is.null(cc$maxit)) 100L else cc$maxit, firth = isTRUE(object$firth),
-        covariance = if (is.null(cc$covariance)) "estimate" else cc$covariance))
+    common <- .fastglm_refit_glm_controls(object, isTRUE(opts$nb_theta_fixed))
+    common$method <- if (!is.null(object$solver) && object$solver %in% c("qr", "llt", "ldlt")) object$solver else "llt"
+    call.fit(fastglm_streaming, c(list(chunk_callback = source), common))
 }
 
 ## ---- update() -----------------------------------------------------------------
@@ -880,6 +997,9 @@
 {
     call <- object$call
     if (is.null(call)) stop("need an object with call component", call. = FALSE)
+    # stats::step() stores the terms as call$formula; these fitting functions
+    # take the formula as their first argument, which update() changes.
+    call$formula <- NULL
     if (!is.null(formula.)) {
         if (!is.null(object$source)) {
             arg <- if (inherits(object, c("fastglm_nb", "fastglm_truncated"))) "x" else "chunk_callback"

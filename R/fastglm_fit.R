@@ -224,18 +224,50 @@ print.fastglmFit <- function(x,...) print.fastglm(x,...)
     object
 }
 
+## Calls with only glm objects go to stats::anova.glm unchanged; a call with
+## another fastglm class, or with a bias-reduced fit, uses the comparison
+## engine of ?anova.fastglm (never a silent anova.glm result).
+#' @rdname anova.fastglm
 #' @exportS3Method stats::anova fastglmFit
 anova.fastglmFit <- function(object, ...)
 {
+    dots <- list(...)
+    is.model <- vapply(dots, function(x) inherits(x, .fastglm_model_classes), NA)
+    if (any(is.model) && .fastglm_anova_needs_engine(c(list(object), dots[is.model]))) {
+        mc <- match.call(expand.dots = FALSE)
+        labels <- .fastglm_anova_labels(mc)
+        nm <- if (is.null(names(dots))) rep_len("", length(dots)) else names(dots)
+        opt <- dots[nm %in% c("test", "dispersion")]
+        keep <- !(nm %in% c("test", "dispersion"))
+        m <- .fastglm_anova_collect(object, dots[keep], labels[c(TRUE, keep)])
+        return(.fastglm_lrt(m$models, test = opt$test, labels = m$labels, dispersion = opt$dispersion))
+    }
+    # A bias-reduced formula fit alone: the sequential table of penalized
+    # likelihood ratio tests (never the deviances of separate Firth fits).
+    if (!any(is.model) && .fastglm_anova_needs_engine(list(object))) {
+        nm <- if (is.null(names(dots))) rep_len("", length(dots)) else names(dots)
+        if (any(!nzchar(nm)) || any(!(nm %in% c("test", "dispersion", "trace"))))
+            warning("arguments to 'anova' that are not fitted models, 'test', 'dispersion', or 'trace' are ignored",
+                    call. = FALSE)
+        return(.fastglm_anova_sequential(object, test = dots$test, dispersion = dots$dispersion,
+                                         label = deparse1(substitute(object)), trace = dots$trace))
+    }
+    # Formula fits compared among themselves (or with stats::glm fits): the
+    # call goes to stats::anova.glm unchanged.
     object <- .fastglm_stats_refit(object, "anova", glm.fit = FALSE)
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)
     NextMethod()
 }
 
+## Bias-reduced fits use the penalized likelihood ratio tests of
+## ?drop1.fastglm; other formula fits go to stats::drop1.glm unchanged.
+#' @rdname drop1.fastglm
 #' @exportS3Method stats::drop1 fastglmFit
 drop1.fastglmFit <- function(object, ...)
 {
+    if (isTRUE(object$firth) || isTRUE(object$control$firth))
+        return(.fastglm_drop1_entry(object, ..., .label = deparse1(substitute(object))))
     object <- .fastglm_stats_refit(object, "drop1")
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)

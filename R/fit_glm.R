@@ -777,7 +777,10 @@ fastglm.default <- function(x, y,
     # The response fingerprint used by model comparisons, recorded while the
     # response is at hand (a big.matrix design, or a fit that drops the data).
     if (is.big.matrix(x) || !retain.data)
-        res$response.fingerprint <- .fastglm_fingerprint(res$y, res$prior.weights)
+    {
+        res$fingerprint.response <- .fastglm_fingerprint(res$y, res$prior.weights)
+        res$fingerprint.offset <- list(main = .fastglm_offset_fingerprint_add(NULL, offset, res$prior.weights))
+    }
     # The controls of the fit, for refits by model comparisons.
     res$compare.controls <- list(method = method, tol = tol, maxit = maxit, firth = firth,
                                  covariance = match.arg(covariance))

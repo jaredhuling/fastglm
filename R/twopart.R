@@ -24,9 +24,23 @@
 #'   for none, or `NULL` (default) for `getOption("fastglm.trace")`, which
 #'   defaults to `TRUE` for a [fastglm_source()] in an interactive session
 #'   and `FALSE` otherwise.
+#' @details [logLik()] (and hence [AIC()], [BIC()], and `extractAIC()`) is the
+#'   Gamma log likelihood of the positive observations with the shape at its
+#'   maximum likelihood estimate given the fitted means, plus the weighted
+#'   Bernoulli log likelihood of the binary part. With weights \eqn{w}{w}
+#'   (total \eqn{W}{W}) and deviance \eqn{D}{D} of the positive part, the
+#'   shape \eqn{\nu}{nu} solves
+#'   \eqn{\log\nu - \psi(\nu) = D/(2W)}{log(nu) - digamma(nu) = D / (2 W)}, the
+#'   estimate that `MASS::gamma.shape()` gives for the Gamma GLM with unit
+#'   weights. It is counted as one parameter in the `df` of [logLik()].
+#'   [stats::glm()] instead evaluates the Gamma likelihood at the plug-in shape
+#'   \eqn{W/D}{W / D} (version 0.1.4 of this package did the same), which gives
+#'   a smaller log likelihood whose differences between fits are not
+#'   likelihood ratio statistics.
 #' @returns A `fastglm_twopart` model supporting prediction, delta-method
 #'   standard errors, simulation, and component summaries. Its element
-#'   `threads` records the thread setting of the fit.
+#'   `threads` records the thread setting of the fit, and `shape` the maximum
+#'   likelihood Gamma shape.
 #' @export
 fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
                             link = "logit", method = "auto", tol = 1e-8,
@@ -72,9 +86,10 @@ fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
     v[pc+seq_len(pz),pc+seq_len(pz)] <- vcov(binary)
     cn <- c(paste0("positive_", names(coef(fit))),paste0("zero_", names(coef(binary))))
     dimnames(v) <- list(cn,cn)
+    ll <- .twopart_loglik(fit, binary)
     out <- list(coefficients=list(count=coef(fit),zero=coef(binary)),
         vcov=v, vcov.full=v, positive=fit, binary=binary,
-        loglik=as.numeric(logLik(fit))+as.numeric(logLik(binary)),
+        loglik=ll$loglik, loglik_count=ll$loglik_count, loglik_zero=ll$loglik_zero, shape=ll$shape,
         converged=fit$converged && binary$converged, dist="Gamma", link=link,
         model=mf, terms=tt, assign=lapply(x,attr,"assign"),formula=f, x=x, y=y, weights=w, offset=off,
         levels=lapply(mf[vapply(mf,is.factor,logical(1))],levels),
@@ -88,6 +103,87 @@ fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
 #' @export
 logLik.fastglm_twopart <- function(object, ...) {
     structure(object$loglik, df=length(coef(object))+1L, nobs=nobs(object), class="logLik")
+}
+
+## ---- Gamma shape at its maximum likelihood estimate ------------------------------
+
+## h(nu) = log(nu) - digamma(nu) and h'(nu), with the asymptotic series for
+## large nu, where the difference of the two terms would lose precision.
+.gamma_shape_h <- function(nu)
+{
+    if (nu >= 1e3) 1 / (2 * nu) + 1 / (12 * nu^2) - 1 / (120 * nu^4) + 1 / (252 * nu^6)
+    else log(nu) - digamma(nu)
+}
+.gamma_shape_dh <- function(nu)
+{
+    if (nu >= 1e3) -1 / (2 * nu^2) - 1 / (6 * nu^3) + 1 / (30 * nu^5) - 1 / (42 * nu^7)
+    else 1 / nu - trigamma(nu)
+}
+
+## q(nu) = nu log(nu) - nu - lgamma(nu), written as
+## log(nu / (2 pi)) / 2 - stirlerr(nu) so that large nu keeps its precision.
+.gamma_shape_q <- function(nu)
+{
+    s <- if (nu >= 10) 1 / (12 * nu) - 1 / (360 * nu^3) + 1 / (1260 * nu^5) - 1 / (1680 * nu^7) +
+             1 / (1188 * nu^9)
+         else lgamma(nu) - (nu - 0.5) * log(nu) + nu - 0.5 * log(2 * pi)
+    0.5 * log(nu / (2 * pi)) - s
+}
+
+## The maximum likelihood Gamma shape given the fitted means: the root of
+## h(nu) = D / (2 W), with D the deviance and W the total of the (frequency)
+## weights of the positive observations. h decreases from infinity to 0, so
+## the root is unique. Newton's method on log(nu), from the approximation
+## nu = (3 - t + sqrt((t - 3)^2 + 24 t)) / (12 t), t = D / (2 W), with a
+## bracketing search as fallback.
+.gamma_ml_shape <- function(D, W)
+{
+    t <- D / (2 * W)
+    if (!is.finite(t) || t <= 0) return(NA_real_)
+    u <- log((3 - t + sqrt((t - 3)^2 + 24 * t)) / (12 * t))
+    for (it in seq_len(100L)) {
+        nu <- exp(u)
+        f <- .gamma_shape_h(nu) - t
+        step <- f / (nu * .gamma_shape_dh(nu))
+        if (!is.finite(step)) break
+        u <- u - step
+        if (abs(step) < 1e-14 * max(1, abs(u))) return(exp(u))
+    }
+    exp(stats::uniroot(function(v) .gamma_shape_h(exp(v)) - t, c(u - 1, u + 1), extendInt = "downX",
+                       tol = 1e-14)$root)
+}
+
+## The log likelihood of the positive (Gamma) part with the shape at its
+## maximum likelihood estimate given the fitted means. With frequency weights
+## w (total W) and deviance D, the Gamma log likelihood at shape nu is
+## W q(nu) - nu D / 2 - sum(w log y). logLik() of the Gamma GLM uses the
+## plug-in shape W / D (the reciprocal of deviance over weight total, as
+## stats::glm()), so the maximized value adds W q(nu.hat) - nu.hat D / 2 -
+## (W q(W / D) - W / 2), which needs only D, W, and that log likelihood (the
+## same for in-memory and streamed fits). Returns the log likelihood and the
+## shape.
+.twopart_positive_loglik <- function(positive)
+{
+    ll <- as.numeric(logLik(positive))
+    D <- as.numeric(positive$deviance)
+    W <- if (!is.null(positive$prior.weights)) sum(positive$prior.weights) else
+        if (!is.null(positive$fingerprint.response)) positive$fingerprint.response[["wsum"]] else NA_real_
+    nu <- .gamma_ml_shape(D, W)
+    if (!is.finite(nu)) return(list(loglik = ll, shape = NA_real_))
+    g <- function(v) W * .gamma_shape_q(v) - v * D / 2
+    list(loglik = ll + g(nu) - g(W / D), shape = nu)
+}
+
+## The log likelihood of a two-part fit: the positive part at the maximum
+## likelihood shape, plus the weighted Bernoulli log likelihood of the binary
+## part, minus half its deviance for the 0/1 response (equal to logLik() of
+## the binary GLM with integer weights, and the same for in-memory and
+## streamed fits with any weights).
+.twopart_loglik <- function(positive, binary)
+{
+    pos <- .twopart_positive_loglik(positive)
+    list(loglik = pos$loglik - as.numeric(binary$deviance) / 2, loglik_count = pos$loglik,
+         loglik_zero = -as.numeric(binary$deviance) / 2, shape = pos$shape)
 }
 #' @exportS3Method print fastglm_twopart
 print.fastglm_twopart <- function(x, ...) {

@@ -87,7 +87,7 @@ test_that("comparison records describe every class", {
                           nominal = paste0("nonparallel:a:", c("l1|l2", "l2|l3", "l3|l4"))))
     expect_identical(fastglm:::.fastglm_cmp_record(fits$ordinal)$coef_names, list(location = c("a", "bq", "br")))
     expect_identical(fastglm:::.fastglm_cmp_record(fits$glm)$coef_names, list(main = c("(Intercept)", "a", "bq", "br")))
-    expect_named(fits$bigmatrix$response.fingerprint, c("n", "wsum", "sy", "syy"))
+    expect_named(fits$bigmatrix$fingerprint.response, c("n", "wsum", "sy", "syy"))
     expect_identical(fastglm:::.fastglm_cmp_record(fastglm(yp ~ a, data = d, family = gaussian()))$dispersion,
                      "moment")
     expect_identical(fastglm:::.fastglm_cmp_record(fastglm(yt ~ a, data = d, family = Gamma("log")))$dispersion,
@@ -145,13 +145,13 @@ test_that("streamed and in-memory fingerprints agree", {
     expect_true(fastglm:::.fastglm_same_fingerprint(a, b))
     expect_equal(unname(a), c(nrow(d), sum(d$w), sum(d$w * d$yp), sum(d$w * d$yp^2)))
     nb <- fastglm_nb(fastglm_source(function(k) list(X = model.matrix(~ a + b, d), y = d$ynb), 1L))
-    expect_equal(nb$response.fingerprint, fastglm:::.fastglm_cmp_record(fastglm_nb(ynb ~ a + b, data = d))$fingerprint,
+    expect_equal(nb$fingerprint.response, fastglm:::.fastglm_cmp_record(fastglm_nb(ynb ~ a + b, data = d))$fingerprint,
                  tolerance = 1e-12)
     os <- fastglm_ordinal_streaming(compare_core_source(d, yo ~ a + b))
-    expect_equal(os$response.fingerprint,
+    expect_equal(os$fingerprint.response,
                  fastglm:::.fastglm_cmp_record(fastglm_ordinal(yo ~ a + b, data = d))$fingerprint, tolerance = 1e-12)
     ms <- fastglm_multinom(compare_core_source(d, ym ~ a + b))
-    expect_equal(ms$response.fingerprint,
+    expect_equal(ms$fingerprint.response,
                  fastglm:::.fastglm_cmp_record(fastglm_multinom(ym ~ a + b, data = d))$fingerprint, tolerance = 1e-12)
     # Grouped and individual forms of the same categorical data agree, and n is
     # the total frequency.
@@ -402,6 +402,9 @@ test_that("refits of cached and big.matrix designs stay bounded in disk and memo
     # A cached formula source: refits read the blocks without writing a cache.
     src <- compare_core_source(d, yp ~ a + b, cache = TRUE)
     fit <- fastglm_streaming(src, family = poisson())
+    # Collect garbage first: the finalizer of an unreachable cached source of
+    # an earlier test would otherwise remove its cache during the refit.
+    invisible(gc())
     before <- list.files(tempdir(), all.files = TRUE, recursive = TRUE, include.dirs = TRUE)
     r <- fastglm:::.fastglm_refit(fit, formula = . ~ . - a)
     expect_identical(list.files(tempdir(), all.files = TRUE, recursive = TRUE, include.dirs = TRUE), before)

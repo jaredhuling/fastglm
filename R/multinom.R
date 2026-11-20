@@ -240,6 +240,7 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     # every row (the rule of the in-memory fits).
     totals <- NULL
     fingerprint <- NULL
+    offset.fingerprint <- NULL
     used <- 0L
     lsat <- 0
     offset.used <- FALSE
@@ -254,6 +255,7 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
         }
         b <- nrow(z$X)
         fingerprint <- .fastglm_category_fingerprint_add(fingerprint, z$codes, z$counts, z$weights)
+        offset.fingerprint <- .fastglm_offset_fingerprint_add(offset.fingerprint, z$offset, z$weights)
         if (state$grouped) {
             totals <- totals + colSums(z$counts * z$weights)
             used <- used + sum(z$weights > 0 & rowSums(z$counts) > 0)
@@ -311,7 +313,8 @@ fastglm_multinom.fastglm_source <- function(x, levels = NULL, reference = NULL, 
     out$source.offset.used <- offset.used
     out$source.passes <- state$passes
     out$source.reads <- state$reads
-    out$response.fingerprint <- fingerprint
+    out$fingerprint.response <- fingerprint
+    out$fingerprint.offset <- list(main = offset.fingerprint)
     out$threads <- scope$threads
     .multinom_warnings(out)
 }

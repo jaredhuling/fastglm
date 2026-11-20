@@ -268,6 +268,9 @@ update.fastglm_ordinal <- function(object,formula.,...,evaluate=TRUE) {
     if(isTRUE(object$prepared) && !missing(formula.))
         stop("formula changes require preparing the revised ordinal design again",call.=FALSE)
     call <- object$call
+    # stats::step() stores the terms as call$formula; the formula is the
+    # first argument (x) of fastglm_ordinal().
+    call$formula <- NULL
     if(!missing(formula.)) {
         if(is.null(object$terms)) stop("formula updates require an ordinal formula fit",call.=FALSE)
         call$x <- update.formula(formula(object$terms),formula.)

@@ -58,10 +58,26 @@ and `FALSE` otherwise.}
 \value{
 A `fastglm_twopart` model supporting prediction, delta-method
   standard errors, simulation, and component summaries. Its element
-  `threads` records the thread setting of the fit.
+  `threads` records the thread setting of the fit, and `shape` the maximum
+  likelihood Gamma shape.
 }
 \description{
 Fits a binomial model for a positive outcome and a Gamma model with a log
 link among positive outcomes. The marginal mean is the product of the
 probability of a positive outcome and the conditional positive mean.
+}
+\details{
+[logLik()] (and hence [AIC()], [BIC()], and `extractAIC()`) is the
+  Gamma log likelihood of the positive observations with the shape at its
+  maximum likelihood estimate given the fitted means, plus the weighted
+  Bernoulli log likelihood of the binary part. With weights \eqn{w}{w}
+  (total \eqn{W}{W}) and deviance \eqn{D}{D} of the positive part, the
+  shape \eqn{\nu}{nu} solves
+  \eqn{\log\nu - \psi(\nu) = D/(2W)}{log(nu) - digamma(nu) = D / (2 W)}, the
+  estimate that `MASS::gamma.shape()` gives for the Gamma GLM with unit
+  weights. It is counted as one parameter in the `df` of [logLik()].
+  [stats::glm()] instead evaluates the Gamma likelihood at the plug-in shape
+  \eqn{W/D}{W / D} (version 0.1.4 of this package did the same), which gives
+  a smaller log likelihood whose differences between fits are not
+  likelihood ratio statistics.
 }

@@ -277,7 +277,10 @@ test_that("drop1, add1, profile, anova, and update work on formula fits as on gl
     h <- fastglm(x3 ~ x1 + x2, data = d)
     expect_equal(as.matrix(drop1(h, test = "F")),
                  as.matrix(drop1(glm(x3 ~ x1 + x2, data = d), test = "F")), tolerance = 1e-8)
-    # Bias-reduced fits are refused: glm.fit() would refit by maximum likelihood.
+    # Bias-reduced fits are never refitted by glm.fit() (maximum likelihood):
+    # drop1() gives penalized likelihood ratio tests (see test-compare-drop1.R).
     fb <- fastglm(y ~ x1 + x2, data = d, family = binomial(), firth = TRUE)
-    expect_error(drop1(fb), "bias-reduced")
+    tb <- drop1(fb, test = "LRT")
+    expect_true("Penalized LRT" %in% names(tb))
+    expect_equal(tb["x1", "Penalized LRT"], unname(fastglm_profile_test(fb, parm = "x1")$statistic))
 })
