@@ -61,28 +61,32 @@
   two evaluations more or fewer, and so one or two passes; on one ordinal
   logit fit at n = 1e6 the number of evaluations went from 8 to 9.
 * Speed with 4 threads compared with 1, at n = 1e6 (logistic GLMs with
-  Cholesky methods), measured on a shared machine: dense p = 20 2.1 times
-  faster and p = 200 3.6 times; `big.matrix` 1.8 and 2.9 times; streamed
-  p = 200 2.1 times; sparse (p = 200, 5 percent nonzero) 1.8 times; negative
-  binomial 1.8 times, zero-inflated Poisson 2.5 times, hurdle negative
-  binomial 2.9 times, zero-truncated Poisson 1.5 times; multinomial (K = 5)
-  3.4 to 3.6 times and (K = 50, n = 2.5e5) 3.7 to 3.9 times in the compiled
-  fit; ordinal logit 3.7 times and probit 2.0 times in the compiled fit.
+  Cholesky methods), measured on an otherwise idle Apple M4 Max (10
+  performance cores): dense p = 20 2.1 times faster and p = 200 3.5 times;
+  `big.matrix` 1.7 and 2.9 times; streamed p = 200 2.0 times; multinomial
+  (K = 5) 3.4 to 3.6 times and (K = 50, n = 2.5e5) 3.6 to 3.8 times in the
+  compiled fit; ordinal logit 3.6 times and probit 2.0 times in the compiled
+  fit. Measured on the same machine while shared: sparse (p = 200, 5 percent
+  nonzero) 1.8 times; negative binomial 1.8 times, zero-inflated Poisson 2.5
+  times, hurdle negative binomial 2.9 times, zero-truncated Poisson 1.5
+  times.
 * Streamed GLM fits with few columns gain less, about 1.3 times at p = 20
   with 4 threads; they stay threaded because results do not change and they
   were not slower than one thread in our measurements. Two-part fits gain about 1.4 times,
   through their GLM components.
-* With one thread, GLM fits with at most 1024 columns ran within about 5
+* With one thread, GLM fits with at most 1024 columns ran within 4.5
   percent of the speed of 0.1.4 in our measurements, count fits at most 4.7
-  percent slower, and multinomial fits at most 3.0 percent slower. An ordinal
+  percent slower, and the compiled multinomial fit at most 3.3 percent
+  slower (whole multinomial calls were 7 to 32 percent faster). An ordinal
   logit fit at n = 1e6 took 15 percent longer on one thread because it made
-  one extra line-search evaluation, a rounding-level outcome to which 0.1.4
-  is equally subject; over 12 seeds at n = 2e5 the one-thread total was 2.5
-  percent longer. Ordinal probit fits were 4.2 percent slower.
+  one extra line-search evaluation (9 instead of 8, with the same 7
+  iterations and estimates that agree to 2e-16), a rounding-level outcome to
+  which 0.1.4 is equally subject; over 12 seeds at n = 2e5 the one-thread
+  total was 2.5 percent longer. Ordinal probit fits were 1.3 percent slower.
 * For GLMs whose accumulated matrix has more than 1024 rows (more than 1024
-  columns), the column-tile scheme made fits 9 to 13 percent slower than
-  0.1.4 on one thread, and 2.9 to 3.3 times faster than one thread of the
-  same build on 4 threads. One-thread timings above 1024 coefficients were
+  columns), the column-tile scheme made fits 14 to 15 percent slower than
+  0.1.4 on one thread (n = 2e5, p = 1100), and 2.9 to 3.3 times faster than
+  one thread of the same build on 4 threads. One-thread timings above 1024 coefficients were
   measured for GLMs only.
 * Sparse (`dgCMatrix`) GLM fits form X'WX from a row-compressed copy of the
   design built once per fit, instead of transposing the design at every
