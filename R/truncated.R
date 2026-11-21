@@ -124,6 +124,8 @@ fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "neg
 
 #' @export
 vcov.fastglm_truncated <- function(object, full = FALSE,type=NULL,cluster=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(!is.null(type) || !is.null(cluster))
         return(fastglm_vcov(object,if(is.null(type)) "HC0" else type,cluster=cluster,full=full,...))
     if (full) object$vcov.full else object$cov.unscaled

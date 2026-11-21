@@ -350,7 +350,7 @@ test_that("streamed refits: one announcement, one-shot sources refused first, tr
     options(old)
 })
 
-test_that("refits honor the fit's threads and an interrupt leaves the session usable", {
+test_that("refits use at most the session's threads and an interrupt leaves the session usable", {
     skip_on_cran()
     skip_on_os("windows")
     d <- drop1_data(n = 400L)
@@ -367,7 +367,8 @@ test_that("refits honor the fit's threads and an interrupt leaves the session us
     seen <- integer()
     suppressMessages(drop1(s))
     expect_true(length(seen) > 0L)
-    expect_true(all(seen == s$threads))
+    # The fit used 2 threads (at most); its refits are capped by the session's 1.
+    expect_true(all(seen == 1L))
     expect_identical(fastglm_threads()$threads, 1L)
     # Interrupt during the second refit.
     reads <- 0L

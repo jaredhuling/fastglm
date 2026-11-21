@@ -87,7 +87,7 @@ c(fit_1$threads,fit_2$threads)
 identical(coef(fit_1),coef(fit_2))
 ```
 
-Dense QR and SVD decompositions, the evaluation of probit links and of families written in R, and the reading of each source block run on one thread, although the cross products of such fits are still threaded; `?fastglm_threads` lists the threaded computations and the default number of threads.
+Dense fits with a QR or SVD method, including the default `method=0` of `fastglm()`, run entirely on one thread, so a dense fit is threaded only with `method="llt"`, `"ldlt"`, or `"auto"`. The evaluation of probit links and of families written in R, and the reading of each source block, also run on one thread, but the cross products of such fits are still threaded. `?fastglm_threads` lists the threaded computations and the default number of threads.
 
 With `trace=TRUE`, a fit prints one line per iteration: the iteration number, the passes over the data so far, the deviance or log likelihood, the number of step halvings, and the elapsed time. Streamed fits trace by default in an interactive session; otherwise, including when a document is knitted, the trace is off unless requested.
 

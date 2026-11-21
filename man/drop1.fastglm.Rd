@@ -172,7 +172,8 @@ attribute, with a first row \verb{<none>} (the full model) for \code{drop1()} an
 \description{
 \code{drop1()} refits the model without each term in \code{scope} (on the data and
 with the weights, offsets, family, link, method, and controls of the fit,
-including \code{threads}) and compares each refit with the full model. \code{anova()}
+including \code{threads}, capped at the session setting of
+\code{\link[=fastglm_threads]{fastglm_threads()}}) and compares each refit with the full model. \code{anova()}
 of a single model gives the sequential table: the terms are added in the
 order of the formula, each compared with the model before it.
 }

@@ -191,11 +191,11 @@ nb1 <- fastglm_nb(visits~x+group+offset(log(exposure)), data=d)
 anova(pois1, nb1)
 ```
 
-`drop1()` refits the model without each term and compares each refit with the full model, respecting marginality as `stats::drop1()` does; `anova()` of a single model gives the table of terms added in sequence. For negative-binomial fits, $\theta$ is held at the full model's estimate in each refit, as for a `MASS::glm.nb()` fit. `extractAIC()` methods let `step()` and `MASS::stepAIC()` select terms by AIC.
+`drop1()` refits the model without each term and compares each refit with the full model, respecting marginality as `stats::drop1()` does; `anova()` of a single model gives the table of terms added in sequence. For negative-binomial fits, $\theta$ is held at the full model's estimate in each refit, as for a `MASS::glm.nb()` fit. `extractAIC()` methods let `step()` and `MASS::stepAIC()` select terms by AIC. The example calls `stats::step()`, since the recipes package also exports a function named `step()` that masks it when recipes is attached.
 
 ```{r}
 drop1(nb1, test="LRT")
-step(nb1, trace=0)$call
+stats::step(nb1, trace=0)$call
 ```
 
 Zero-inflated, hurdle, and two-part models have two linear predictors. Their `drop1()` table has one row per term in each part, and each refit removes the term from that part only. A sequential `anova()` table is not given for these models, since the order in which terms enter has no clear meaning across parts.

@@ -2,6 +2,9 @@
 {
     ## Thread setting for the compiled code: the fastglm.threads option when
     ## set, otherwise the default. No warning at load.
+    ## The process that loaded the package; a process forked from it later
+    ## (an mclapply worker) resolves the default to 1 thread.
+    .fastglm_state$pid <- Sys.getpid()
     fastglm_set_threads_cpp(tryCatch(.fastglm_resolve_threads(NULL),
                                      error = function(e) 1L))
 

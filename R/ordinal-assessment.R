@@ -302,6 +302,8 @@ fastglm_ordinal_assess <- function(object,newdata=NULL,y=NULL,weights=NULL,
         offset=NULL,bins=10L,proportional.odds=FALSE,po.control=list(),
         po.test=c("none","score"),po.terms=NULL,po.test.control=list(),
         po.estimation=c("ML","meanBR"),keep.rows=NULL,sink=NULL) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     # Internal refits are not traced, even under options(fastglm.trace = TRUE).
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)

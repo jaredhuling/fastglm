@@ -95,6 +95,8 @@
 fastglm_marginal_effects <- function(object,variable,newdata=NULL,weights=NULL,
                                      vcov.=NULL,level=.95,type="response",
                                      eps=NULL,offset=NULL) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(inherits(object,"fastglm_vglm"))
         return(.vglm_marginal_effects(object,variable,newdata,weights,vcov.,level,type,eps,offset))
     if(!inherits(object,"fastglm_ordinal"))

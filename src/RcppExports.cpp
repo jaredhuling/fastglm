@@ -1268,6 +1268,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fastglm_thread_limit_cpp
+int fastglm_thread_limit_cpp();
+RcppExport SEXP _fastglm_fastglm_thread_limit_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(fastglm_thread_limit_cpp());
+    return rcpp_result_gen;
+END_RCPP
+}
 // fastglm_has_openmp_cpp
 bool fastglm_has_openmp_cpp();
 RcppExport SEXP _fastglm_fastglm_has_openmp_cpp() {
@@ -1410,6 +1420,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fastglm_fastglm_reduce_failure_test", (DL_FUNC) &_fastglm_fastglm_reduce_failure_test, 6},
     {"_fastglm_prepare_glm_constant", (DL_FUNC) &_fastglm_prepare_glm_constant, 4},
     {"_fastglm_fastglm_set_threads_cpp", (DL_FUNC) &_fastglm_fastglm_set_threads_cpp, 1},
+    {"_fastglm_fastglm_thread_limit_cpp", (DL_FUNC) &_fastglm_fastglm_thread_limit_cpp, 0},
     {"_fastglm_fastglm_has_openmp_cpp", (DL_FUNC) &_fastglm_fastglm_has_openmp_cpp, 0},
     {"_fastglm_fastglm_logical_cores_cpp", (DL_FUNC) &_fastglm_fastglm_logical_cores_cpp, 0},
     {"_fastglm_fastglm_set_trace_cpp", (DL_FUNC) &_fastglm_fastglm_set_trace_cpp, 2},

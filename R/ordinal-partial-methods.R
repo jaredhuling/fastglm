@@ -69,6 +69,8 @@ coef.fastglm_ordinal_partial <- function(object,component=c("all","location","th
 #' @export
 vcov.fastglm_ordinal_partial <- function(object,component=c("all","location","threshold","common","nonparallel"),
     type=c("model","HC0","HC1"),cluster=NULL,cadjust=TRUE,block.size=8192L,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(length(list(...))) stop("unused nonparallel covariance arguments",call.=FALSE)
     component <- match.arg(component);type <- match.arg(type)
     if(type=="model" && !is.null(cluster))
@@ -158,6 +160,8 @@ print.fastglm_ordinal_partial <- function(x,digits=max(3L,getOption("digits")-3L
 #'   [fastglm_score_test()].
 #' @export
 confint.fastglm_ordinal_partial <- function(object,parm,level=.95,method=c("wald","profile"),control=list(),...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     # Internal refits are not traced, even under options(fastglm.trace = TRUE).
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)
@@ -187,6 +191,8 @@ confint.fastglm_ordinal_partial <- function(object,parm,level=.95,method=c("wald
 #' @export
 predict.fastglm_ordinal_partial <- function(object,newdata=NULL,
     type=c("probability","cumulative","class","link","response"),se.fit=FALSE,offset=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(length(list(...))) stop("unused nonparallel prediction arguments",call.=FALSE)
     type <- match.arg(type);if(type=="response") type <- "probability"
     if(!is.logical(se.fit) || length(se.fit)!=1L || is.na(se.fit)) stop("'se.fit' must be TRUE or FALSE",call.=FALSE)

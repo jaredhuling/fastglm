@@ -368,6 +368,8 @@ residuals.fastglm <- function(object,
                               type = c("deviance", "pearson", "working", "response", "partial"), 
                               ...)
 {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     type <- match.arg(type)
     code <- .stable_binomial_code(object)
     if(code>=0L && type %in% c("deviance","pearson","response")) {
@@ -438,6 +440,8 @@ predict.fastglm <- function(object, newdata = NULL,
                             type = c("link", "response", "terms"),
                             se.fit = FALSE, dispersion = NULL, offset = NULL,
                             terms = NULL, ...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     type <- match.arg(type)
     if (se.fit && is.null(object$cov.unscaled)) stop("prediction standard errors require full covariance", call. = FALSE)
     if (is.null(dispersion)) dispersion <- object$dispersion

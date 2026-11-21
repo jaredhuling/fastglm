@@ -130,6 +130,8 @@ simulate.fastglm_ordinal <- function(object,nsim=1L,seed=NULL,...) {
 #'   outcomes. Biometrika, 99, 473--480. \doi{10.1093/biomet/asr073}.
 #' @exportS3Method residuals fastglm_ordinal
 residuals.fastglm_ordinal <- function(object,type=c("probability","cumulative","pearson"),...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(length(list(...))) stop("unused ordinal residual arguments",call.=FALSE)
     type <- match.arg(type)
     n <- nrow(object$x); K <- length(object$levels)

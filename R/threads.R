@@ -18,8 +18,11 @@
 #' predictors, and native family evaluations of dense, sparse,
 #' \code{big.matrix}, and streamed GLM fits with the Cholesky methods; the
 #' count, zero-inflated, hurdle, and two-part models; and the multinomial
-#' and ordinal engines. The following run on one thread: the dense QR and SVD
-#' methods (\code{method} 0, 1, 4, and 5), the evaluation of calculations
+#' and ordinal engines. The following run on one thread: dense GLM fits of
+#' \code{\link{fastglm}} and \code{\link{fastglmPure}} with a QR or SVD method
+#' (\code{method} 0, 1, 4, and 5), including the default \code{method = 0}
+#' (pivoted QR), so a dense fit is threaded only with \code{method = 2} or
+#' \code{3} (or \code{"auto"}); the evaluation of calculations
 #' that use R's distribution functions (such as probit links), the functions
 #' of families written in R, sparse Cholesky factorizations, and the reading
 #' of source blocks; the cross products of probit fits and of fits with
@@ -31,17 +34,41 @@
 #' The default is half the physical cores (half the logical cores when the
 #' physical count is unavailable), at most 8 and at least 1. It is reduced to
 #' the values of the environment variables \code{OMP_THREAD_LIMIT} and
-#' \code{OMP_NUM_THREADS} when they are set, and to at most 2 when
-#' \code{_R_CHECK_LIMIT_CORES_} is set to anything other than \code{"false"}, as it is
-#' during \code{R CMD check}.
+#' \code{OMP_NUM_THREADS} when they are set, and to at most 2 during
+#' \code{R CMD check} (when \code{_R_CHECK_PACKAGE_NAME_} is set, or when
+#' \code{_R_CHECK_LIMIT_CORES_} is set to anything other than \code{"false"}).
 #'
-#' A requested count is reduced to the number of logical cores and, when
-#' \code{_R_CHECK_LIMIT_CORES_} is set, to at most 2. When the package was built
-#' without OpenMP, fastglm always uses 1 thread and a request for more warns
-#' once per session.
+#' A requested count is reduced to the number of logical cores, to the OpenMP
+#' thread limit (\code{OMP_THREAD_LIMIT}), and to at most 2 during
+#' \code{R CMD check}; a fit records the reduced count. The OpenMP runtime
+#' reads \code{OMP_THREAD_LIMIT} once, when it starts, so the variable must be
+#' set before R starts (for example in \code{.Renviron} or the shell), not with
+#' \code{Sys.setenv()} during the session. When the package was
+#' built without OpenMP, fastglm always uses 1 thread and a request for more
+#' warns once per session.
+#'
+#' A process made by \code{fork()}, such as a worker of
+#' \code{parallel::mclapply()}, \code{future}'s multicore plan, or
+#' \code{doMC}, uses 1 thread, whatever the setting of the process that
+#' forked it, so that processes and threads do not multiply. The worker's
+#' session setting is 1 unless \code{fastglm_threads(n)} is called in the
+#' worker (\code{options(fastglm.threads = )} inherited from the parent is
+#' ignored); a fit run there with a \code{threads} argument uses that count
+#' for the fit itself. This applies when fastglm was loaded before
+#' the fork; a worker that first loads fastglm itself uses the default count.
+#' Workers of a socket (PSOCK) cluster are new R
+#' sessions and use the default count unless they call
+#' \code{fastglm_threads(1)}.
 #'
 #' The setting is stored in \code{options(fastglm.threads = )}, which can also be
 #' set before the package is loaded.
+#'
+#' Functions applied to a fitted model (for example \code{predict()},
+#' \code{vcov()}, \code{confint()}, score and proportional-odds tests, and
+#' refits for \code{anova()} and \code{drop1()}) use the fit's \code{threads},
+#' but not more than the session setting at the time of the call: after
+#' \code{fastglm_threads(1)} they use 1 thread, and in a forked worker they use
+#' 1 thread unless \code{fastglm_threads(n)} is called in the worker.
 #'
 #' A fit holds its thread setting for the whole call and then restores the
 #' session setting, so a call to \code{fastglm_threads()} made during a fit (for
@@ -68,6 +95,7 @@ fastglm_threads <- function(n = NULL)
         return(.fastglm_threads_info(.fastglm_resolve_threads(NULL)))
     eff <- .fastglm_resolve_threads(n, name = "n")
     options(fastglm.threads = eff)
+    .fastglm_state$pid <- Sys.getpid()
     fastglm_set_threads_cpp(eff)
     invisible(.fastglm_threads_info(eff))
 }
@@ -100,14 +128,26 @@ fastglm_threads <- function(n = NULL)
     as.integer(min(x, .Machine$integer.max))
 }
 
-## Applies the _R_CHECK_LIMIT_CORES_ cap (at most 2 threads) to n.
-.fastglm_check_cap <- function(n, limit = Sys.getenv("_R_CHECK_LIMIT_CORES_", ""))
+## Applies the R CMD check cap (at most 2 threads) to n: when
+## _R_CHECK_LIMIT_CORES_ is set to anything other than "false" (R CMD check
+## --as-cran sets it) or _R_CHECK_PACKAGE_NAME_ is non-empty (every
+## R CMD check sets it; testthat's is_checking() uses it too).
+.fastglm_check_cap <- function(n, limit = Sys.getenv("_R_CHECK_LIMIT_CORES_", ""),
+                               package = Sys.getenv("_R_CHECK_PACKAGE_NAME_", ""))
 {
     n <- as.integer(n)
-    if (length(limit) == 1L && !is.na(limit) && nzchar(limit) &&
-        !identical(tolower(limit), "false"))
+    set <- function(v) length(v) == 1L && !is.na(v) && nzchar(v)
+    if ((set(limit) && !identical(tolower(limit), "false")) || set(package))
         n <- min(n, 2L)
     n
+}
+
+## The OpenMP runtime's thread limit (OMP_THREAD_LIMIT), or NA when there is
+## none to apply (a serial build). A team cannot be larger.
+.fastglm_thread_limit <- function()
+{
+    lim <- suppressWarnings(as.integer(fastglm_thread_limit_cpp()))
+    if (length(lim) != 1L || is.na(lim) || lim < 1L) NA_integer_ else lim
 }
 
 ## parallel::detectCores(), cached for the session: on some platforms it
@@ -128,7 +168,8 @@ fastglm_threads <- function(n = NULL)
     physical = .fastglm_detected_cores(logical = FALSE),
     logical  = .fastglm_detected_cores(logical = TRUE),
     env      = as.list(Sys.getenv(c("OMP_THREAD_LIMIT", "OMP_NUM_THREADS",
-                                    "_R_CHECK_LIMIT_CORES_"), unset = "")))
+                                    "_R_CHECK_LIMIT_CORES_", "_R_CHECK_PACKAGE_NAME_"),
+                                  unset = "")))
 {
     physical <- .fastglm_as_count(physical)
     logical  <- .fastglm_as_count(logical)
@@ -140,16 +181,21 @@ fastglm_threads <- function(n = NULL)
         if (!is.na(lim)) n <- min(n, lim)
     }
     chk <- env[["_R_CHECK_LIMIT_CORES_"]]
-    n <- .fastglm_check_cap(n, if (is.null(chk)) "" else chk)
+    pkg <- env[["_R_CHECK_PACKAGE_NAME_"]]
+    n <- .fastglm_check_cap(n, if (is.null(chk)) "" else chk, if (is.null(pkg)) "" else pkg)
     if (!is.na(logical)) n <- min(n, logical)
     max(1L, as.integer(n))
 }
 
 ## The effective thread count for a request. NULL means the session setting
-## (options(fastglm.threads), else the default). An explicit request must be a
-## single positive whole number; it is reduced to the logical cores and by the
-## _R_CHECK_LIMIT_CORES_ cap, and is 1 on a serial build (warning once per
-## session when more was requested).
+## (options(fastglm.threads), else the default), which is 1 in a process
+## forked from the one that loaded the package or last set the count (for
+## example an mclapply worker) until fastglm_threads(n) or a fit's own
+## request sets it there. An explicit request must be a single positive whole
+## number. Either is reduced to the logical cores, to the OpenMP thread limit
+## (a larger team cannot be formed; libomp would warn and use fewer), and by
+## the R CMD check cap, and is 1 on a serial build (warning once per session
+## when more was requested).
 .fastglm_resolve_threads <- function(threads = NULL, name = "threads")
 {
     explicit <- !is.null(threads)
@@ -158,10 +204,15 @@ fastglm_threads <- function(n = NULL)
         if (is.na(n))
             stop(sprintf("'%s' must be a positive integer", name), call. = FALSE)
     } else {
-        ## A malformed option falls back to the default rather than erroring.
-        opt <- getOption("fastglm.threads")
-        n <- if (is.null(opt)) NA_integer_ else .fastglm_as_count(opt)
-        if (is.na(n)) n <- .fastglm_default_threads()
+        if (!identical(.fastglm_state$pid, Sys.getpid())) {
+            ## A forked child: the option and the C++ setting were inherited.
+            n <- 1L
+        } else {
+            ## A malformed option falls back to the default rather than erroring.
+            opt <- getOption("fastglm.threads")
+            n <- if (is.null(opt)) NA_integer_ else .fastglm_as_count(opt)
+            if (is.na(n)) n <- .fastglm_default_threads()
+        }
     }
     if (!fastglm_has_openmp_cpp()) {
         if (explicit && n > 1L && !isTRUE(.fastglm_state$warned_serial)) {
@@ -171,6 +222,8 @@ fastglm_threads <- function(n = NULL)
         return(1L)
     }
     n <- min(n, .fastglm_logical_cores())
+    lim <- .fastglm_thread_limit()
+    if (!is.na(lim)) n <- min(n, lim)
     max(1L, .fastglm_check_cap(n))
 }
 
@@ -196,13 +249,40 @@ fastglm_threads <- function(n = NULL)
 {
     eff <- .fastglm_resolve_threads(threads)
     old <- options(fastglm.threads = eff)
+    ## In a forked child the scope's count holds for the fits it runs; the
+    ## process record is restored with the option.
+    old.pid <- .fastglm_state$pid
+    .fastglm_state$pid <- Sys.getpid()
     prev <- fastglm_set_threads_cpp(eff)
     list(threads = eff,
          restore = function() {
              fastglm_set_threads_cpp(prev)
+             .fastglm_state$pid <- old.pid
              options(old)
              invisible(NULL)
          })
+}
+
+## The thread scope of a function applied to a fitted model (prediction,
+## covariance, tests, profiles, refits): see .fastglm_fit_threads. Callers use
+##   scope <- .fastglm_scope_fit_threads(object); on.exit(scope$restore(), add = TRUE)
+.fastglm_scope_fit_threads <- function(object)
+{
+    .fastglm_scope_threads(.fastglm_fit_threads(object))
+}
+
+## The thread count for work on a fitted model: the smaller of the fit's
+## recorded threads and the session setting resolved now, so that after
+## fastglm_threads(1) such work uses 1 thread. The session setting is 1 in a
+## forked worker unless fastglm_threads(n) was called there, and 1 on a
+## serial build; the fit's count is never resolved as a request, so a fit
+## that recorded more threads than this build allows gives no warning.
+.fastglm_fit_threads <- function(object)
+{
+    session <- .fastglm_resolve_threads(NULL)
+    own <- tryCatch(object[["threads"]], error = function(e) NULL)
+    own <- if (is.null(own)) NA_integer_ else .fastglm_as_count(own)
+    if (is.na(own)) session else min(own, session)
 }
 
 ## Wraps fun so that it first sets one thread for the session; used for

@@ -390,6 +390,8 @@ predict.fastglm_ordinal_stream <- function(object,newdata=NULL,type=c("probabili
 #' @rdname predict.fastglm_ordinal_stream
 #' @export
 residuals.fastglm_ordinal_stream <- function(object,type=c("probability","cumulative","pearson"),sink=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     type <- match.arg(type)
     .ordinal_stream_collect(object,function(z) {
         model <- object;model$x <- z$X;model$offset <- z$offset;model$weights <- z$weights

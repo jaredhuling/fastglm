@@ -2,15 +2,29 @@
 #include "parallel_reduce.h"
 #include "trace.h"
 
-// Sets the package thread setting and returns the previous value. A value
-// below 1 is stored as 1, and a serial build always stores 1.
+// Sets the package thread setting for the current process and returns the
+// previous setting in effect (1 in a forked child that had not set its own).
+// A value below 1 is stored as 1, and a serial build always stores 1.
 // [[Rcpp::export]]
 int fastglm_set_threads_cpp(int n)
 {
-    const int prev = fglm_par::thread_setting();
+    const int prev = fglm_par::effective_thread_setting();
     if (n == NA_INTEGER || n < 1 || !fglm_par::has_openmp()) n = 1;
-    fglm_par::thread_setting() = n;
+    fglm_par::set_thread_setting(n);
     return prev;
+}
+
+// The OpenMP runtime's limit on the number of threads in use at once (set by
+// OMP_THREAD_LIMIT; otherwise a large runtime default), or NA on a serial
+// build. A team larger than the limit cannot be formed.
+// [[Rcpp::export]]
+int fastglm_thread_limit_cpp()
+{
+#ifdef _OPENMP
+    const int lim = omp_get_thread_limit();
+    if (lim >= 1) return lim;
+#endif
+    return NA_INTEGER;
 }
 
 // [[Rcpp::export]]

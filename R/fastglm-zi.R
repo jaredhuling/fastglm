@@ -364,6 +364,8 @@ coef.fastglm_zi <- function(object, model = c("full", "count", "zero"), ...)
 vcov.fastglm_zi <- function(object, model = c("full", "count", "zero"), full = FALSE,
                            type=NULL,cluster=NULL,...)
 {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     model <- match.arg(model)
     if(!is.null(type) || !is.null(cluster)) {
         v <- fastglm_vcov(object,if(is.null(type)) "HC0" else type,cluster=cluster,full=full,...)

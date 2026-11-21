@@ -398,6 +398,8 @@
 
 #' @export
 vcov.fastglm_nb <- function(object,dispersion=1,full=FALSE,type=NULL,cluster=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(!is.null(type) || !is.null(cluster))
         return(fastglm_vcov(object,if(is.null(type)) "HC0" else type,cluster=cluster,full=full,...))
     if(full) return(.count_default_vcov(object))

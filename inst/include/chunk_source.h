@@ -133,7 +133,7 @@ inline void weighted_block_reduce(Eigen::Index n, Eigen::Index p, int chunk_rows
     // of its lanes). Tiles: one per group slot.
     const Eigen::Index nlanes = std::min<Eigen::Index>(nblocks, fglm_par::kLanes);
     const Eigen::Index nslots = lanes
-        ? std::min<Eigen::Index>(nlanes, std::max(1, fglm_par::thread_setting()))
+        ? std::min<Eigen::Index>(nlanes, fglm_par::effective_thread_setting())
         : std::min<Eigen::Index>(fglm_par::kGroupBlocks, nblocks);
     if (static_cast<Eigen::Index>(pl.slots.size()) < nslots) pl.slots.resize(nslots);
     for (Eigen::Index j = 0; j < nslots; ++j)

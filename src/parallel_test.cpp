@@ -17,11 +17,23 @@ namespace {
 // restores the previous value on exit, including on error.
 struct ThreadSettingGuard {
     int old;
-    explicit ThreadSettingGuard(int n) : old(fglm_par::thread_setting())
+    long old_process;
+    explicit ThreadSettingGuard(int n)
+        : old(fglm_par::thread_setting()), old_process(fglm_par::thread_setting_process())
     {
-        fglm_par::thread_setting() = (n < 1 || !fglm_par::has_openmp()) ? 1 : n;
+        if (n < 1 || !fglm_par::has_openmp()) n = 1;
+#ifdef _OPENMP
+        // As for a fit: a team above the OpenMP thread limit cannot be formed.
+        const int lim = omp_get_thread_limit();
+        if (lim >= 1 && n > lim) n = lim;
+#endif
+        fglm_par::set_thread_setting(n);
     }
-    ~ThreadSettingGuard() { fglm_par::thread_setting() = old; }
+    ~ThreadSettingGuard()
+    {
+        fglm_par::thread_setting() = old;
+        fglm_par::thread_setting_process() = old_process;
+    }
 };
 
 struct LaneAcc {
@@ -172,14 +184,19 @@ int fastglm_max_team_size_test(bool reset)
 
 // Runs fglm_par::parallel_blocks over n rows in blocks of block_rows with the
 // given thread setting; the blocks listed in fail (1-based) throw inside the
-// region. The exception rethrown on the calling thread is reported with
-// Rcpp::stop. Returns the number of blocks that ran when none failed.
+// region, a std::runtime_error for a positive entry b and a std::bad_alloc
+// for a negative entry -b. The exception rethrown on the calling thread is
+// reported with Rcpp::stop. Returns the number of blocks that ran when none
+// failed.
 // [[Rcpp::export]]
 int fastglm_parallel_blocks_test(int n, int block_rows, Rcpp::IntegerVector fail, int threads)
 {
     std::vector<char> failing((n + block_rows - 1) / block_rows + 1, 0);
-    for (int f : fail)
+    for (int f : fail) {
+        if (f == NA_INTEGER) continue;
         if (f >= 1 && f < static_cast<int>(failing.size())) failing[f - 1] = 1;
+        if (f <= -1 && -f < static_cast<int>(failing.size())) failing[-f - 1] = 2;
+    }
     std::vector<int> ran(failing.size(), 0);
     std::string msg;
     {
@@ -188,6 +205,7 @@ int fastglm_parallel_blocks_test(int n, int block_rows, Rcpp::IntegerVector fail
             fglm_par::parallel_blocks(n, block_rows, [&](Eigen::Index r, Eigen::Index) {
                 const Eigen::Index b = r / block_rows;
                 ran[b] = 1;
+                if (failing[b] == 2) throw std::bad_alloc();
                 if (failing[b])
                     throw std::runtime_error("failure in block " + std::to_string(static_cast<long long>(b) + 1));
             });

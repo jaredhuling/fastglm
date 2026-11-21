@@ -67,6 +67,8 @@
 #' @md
 #' @export
 fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(!is.logical(boundary) || length(boundary)!=1L || is.na(boundary))
         stop("'boundary' must be TRUE or FALSE",call.=FALSE)
     out <- .fastglm_diagnostics(object,boundary,max.rows)
@@ -191,6 +193,8 @@ fastglm_diagnostics <- function(object,boundary=FALSE,max.rows=5L) {
 #' @returns A named interval for theta with the evaluated profile attached.
 #' @export
 fastglm_confint_theta <- function(object,level=.95,tol=1e-5,maxit=200L) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     # Internal refits are not traced, even under options(fastglm.trace = TRUE).
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)

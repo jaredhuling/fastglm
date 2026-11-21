@@ -94,9 +94,10 @@ fit, or `NULL` (default) for the session setting of [fastglm_threads()].
 The count is reduced to the number of logical cores (and to 2 under
 `R CMD check`). Results are identical for every number of threads.
 Families supplied as R functions are evaluated on one thread. Dense fits
-with a QR or SVD method (0, 1, 4, 5) use one thread, because their
-decomposition is serial; so does the pivoted QR refit after a failed
-Cholesky factorization. Cholesky fits of dense, sparse (`dgCMatrix`), and
+with a QR or SVD method (0, 1, 4, 5), including the default `method = 0`,
+run entirely on one thread, because their decomposition is serial; use
+`method = 2` or `3` (or `"auto"`) to thread a dense fit. So does the
+pivoted QR refit after a failed Cholesky factorization. Cholesky fits of dense, sparse (`dgCMatrix`), and
 `big.matrix` designs are threaded. Fits with fewer than two row blocks
 of observations (16384 rows each by default) run on one thread.}
 

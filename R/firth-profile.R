@@ -236,6 +236,8 @@
 #' @md
 #' @export
 fastglm_profile_test <- function(object,parm,null=0,control=list(),contrast=NULL) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     # Internal refits are not traced, even under options(fastglm.trace = TRUE).
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)

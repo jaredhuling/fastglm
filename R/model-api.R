@@ -148,6 +148,8 @@ predict.fastglmFit <- function(object, newdata = NULL,
                                type = c("link", "response", "terms"),
                                se.fit = FALSE, dispersion = NULL, offset = NULL,
                                terms = NULL, ...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     predict.fastglm(object, newdata, type, se.fit, dispersion, offset, terms, ...)
 }
 
@@ -211,6 +213,8 @@ hatvalues.fastglmFit <- hatvalues.fastglm
 #' @export
 confint.fastglm <- function(object, parm, level = 0.95, ...,
                             method = c("wald", "profile"), control = list()) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     # Internal refits are not traced, even under options(fastglm.trace = TRUE).
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)

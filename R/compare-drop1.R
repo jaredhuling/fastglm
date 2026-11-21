@@ -7,7 +7,8 @@
 #'
 #' `drop1()` refits the model without each term in `scope` (on the data and
 #' with the weights, offsets, family, link, method, and controls of the fit,
-#' including `threads`) and compares each refit with the full model. `anova()`
+#' including `threads`, capped at the session setting of
+#' [fastglm_threads()]) and compares each refit with the full model. `anova()`
 #' of a single model gives the sequential table: the terms are added in the
 #' order of the formula, each compared with the model before it.
 #'

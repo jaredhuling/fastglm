@@ -16,9 +16,31 @@
 * The default is half the physical cores (half the logical cores when the
   physical count is unavailable), at most 8 and at least 1. It is reduced to
   `OMP_THREAD_LIMIT` and `OMP_NUM_THREADS` when they are set, and to at most 2
-  when `_R_CHECK_LIMIT_CORES_` is set to anything but `"false"`, as during
-  `R CMD check`; that cap also applies to explicit requests. A request is never
-  above the number of logical cores.
+  during `R CMD check` (when `_R_CHECK_PACKAGE_NAME_` is set, or
+  `_R_CHECK_LIMIT_CORES_` is set to anything but `"false"`); that cap also
+  applies to explicit requests. A request is never above the number of
+  logical cores or the OpenMP thread limit (`OMP_THREAD_LIMIT`), and a fit
+  records the reduced count. `OMP_THREAD_LIMIT` must be set before R starts:
+  the OpenMP runtime reads it once, when it starts.
+* A process made by `fork()` (a worker of `parallel::mclapply()`, `future`'s
+  multicore plan, or `doMC`) uses one thread, whatever the setting of the
+  process that forked it: its session setting is 1 unless
+  `fastglm_threads(n)` is called in the worker (an inherited
+  `options(fastglm.threads = )` is ignored there), and a fit run there with
+  a `threads` argument uses that count for the fit itself. (A worker that first loads
+  fastglm itself uses the default count.) Workers of a socket
+  (PSOCK) cluster are new R sessions and use the default count unless they
+  call `fastglm_threads(1)`.
+* Functions applied to a fitted model (`predict()`, `residuals()`, `vcov()`,
+  `confint()`, `fastglm_vcov()`, `fastglm_score_test()`,
+  `fastglm_po_test()`, `fastglm_profile_test()`, `fastglm_ordinal_assess()`,
+  `fastglm_marginal_effects()`, `fastglm_average()`,
+  `fastglm_diagnostics()`, `fastglm_confint_theta()`, and the refits of
+  `anova()` and `drop1()`) use the fit's `threads`, but not more than the
+  session setting at the time of the call: after `fastglm_threads(1)` they
+  use 1 thread, and in a forked worker 1 thread unless
+  `fastglm_threads(n)` is called in the worker. A fit that recorded several
+  threads gives no warning when used on a build without OpenMP.
 * Results are identical for every number of threads: coefficients, deviance
   or log likelihood, iterations, passes, and covariance. Rows are divided into
   blocks whose size is set by the dimensions of the problem and by block-size
@@ -71,9 +93,12 @@
   per nonzero and 8 per row) is held for the whole fit, and with at most 1024
   columns the reduction holds up to about 72 MiB of extra working memory.
 * Left on one thread:
-  * dense QR and SVD methods (`method` 0, 1, 4, and 5), whose
-    decompositions are serial; such fits record `threads = 1`, and so does a
-    Cholesky fit that falls back to QR;
+  * dense GLM fits with QR and SVD methods (`method` 0, 1, 4, and 5),
+    including the default `method = 0` (pivoted QR) of `fastglm()` and
+    `fastglmPure()`, whose decompositions are serial; such fits run entirely
+    on one thread and record `threads = 1`, and so does a Cholesky fit that
+    falls back to QR. Use `method = 2` or `3` (or `"auto"`) to thread a dense
+    fit;
   * the evaluation of probit links and other calculations that use R's
     distribution functions (GLMs, zero-inflated models, the negative binomial
     joint covariance, `big.matrix` count blocks, and ordinal fits, where this
@@ -335,7 +360,7 @@
 * Streamed and `big.matrix` fits: `drop1()` and the sequential `anova()`
   print one line before starting that states what will be read: the number
   of refits, each a streamed fit that makes several passes over the data
-  with the fit's `threads`, and, for a cached source, the one pass that
+  with the fit's `threads` (at most the session setting), and, for a cached source, the one pass that
   builds the cache of the call; `trace = TRUE` traces the refits.
   `fastglm_source()` has a new argument `reusable`; a source declared with
   `reusable = FALSE` gives an error before any refit.

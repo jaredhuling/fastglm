@@ -89,7 +89,10 @@ are not affected.}
 
 \item{threads}{the number of threads for the compiled computations of this
 fit, or `NULL` (default) for the session setting of [fastglm_threads()].
-Results are identical for every number of threads.}
+Results are identical for every number of threads. A dense fit with a QR
+or SVD method, including the default `method = 0` (pivoted QR), runs
+entirely on one thread; `method = 2` or `3` (or `"auto"`) threads a dense
+fit. See [fastglm_threads()] for what is threaded.}
 
 \item{trace}{`TRUE` to print one line per iteration (the iteration,
 the passes over the data so far, the deviance, the step halvings of the

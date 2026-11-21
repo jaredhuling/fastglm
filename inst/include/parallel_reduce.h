@@ -44,19 +44,64 @@ int omp_get_num_procs(void);
 int omp_get_num_threads(void);
 int omp_get_thread_num(void);
 int omp_get_max_threads(void);
+int omp_get_thread_limit(void);
 }
 #  endif
+#endif
+
+#ifndef _WIN32
+#  include <sys/types.h>
+#  include <unistd.h>
 #endif
 
 namespace fglm_par {
 
 // The package-wide thread setting. A function-local static in an inline
 // function has a single instance across the translation units of the shared
-// library. Defaults to 1 until the R side sets it at load.
+// library. Defaults to 1 until the R side sets it at load. Engines read it
+// through effective_thread_setting(), never directly.
 inline int& thread_setting()
 {
     static int n = 1;
     return n;
+}
+
+// The id of the current process (0 on Windows, which has no fork()).
+inline long current_process()
+{
+#ifdef _WIN32
+    return 0L;
+#else
+    return static_cast<long>(getpid());
+#endif
+}
+
+// The process that stored thread_setting(). A process made by fork() (for
+// example a worker of parallel::mclapply) inherits the setting but not this
+// id, so it runs on one thread until something in it sets the count again.
+// This check replaces a pthread_atfork() handler, which cannot be removed
+// once registered and would be left pointing into unloaded code if the
+// package's shared library were unloaded before a later fork.
+inline long& thread_setting_process()
+{
+    static long pid = -1L;
+    return pid;
+}
+
+// Stores the thread setting for the current process.
+inline void set_thread_setting(int n)
+{
+    thread_setting() = n < 1 ? 1 : n;
+    thread_setting_process() = current_process();
+}
+
+// The thread setting in effect: the stored setting in the process that
+// stored it, and 1 in a forked child that has not set its own.
+inline int effective_thread_setting()
+{
+    const int n = thread_setting();
+    if (n <= 1) return 1;
+    return thread_setting_process() == current_process() ? n : 1;
 }
 
 // True when the package was compiled with OpenMP.
@@ -112,8 +157,7 @@ inline void note_team_size()
 inline int threads_for(Eigen::Index nblocks)
 {
     if (nblocks < 2) return 1;
-    const int n = thread_setting();
-    if (n < 1) return 1;
+    const int n = effective_thread_setting();
     return static_cast<Eigen::Index>(n) < nblocks ? n : static_cast<int>(nblocks);
 }
 
@@ -155,8 +199,15 @@ void parallel_blocks(Eigen::Index n, Eigen::Index block_rows, F f)
     const Eigen::Index nblocks = (n + block_rows - 1) / block_rows;
     const int nt = threads_for(nblocks);
     if (nt <= 1) {
-        for (Eigen::Index r = 0; r < n; r += block_rows)
-            f(r, std::min<Eigen::Index>(block_rows, n - r));
+        // An allocation failure gives the same message as with several
+        // threads; other exceptions pass through unchanged, as they do from
+        // the parallel loop.
+        try {
+            for (Eigen::Index r = 0; r < n; r += block_rows)
+                f(r, std::min<Eigen::Index>(block_rows, n - r));
+        } catch (const std::bad_alloc&) {
+            rethrow_region_exception(std::current_exception());
+        }
         return;
     }
     std::vector<std::exception_ptr> err(static_cast<std::size_t>(nblocks));

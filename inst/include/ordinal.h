@@ -440,7 +440,7 @@ void ordinal_lanes(Eigen::Index nblocks,OrdinalWorkspace& ws,const VectorXd& row
     Reset reset,Add add,Combine combine,bool staged,Stage stage) {
     if(nblocks<=0) return;
     const Eigen::Index nlanes=std::min<Eigen::Index>(nblocks,fglm_par::kLanes);
-    const Eigen::Index ns=std::min<Eigen::Index>(nlanes,std::max(1,fglm_par::thread_setting()));
+    const Eigen::Index ns=std::min<Eigen::Index>(nlanes,fglm_par::effective_thread_setting());
     if(static_cast<Eigen::Index>(ws.slots.size())<ns) ws.slots.resize(ns);
     if(static_cast<Eigen::Index>(ws.lanes.size())<nlanes) ws.lanes.resize(nlanes);
     auto make_work=[&]() {

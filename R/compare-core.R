@@ -407,7 +407,7 @@
              "it cannot be read again for a refit", call. = FALSE)
     trace <- if (is.null(extras$trace)) FALSE else extras$trace
     extras$trace <- NULL
-    scope <- .fastglm_scope_threads(object$threads)
+    scope <- .fastglm_scope_fit_threads(object)
     on.exit(scope$restore(), add = TRUE)
     # trace = TRUE: the option is on inside the scope, so the fitting
     # function (called with trace = NULL) traces the refit.

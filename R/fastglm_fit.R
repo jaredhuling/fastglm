@@ -206,7 +206,7 @@ print.fastglmFit <- function(x,...) print.fastglm(x,...)
 ## stats::glm.fit(), which accepts only glm.control() fields, so they get the
 ## fit's tolerance and iteration limit in that form. The refits are not
 ## traced, and refits by glm.fit() (maximum likelihood) are refused for
-## bias-reduced fits.
+## bias-reduced fits. The anova.glm() refits use .fastglm_fit_threads().
 .fastglm_stats_refit <- function(object, what, glm.fit = TRUE)
 {
     ctl <- object$control
@@ -219,6 +219,8 @@ print.fastglmFit <- function(x,...) print.fastglm(x,...)
             maxit = if (is.null(ctl$maxit)) 100L else ctl$maxit)
     } else if (is.list(ctl)) {
         ctl$trace <- FALSE
+        # The refits use the fit's threads, at most the session setting.
+        ctl$threads <- .fastglm_fit_threads(object)
         object$control <- ctl
     }
     object

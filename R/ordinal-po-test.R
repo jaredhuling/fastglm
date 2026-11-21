@@ -539,6 +539,8 @@
 fastglm_po_test <- function(object,terms=NULL,null.estimation=c("ML","meanBR"),
                             newdata=NULL,y=NULL,weights=NULL,offset=NULL,control=list(),by.term=FALSE,
                             method=c("score","lr")) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     # Internal refits are not traced, even under options(fastglm.trace = TRUE).
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)

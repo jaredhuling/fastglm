@@ -17,6 +17,8 @@
 #' @export
 predict.fastglm_stream <- function(object,newdata=NULL,type=c("link","response"),
                                    se.fit=FALSE,dispersion=NULL,sink=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     type <- match.arg(type)
     if(!is.null(newdata)) return(predict.fastglm(object,newdata,type,se.fit,dispersion,...))
     if(is.null(dispersion)) dispersion <- object$dispersion
@@ -40,6 +42,8 @@ predict.fastglm_stream <- function(object,newdata=NULL,type=c("link","response")
 
 #' @export
 residuals.fastglm_stream <- function(object,type=c("deviance","pearson","working","response"),sink=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     type <- match.arg(type); n <- object$source$n_chunks
     out <- if(is.null(sink)) vector("list",n)
     for(k in seq_len(n)) {
@@ -69,6 +73,8 @@ logLik.fastglm_stream <- function(object,...) {
 
 #' @export
 hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(model)
+    on.exit(scope$restore(), add = TRUE)
     out <- if(is.null(sink)) vector("list",model$source$n_chunks)
     for(k in seq_len(model$source$n_chunks)) {
         z <- model$fetch(k); eta <- .model_eta(z$X,model,z$offset); mu <- model$family$linkinv(eta)
@@ -161,6 +167,8 @@ hatvalues.fastglm_stream <- function(model,sink=NULL,...) {
 #' @export
 fastglm_vcov <- function(object,type=c("HC3","HC2","HC1","HC0"),cluster=NULL,
                           cadjust=TRUE,block.size=8192L,full=FALSE) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(inherits(object,"fastglm_vglm")) {
         if(missing(type)) type <- "HC0"
         return(.vglm_robust_vcov(object,type,cluster,cadjust,block.size))
@@ -290,6 +298,8 @@ vcovHC.fastglm_stream <- function(object,type=c("HC3","HC2","HC1","HC0"),...) fa
 #' @export
 fastglm_average <- function(object,newdata=NULL,contrast=NULL,weights=NULL,
                              vcov.=NULL,level=.95,type="response") {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(anyNA(coef(object))) stop("average prediction inference requires a full-rank fit",call.=FALSE)
     if(length(level)!=1L || !is.finite(level) || level<=0 || level>=1)
         stop("'level' must lie between zero and one",call.=FALSE)

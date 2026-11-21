@@ -328,6 +328,8 @@ coef.fastglm_ordinal <- function(object,component=c("all","location","threshold"
 vcov.fastglm_ordinal <- function(object,component=c("all","location","threshold"),
                                 type=c("model","HC0","HC1"),cluster=NULL,
                                 cadjust=TRUE,block.size=8192L,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(length(list(...))) stop("unused ordinal covariance arguments",call.=FALSE)
     .ordinal_check_inference(object)
     component <- match.arg(component); type <- match.arg(type)
@@ -477,6 +479,8 @@ deviance.fastglm_ordinal <- function(object,...) {
 #'   intervals, not exact small-sample or cluster-robust intervals.
 #' @export
 confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profile"),control=list(),...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     # Internal refits are not traced, even under options(fastglm.trace = TRUE).
     no.trace <- .fastglm_scope_trace(FALSE)
     on.exit(no.trace$restore(), add = TRUE)
@@ -627,6 +631,8 @@ confint.fastglm_ordinal <- function(object,parm,level=.95,method=c("wald","profi
 predict.fastglm_ordinal <- function(object,newdata=NULL,
         type=c("probability","cumulative","class","link","response"),
         se.fit=FALSE,offset=NULL,...) {
+    scope <- .fastglm_scope_fit_threads(object)
+    on.exit(scope$restore(), add = TRUE)
     if(length(list(...))) stop("unused ordinal prediction arguments",call.=FALSE)
     type <- match.arg(type)
     if(type=="response") type <- "probability"

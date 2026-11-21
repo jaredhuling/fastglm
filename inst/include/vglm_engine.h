@@ -503,7 +503,7 @@ struct VglmWorkHandle {
 inline Eigen::Index vglm_lane_slots(VglmWorkspace& ws, Eigen::Index nblocks) {
     const Eigen::Index nlanes = std::min<Eigen::Index>(nblocks, fglm_par::kLanes);
     const Eigen::Index ns =
-        std::min<Eigen::Index>(nlanes, std::max(1, fglm_par::thread_setting()));
+        std::min<Eigen::Index>(nlanes, fglm_par::effective_thread_setting());
     if (static_cast<Eigen::Index>(ws.slots.size()) < ns) ws.slots.resize(ns);
     if (static_cast<Eigen::Index>(ws.lanes.size()) < nlanes) ws.lanes.resize(nlanes);
     return ns;

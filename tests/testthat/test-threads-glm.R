@@ -308,7 +308,8 @@ test_that("fits record the thread count used and diagnostics print it", {
     d <- thread_glm_data(n = 2000L)
     # A build without OpenMP always uses 1 thread.
     cap <- function(n) if (!fastglm_threads()$openmp) 1L else
-        fastglm:::.fastglm_check_cap(min(n, fastglm_threads()$logical.cores))
+        fastglm:::.fastglm_check_cap(min(n, fastglm_threads()$logical.cores,
+                                         fastglm:::.fastglm_thread_limit(), na.rm = TRUE))
     for (req in c(1L, 2L, 4L)) {
         fit <- fastglm(d$x, d$yb, family = binomial(), method = 2L, threads = req)
         expect_identical(fit$threads, cap(req))

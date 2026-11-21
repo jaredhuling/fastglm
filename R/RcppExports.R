@@ -257,6 +257,10 @@ fastglm_set_threads_cpp <- function(n) {
     .Call(`_fastglm_fastglm_set_threads_cpp`, n)
 }
 
+fastglm_thread_limit_cpp <- function() {
+    .Call(`_fastglm_fastglm_thread_limit_cpp`)
+}
+
 fastglm_has_openmp_cpp <- function() {
     .Call(`_fastglm_fastglm_has_openmp_cpp`)
 }
