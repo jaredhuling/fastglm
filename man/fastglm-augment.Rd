@@ -119,8 +119,9 @@ Applies to \code{fastglm()} and \code{fastglm_nb()} fits. The defaults follow
 \code{broom::augment.glm()}: \code{type.predict = "link"} and
 \code{type.residuals = "deviance"}. For training rows the columns \code{.hat}
 (leverage, from \code{\link[=hatvalues]{hatvalues()}}), \code{.sigma} (leave-one-out residual standard
-deviation, computed as \code{lm.influence()} does from the deviance residuals),
-\code{.cooksd} (Cook's distance), and \code{.std.resid} (standardized residual of
+deviation, computed as \code{stats::influence()} does for glm fits: from the
+Pearson residuals in R 4.6.0 and later, and from the deviance residuals in
+earlier versions), \code{.cooksd} (Cook's distance), and \code{.std.resid} (standardized residual of
 type \code{type.residuals}, \code{deviance} or \code{pearson}) follow \code{.resid} in broom's
 order. Rows with zero weight give \code{NA}, and a leverage of one gives \code{NaN},
 as in \code{rstandard.glm()}. The influence columns are omitted for Firth fits,

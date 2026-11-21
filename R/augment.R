@@ -109,18 +109,21 @@
 # Leverage, leave-one-out sigma, Cook's distance, and standardized residuals
 # of a GLM, as stats::influence(), rstandard(), and cooks.distance() give for
 # glm fits: the leave-one-out sigma is that of lm.influence() applied to the
-# deviance residuals, with n counting the rows of nonzero weight.
+# residuals that weighted.residuals() returns for a glm, with n counting the
+# rows of nonzero weight. R 4.6.0 changed those residuals from deviance to
+# Pearson residuals, and the version check keeps agreement with stats.
 .augment_influence <- function(x, type) {
     h <- unname(hatvalues(x)); disp <- x$dispersion
     dev <- unname(stats::residuals(x, type = "deviance"))
     pear <- unname(stats::residuals(x, type = "pearson"))
     res <- if (type == "deviance") dev else pear
+    loo <- if (getRversion() >= "4.6.0") pear else dev
     w <- if (!is.null(x$na.action) && inherits(x$na.action, "exclude"))
         napredict(x$na.action, x$prior.weights) else x$prior.weights
     live <- !is.na(dev) & !is.na(h) & w != 0
     n <- sum(live); p <- x$rank
-    ss <- sum(dev[live]^2)
-    sigma <- sqrt(pmax(0, (ss - dev^2 / (1 - h)) / (n - p - 1)))
+    ss <- sum(loo[live]^2)
+    sigma <- sqrt(pmax(0, (ss - loo^2 / (1 - h)) / (n - p - 1)))
     std <- suppressWarnings(res / sqrt(disp * (1 - h)))
     cd <- (pear / (1 - h))^2 * h / (disp * p)
     # A leverage of one gives undefined statistics, as in stats::rstandard.glm.
@@ -156,8 +159,9 @@
 #' `broom::augment.glm()`: `type.predict = "link"` and
 #' `type.residuals = "deviance"`. For training rows the columns `.hat`
 #' (leverage, from [hatvalues()]), `.sigma` (leave-one-out residual standard
-#' deviation, computed as `lm.influence()` does from the deviance residuals),
-#' `.cooksd` (Cook's distance), and `.std.resid` (standardized residual of
+#' deviation, computed as `stats::influence()` does for glm fits: from the
+#' Pearson residuals in R 4.6.0 and later, and from the deviance residuals in
+#' earlier versions), `.cooksd` (Cook's distance), and `.std.resid` (standardized residual of
 #' type `type.residuals`, `deviance` or `pearson`) follow `.resid` in broom's
 #' order. Rows with zero weight give `NA`, and a leverage of one gives `NaN`,
 #' as in `rstandard.glm()`. The influence columns are omitted for Firth fits,

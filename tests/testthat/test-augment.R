@@ -205,7 +205,8 @@ test_that("influence columns handle zero weights and unit leverage", {
     expect_true(all(is.na(a$.std.resid[c(2, 5)])) && all(is.na(a$.cooksd[c(2, 5)])))
     g <- glm(yb ~ x, data = d, family = binomial(), weights = w, control = glm.control(epsilon = 1e-12))
     live <- w > 0
-    expect_equal(a$.std.resid[live], unname(rstandard(g)), tolerance = 1e-6)
+    ## rstandard.glm() defaults to Pearson residuals in R >= 4.6.0
+    expect_equal(a$.std.resid[live], unname(rstandard(g, type = "deviance")), tolerance = 1e-6)
     expect_equal(a$.cooksd[live], unname(cooks.distance(g)), tolerance = 1e-6)
     expect_equal(a$.sigma[live], unname(influence(g, do.coef = FALSE)$sigma), tolerance = 1e-6)
     ## a level with one observation has leverage one: NaN, not Inf
