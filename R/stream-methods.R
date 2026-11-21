@@ -248,6 +248,11 @@ vcovHC.fastglm_stream <- function(object,type=c("HC3","HC2","HC1","HC0"),...) fa
 #' For ordinal fits, returns an average for each category or cumulative
 #' probability. With collapsed categories, inference refers to the reduced
 #' category model and removed-category standard errors are unavailable.
+#' For a GLM, a contrast is applied once to the whole design of an in-memory
+#' dense or sparse fit, and block by block (of rows) to a `big.matrix` design
+#' or a source, so for those designs the contrast should transform each row
+#' on its own (for example, subtract a fixed number from a column rather than
+#' its mean, which differs between blocks).
 #' Nonparallel ordinal fits include the joint uncertainty of thresholds,
 #' common slopes, and threshold-specific slopes and check prediction validity
 #' at all rows with positive averaging weight.
@@ -327,6 +332,14 @@ fastglm_average <- function(object,newdata=NULL,contrast=NULL,weights=NULL,
                 stop("contrast must preserve design dimensions",call.=FALSE)
             .design_blocks(d$x,function(z,i) add(z,d$offset[i],if(!is.null(weights)) weights[i],
                 if(!is.null(contrast)) xx[i,,drop=FALSE]))
+        } else if(inherits(d$x,"big.matrix")) {
+            # A big.matrix design is read in blocks of rows (the contrast is
+            # applied to each block).
+            if(!is.null(weights) && (length(weights)!=nrow(d$x) || any(!is.finite(weights)|weights<0)))
+                stop("invalid averaging weights",call.=FALSE)
+            off <- if(is.null(d$offset)) 0 else d$offset
+            .design_blocks(d$x,function(z,i) add(z,if(length(off)==nrow(d$x)) off[i] else off,
+                if(!is.null(weights)) weights[i]))
         } else add(d$x,d$offset,weights)
     }
     if(total<=0) stop("averaging weights must have positive total",call.=FALSE)

@@ -24,6 +24,9 @@
 #'   Select complete model terms with a one-sided formula for a formula source,
 #'   or columns by name or index for a matrix source. All declared categories
 #'   must have positive total frequency for these models.
+#' @param formula a model formula that replaces the formula of a formula
+#'   source (the source is rebuilt with it, as [update()] of the source does);
+#'   calls written by [stats::step()] name the model formula this way.
 #' @details The rows and values returned for each block must remain unchanged
 #'   during fitting and later prediction or residual calculations. Empty
 #'   blocks are not accepted; blocks with zero total frequency are allowed.
@@ -65,8 +68,9 @@
 #' @md
 #' @export
 fastglm_ordinal_streaming <- function(source,n_chunks=NULL,levels=NULL,firth=FALSE,
-    link="logit",tol=1e-8,maxit=200L,block.size=2048L,control=list(),nonparallel=NULL) {
+    link="logit",tol=1e-8,maxit=200L,block.size=2048L,control=list(),nonparallel=NULL,formula=NULL) {
     call <- match.call();call[[1L]] <- quote(fastglm::fastglm_ordinal_streaming)
+    if(!is.null(formula)) source <- .fastglm_formula_source(source,formula)
     # A thread count in 'control' is held for the whole call (every source
     # pass) and is not kept in the fit's optimizer controls.
     split <- .ordinal_split_threads(control); control <- split$control

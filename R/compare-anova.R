@@ -120,6 +120,16 @@
 #' a robust or clustered `vcov` type gets the same test. For a comparison that
 #' uses a robust covariance, use [fastglm_wald_test()].
 #'
+#' **Streamed and `big.matrix` fits.** Comparing fitted models reads no data:
+#' the statistic uses the log likelihoods (or deviances) saved at fit time,
+#' and the data checks use the response fingerprint, so no comparison loads a
+#' source into memory. `anova(object)` with a single streamed or `big.matrix`
+#' fit instead refits the smaller models of the nested sequence, each a full
+#' streamed fit (several passes over the source), after a line stating the
+#' number of refits; a source declared one-shot
+#' (`fastglm_source(reusable = FALSE)`) gives an error before any refit. See
+#' [drop1.fastglm()], which has the same cost.
+#'
 #' **Formula fits.** Calls with only formula `fastglm()` fits (and other `glm`
 #' objects) are handed to [stats::anova.glm()] unchanged, with its tests
 #' (including `test = "Rao"`), results, and messages. Bias-reduced formula

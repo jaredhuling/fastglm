@@ -42,6 +42,7 @@ reference:
   - fastglm_vcov
   - "`fastglm-sandwich`"
   - vcovHC.fastglm
+  - vcovHC.fastglm_count
   - confint.fastglm
   - "`fastglm-confint-methods`"
   - fastglm_wald_test
@@ -67,6 +68,15 @@ reference:
   - predict.fastglm_stream
   - predict.fastglm_ordinal_stream
   - fastglm_threads
+- title: Model comparison
+  contents:
+  - anova.fastglm
+  - drop1.fastglm
+  - update-fastglm
+- title: Other packages
+  contents:
+  - "`fastglm-emmeans`"
+  - "`fastglm-augment`"
 - title: Diagnostics and reporting
   contents:
   - fastglm_diagnostics
@@ -93,6 +103,10 @@ articles:
   navbar: Large data
   contents:
   - large-data-fastglm
+- title: Other packages
+  navbar: Other packages
+  contents:
+  - ecosystem-fastglm
 - title: Performance and stability
   navbar: Performance and stability
   contents:

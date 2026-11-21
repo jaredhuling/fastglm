@@ -97,6 +97,32 @@ stream_traced <- fastglm_streaming(source,family=poisson(),trace=TRUE)
 
 A fit can be interrupted between groups of row blocks, and the thread setting is restored afterward.
 
+# Comparing streamed models
+
+`anova(m0, m1)` for two streamed fits reads no data. It uses the log likelihoods saved during fitting and checks that the fits describe the same observations through a fingerprint of the response recorded at fit time: the number of observations, the sum of the weights, and the weighted sums of the response and of its square. Here the smaller model is fitted from a second source with the same reader and prototype.
+
+```{r stream-anova}
+source_x <- fastglm_source(get_data, n_chunks=4L,
+                           formula=y~x, prototype=raw)
+stream_x <- fastglm_streaming(source_x, family=poisson())
+anova(stream_x, stream_fit)
+```
+
+`drop1()` and the sequential `anova()` of one model refit the model without each term. For a streamed fit each refit is a streamed fit, which makes several passes over the source (one or more per iteration). Before the first refit, one line states what will be read. Generalized linear and negative binomial models are refitted by removing design columns from the blocks, so a source made with `cache` serves these refits from its cache. The other models are refitted with a reduced formula, which rebuilds each block from the raw data and so cannot use that cache; for a source made with `cache`, `drop1()` and `anova()` read the source once at the start of the call into a block cache of the raw data in `tempdir()`, every refit reads that cache, and it is removed when the call ends. The refits use the threads of the original fit and are traced only with `trace=TRUE`. No refit holds more than one block of the source in memory.
+
+```{r stream-drop1, message=TRUE}
+drop1(stream_fit, test="LRT")
+```
+
+A stream that cannot be rewound needs `cache`, since a fit reads its blocks several times. Generalized linear and negative binomial fits of such a source can still be compared by refits, which read the cache; refits by formula of the other models read the source again, so for those models the source should be declared with `reusable=FALSE`. A source declared with `reusable=FALSE` serves only the fit it is passed to, and every comparison that would refit the model stops before the first refit:
+
+```{r stream-one-shot, error=TRUE}
+one_shot <- fastglm_source(get_data, n_chunks=4L, formula=y~x+g,
+                           prototype=raw, reusable=FALSE)
+one_shot_fit <- fastglm_streaming(one_shot, family=poisson())
+drop1(one_shot_fit, test="LRT")
+```
+
 # QR updates for nearly collinear predictors
 
 Streaming fits use the `"llt"` Cholesky method by default. At each coefficient update, this method combines weighted products of predictor columns into a small matrix. These products are inexpensive to accumulate across blocks, but they can lose precision when predictors are nearly linear combinations of one another. For example, two measurements may differ only slightly while still carrying distinct information. Rescaling their units can help with differences in magnitude, but it cannot remove their near redundancy.

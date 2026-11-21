@@ -124,9 +124,10 @@ vector of term labels or a formula whose terms are taken, as in
 respecting marginality (\code{\link[stats:factor.scope]{stats::drop.scope()}}), so for \code{y ~ a * b} only
 \code{a:b}. For a model with two linear predictors (zero-inflated, hurdle,
 two-part) or a partial proportional odds model, a list with elements
-named by part (\code{count}, \code{zero}; \code{location}, \code{nominal}) gives the scope of
-each part, and a vector or formula applies to every part that has the
-term. For a fit to a design matrix (including \code{big.matrix} and streamed
+named by part (\code{count}, \code{zero}; \code{positive}, \code{zero} for two-part fits,
+where \code{count} is accepted for \code{positive}; \code{location}, \code{nominal}) gives
+the scope of each part, and a vector or formula applies to every part
+that has the term. For a fit to a design matrix (including \code{big.matrix} and streamed
 design matrices): a list of column groups, each a vector of column
 indices or names dropped together (for example \code{list(g = c(2, 3))}), or a
 vector of columns dropped one at a time; the default drops each
@@ -185,7 +186,9 @@ estimated), \verb{Rao score}, or \verb{F value}, and their p-values. For negativ
 binomial fits theta is held at the full model's estimate in every refit,
 as \code{drop1()} does for a \code{MASS::glm.nb()} fit (through
 \code{\link[stats:add1]{stats::drop1.glm()}}); the AIC column then counts the coefficients only,
-as \code{MASS}'s \code{extractAIC()} does, so it differs from \code{\link[=AIC]{AIC()}} by 2.
+as \code{MASS}'s \code{extractAIC()} does, so it differs from \code{\link[=AIC]{AIC()}} by 2. When the
+estimate of theta is infinite (the Poisson limit, where \code{\link[=fastglm_nb]{fastglm_nb()}}
+returns the Poisson fit), every refit is a Poisson fit.
 
 \strong{Other models} (truncated, zero-inflated, hurdle, two-part, ordinal, and
 multinomial) are refitted without the term, as \code{\link[stats:add1]{stats::drop1()}} does
@@ -196,8 +199,9 @@ p-value. For two-part fits both use \code{\link[=logLik]{logLik()}}, which maxim
 Gamma shape (see \code{\link[=fastglm_twopart]{fastglm_twopart()}}).
 
 \strong{Models with two linear predictors} get one row per term per part,
-named by part (for example \code{count: a} and \code{zero: a}); each refit drops
-the term from that part only. A partial proportional odds model with a
+named by part (for example \code{count: a} and \code{zero: a}, or \code{positive: a} and
+\code{zero: a} for a two-part fit, whose first part models the positive
+outcomes); each refit drops the term from that part only. A partial proportional odds model with a
 term \code{a} that has cutpoint-specific effects lists it twice: \verb{a (all effects)} removes the term (its test has the degrees of freedom of all of
 its cutpoint-specific coefficients), and \code{a (nonparallel)} replaces its
 cutpoint-specific effects by a common effect, which tests the
@@ -217,19 +221,49 @@ error. The sequential table of a Firth formula fit applies the same test to
 each model of the sequence.
 
 \strong{Streamed and \code{big.matrix} fits} are refitted by reading the source
-(or its cache, or the \code{big.matrix} in blocks of rows) again, so each refit
-is a full streamed fit. Before the first refit one line says how many
-refits will be run. The refits are not traced unless \code{trace = TRUE}. A
-source declared one-shot (\code{fastglm_source(reusable = FALSE)}) gives an
-error before any refit.
+(or its block cache, or the \code{big.matrix} in blocks of rows) again, so
+each refit is a streamed fit, which makes several passes over the data
+(one or more per iteration). Before the first refit one line says what
+will be read: the number of refits, and, for a source made with \code{cache},
+the one pass that builds the block cache of the call. A refit by formula
+(the classes other than generalized linear and negative binomial models)
+rebuilds each block from the raw data with the reduced formula, so it
+cannot use the source's cache of built blocks; for a source made with
+\code{cache}, \code{drop1()} and \code{anova()} therefore read the source once at the
+start of the call into a block cache of the raw data in \code{\link[=tempdir]{tempdir()}},
+every refit reads that cache, and the cache is removed when the call ends
+(also on an error or an interrupt). The source's callback is thus read
+once per call, as the original fit's cache intends. Without \code{cache}, each
+refit reads the source on every pass. The per-call cache holds the raw
+blocks uncompressed, so while the call runs it needs disk space in
+\code{\link[=tempdir]{tempdir()}} about equal to the uncompressed raw data, in addition to the
+source's own cache. Refits by columns (generalized linear and negative
+binomial models) read the source's own cache. On a cached streamed fit,
+each model that \code{step()} moves to is a new fit with its own source cache,
+removed when that fit is garbage collected. The refits are not traced unless \code{trace = TRUE}. A source declared one-shot
+(\code{fastglm_source(reusable = FALSE)}) gives an error before any refit.
 
 \strong{Model selection.} \code{extractAIC()} methods for these classes return the
 number of parameters and the AIC with penalty \code{k} (the coefficients for
 generalized linear and negative binomial models, as \code{extractAIC()} of
 \code{glm()} and \code{MASS::glm.nb()} fits; every parameter of \code{\link[=logLik]{logLik()}}
 otherwise), the values of the AIC column. With \code{\link[=update]{update()}}, this lets
-\code{\link[stats:step]{stats::step()}} and \code{MASS::stepAIC()} run on fits held in memory. On a
-streamed fit each \code{drop1()} call that \code{step()} makes announces its refits.
+\code{\link[stats:step]{stats::step()}} and \code{MASS::stepAIC()} run on fits held in memory, and the
+fit that \code{step()} returns can be evaluated again from its call and
+updated. On a streamed fit each \code{drop1()} call that \code{step()} makes
+announces its refits (and, for a cached source, builds its own block
+cache), and each model that \code{step()} moves to is a new streamed fit.
+\code{step()} and \code{MASS::stepAIC()} do not select terms of models with two
+linear predictors (zero-inflated, hurdle, and two-part), whose terms
+belong to a part: they return the fit unchanged, with a warning (from
+\code{extractAIC()}, which they call) pointing to \code{drop1()}, which gives the
+tests for each part.
+For fits with zero prior weights, the number of parameters is the rank,
+while \code{extractAIC()} of \code{glm()} and \code{MASS::glm.nb()} fits counts
+\code{n - df.residual}, which adds the number of rows with zero weight. The
+difference is the same for every model of the same data, so \code{step()}
+selects the same models and the AIC values differ by a constant (for
+\code{glm()} fits, only when \code{k != 2}).
 
 \strong{Sequential tables.} \code{anova(object)} for a model with a formula and one
 linear predictor refits the nested sequence: for generalized linear and

@@ -1,0 +1,246 @@
+---
+title: "Using fastglm with emmeans, broom, and tidymodels"
+author: "Jared Huling"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using fastglm with emmeans, broom, and tidymodels}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE)
+has <- function(pkgs) all(vapply(pkgs, requireNamespace, logical(1), quietly=TRUE))
+has_mass <- has("MASS")
+has_broom <- has_mass && has("broom")
+has_emmeans <- has_mass && has("emmeans")
+has_sandwich <- has_emmeans && has("sandwich")
+has_tidymodels <- has_mass && has(c("parsnip","recipes","workflows","rsample",
+                                    "tune","broom"))
+```
+
+fastglm supplies methods for generics of three other packages: `tidy()`, `glance()`, and `augment()` of *broom*; `recover_data()` and `emm_basis()` of *emmeans*; and an engine `"fastglm"` for model types of *parsnip*. Each set of methods is registered when the other package is loaded, and none of these packages is required by fastglm. This vignette carries three datasets from *MASS* through them: days absent from school (`quine`, counts), housing satisfaction (`housing`, ordered and unordered categories), and low birth weight (`birthwt`, a binary outcome). Each code chunk runs only when the packages it uses are installed.
+
+# Days absent: Poisson and negative binomial fits
+
+`quine` records the days absent from school of 146 children, with ethnicity (`Eth`), sex (`Sex`), age group (`Age`, four levels), and learner status (`Lrn`). Both models below have the log-linear mean
+$$
+\log \mu_i = x_i^\top\beta .
+$$
+The Poisson model sets $\operatorname{Var}(Y_i)=\mu_i$; the negative binomial model sets $\operatorname{Var}(Y_i)=\mu_i+\mu_i^2/\theta$ and estimates $\theta$ with $\beta$.
+
+```{r quine-fits, eval=has_mass}
+library(fastglm)
+quine <- MASS::quine
+pois <- fastglm(Days ~ Eth + Sex + Age + Lrn, data=quine, family=poisson())
+nb <- fastglm_nb(Days ~ Eth + Sex + Age + Lrn, data=quine)
+nb$theta
+```
+
+`glance()` gives one row per fit. The Poisson residual deviance is more than ten times its residual degrees of freedom, so the Poisson variance is far too small for these data; the negative binomial log likelihood is higher by about 600.
+
+```{r quine-glance, eval=has_broom, warning=FALSE}
+library(broom)
+rbind(poisson=glance(pois)[c("logLik","AIC","deviance","df.residual")],
+      negbin=glance(nb)[c("logLik","AIC","deviance","df.residual")])
+```
+
+`tidy()` gives the coefficient table, here with Wald limits and exponentiated to the scale of mean ratios:
+
+```{r quine-tidy, eval=has_broom}
+tidy(nb, conf.int=TRUE, exponentiate=TRUE)
+```
+
+`augment()` adds fitted values, residuals, and the influence measures of `broom::augment.glm()` (`.hat`, `.sigma`, `.cooksd`, `.std.resid`) to the model frame. With `type.predict="response"`, `.fitted` is $\hat\mu_i$:
+
+```{r quine-augment, eval=has_broom}
+aug <- augment(nb, type.predict="response")
+head(aug)
+```
+
+# Estimated marginal means and contrasts for counts
+
+The reference grid has one cell for each combination of the factor levels, $2\times2\times4\times2=32$ cells here. For the age group $a$, the estimated marginal mean averages the linear predictor over the cells with that age and returns to the mean scale:
+$$
+\hat m_a=\exp\Big(\frac{1}{|G_a|}\sum_{g\in G_a} x_g^\top\hat\beta\Big),
+$$
+where $G_a$ is the set of grid cells with age $a$. Contrasts are formed on the log scale, so with `type="response"` a pairwise contrast is a ratio of means $\hat m_a/\hat m_b$. Standard errors use the delta method with the covariance of $\hat\beta$, with $\theta$ treated as known (as for `MASS::glm.nb()` fits).
+
+```{r quine-emmeans, eval=has_emmeans, warning=FALSE}
+library(emmeans)
+age_nb <- emmeans(nb, "Age", type="response")
+age_nb
+pairs(age_nb)
+```
+
+The Poisson fit is a `glm` object, which *emmeans* handles through its own `glm` support. Its means differ somewhat from those of the negative binomial fit, and its standard errors are a quarter to a third as large, because they use $\operatorname{Var}(Y_i)=\mu_i$:
+
+```{r quine-emmeans-poisson, eval=has_emmeans}
+age_pois <- emmeans(pois, "Age", type="response")
+data.frame(Age=levels(quine$Age),
+           mean_poisson=summary(age_pois)$rate, mean_negbin=summary(age_nb)$response,
+           se_poisson=summary(age_pois)$SE, se_negbin=summary(age_nb)$SE)
+```
+
+Any covariance of the coefficients can replace the model-based one through the `vcov.` argument. The sandwich covariance of the negative binomial fit (HC0, the default of `sandwich::vcovHC()` for fastglm count models) gives standard errors that do not rely on the variance function:
+
+```{r quine-emmeans-sandwich, eval=has_sandwich}
+emmeans(nb, "Age", type="response", vcov.=sandwich::vcovHC(nb))
+```
+
+Comparisons with a control group use the same interface; here each age group is compared with the youngest (`F0`):
+
+```{r quine-emmeans-control, eval=has_emmeans}
+contrast(age_nb, "trt.vs.ctrl")
+```
+
+# Ordered satisfaction: cumulative-link probabilities
+
+`housing` gives the satisfaction (`Sat`: low, medium, high) of 1681 residents, recorded as frequencies (`Freq`) in 72 cells defined by perceived influence (`Infl`), housing type (`Type`), and contact with other residents (`Cont`). The proportional odds model is
+$$
+P(Y_i\le j\mid x_i)=F(\alpha_j-x_i^\top\beta),\qquad j=1,2,
+$$
+with $F$ the logistic distribution function and cutpoints $\alpha_1<\alpha_2$, so that
+$$
+P(Y_i=j\mid x_i)=F(\alpha_j-x_i^\top\beta)-F(\alpha_{j-1}-x_i^\top\beta),
+$$
+with $\alpha_0=-\infty$ and $\alpha_3=\infty$. The frequencies enter as weights.
+
+```{r housing-ordinal, eval=has_mass}
+housing <- MASS::housing
+ord <- fastglm_ordinal(Sat ~ Infl + Type + Cont, data=housing, weights=Freq)
+```
+
+```{r housing-ordinal-tidy, eval=has_broom}
+tidy(ord)
+glance(ord)
+```
+
+The modes of *emmeans* for ordinal fits are those it provides for `MASS::polr()`. With `mode="prob"`, the grid gains the outcome category as a factor, and each estimate is a category probability averaged over the grid cells:
+
+```{r housing-ordinal-prob, eval=has_emmeans}
+emmeans(ord, ~ Sat | Infl, mode="prob")
+```
+
+With `mode="mean.class"`, the estimate is the mean category number $\sum_j j\,P(Y=j\mid x)$, averaged over the grid, which places the three influence levels on one scale:
+
+```{r housing-ordinal-mean, eval=has_emmeans}
+pairs(emmeans(ord, "Infl", mode="mean.class"))
+```
+
+The covariance of an ordinal fit is the inverse of the expected information, while `MASS::polr()` and `ordinal::clm()` use the observed information, so these standard errors can differ from theirs by a few percent.
+
+`augment()` keeps the matrix column `.fitted` of category probabilities and adds one column `.prob_<level>` per category:
+
+```{r housing-ordinal-augment, eval=has_broom}
+head(augment(ord)[c("Sat","Infl","Type","Cont",".prob_Low",".prob_Medium",".prob_High",".class")], 3)
+```
+
+# Unordered satisfaction: multinomial probabilities
+
+Treating `Sat` as unordered gives the baseline-category logit model, with low satisfaction as the reference category:
+$$
+P(Y_i=k\mid x_i)=\frac{\exp(x_i^\top\beta_k)}{\sum_{l=1}^{3}\exp(x_i^\top\beta_l)},\qquad \beta_1=0 .
+$$
+This model has a separate coefficient vector for each non-reference category, 14 coefficients in all against 8 parameters for the proportional odds model.
+
+```{r housing-multinom, eval=has_mass}
+housing_unordered <- transform(housing, Sat=factor(Sat, ordered=FALSE))
+mn <- fastglm_multinom(Sat ~ Infl + Type + Cont, data=housing_unordered,
+                       weights=Freq)
+```
+
+```{r housing-multinom-broom, eval=has_broom}
+glance(mn)
+head(augment(mn)[c("Sat","Infl",".prob_Low",".prob_Medium",".prob_High",".class")], 3)
+```
+
+The *emmeans* modes are those of `nnet::multinom()`: `"prob"` (the default) and `"latent"`.
+
+```{r housing-multinom-prob, eval=has_emmeans}
+sat_mn <- emmeans(mn, ~ Sat | Infl, mode="prob")
+sat_mn
+```
+
+These probabilities are close to those of the proportional odds model (the largest difference is below), and the proportional odds model, with 6 fewer parameters, has the lower AIC:
+
+```{r housing-compare, eval=has_emmeans}
+sat_ord <- emmeans(ord, ~ Sat | Infl, mode="prob")
+max(abs(summary(sat_mn)$prob - summary(sat_ord)$prob))
+AIC(ord, mn)
+```
+
+A contrast within each category compares the influence levels on the probability scale; here, each level is compared with low influence:
+
+```{r housing-multinom-contrast, eval=has_emmeans}
+contrast(emmeans(mn, ~ Infl | Sat, mode="prob"), "trt.vs.ctrl")
+```
+
+The degrees of freedom of 14 follow the convention of `nnet::multinom()` in *emmeans* (the number of coefficients).
+
+# Logistic regression in a tidymodels workflow
+
+`birthwt` records whether each of 189 infants weighed less than 2.5 kg at birth (`low`), with the mother's age, weight (`lwt`), race, smoking status, number of previous premature labors (`ptl`), hypertension (`ht`), and uterine irritability (`ui`). The logistic model is
+$$
+\operatorname{logit} P(Y_i=\text{normal}\mid x_i)=x_i^\top\beta .
+$$
+As with the `"glm"` engine, the model is for the probability of the second level of the outcome factor. With the levels `low` and `normal`, *yardstick* treats the first level, `low`, as the event.
+
+```{r birthwt-data, eval=has_tidymodels}
+bw <- MASS::birthwt
+bw <- data.frame(
+    low=factor(bw$low, levels=c(1, 0), labels=c("low", "normal")),
+    age=bw$age, lwt=bw$lwt, ptl=bw$ptl,
+    race=factor(bw$race, labels=c("white", "black", "other")),
+    smoke=factor(bw$smoke, labels=c("no", "yes")),
+    ht=factor(bw$ht, labels=c("no", "yes")),
+    ui=factor(bw$ui, labels=c("no", "yes")))
+```
+
+A recipe codes the factors as indicator columns, and `set_engine("fastglm")` selects fastglm for `logistic_reg()`:
+
+```{r birthwt-workflow, eval=has_tidymodels, warning=FALSE}
+library(parsnip)
+library(recipes)
+library(workflows)
+rec <- recipe(low ~ ., data=bw) |>
+    step_dummy(all_nominal_predictors())
+wf <- workflow() |>
+    add_recipe(rec) |>
+    add_model(logistic_reg() |> set_engine("fastglm"))
+wf_fit <- fit(wf, data=bw)
+tidy(extract_fit_engine(wf_fit))
+head(predict(wf_fit, bw, type="prob"), 3)
+```
+
+The coefficients are on the log odds of a normal birth weight, so a negative coefficient, as for smoking, lowers the probability of a normal weight. `extract_fit_engine()` returns the fastglm fit, with all of its methods. Engine arguments are given to `set_engine()`: `method` (the decomposition), `firth=TRUE` for mean bias reduction, `link`, and `threads`. An engine fit uses one thread unless `threads` is given, since resampling and tuning can run several fits at once in separate processes.
+
+Five-fold cross-validation, stratified by the outcome, estimates out-of-sample accuracy, the Brier score, and the area under the ROC curve:
+
+```{r birthwt-resamples, eval=has_tidymodels, warning=FALSE}
+library(rsample)
+library(tune)
+set.seed(2)
+folds <- vfold_cv(bw, v=5, strata=low)
+res <- fit_resamples(wf, folds)
+collect_metrics(res)
+```
+
+The same resamples with the `"glm"` engine give the same metrics, to rounding error:
+
+```{r birthwt-glm, eval=has_tidymodels, warning=FALSE}
+wf_glm <- update_model(wf, logistic_reg() |> set_engine("glm"))
+res_glm <- fit_resamples(wf_glm, folds)
+max(abs(collect_metrics(res)$mean - collect_metrics(res_glm)$mean))
+```
+
+A bias-reduced fit changes only the engine argument:
+
+```{r birthwt-firth, eval=has_tidymodels, warning=FALSE}
+wf_firth <- update_model(wf, logistic_reg() |> set_engine("fastglm", firth=TRUE))
+coef(extract_fit_engine(fit(wf_firth, data=bw)))
+```
+
+# Marginal effects with marginaleffects
+
+Support for fastglm fits in *marginaleffects* is being contributed to that package. Until it is available there, `fastglm_marginal_effects()` and `fastglm_average()` compute average marginal effects and averaged predictions, with delta-method standard errors, for GLMs, count, two-part, ordinal, and multinomial fits, including streamed fits.

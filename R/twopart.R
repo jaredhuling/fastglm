@@ -5,6 +5,9 @@
 #' probability of a positive outcome and the conditional positive mean.
 #' @param formula numeric matrix, `dgCMatrix`, `big.matrix`, [fastglm_source()], or a formula
 #'   with one or two right-hand sides, as in [fastglm_hurdle()].
+#'   A list with elements `count` and `zero` (formulas, as [stats::step()]
+#'   writes the terms of the model into its call) is taken as the formula
+#'   `y ~ count terms | zero terms`.
 #' @param data,subset,na.action,weights,offset model-frame arguments. A vector
 #'   offset applies to the positive component; a two-column matrix supplies
 #'   positive and binary offsets.
@@ -47,6 +50,9 @@ fastglm_twopart <- function(formula, data, subset, na.action, weights, offset,
                             maxit = 100L, firth = FALSE,
                             response = NULL, z = NULL, block.size = 8192L, threads = NULL,
                             trace = NULL) {
+    # A list of count and zero formulas (as stats::step() writes the terms of
+    # a two-part model into the call) is the two-part formula.
+    formula <- .two_part_formula_arg(formula)
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
     threads <- scope$threads

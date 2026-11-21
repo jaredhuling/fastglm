@@ -18,7 +18,8 @@ fastglm_truncated(
   outer.tol = 1e-08,
   outer.maxit = 100L,
   threads = NULL,
-  trace = NULL
+  trace = NULL,
+  formula = NULL
 )
 }
 \arguments{
@@ -56,6 +57,11 @@ halvings of the iteration, and the elapsed seconds), `FALSE` for none, or
 `NULL` (default) for `getOption("fastglm.trace")`, which defaults to
 `TRUE` for a [fastglm_source()] in an interactive session and `FALSE`
 otherwise.}
+
+\item{formula}{the model formula, as an alternative to giving it as `x`;
+when given, it is used in place of a formula `x`, and a
+[fastglm_source()] `x` is rebuilt with it (as [update()] of the source
+does). Calls written by [stats::step()] name the formula this way.}
 }
 \value{
 A `fastglm_truncated` model with joint covariance when theta is

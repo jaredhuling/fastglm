@@ -108,12 +108,37 @@ confint.fastglm_vglm <- function(object, parm, level = 0.95, ...) {
 #' @rdname fastglm-vglm-methods
 #' @export
 logLik.fastglm_vglm <- function(object, ...)
-    structure(object$loglik, df = object$rank, nobs = object$nobs,
+    structure(object$loglik, df = object$rank, nobs = .vglm_nobs(object),
               class = "logLik")
 
 #' @rdname fastglm-vglm-methods
 #' @export
-nobs.fastglm_vglm <- function(object, ...) object$nobs
+nobs.fastglm_vglm <- function(object, ...) .vglm_nobs(object)
+
+# The number of observations of a multinomial fit is the total frequency:
+# the sum of the prior weights over the rows, times the row totals for a
+# count-matrix response, as nobs() of ordinal fits and of MASS::polr() fits
+# with frequency weights (the fingerprint's n, recorded for streamed fits).
+# Without weights or counts this is the number of rows with positive weight,
+# object$nobs, which df.residual uses. Other families keep object$nobs.
+.vglm_nobs <- function(object) {
+    if (!identical(object$family, "multinomial")) return(object$nobs)
+    fp <- tryCatch(.fastglm_cmp_fingerprint(object), error = function(e) NULL)
+    n <- if (is.null(fp)) NA_real_ else unname(fp[["n"]])
+    # Without the response (and so without its fingerprint), individual data
+    # give the sum of the prior weights. Individual data are recognized by a
+    # deviance equal to -2 times the log likelihood (grouped data subtract the
+    # saturated log likelihood, which is zero only when every row has one
+    # nonzero count, a case this undercounts); for grouped data the row
+    # totals are then unknown, and the number of rows with positive weight is
+    # returned.
+    individual <- is.finite(object$deviance) && is.finite(object$loglik) &&
+        abs(object$deviance + 2 * object$loglik) <= 1e-8 * max(1, abs(object$deviance))
+    if (!is.finite(n) && individual && length(object$prior.weights))
+        n <- sum(object$prior.weights[object$prior.weights > 0])
+    if (!is.finite(n)) return(object$nobs)
+    if (abs(n - round(n)) <= 1e-8 * max(1, n) && n <= .Machine$integer.max) as.integer(round(n)) else n
+}
 
 #' @rdname fastglm-vglm-methods
 #' @export
@@ -191,7 +216,7 @@ summary.fastglm_vglm <- function(object, ...) {
                    levels = object$levels, reference = object$reference,
                    loglik = object$loglik, deviance = object$deviance,
                    null.deviance = object$null.deviance,
-                   df.residual = object$df.residual, nobs = object$nobs,
+                   df.residual = object$df.residual, nobs = .vglm_nobs(object),
                    rank = object$rank, AIC = AIC(object), BIC = BIC(object),
                    iter = object$iter, converged = object$converged,
                    convergence.reason = object$convergence.reason,

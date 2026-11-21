@@ -38,11 +38,12 @@ Mean bias reduction is requested with `firth=TRUE` in the interfaces that suppor
 | Coefficient intervals and joint tests | `confint()` and `fastglm_wald_test()` | Model-based Wald inference for supported fitted classes; formula terms and named contrasts can combine several coefficients |
 | Profile intervals and likelihood-ratio tests | `confint(method="profile")`, `fastglm_profile_test()`, and `fastglm_confint_theta()` | Dense binomial-logit Firth fits, dense ordinal ML fits with common or varying slopes, and negative-binomial size profiles, respectively |
 | Score tests of coefficients or the common-slope restriction | `fastglm_score_test()` and `fastglm_po_test()` | Retained dense ordinal models for coefficient constraints; `fastglm_po_test()` tests complete terms in dense or streamed common-slope and partial models |
+| Likelihood-ratio comparisons of nested models | `anova()`, `drop1()`, and `step()` | Every model class, including streamed and `bigmemory` fits, after checks that the models use the same data and are nested; `step()` for fits held in memory other than multinomial fits. [Comparing models](#comparing-models) |
 | Robust or clustered standard errors | `fastglm_vcov()` and supported `vcov(type=...)` methods | GLMs, count and two-part models, dense or streamed ordinal fits, and multinomial fits from any input, subject to each class's requirements |
 | Response or probability summaries | `predict(se.fit=TRUE)`, `fastglm_average()`, and `fastglm_marginal_effects()` | Predictions and averages for supported classes; automatic marginal effects target common-slope or partial ordinal probabilities and multinomial category probabilities |
 | Refitting uncertainty and model assessment | `fastglm_bootstrap()`, `fastglm_diagnostics()`, residuals, and `fastglm_ordinal_assess()` | Bootstrap support depends on retained data and model class; ordinal prediction scores, calibration, and optional boundary-row diagnostics support dense or streamed fits |
 
-These methods use different assumptions and are not interchangeable across model classes. Dense partial ordinal fits support robust covariance, ML profiles, and constrained score inference. Streamed ordinal fits provide model-based and robust covariance, common-slope tests, prediction scores, and calibration on the original source. General constrained coefficient inference requires retained observations. The [ordinal support guide](ordinal-fastglm.html#ordinal-scope) states these distinctions explicitly. The sections below explain [coefficient uncertainty and population averages](#inference-and-population-averages), [joint tests](#joint-coefficient-tests), and [readable result displays](#specifying-the-mean-model).
+These methods use different assumptions and are not interchangeable across model classes. Dense partial ordinal fits support robust covariance, ML profiles, and constrained score inference. Streamed ordinal fits provide model-based and robust covariance, common-slope tests, prediction scores, and calibration on the original source. General constrained coefficient inference requires retained observations. The [ordinal support guide](ordinal-fastglm.html#ordinal-scope) states these distinctions explicitly. The sections below explain [coefficient uncertainty and population averages](#inference-and-population-averages), [joint tests](#joint-coefficient-tests), [likelihood-ratio comparisons](#comparing-models), and [readable result displays](#specifying-the-mean-model).
 
 ## Data size and repeated fitting
 
@@ -55,7 +56,7 @@ These methods use different assumptions and are not interchangeable across model
 
 Data representation changes the amount of retained information and the cost of rereading observations. It can therefore affect both fitting time and which later procedures are available. The [large-data vignette](large-data-fastglm.html) explains these requirements. [Benchmark examples](benchmarks-fastglm.html) examine speed together with numerical agreement.
 
-The remaining sections demonstrate the shared workflow with a Poisson model: [specify the mean](#specifying-the-mean-model), [choose a numerical decomposition and assess convergence](#choosing-a-decomposition), [quantify uncertainty](#inference-and-population-averages), and [reuse a design](#repeated-outcomes-on-a-shared-design). Generalized linear model fitting uses iteratively reweighted least squares, which updates coefficients through a sequence of weighted regressions.
+The remaining sections demonstrate the shared workflow with a Poisson model: [specify the mean](#specifying-the-mean-model), [choose a numerical decomposition and assess convergence](#choosing-a-decomposition), [quantify uncertainty](#inference-and-population-averages), [compare nested models](#comparing-models), and [reuse a design](#repeated-outcomes-on-a-shared-design). Generalized linear model fitting uses iteratively reweighted least squares, which updates coefficients through a sequence of weighted regressions.
 
 # Specifying the mean model
 
@@ -156,6 +157,79 @@ as.data.frame(group_comparison)
 ```
 
 Matrix contrasts permit several comparisons in a joint test, and `null` supplies their hypothesized values. Omitted named coefficients receive weight zero. The returned result retains the contrast estimates and standard errors at full precision. Nonestimable comparisons, unsuccessful fits, and unusable covariance matrices produce an unavailable test with an explanation.
+
+# Comparing models
+
+```{r comparisons-seed, include=FALSE}
+# This section draws random numbers; the state is restored after it, so the
+# later examples give the values they gave before the section was added.
+seed_before_comparisons <- get(".Random.seed", envir=globalenv())
+```
+
+`anova(m0, m1, ...)` compares nested models fitted to the same data. With $\ell$ the maximized log likelihood, the statistic for a smaller model $m_0$ within a larger model $m_1$ is
+$$
+\Lambda=2\{\ell(m_1)-\ell(m_0)\},
+$$
+referred to a chi-square distribution whose degrees of freedom are the difference in the number of estimated parameters. That number is the `df` attribute of `logLik()`: coefficients, cutpoints of ordinal models, the negative-binomial $\theta$, and a dispersion estimated by maximum likelihood. For GLMs whose dispersion is estimated by moments (Gaussian, Gamma, inverse Gaussian, and quasi families), the default is the F test of `anova.glm()`. The same methods apply to every model class, including streamed and `bigmemory` fits.
+
+A p-value requires that the models describe the same observations. Before computing one, `anova()` checks that the models have the same number of observations, sum of prior weights, response, and offsets, and the same family and link, apart from the pairs described below. It also checks that the smaller model is nested in the larger one: for fits held in memory, each column of the smaller design must lie in the column space of the larger design, so `y~poly(x,2)` is recognized as nested in `y~poly(x,3)`. A failed check is an error. When nesting can only be judged by coefficient names, as for streamed fits, a warning says so. `?anova.fastglm` lists the checks.
+
+The example below uses a count outcome with more variation than the Poisson model allows. Calls with only formula `fastglm()` fits go to `stats::anova.glm()` unchanged.
+
+```{r}
+set.seed(150)
+d$visits <- rnbinom(500, mu=d$exposure*exp(.2+.4*d$x), size=1.5)
+pois0 <- fastglm(visits~x+offset(log(exposure)), data=d, family=poisson())
+pois1 <- update(pois0, .~.+group)
+anova(pois0, pois1, test="Chisq")
+```
+
+The Poisson model is the negative-binomial model with $1/\theta=0$, a value on the boundary of the parameter space. Under the Poisson model, the large-sample distribution of $\Lambda$ for the same mean model is not chi-square with one degree of freedom but an equal mixture of a point mass at zero and a chi-square with one degree of freedom, so the p-value is half the usual one. When the negative-binomial model also adds $r$ mean parameters, the reference distribution is the equal mixture of chi-square distributions with $r$ and $r+1$ degrees of freedom, and the p-value is $\tfrac12 P(\chi^2_r>\Lambda)+\tfrac12 P(\chi^2_{r+1}>\Lambda)$. The printed table states which reference it used.
+
+```{r}
+nb1 <- fastglm_nb(visits~x+group+offset(log(exposure)), data=d)
+anova(pois1, nb1)
+```
+
+`drop1()` refits the model without each term and compares each refit with the full model, respecting marginality as `stats::drop1()` does; `anova()` of a single model gives the table of terms added in sequence. For negative-binomial fits, $\theta$ is held at the full model's estimate in each refit, as for a `MASS::glm.nb()` fit. `extractAIC()` methods let `step()` and `MASS::stepAIC()` select terms by AIC.
+
+```{r}
+drop1(nb1, test="LRT")
+step(nb1, trace=0)$call
+```
+
+Zero-inflated, hurdle, and two-part models have two linear predictors. Their `drop1()` table has one row per term in each part, and each refit removes the term from that part only. A sequential `anova()` table is not given for these models, since the order in which terms enter has no clear meaning across parts.
+
+```{r, eval=requireNamespace("MASS", quietly=TRUE)}
+zinb <- fastglm_zi(visits~x+group+offset(log(exposure))|x, data=d,
+                   dist="negbin")
+drop1(zinb, test="LRT")
+```
+
+A zero-inflated model is not compared with a model without zero inflation by a likelihood-ratio test. The inflation probability of the smaller model is on the boundary of its space, and the usual nesting argument does not apply, so `anova()` stops with an error and the models can be compared by AIC instead:
+
+```{r, error=TRUE, eval=requireNamespace("MASS", quietly=TRUE)}
+anova(nb1, zinb)
+AIC(nb1, zinb)
+```
+
+Bias-reduced fits maximize a penalized likelihood. For binomial-logit fits held in memory with a dense design, `anova()` and `drop1()` give the penalized likelihood-ratio test: the larger model is refitted with the coefficients absent from the smaller model fixed at zero, under the larger model's penalty, as `fastglm_profile_test()` does. This is not twice the difference of the two penalized log likelihoods. A bias-reduced fit is never compared with a maximum-likelihood fit.
+
+```{r, error=TRUE}
+set.seed(43)
+d$event <- rbinom(500, 1, plogis(-2.5+.8*d$x))
+firth0 <- fastglm(event~x, data=d, family=binomial(), firth=TRUE)
+firth1 <- fastglm(event~x+group, data=d, family=binomial(), firth=TRUE)
+anova(firth0, firth1)
+ml1 <- fastglm(event~x+group, data=d, family=binomial())
+anova(firth0, ml1)
+```
+
+A robust or clustered covariance does not change a likelihood-ratio test. To compare models under such a covariance, `fastglm_wald_test()` with `vcov.` tests the omitted coefficients directly, as in the [joint tests](#joint-coefficient-tests) above.
+
+```{r comparisons-seed-restore, include=FALSE}
+assign(".Random.seed", seed_before_comparisons, envir=globalenv())
+```
 
 # Repeated outcomes on a shared design
 

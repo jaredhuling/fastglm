@@ -65,7 +65,9 @@ Suggests:
     poissonreg,
     ordered,
     workflows,
-    recipes
+    recipes,
+    rsample,
+    tune
 Config/testthat/edition: 3
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr

@@ -23,6 +23,12 @@
 #' @param data,subset,na.action,contrasts formula and model-frame arguments.
 #'   Rows with missing values are removed by `na.action` (default `na.omit`),
 #'   as in [stats::glm()]. The matrix method rejects missing values.
+#' @param model for the formula method, `TRUE` (default) keeps the model
+#'   frame in the fit (element `model`, as [stats::glm()]); `drop1()`,
+#'   `anova()`, and emmeans rebuild reduced designs and reference grids from
+#'   it. `FALSE` leaves it out to save memory: refits then keep columns of the
+#'   stored design (which needs the intercept and marginality to stay), and
+#'   emmeans reads the data again through the call.
 #' @param weights nonnegative prior weights, one per row. For grouped data
 #'   each row's counts are multiplied by its weight.
 #' @param offset a vector of length `n`, added to every linear predictor, or an
@@ -113,6 +119,10 @@
 #'   because otherwise no finite maximum exists; an empty category stops the
 #'   fit with an error naming it. Rows with zero weight (or, for grouped data,
 #'   zero total count) contribute nothing and are not counted in `nobs`.
+#'   [nobs()] (and the number of observations used by [BIC()]) is the total
+#'   frequency: the sum of the weights, times the row totals for grouped
+#'   data, as for [fastglm_ordinal()] and `MASS::polr()` fits with frequency
+#'   weights; without weights or counts it equals `nobs`.
 #'   `df.residual` is `nobs * (K - 1)` minus the rank, and `null.deviance` is
 #'   the deviance of the intercept-only model with the same weights and
 #'   offsets.
@@ -170,6 +180,22 @@
 #' @md
 #' @export
 fastglm_multinom <- function(x, ...) {
+    # A formula named next to x (as stats::step() and update() write it for a
+    # streamed fit) replaces the formula of x: a source is rebuilt with it.
+    if (!missing(x) && !is.null(match.call(expand.dots = TRUE)$formula)) {
+        mc <- match.call(expand.dots = TRUE)
+        if (inherits(x, "formula")) {
+            mc$x <- mc$formula
+        } else {
+            if (!inherits(x, "fastglm_source"))
+                stop("fastglm_multinom: 'formula' can be given with a model formula or a fastglm_source() ",
+                     "with a formula, not with a design matrix", call. = FALSE)
+            mc$x <- as.call(list(quote(stats::update), mc$x, mc$formula))
+        }
+        mc$formula <- NULL
+        mc[[1L]] <- quote(fastglm::fastglm_multinom)
+        return(eval(mc, parent.frame()))
+    }
     if (missing(x)) {
         mc <- match.call(expand.dots = TRUE)
         if (is.null(mc$formula))
@@ -463,8 +489,10 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
                                      offset = NULL, reference = NULL,
                                      firth = FALSE, tol = 1e-8, maxit = 100L,
                                      block.size = 8192L, control = list(),
-                                     contrasts = NULL, ...) {
+                                     contrasts = NULL, model = TRUE, ...) {
     if (length(list(...))) stop("fastglm_multinom: unused arguments", call. = FALSE)
+    if (!is.logical(model) || length(model) != 1L || is.na(model))
+        stop("fastglm_multinom: 'model' must be TRUE or FALSE", call. = FALSE)
     call <- match.call()
     mf <- call[c(1L, match(c("x", "data", "weights", "subset", "na.action", "offset"),
                            names(call), 0L))]
@@ -498,7 +526,7 @@ fastglm_multinom.formula <- function(x, data, weights, subset, na.action,
                                      contrasts = attr(design, "contrasts"),
                                      na.action = attr(mf, "na.action")))
     # The model frame, from which model comparisons rebuild reduced designs.
-    fit$model <- mf
+    if (model) fit$model <- mf
     # Store the formula under the name `formula` so that update() can replace
     # it; the generic maps it back to `x` when the call is evaluated.
     names(call)[names(call) == "x"] <- "formula"

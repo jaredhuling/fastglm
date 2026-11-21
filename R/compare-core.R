@@ -398,6 +398,7 @@
                                    check = TRUE, columns = FALSE, nb_theta_fixed = FALSE)
 {
     extras <- list(...)
+    part <- .fastglm_part_internal(part)
     if (!is.null(formula) && !is.null(drop_columns))
         stop("supply either 'formula' or 'drop_columns', not both", call. = FALSE)
     streamed <- !is.null(object$source)
@@ -440,6 +441,10 @@
 .fastglm_refit.fastglm_vglm <- .fastglm_refit.fastglm
 
 .fastglm_two_part <- function(object) inherits(object, c("fastglm_zi", "fastglm_hurdle"))
+
+## The internal name of a part of a model with two linear predictors: the
+## positive part of a two-part fit is stored as `count`.
+.fastglm_part_internal <- function(part) if (identical(part, "positive")) "count" else part
 
 ## A refit must use the same observations and response as the original fit.
 .fastglm_refit_check <- function(object, fit)
@@ -692,7 +697,10 @@
     if (nb_theta_fixed) {
         rc <- object$refit.controls
         link <- if (!is.null(object$family$link)) object$family$link else "log"
-        return(list(family = negbin(object$theta, link = link),
+        # An infinite theta (the Poisson limit, where fastglm_nb() returns the
+        # Poisson fit) is held fixed as the Poisson family.
+        fam <- if (is.finite(object$theta)) negbin(object$theta, link = link) else stats::poisson(link = link)
+        return(list(family = fam,
                     tol = if (is.null(rc$tol)) 1e-8 else rc$tol,
                     maxit = if (is.null(rc$maxit)) 100L else rc$maxit,
                     firth = FALSE, covariance = "estimate",
@@ -986,6 +994,72 @@
     common$method <- if (!is.null(object$solver) && object$solver %in% c("qr", "llt", "ldlt")) object$solver else "llt"
     call.fit(fastglm_streaming, c(list(chunk_callback = source), common))
 }
+
+## ---- Formulas -----------------------------------------------------------------
+
+## A model formula given as a list with elements count and zero (formulas or
+## terms objects), as stats::step() stores the terms of a model with two
+## linear predictors in its call, becomes the two-part formula
+## `y ~ count terms | zero terms`. Other values are returned unchanged.
+.two_part_formula_arg <- function(formula)
+{
+    if (!is.list(formula) || is.data.frame(formula) || inherits(formula, c("formula", "fastglm_source")))
+        return(formula)
+    nm <- names(formula)
+    if (is.null(nm) || !all(c("count", "zero") %in% nm) ||
+        !all(vapply(formula[c("count", "zero")], inherits, NA, "formula")))
+        return(formula)
+    fc <- stats::formula(formula$count); fz <- stats::formula(formula$zero)
+    if (length(fc) != 3L || length(fz) < 2L)
+        stop("a list formula needs a two-sided count formula and a zero formula", call. = FALSE)
+    Formula::as.Formula(stats::as.formula(call("~", fc[[2L]], call("|", fc[[3L]], fz[[length(fz)]])),
+                                          env = environment(fc)))
+}
+
+## A model formula given next to a data source (as stats::step() writes the
+## terms of a streamed fit into its call) rebuilds the source with that
+## formula, as update() of the source does; it cannot be given with a design
+## matrix.
+.fastglm_formula_source <- function(x, formula)
+{
+    if (!inherits(x, "fastglm_source"))
+        stop("'formula' can be given with a model formula or a fastglm_source() with a formula, ",
+             "not with a design matrix", call. = FALSE)
+    stats::update(x, formula)
+}
+
+## formula() of a fitted model: the model formula without the attributes of
+## a terms object (stats::formula.default() would return the stored terms
+## with all of their attributes). Models with two linear predictors give the
+## two-part formula, and streamed fits the formula of their source.
+.fastglm_formula <- function(x, ...)
+{
+    f <- x$formula
+    if (is.list(f) && !inherits(f, "formula")) f <- .two_part_formula_arg(f)
+    if (inherits(f, "formula")) return(if (inherits(f, "terms")) stats::formula(f) else f)
+    tt <- x$terms
+    if (inherits(tt, "terms")) return(stats::formula(tt))
+    if (!is.null(x$source)) {
+        sf <- .fastglm_source_formula(x$source)
+        if (!is.null(sf)) return(sf)
+    }
+    stop("this fit has no formula (it was fitted to a design matrix)", call. = FALSE)
+}
+
+#' @exportS3Method stats::formula
+formula.fastglm_nb <- .fastglm_formula
+#' @exportS3Method stats::formula
+formula.fastglm_truncated <- .fastglm_formula
+#' @exportS3Method stats::formula
+formula.fastglm_zi <- .fastglm_formula
+#' @exportS3Method stats::formula
+formula.fastglm_hurdle <- .fastglm_formula
+#' @exportS3Method stats::formula
+formula.fastglm_ordinal <- .fastglm_formula
+#' @exportS3Method stats::formula
+formula.fastglm_vglm <- .fastglm_formula
+#' @exportS3Method stats::formula
+formula.fastglm_stream <- .fastglm_formula
 
 ## ---- update() -----------------------------------------------------------------
 

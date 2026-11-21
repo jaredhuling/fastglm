@@ -45,14 +45,14 @@ fastglm_parsnip_ordinal(
 
 \item{weights}{optional case weights, supplied by 'parsnip'.}
 
-\item{family}{the family name (`"binomial"`, `"gaussian"`, or
-`"poisson"`), or a family object.}
+\item{family}{the family name (\code{"binomial"}, \code{"gaussian"}, or
+\code{"poisson"}), or a family object.}
 
 \item{link}{the link function, a name accepted by the family. For
-`fastglm_parsnip_ordinal()`, a 'parsnip' ordinal link (`"logistic"`,
-`"probit"`, or `"cloglog"`) or a link of [fastglm_ordinal()].}
+\code{fastglm_parsnip_ordinal()}, a 'parsnip' ordinal link (\code{"logistic"},
+\code{"probit"}, or \code{"cloglog"}) or a link of \code{\link[=fastglm_ordinal]{fastglm_ordinal()}}.}
 
-\item{method}{the decomposition, as in [fastglm()].}
+\item{method}{the decomposition, as in \code{\link[=fastglm]{fastglm()}}.}
 
 \item{firth}{use mean bias reduction.}
 
@@ -61,72 +61,82 @@ fastglm_parsnip_ordinal(
 \item{...}{further arguments to the fitting function.}
 
 \item{odds_link, threshold_structure}{the 'parsnip' arguments of
-`ordinal_reg()`; only `"cumulative_link"` and `"flexible"` (or `NULL`)
+\code{ordinal_reg()}; only \code{"cumulative_link"} and \code{"flexible"} (or \code{NULL})
 are supported.}
 }
 \value{
 The fastglm fit.
 }
 \description{
-fastglm provides the engine `"fastglm"` for five model types of the
+fastglm provides the engine \code{"fastglm"} for five model types of the
 'parsnip' package, so that fastglm fits can be used in tidymodels
 workflows, recipes, and resampling. The engines are registered when
 'parsnip' is loaded (whether before or after fastglm); 'parsnip' is not
 required otherwise.
 }
 \details{
-| Model | Mode | Fitting function | Engine arguments |
-|---|---|---|---|
-| `logistic_reg()` | classification | [fastglm()], binomial family | `method`, `firth`, `threads`, `link` |
-| `linear_reg()` | regression | [fastglm()], gaussian family | `method`, `firth`, `threads`, `link` |
-| `poisson_reg()` | regression | [fastglm()], poisson family | `method`, `firth`, `threads`, `link` |
-| `multinom_reg()` | classification | [fastglm_multinom()] | `firth`, `threads` |
-| `ordinal_reg()` | classification | [fastglm_ordinal()] | `firth`, `threads`; main arguments `ordinal_link`, `odds_link`, `threshold_structure` |
+\tabular{llll}{
+   Model \tab Mode \tab Fitting function \tab Engine arguments \cr
+   \code{logistic_reg()} \tab classification \tab \code{\link[=fastglm]{fastglm()}}, binomial family \tab \code{method}, \code{firth}, \code{threads}, \code{link} \cr
+   \code{linear_reg()} \tab regression \tab \code{\link[=fastglm]{fastglm()}}, gaussian family \tab \code{method}, \code{firth}, \code{threads}, \code{link} \cr
+   \code{poisson_reg()} \tab regression \tab \code{\link[=fastglm]{fastglm()}}, poisson family \tab \code{method}, \code{firth}, \code{threads}, \code{link} \cr
+   \code{multinom_reg()} \tab classification \tab \code{\link[=fastglm_multinom]{fastglm_multinom()}} \tab \code{firth}, \code{threads} \cr
+   \code{ordinal_reg()} \tab classification \tab \code{\link[=fastglm_ordinal]{fastglm_ordinal()}} \tab \code{firth}, \code{threads}; main arguments \code{ordinal_link}, \code{odds_link}, \code{threshold_structure} \cr
+}
 
-Engine arguments are given to `parsnip::set_engine()`, for example
-`logistic_reg() |> set_engine("fastglm", link = "probit", firth = TRUE)`.
-`method` is the decomposition of [fastglm()], `firth = TRUE` gives mean
-bias reduction, and `link` is the link function of the family. Other
-arguments (for example `tol` or `maxit`) are passed to the fitting
-function. The `ordinal_link` argument of `ordinal_reg()` accepts
-`"logistic"` (the default), `"probit"`, and `"cloglog"`; fastglm does not
-fit the `"loglog"` and `"cauchit"` links. The fits are cumulative-link
-models with flexible thresholds, so `odds_link` must be
-`"cumulative_link"` (or unset) and `threshold_structure` must be
-`"flexible"` (or unset); other values are errors. The penalty and mixture
+
+Engine arguments are given to \code{parsnip::set_engine()}, for example
+\code{logistic_reg() |> set_engine("fastglm", link = "probit", firth = TRUE)}.
+\code{method} is the decomposition of \code{\link[=fastglm]{fastglm()}}, \code{firth = TRUE} gives mean
+bias reduction, and \code{link} is the link function of the family. Other
+arguments (for example \code{tol} or \code{maxit}) are passed to the fitting
+function. The \code{ordinal_link} argument of \code{ordinal_reg()} accepts
+\code{"logistic"} (the default), \code{"probit"}, and \code{"cloglog"}; fastglm does not
+fit the \code{"loglog"} and \code{"cauchit"} links. The fits are cumulative-link
+models with flexible thresholds, so \code{odds_link} must be
+\code{"cumulative_link"} (or unset) and \code{threshold_structure} must be
+\code{"flexible"} (or unset); other values are errors. The penalty and mixture
 arguments of the model types are not used: the fits are unpenalized (or
-bias-reduced with `firth = TRUE`).
+bias-reduced with \code{firth = TRUE}).
 
 An outcome level with no observations in the training data is an error
-for `multinom_reg()` and `ordinal_reg()` (the fitting functions do not
+for \code{multinom_reg()} and \code{ordinal_reg()} (the fitting functions do not
 estimate a category without observations), so in resampling a fold that
-lacks a level fails with a note. `nnet::multinom()`, in contrast, drops
+lacks a level fails with a note. \code{nnet::multinom()}, in contrast, drops
 the probability column of such a level.
 
-**Threads.** An engine fit uses one thread unless `threads` is given to
-`set_engine()`. Resampling and tuning ('tune') usually run fits in
+\strong{Threads.} An engine fit uses one thread unless \code{threads} is given to
+\code{set_engine()}. Resampling and tuning ('tune') usually run fits in
 several worker processes at once, and the default thread count of fastglm
 in each worker would multiply the number of processes by the number of
-threads. Pass `threads` explicitly to use more threads for a single fit.
+threads. Pass \code{threads} explicitly to use more threads for a single fit.
 Results are identical for every number of threads.
 
-**Predictions.** Class probabilities have one column per level of the
-outcome factor, in the order of its levels, named `.pred_<level>` by
-'parsnip'. For `logistic_reg()`, as for the `"glm"` engine, the model is
+\strong{Predictions.} Class probabilities have one column per level of the
+outcome factor, in the order of its levels, named \verb{.pred_<level>} by
+'parsnip'. For \code{logistic_reg()}, as for the \code{"glm"} engine, the model is
 for the probability of the second level, and the predicted class is the
 second level when that probability is at least 0.5. Regression models
-predict the mean (`type = "numeric"`), and `type = "raw"` returns the
-default [predict()] output of the fit. For `linear_reg()` and
-`logistic_reg()`, `type = "conf_int"` gives Wald intervals for the mean,
-computed as by the `"glm"` engine: the interval
-`eta +/- t * se(eta)` on the link scale, with `t` the quantile of the t
-distribution on the residual degrees of freedom at the requested `level`,
-transformed by the inverse link (columns `.pred_lower` and `.pred_upper`,
-or `.pred_lower_<level>` and `.pred_upper_<level>` for classification).
+predict the mean (\code{type = "numeric"}), and \code{type = "raw"} returns the
+default \code{\link[=predict]{predict()}} output of the fit. For \code{linear_reg()} and
+\code{logistic_reg()}, \code{type = "conf_int"} gives Wald intervals for the mean,
+computed as by the \code{"glm"} engine: the interval
+\verb{eta +/- t * se(eta)} on the link scale, with \code{t} the quantile of the t
+distribution on the residual degrees of freedom at the requested \code{level},
+transformed by the inverse link (columns \code{.pred_lower} and \code{.pred_upper},
+or \verb{.pred_lower_<level>} and \verb{.pred_upper_<level>} for classification).
 
-The fitted model (the `fit` element of the 'parsnip' model fit, or
-`parsnip::extract_fit_engine()`) is the fastglm fit, with all of its
-methods. The functions below are the fitting functions called by the
+The fitted model (the \code{fit} element of the 'parsnip' model fit, or
+\code{parsnip::extract_fit_engine()}) is the fastglm fit, with all of its
+methods, including \code{\link[=update]{update()}}, \code{\link[stats:step]{stats::step()}}, and \code{\link[=anova]{anova()}} of an
+updated fit: the stored call refers to the training data through a
+private environment (it prints as \verb{data = <environment>$data}), so it can
+be evaluated again from any frame. The model formula keeps its own
+environment, so \code{\link[=predict]{predict()}} with new data that lack a predictor is an
+error, as for the \code{"glm"} engine. A family of the 'stats' package is
+stored in the call as a short call such as
+\code{stats::binomial(link = "logit")}. The functions below are the fitting
+functions called by the
 engines; they are exported for 'parsnip' and are not meant to be called
 directly.
 }

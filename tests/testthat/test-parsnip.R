@@ -214,6 +214,87 @@ test_that("a workflow with a recipe matches a direct fit on the processed data",
     expect_equal(pr$.pred_no, unname(predict(direct, bnew, type = "response")), tolerance = 1e-10)
 })
 
+test_that("engine fits support update(), step(), and anova() of an updated fit", {
+    pd$z <- rnorm(nrow(pd))
+    pf <- fit(poisson_reg() |> set_engine("fastglm"), yc ~ x1 + x2 + g + z, data = pd)
+    eng <- extract_fit_engine(pf)
+    direct <- fastglm(yc ~ x1 + x2 + g + z, data = pd, family = poisson())
+    # The call holds a short family call, and its data argument refers to
+    # the training data through a private environment.
+    expect_true(is.call(eng$call$data))
+    expect_identical(eval(eng$call$data)[names(pd)], pd)
+    expect_identical(deparse(eng$call$family), "stats::poisson(link = \"log\")")
+    u <- update(eng, . ~ . - z)
+    expect_equal(coef(u), coef(fastglm(yc ~ x1 + x2 + g, data = pd, family = poisson())), tolerance = 1e-10)
+    expect_equal(as.matrix(anova(u, eng, test = "Chisq")),
+                 as.matrix(anova(update(direct, . ~ . - z), direct, test = "Chisq")), tolerance = 1e-10)
+    s <- step(eng, trace = 0)
+    sd <- step(direct, trace = 0)
+    expect_identical(attr(terms(s), "term.labels"), attr(terms(sd), "term.labels"))
+    expect_equal(coef(s), coef(sd), tolerance = 1e-10)
+    # Multinomial and ordinal engine fits.
+    me <- extract_fit_engine(fit(multinom_reg() |> set_engine("fastglm"), ym ~ x1 + x2 + z, data = pd))
+    md <- fastglm_multinom(ym ~ x1 + x2 + z, data = pd)
+    expect_equal(as.matrix(anova(update(me, . ~ . - z), me)),
+                 as.matrix(anova(update(md, . ~ . - z), md)), tolerance = 1e-8)
+    expect_identical(attr(terms(formula(step(me, trace = 0))), "term.labels"),
+                     attr(terms(formula(step(md, trace = 0))), "term.labels"))
+    # A formula with `.` is expanded against the training data.
+    dot <- extract_fit_engine(fit(linear_reg() |> set_engine("fastglm"), yg ~ ., data = pd[, c("yg", "x1", "x2")]))
+    expect_identical(deparse(formula(dot)), "yg ~ x1 + x2")
+    expect_equal(coef(update(dot, . ~ . - x2)), coef(fastglm(yg ~ x1, data = pd)), tolerance = 1e-10)
+    # Case weights (as parsnip passes them to the fitting function).
+    we <- fastglm_parsnip_glm(yb ~ x1 + x2 + z, data = pd, weights = pd$w, family = "binomial")
+    wd <- fastglm(yb ~ x1 + x2 + z, data = pd, family = binomial(), weights = as.numeric(pd$w))
+    expect_equal(coef(we), coef(wd), tolerance = 1e-10)
+    expect_equal(coef(update(we, . ~ . - z)), coef(update(wd, . ~ . - z)), tolerance = 1e-10)
+    expect_equal(coef(step(we, trace = 0)), coef(step(wd, trace = 0)), tolerance = 1e-10)
+    # Printing a workflow does not print the family object.
+    skip_if_not_installed("workflows")
+    wf <- workflows::workflow() |> workflows::add_formula(yb ~ x1 + x2 + z) |>
+        workflows::add_model(logistic_reg() |> set_engine("fastglm"))
+    out <- paste(utils::capture.output(print(fit(wf, pd))), collapse = "\n")
+    expect_false(grepl("linkfun|validmu|function \\(", out))
+    expect_match(out, "stats::binomial(link = \"logit\")", fixed = TRUE)
+    skip_if_not("ordinal_reg" %in% ls(parsnip::get_model_env()))
+    oe <- extract_fit_engine(fit(ordinal_reg() |> set_engine("fastglm"), yo ~ x1 + x2 + z, data = pd))
+    od <- fastglm_ordinal(yo ~ x1 + x2 + z, data = pd)
+    expect_equal(coef(step(oe, trace = 0)), coef(step(od, trace = 0)), tolerance = 1e-8)
+})
+
+test_that("engine fits do not predict from training columns missing from new data", {
+    pd$z <- rnorm(nrow(pd))
+    nd <- newd; nd$z <- rnorm(nrow(nd))
+    miss <- nd; miss$x2 <- NULL
+    pf <- fit(poisson_reg() |> set_engine("fastglm"), yc ~ x1 + x2 + z, data = pd)
+    eng <- extract_fit_engine(pf)
+    expect_error(predict(eng, newdata = miss, type = "response"), "'x2' not found")
+    expect_error(predict(pf, new_data = miss), "'x2' not found")
+    full <- pd; full$x2 <- NULL
+    expect_error(predict(eng, newdata = full), "'x2' not found")
+    expect_error(predict(update(eng, . ~ . - z), newdata = miss), "'x2' not found")
+    # The "glm" engine gives the same error.
+    gf <- fit(linear_reg() |> set_engine("lm"), yg ~ x1 + x2, data = pd)
+    expect_error(predict(gf, new_data = miss), "'x2' not found")
+    # Predictions with complete new data are unchanged.
+    direct <- fastglm(yc ~ x1 + x2 + z, data = pd, family = poisson())
+    expect_equal(predict(pf, new_data = nd)$.pred, unname(predict(direct, nd, type = "response")),
+                 tolerance = 1e-10)
+    mf <- fit(multinom_reg() |> set_engine("fastglm"), ym ~ x1 + x2, data = pd)
+    expect_error(predict(extract_fit_engine(mf), newdata = miss), "'x2' not found")
+    expect_error(predict(mf, new_data = miss, type = "prob"), "'x2' not found")
+    # Weighted fits: the weights are a column of the stored data.
+    we <- fastglm_parsnip_glm(yb ~ x1 + x2, data = pd, weights = pd$w, family = "binomial")
+    expect_error(predict(we, newdata = miss), "'x2' not found")
+    # The saved fit holds the training data once, as a glm() fit does.
+    gl <- glm(yc ~ x1 + x2 + z, family = poisson(), data = pd)
+    expect_lt(length(serialize(eng, NULL)), 1.5 * length(serialize(gl, NULL)))
+    skip_if_not("ordinal_reg" %in% ls(parsnip::get_model_env()))
+    of <- fit(ordinal_reg() |> set_engine("fastglm"), yo ~ x1 + x2, data = pd)
+    expect_error(predict(extract_fit_engine(of), newdata = miss), "'x2' not found")
+    expect_error(predict(of, new_data = miss), "'x2' not found")
+})
+
 # Run R code in a fresh R process (base R only) with this session's library
 # path, returning its last line of output.
 run_fresh_r <- function(code) {

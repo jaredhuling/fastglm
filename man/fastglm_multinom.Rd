@@ -79,6 +79,7 @@ fastglm_multinom(x, ...)
   block.size = 8192L,
   control = list(),
   contrasts = NULL,
+  model = TRUE,
   ...
 )
 }
@@ -170,6 +171,13 @@ categories stops with an error naming it.}
 \item{data, subset, na.action, contrasts}{formula and model-frame arguments.
 Rows with missing values are removed by \code{na.action} (default \code{na.omit}),
 as in \code{\link[stats:glm]{stats::glm()}}. The matrix method rejects missing values.}
+
+\item{model}{for the formula method, \code{TRUE} (default) keeps the model
+frame in the fit (element \code{model}, as \code{\link[stats:glm]{stats::glm()}}); \code{drop1()},
+\code{anova()}, and emmeans rebuild reduced designs and reference grids from
+it. \code{FALSE} leaves it out to save memory: refits then keep columns of the
+stored design (which needs the intercept and marginality to stay), and
+emmeans reads the data again through the call.}
 }
 \value{
 An object of class \code{c("fastglm_multinom", "fastglm_vglm")} with
@@ -232,6 +240,10 @@ Every category must have a positive weighted number of observations,
 because otherwise no finite maximum exists; an empty category stops the
 fit with an error naming it. Rows with zero weight (or, for grouped data,
 zero total count) contribute nothing and are not counted in \code{nobs}.
+\code{\link[=nobs]{nobs()}} (and the number of observations used by \code{\link[=BIC]{BIC()}}) is the total
+frequency: the sum of the weights, times the row totals for grouped
+data, as for \code{\link[=fastglm_ordinal]{fastglm_ordinal()}} and \code{MASS::polr()} fits with frequency
+weights; without weights or counts it equals \code{nobs}.
 \code{df.residual} is \code{nobs * (K - 1)} minus the rank, and \code{null.deviance} is
 the deviance of the intercept-only model with the same weights and
 offsets.

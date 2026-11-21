@@ -16,6 +16,9 @@
 #'   [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 #'   where the right-hand side after `|` specifies the zero-model design.
 #'   If `|` is absent, the same RHS is used for both parts.
+#'   A list with elements `count` and `zero` (formulas, as [stats::step()]
+#'   writes the terms of the model into its call) is taken as the formula
+#'   `y ~ count terms | zero terms`.
 #' @param response nonnegative integer response for a matrix design. A source
 #'   supplies its response in each block; the existing `y` argument controls
 #'   whether a fitted model retains its response.
@@ -113,6 +116,9 @@ fastglm_hurdle <- function(formula, data, subset, na.action,
     dist      <- match.arg(dist)
     link      <- match.arg(link)
     zero.dist <- match.arg(zero.dist, choices = "binomial")
+    # A list of count and zero formulas (as stats::step() writes the terms of
+    # a two-part model into the call) is the two-part formula.
+    formula <- .two_part_formula_arg(formula)
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
     threads <- scope$threads

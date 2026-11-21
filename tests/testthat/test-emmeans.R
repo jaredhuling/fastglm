@@ -237,8 +237,25 @@ test_that("streamed, big.matrix, and matrix fits point to fastglm_marginal_effec
     skip_if_not_installed("bigmemory")
     expect_error(quiet(emmeans::emmeans(fastglm(bigmemory::as.big.matrix(X), d$y, family = poisson(), method = 2L), "x")), msg)
     src <- fastglm_source(function(k) d[((k - 1) * 40 + 1):(k * 40), ], 3, formula = y ~ b + x, prototype = d)
-    expect_error(quiet(emmeans::emmeans(fastglm_streaming(src, family = poisson()), "b")), msg)
-    expect_error(quiet(emmeans::emmeans(fastglm_nb(src), "b")), msg)
+    sp <- fastglm_streaming(src, family = poisson())
+    # A streamed fit: fastglm_marginal_effects() needs newdata, which the
+    # message says; both suggested calls then work.
+    smsg <- "fastglm_average\\(\\) \\(which reads the source again\\).*fastglm_marginal_effects\\(\\) with 'newdata'"
+    expect_error(quiet(emmeans::emmeans(sp, "b")), smsg)
+    expect_error(quiet(emmeans::emmeans(fastglm_nb(src), "b")), smsg)
+    expect_equal(fastglm_average(sp)$estimate, fastglm_average(fastglm(y ~ b + x, data = d, family = poisson()))$estimate,
+                 tolerance = 1e-8)
+    expect_error(fastglm_marginal_effects(sp, "x"), "newdata")
+    expect_true(is.finite(fastglm_marginal_effects(sp, "x", newdata = d)$estimate))
+    # A big.matrix fit: both work without newdata, and agree with the dense fit.
+    fb <- fastglm(bigmemory::as.big.matrix(X), d$y, family = poisson(), method = 2L)
+    fm <- fastglm(X, d$y, family = poisson())
+    expect_equal(fastglm_average(fb), fastglm_average(fm), tolerance = 1e-8)
+    shift <- function(x) { x[, "x"] <- x[, "x"] + 1; x }
+    expect_equal(fastglm_average(fb, contrast = shift), fastglm_average(fm, contrast = shift), tolerance = 1e-8)
+    expect_equal(fastglm_average(fb, weights = seq_len(nrow(X))),
+                 fastglm_average(fm, weights = seq_len(nrow(X))), tolerance = 1e-8)
+    expect_equal(fastglm_marginal_effects(fb, "x"), fastglm_marginal_effects(fm, "x"), tolerance = 1e-8)
 })
 
 test_that("a fit made without data = gives the reference grid", {

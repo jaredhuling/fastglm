@@ -25,7 +25,10 @@ fastglm_twopart(
 }
 \arguments{
 \item{formula}{numeric matrix, `dgCMatrix`, `big.matrix`, [fastglm_source()], or a formula
-with one or two right-hand sides, as in [fastglm_hurdle()].}
+with one or two right-hand sides, as in [fastglm_hurdle()].
+A list with elements `count` and `zero` (formulas, as [stats::step()]
+writes the terms of the model into its call) is taken as the formula
+`y ~ count terms | zero terms`.}
 
 \item{data, subset, na.action, weights, offset}{model-frame arguments. A vector
 offset applies to the positive component; a two-column matrix supplies

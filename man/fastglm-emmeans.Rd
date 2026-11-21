@@ -134,7 +134,7 @@
 \item{object}{a fitted model.}
 
 \item{data}{an optional data frame from which to build the reference grid,
-as for [emmeans::ref_grid()].}
+as for \code{\link[emmeans:ref_grid]{emmeans::ref_grid()}}.}
 
 \item{...}{further arguments passed by 'emmeans'.}
 
@@ -146,112 +146,118 @@ returns one.}
 
 \item{mode}{the quantity to estimate; see Details.}
 
-\item{lin.pred}{for zero-inflated and hurdle fits, `TRUE` gives the
-`"count"` and `"zero"` modes on the scale of the linear predictor.}
+\item{lin.pred}{for zero-inflated and hurdle fits, \code{TRUE} gives the
+\code{"count"} and \code{"zero"} modes on the scale of the linear predictor.}
 
-\item{rescale}{for the `"latent"` mode of cumulative-link fits, the
-location and scale of the latent variable, as for `MASS::polr()`.}
+\item{rescale}{for the \code{"latent"} mode of cumulative-link fits, the
+location and scale of the latent variable, as for \code{MASS::polr()}.}
 }
 \value{
-`recover_data()` methods return the data for the reference grid,
-  or a character string explaining why it cannot be built; `emm_basis()`
-  methods return the list described in the 'emmeans' vignette "For
-  developers: extending emmeans".
+\code{recover_data()} methods return the data for the reference grid,
+or a character string explaining why it cannot be built; \code{emm_basis()}
+methods return the list described in the 'emmeans' vignette "For
+developers: extending emmeans".
 }
 \description{
-Methods for the `recover_data()` and `emm_basis()` generics of the
-'emmeans' package, so that [emmeans::emmeans()], [emmeans::ref_grid()],
+Methods for the \code{recover_data()} and \code{emm_basis()} generics of the
+'emmeans' package, so that \code{\link[emmeans:emmeans]{emmeans::emmeans()}}, \code{\link[emmeans:ref_grid]{emmeans::ref_grid()}},
 and the functions built on them accept fastglm fits. They are registered
 when 'emmeans' is loaded; 'emmeans' is not required otherwise.
 }
 \details{
-Formula fits from [fastglm()] are `glm` objects, and 'emmeans' handles
-them through its own `glm` support. The methods here cover the other
-classes, with the modes (passed as `mode =` to [emmeans::emmeans()]) of
+Formula fits from \code{\link[=fastglm]{fastglm()}} are \code{glm} objects, and 'emmeans' handles
+them through its own \code{glm} support. The methods here cover the other
+classes, with the modes (passed as \verb{mode =} to \code{\link[emmeans:emmeans]{emmeans::emmeans()}}) of
 the established support for the corresponding reference packages:
+\itemize{
+\item Negative binomial fits (\code{\link[=fastglm_nb]{fastglm_nb()}}): as for \code{MASS::glm.nb()}, the
+linear predictor with the log link, so \code{type = "response"} gives means.
+\item Zero-inflated fits (\code{\link[=fastglm_zi]{fastglm_zi()}}): as for \code{pscl::zeroinfl()},
+\code{"response"} (the mean, the default), \code{"count"} (the mean of the count
+component), \code{"zero"} (the probability of a structural zero), and
+\code{"prob0"} (the probability of a zero). With \code{lin.pred = TRUE}, the
+\code{"count"} and \code{"zero"} modes are on the scale of the component's linear
+predictor.
+\item Hurdle fits (\code{\link[=fastglm_hurdle]{fastglm_hurdle()}}): as for \code{pscl::hurdle()}, \code{"response"}
+(the mean, the default), \code{"count"} (the mean of the untruncated count
+distribution), \code{"zero"} (the ratio of the probability of a positive
+value to the probability that the untruncated count distribution is
+positive), and \code{"prob0"} (the probability of a zero); \code{lin.pred = TRUE}
+as for zero-inflated fits.
+\item Zero-truncated fits (\code{\link[=fastglm_truncated]{fastglm_truncated()}}): \code{"response"} (the mean of
+the truncated distribution, the default), \code{"count"} (the mean of the
+untruncated distribution), and \code{"link"} (the log of the untruncated
+mean, so \code{type = "response"} returns the untruncated mean).
+\item Two-part fits (\code{\link[=fastglm_twopart]{fastglm_twopart()}}): \code{"response"} (the mean, the
+default), \code{"zero"} (the probability of a zero), and \code{"positive"} (the
+mean given a positive value).
+\item Cumulative-link fits (\code{\link[=fastglm_ordinal]{fastglm_ordinal()}}): as for \code{MASS::polr()},
+\code{"latent"} (the default, with argument \code{rescale}), \code{"linear.predictor"},
+\code{"cum.prob"}, \code{"exc.prob"}, \code{"prob"}, and \code{"mean.class"}.
+\item Cumulative-link fits with threshold-specific slopes (\code{nonparallel}):
+\code{"prob"} (the default), \code{"cum.prob"}, \code{"exc.prob"}, and
+\code{"mean.class"}. The latent variable and a single linear predictor are not
+defined when slopes differ across thresholds.
+\item Multinomial fits (\code{\link[=fastglm_multinom]{fastglm_multinom()}}): as for \code{nnet::multinom()},
+\code{"prob"} (the default) and \code{"latent"} (centered log ratios), whatever
+the reference category.
+}
 
-* Negative binomial fits ([fastglm_nb()]): as for `MASS::glm.nb()`, the
-  linear predictor with the log link, so `type = "response"` gives means.
-* Zero-inflated fits ([fastglm_zi()]): as for `pscl::zeroinfl()`,
-  `"response"` (the mean, the default), `"count"` (the mean of the count
-  component), `"zero"` (the probability of a structural zero), and
-  `"prob0"` (the probability of a zero). With `lin.pred = TRUE`, the
-  `"count"` and `"zero"` modes are on the scale of the component's linear
-  predictor.
-* Hurdle fits ([fastglm_hurdle()]): as for `pscl::hurdle()`, `"response"`
-  (the mean, the default), `"count"` (the mean of the untruncated count
-  distribution), `"zero"` (the ratio of the probability of a positive
-  value to the probability that the untruncated count distribution is
-  positive), and `"prob0"` (the probability of a zero); `lin.pred = TRUE`
-  as for zero-inflated fits.
-* Zero-truncated fits ([fastglm_truncated()]): `"response"` (the mean of
-  the truncated distribution, the default), `"count"` (the mean of the
-  untruncated distribution), and `"link"` (the log of the untruncated
-  mean, so `type = "response"` returns the untruncated mean).
-* Two-part fits ([fastglm_twopart()]): `"response"` (the mean, the
-  default), `"zero"` (the probability of a zero), and `"positive"` (the
-  mean given a positive value).
+For zero-truncated and two-part fits, a mode estimates the same quantity
+as the \code{\link[=predict]{predict()}} type of the same name, averaged over the reference
+grid; for example, \code{mode = "zero"} of a two-part fit corresponds to
+\code{predict(type = "zero")}. The modes of zero-inflated and hurdle fits
+follow 'pscl', and two of them differ from the \code{\link[=predict]{predict()}} types of the
+same name: \code{\link[=predict]{predict()}} with \code{type = "zero"} gives the probability of a
+zero (the \code{"prob0"} mode), and for hurdle fits \code{\link[=predict]{predict()}} with
+\code{type = "count"} gives the mean of the positive counts.
 
-As in 'emmeans', a mode estimates the same quantity as the [predict()]
-type of the same name, averaged over the reference grid; for example,
-`mode = "zero"` corresponds to `predict(type = "zero")`.
-* Cumulative-link fits ([fastglm_ordinal()]): as for `MASS::polr()`,
-  `"latent"` (the default, with argument `rescale`), `"linear.predictor"`,
-  `"cum.prob"`, `"exc.prob"`, `"prob"`, and `"mean.class"`.
-* Cumulative-link fits with threshold-specific slopes (`nonparallel`):
-  `"prob"` (the default), `"cum.prob"`, `"exc.prob"`, and
-  `"mean.class"`. The latent variable and a single linear predictor are not
-  defined when slopes differ across thresholds.
-* Multinomial fits ([fastglm_multinom()]): as for `nnet::multinom()`,
-  `"prob"` (the default) and `"latent"` (centered log ratios), whatever
-  the reference category.
-
-Standard errors use the delta method with the covariance from [vcov()]
-(or the `vcov.` argument of 'emmeans'). For cumulative-link fits, and for
+Standard errors use the delta method with the covariance from \code{\link[=vcov]{vcov()}}
+(or the \code{vcov.} argument of 'emmeans'). For cumulative-link fits, and for
 the binary component of zero-inflated, hurdle, and two-part fits with a
-link other than the logit, [vcov()] is the inverse expected information,
-while `MASS::polr()`, `ordinal::clm()`, and 'pscl' use the observed
+link other than the logit, \code{\link[=vcov]{vcov()}} is the inverse expected information,
+while \code{MASS::polr()}, \code{ordinal::clm()}, and 'pscl' use the observed
 information; the standard errors then differ from theirs by up to a few
-percent. Another covariance can be given to [emmeans::emmeans()] as
-`vcov.`, a matrix (in the order of `coef(object)`) or a function of the
-fit, for example a robust covariance from [fastglm_vcov()] where it is
+percent. Another covariance can be given to \code{\link[emmeans:emmeans]{emmeans::emmeans()}} as
+\code{vcov.}, a matrix (in the order of \code{coef(object)}) or a function of the
+fit, for example a robust covariance from \code{\link[=fastglm_vcov]{fastglm_vcov()}} where it is
 available. As in the reference packages, the
 dispersion parameter of negative binomial components is treated as known.
 The degrees of freedom follow the reference packages: infinite except for
 hurdle fits (the residual degrees of freedom) and multinomial fits (the
-number of coefficients, the convention of `nnet::multinom()`).
+number of coefficients, the convention of \code{nnet::multinom()}).
 
-Offsets follow the convention of 'emmeans' for `glm` fits. An offset in
+Offsets follow the convention of 'emmeans' for \code{glm} fits. An offset in
 the formula is evaluated at the grid values of its variables (their means
-unless set with `at`), and an offset given through the `offset` argument
-of the fitting function enters at its mean. The `offset` argument of
-[emmeans::emmeans()] replaces both, for every mode; on the response scale
+unless set with \code{at}), and an offset given through the \code{offset} argument
+of the fitting function enters at its mean. The \code{offset} argument of
+\code{\link[emmeans:emmeans]{emmeans::emmeans()}} replaces both, for every mode; on the response scale
 it enters the linear predictor of the count (or positive) component, not
-the estimate itself. The 'emmeans' support for `pscl` fits instead
-ignores an `offset =` argument of the fit in its response-scale modes, so
-`emmeans(fit, ..., offset = 0)` reproduces those values.
+the estimate itself. The 'emmeans' support for \code{pscl} fits instead
+ignores an \verb{offset =} argument of the fit in its response-scale modes, so
+\code{emmeans(fit, ..., offset = 0)} reproduces those values.
 
 The reference grid is built from the model frame stored with the fit when
-the formula has no function calls (as 'emmeans' does for `glm` fits), so
+the formula has no function calls (as 'emmeans' does for \code{glm} fits), so
 changing the data frame after fitting does not change the grid. Otherwise
 the data are found again from the call; if they no longer agree with the
 data the model was fitted to (a different number of rows, other factor
 levels, or other values), an error asks for the original data through the
-`data` argument of [emmeans::emmeans()].
+\code{data} argument of \code{\link[emmeans:emmeans]{emmeans::emmeans()}}.
 
-Streamed fits, fits to a `big.matrix`, and fits from the matrix interface
+Streamed fits, fits to a \code{big.matrix}, and fits from the matrix interface
 have no data in memory to build a reference grid from, and give an error;
-[fastglm_marginal_effects()] and [fastglm_average()] compute averaged
+\code{\link[=fastglm_marginal_effects]{fastglm_marginal_effects()}} and \code{\link[=fastglm_average]{fastglm_average()}} compute averaged
 predictions and marginal effects for them.
 
 Two choices differ from the support 'emmeans' 1.11 provides for
-`pscl` fits, to give correct results. The `"prob0"` mode of zero-inflated
-fits and the `"zero"` mode of hurdle fits include every factor of the
+\code{pscl} fits, to give correct results. The \code{"prob0"} mode of zero-inflated
+fits and the \code{"zero"} mode of hurdle fits include every factor of the
 delta-method derivative (the 'emmeans' versions omit the derivative of the
 mean with respect to the linear predictor, which changes the standard
-errors but not the estimates). The `"zero"` mode of hurdle fits builds the
+errors but not the estimates). The \code{"zero"} mode of hurdle fits builds the
 grid from all predictors, since it involves both components. The hurdle
-`"response"` mode uses the derivative of the fitted binary link, not of
+\code{"response"} mode uses the derivative of the fitted binary link, not of
 the logit, for links other than the logit.
 }
 \examples{

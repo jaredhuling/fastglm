@@ -26,7 +26,8 @@ fastglm_nb(
   data = NULL,
   subset,
   na.action,
-  contrasts = NULL
+  contrasts = NULL,
+  formula = NULL
 )
 }
 \arguments{
@@ -95,6 +96,11 @@ session and `FALSE` otherwise.}
 
 \item{data, subset, na.action, contrasts}{model-frame arguments used when `x`
 is a formula, as in [stats::glm()].}
+
+\item{formula}{the model formula, as an alternative to giving it as `x`;
+when given, it is used in place of a formula `x`, and a
+[fastglm_source()] `x` is rebuilt with it (as [update()] of the source
+does). Calls written by [stats::step()] name the formula this way.}
 }
 \value{
 A list of class `c("fastglm_nb", "fastglm")` with the usual

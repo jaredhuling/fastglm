@@ -32,10 +32,6 @@
 #' * Two-part fits ([fastglm_twopart()]): `"response"` (the mean, the
 #'   default), `"zero"` (the probability of a zero), and `"positive"` (the
 #'   mean given a positive value).
-#'
-#' As in 'emmeans', a mode estimates the same quantity as the [predict()]
-#' type of the same name, averaged over the reference grid; for example,
-#' `mode = "zero"` corresponds to `predict(type = "zero")`.
 #' * Cumulative-link fits ([fastglm_ordinal()]): as for `MASS::polr()`,
 #'   `"latent"` (the default, with argument `rescale`), `"linear.predictor"`,
 #'   `"cum.prob"`, `"exc.prob"`, `"prob"`, and `"mean.class"`.
@@ -46,6 +42,15 @@
 #' * Multinomial fits ([fastglm_multinom()]): as for `nnet::multinom()`,
 #'   `"prob"` (the default) and `"latent"` (centered log ratios), whatever
 #'   the reference category.
+#'
+#' For zero-truncated and two-part fits, a mode estimates the same quantity
+#' as the [predict()] type of the same name, averaged over the reference
+#' grid; for example, `mode = "zero"` of a two-part fit corresponds to
+#' `predict(type = "zero")`. The modes of zero-inflated and hurdle fits
+#' follow 'pscl', and two of them differ from the [predict()] types of the
+#' same name: [predict()] with `type = "zero"` gives the probability of a
+#' zero (the `"prob0"` mode), and for hurdle fits [predict()] with
+#' `type = "count"` gives the mean of the positive counts.
 #'
 #' Standard errors use the delta method with the covariance from [vcov()]
 #' (or the `vcov.` argument of 'emmeans'). For cumulative-link fits, and for
@@ -120,6 +125,7 @@
 #'     emmeans::emmeans(fit, "g", type = "response")
 #' }
 #' @name fastglm-emmeans
+#' @md
 #' @rdname fastglm-emmeans
 NULL
 
@@ -139,8 +145,18 @@ NULL
             else NULL
     if (is.null(kind)) return(NULL)
     paste0("emmeans needs a formula fit whose data are in memory, and this '", class(object)[1L],
-           "' object is ", kind, ". Use fastglm_marginal_effects() or fastglm_average() ",
-           "for averaged predictions and marginal effects from this fit.")
+           "' object is ", kind, ". ", .emm_alternatives(kind == "a streamed fit"))
+}
+
+# The functions that give averaged predictions and marginal effects instead;
+# for a streamed fit, fastglm_marginal_effects() needs `newdata` (the rows at
+# which to average), while fastglm_average() reads the source again.
+.emm_alternatives <- function(streamed = FALSE) {
+    if (streamed)
+        return(paste0("Use fastglm_average() (which reads the source again) for averaged predictions, ",
+                      "or fastglm_marginal_effects() with 'newdata' (the rows to average over) for ",
+                      "marginal effects from this fit."))
+    "Use fastglm_marginal_effects() or fastglm_average() for averaged predictions and marginal effects from this fit."
 }
 
 # The fitting call, with a formula given as `x` renamed to `formula`.
@@ -344,8 +360,7 @@ NULL
 recover_data.fastglm <- function(object, data = NULL, ...) {
     if (is.null(object$model) && is.null(.emm_unavailable(object)))
         return(paste0("emmeans needs a formula fit whose data are in memory, and this '", class(object)[1L],
-                      "' object has no stored model frame. Use fastglm_marginal_effects() or fastglm_average() ",
-                      "for averaged predictions and marginal effects from this fit."))
+                      "' object has no stored model frame. ", .emm_alternatives()))
     .emm_recover(object, stats::delete.response(object$terms), data = data,
                  pwts = object$prior.weights, ...)
 }

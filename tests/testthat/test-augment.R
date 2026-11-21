@@ -275,6 +275,29 @@ test_that("ordinal augment keeps its matrix columns and adds .prob_<level> colum
     expect_true(is.matrix(a$.fitted)); expect_s3_class(a$.class, "ordered")
     for (l in f$levels) expect_equal(a[[paste0(".prob_", l)]], unname(predict(f)[, l]))
     expect_equal(as.matrix(a$.fitted), predict(f), ignore_attr = TRUE)
+    # A tibble, as the other augment() methods.
+    skip_if_not_installed("tibble")
+    expect_s3_class(a, "tbl_df")
+    expect_s3_class(broom::augment(f, newdata = d[1:5, ]), "tbl_df")
+    expect_identical(dim(a$.fitted), c(nrow(d), length(f$levels)))
+})
+
+test_that("every augment() method refuses a streamed fit without newdata with one message", {
+    skip_if_not_installed("broom")
+    d <- aug_data(60L)
+    d$o <- ordered(d$yk)
+    chunks <- function(k) d[((k - 1) * 20 + 1):(k * 20), ]
+    msg <- function(fit) tryCatch(broom::augment(fit), error = conditionMessage)
+    glm.msg <- msg(fastglm_streaming(fastglm_source(chunks, 3, formula = yb ~ x + g, prototype = d),
+                                     family = binomial()))
+    expect_match(glm.msg, "supply 'newdata' (augmenting new data never reads the source)", fixed = TRUE)
+    d$yz <- rpois(nrow(d), 1) * rbinom(nrow(d), 1, 0.7)
+    zi <- fastglm_zi(fastglm_source(chunks, 3, formula = yz ~ x | x, prototype = d))
+    expect_identical(msg(zi), glm.msg)
+    ord <- fastglm_ordinal_streaming(fastglm_source(chunks, 3, formula = o ~ x, prototype = d))
+    expect_identical(msg(ord), glm.msg)
+    mn <- fastglm_multinom(fastglm_source(chunks, 3, formula = yk ~ x, prototype = d))
+    expect_identical(msg(mn), glm.msg)
 })
 
 test_that("multinomial na.exclude with full data aligns the rows", {

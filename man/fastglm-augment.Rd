@@ -74,81 +74,81 @@ augment.fastglm_vglm(
 \item{x}{a fastglm model.}
 
 \item{data}{optional data to accompany the training predictions, in the
-row order of the fit (with `na.omit`, the omitted rows may be included).
+row order of the fit (with \code{na.omit}, the omitted rows may be included).
 Defaults to the data the model retains.}
 
 \item{newdata}{optional new data to predict; residuals are then not
-computed. Cannot be combined with `data`.}
+computed. Cannot be combined with \code{data}.}
 
-\item{type.predict}{the prediction `type` passed to [predict()]. For
-generalized linear models `"link"`, `"response"`, or `"terms"`.}
+\item{type.predict}{the prediction \code{type} passed to \code{\link[=predict]{predict()}}. For
+generalized linear models \code{"link"}, \code{"response"}, or \code{"terms"}.}
 
-\item{type.residuals}{the residual `type` passed to [residuals()].}
+\item{type.residuals}{the residual \code{type} passed to \code{\link[=residuals]{residuals()}}.}
 
-\item{se_fit}{include prediction standard errors in `.se.fit`.}
+\item{se_fit}{include prediction standard errors in \code{.se.fit}.}
 
-\item{...}{additional arguments passed to [predict()] (for example `at` for
+\item{...}{additional arguments passed to \code{\link[=predict]{predict()}} (for example \code{at} for
 probability masses of count models).}
 }
 \value{
 A tibble with the data columns and the added columns.
 }
 \description{
-Methods for the broom generic `augment()`. The result is a tibble (a data
+Methods for the broom generic \code{augment()}. The result is a tibble (a data
 frame when tibble is unavailable) with the data columns first, followed by
-`.fitted` (a prediction of the requested type), `.se.fit` when
-`se_fit = TRUE`, and, for the training rows, `.resid`. A `.rownames` column
+\code{.fitted} (a prediction of the requested type), \code{.se.fit} when
+\code{se_fit = TRUE}, and, for the training rows, \code{.resid}. A \code{.rownames} column
 comes first when the data have row names other than the automatic ones, as
 in broom. Formula fits default to the model frame.
 }
 \details{
 A matrix-interface fit has no data frame. Its default rows are the
-non-constant design columns and the response `y`, except that a sparse
-(`Matrix`) design, a `big.matrix` design, or any design with more than
+non-constant design columns and the response \code{y}, except that a sparse
+(\code{Matrix}) design, a \code{big.matrix} design, or any design with more than
 1e7 cells (rows times columns) is never converted to a dense data frame: the
-default rows then hold only the response `y`, or a row index `row` when no
-response is stored. Supply `data =` to get data columns in that case.
+default rows then hold only the response \code{y}, or a row index \code{row} when no
+response is stored. Supply \verb{data =} to get data columns in that case.
 
-Streamed and `big.matrix` fits do not retain their rows, so `augment()`
-needs `newdata` for them (which never reads the source); without it they
-stop with a message directing the user to [predict()] and [residuals()].
+Streamed and \code{big.matrix} fits do not retain their rows, so \code{augment()}
+needs \code{newdata} for them (which never reads the source); without it they
+stop with a message directing the user to \code{\link[=predict]{predict()}} and \code{\link[=residuals]{residuals()}}.
 }
 \section{Generalized linear models}{
 
-Applies to `fastglm()` and `fastglm_nb()` fits. The defaults follow
-`broom::augment.glm()`: `type.predict = "link"` and
-`type.residuals = "deviance"`. For training rows the columns `.hat`
-(leverage, from [hatvalues()]), `.sigma` (leave-one-out residual standard
-deviation, computed as `lm.influence()` does from the deviance residuals),
-`.cooksd` (Cook's distance), and `.std.resid` (standardized residual of
-type `type.residuals`, `deviance` or `pearson`) follow `.resid` in broom's
-order. Rows with zero weight give `NA`, and a leverage of one gives `NaN`,
-as in `rstandard.glm()`. The influence columns are omitted for Firth fits,
+Applies to \code{fastglm()} and \code{fastglm_nb()} fits. The defaults follow
+\code{broom::augment.glm()}: \code{type.predict = "link"} and
+\code{type.residuals = "deviance"}. For training rows the columns \code{.hat}
+(leverage, from \code{\link[=hatvalues]{hatvalues()}}), \code{.sigma} (leave-one-out residual standard
+deviation, computed as \code{lm.influence()} does from the deviance residuals),
+\code{.cooksd} (Cook's distance), and \code{.std.resid} (standardized residual of
+type \code{type.residuals}, \code{deviance} or \code{pearson}) follow \code{.resid} in broom's
+order. Rows with zero weight give \code{NA}, and a leverage of one gives \code{NaN},
+as in \code{rstandard.glm()}. The influence columns are omitted for Firth fits,
 whose leverage differs from the maximum-likelihood one, and for residual
-types other than `deviance` and `pearson`. Formula fits are served by this
-method instead of `broom::augment.glm()`, which needs `influence()` and
+types other than \code{deviance} and \code{pearson}. Formula fits are served by this
+method instead of \code{broom::augment.glm()}, which needs \code{influence()} and
 fails for them.
 }
 
 \section{Count models}{
 
-Applies to `fastglm_hurdle()`, `fastglm_zi()`, `fastglm_twopart()` and
-`fastglm_truncated()` fits. The defaults are `type.predict = "response"`
-and `type.residuals = "pearson"`, the `pscl` default. A matrix-valued
-prediction (`"link"` or `"prob"`) is stored as a matrix column.
+Applies to \code{fastglm_hurdle()}, \code{fastglm_zi()}, \code{fastglm_twopart()} and
+\code{fastglm_truncated()} fits. The defaults are \code{type.predict = "response"}
+and \code{type.residuals = "pearson"}, the \code{pscl} default. A matrix-valued
+prediction (\code{"link"} or \code{"prob"}) is stored as a matrix column.
 }
 
 \section{Multinomial models}{
 
-Applies to `fastglm_multinom()` and other `fastglm_vglm` fits.
-`type.predict = "probability"` adds one `.prob_<level>` column per outcome
-level and `type.predict = "link"` adds `.link_<level>` columns for the
-non-reference levels. `.class` is the predicted level in either case.
-`.se.fit_<level>` and, for training rows, `.resid_<level>` columns hold the
-standard errors and residuals (`type.residuals = "response"` by default).
-`augment()` for ordinal fits ([fastglm_ordinal()]) keeps its matrix column
-`.fitted` of category probabilities and its ordered factor `.class`, and
-also supplies the same `.prob_<level>` columns, so both shapes are available.
+Applies to \code{fastglm_multinom()} and other \code{fastglm_vglm} fits.
+\code{type.predict = "probability"} adds one \verb{.prob_<level>} column per outcome
+level and \code{type.predict = "link"} adds \verb{.link_<level>} columns for the
+non-reference levels. \code{.class} is the predicted level in either case.
+\verb{.se.fit_<level>} and, for training rows, \verb{.resid_<level>} columns hold the
+standard errors and residuals (\code{type.residuals = "response"} by default).
+\code{augment()} for ordinal fits (\code{\link[=fastglm_ordinal]{fastglm_ordinal()}}) keeps its matrix column
+\code{.fitted} of category probabilities and its ordered factor \code{.class}, and
+also supplies the same \verb{.prob_<level>} columns, so both shapes are available.
 }
 
 \examples{

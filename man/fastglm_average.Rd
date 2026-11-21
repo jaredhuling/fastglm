@@ -55,6 +55,11 @@ Uncertainty conditions on the supplied covariate distribution.
 For ordinal fits, returns an average for each category or cumulative
 probability. With collapsed categories, inference refers to the reduced
 category model and removed-category standard errors are unavailable.
+For a GLM, a contrast is applied once to the whole design of an in-memory
+dense or sparse fit, and block by block (of rows) to a `big.matrix` design
+or a source, so for those designs the contrast should transform each row
+on its own (for example, subtract a fixed number from a column rather than
+its mean, which differs between blocks).
 Nonparallel ordinal fits include the joint uncertainty of thresholds,
 common slopes, and threshold-specific slopes and check prediction validity
 at all rows with positive averaging weight.

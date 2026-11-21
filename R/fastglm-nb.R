@@ -54,6 +54,10 @@
 #'   session and `FALSE` otherwise.
 #' @param data,subset,na.action,contrasts model-frame arguments used when `x`
 #'   is a formula, as in [stats::glm()].
+#' @param formula the model formula, as an alternative to giving it as `x`;
+#'   when given, it is used in place of a formula `x`, and a
+#'   [fastglm_source()] `x` is rebuilt with it (as [update()] of the source
+#'   does). Calls written by [stats::step()] name the formula this way.
 #'
 #' @details
 #' The fit alternates coefficient updates at fixed `theta` (iteratively
@@ -127,8 +131,19 @@ fastglm_nb <- function(x, y = NULL,
                        threads     = NULL,
                        trace       = NULL,
                        data        = NULL,
-                       subset, na.action, contrasts = NULL)
+                       subset, na.action, contrasts = NULL, formula = NULL)
 {
+    # A call naming the formula (as stats::step() writes it, next to the
+    # original `x`) is evaluated with that formula as x.
+    if (!is.null(formula)) {
+        if (!missing(x) && !inherits(x, "formula")) {
+            x <- .fastglm_formula_source(x, formula)
+        } else {
+            mc <- match.call()
+            mc$x <- mc$formula; mc$formula <- NULL
+            return(eval(mc, parent.frame()))
+        }
+    }
     link <- match.arg(link)
     # The thread setting holds for every fit and pass below, including the
     # pilot, Poisson-limit, and covariance passes after the main fit.

@@ -32,7 +32,10 @@ fastglm_zi(
 \arguments{
 \item{formula}{a [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 where the right-hand side after `|` specifies the inflation design.
-If `|` is absent, the same RHS is used for both parts. Alternatively, a
+If `|` is absent, the same RHS is used for both parts. A list with
+elements `count` and `zero` (formulas, as [stats::step()] writes the
+terms of the model into its call) is taken as the formula
+`y ~ count terms | zero terms`. Alternatively, a
 numeric count-design matrix, with `response` and optionally `z`; a
 `dgCMatrix` or file-backed `big.matrix`; or a [fastglm_source()]. Sparse,
 mapped, and source designs are read in blocks of rows: each pass performs

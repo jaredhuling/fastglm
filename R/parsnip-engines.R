@@ -58,7 +58,15 @@
 #'
 #' The fitted model (the `fit` element of the 'parsnip' model fit, or
 #' `parsnip::extract_fit_engine()`) is the fastglm fit, with all of its
-#' methods. The functions below are the fitting functions called by the
+#' methods, including [update()], [stats::step()], and [anova()] of an
+#' updated fit: the stored call refers to the training data through a
+#' private environment (it prints as `data = <environment>$data`), so it can
+#' be evaluated again from any frame. The model formula keeps its own
+#' environment, so [predict()] with new data that lack a predictor is an
+#' error, as for the `"glm"` engine. A family of the 'stats' package is
+#' stored in the call as a short call such as
+#' `stats::binomial(link = "logit")`. The functions below are the fitting
+#' functions called by the
 #' engines; they are exported for 'parsnip' and are not meant to be called
 #' directly.
 #'
@@ -85,6 +93,7 @@
 #' fit <- logistic_reg() |> set_engine("fastglm") |> fit(y ~ x, data = d)
 #' head(predict(fit, d, type = "prob"))
 #' @name fastglm-parsnip
+#' @md
 #' @keywords internal
 NULL
 
@@ -102,8 +111,26 @@ fastglm_parsnip_glm <- function(formula, data, weights = NULL, family = "gaussia
         stop("give 'link' only with a family name", call. = FALSE)
     }
     .fastglm_parsnip_eval(quote(fastglm::fastglm), formula, data, weights,
-                          c(list(family = family, method = method, firth = firth,
-                                 threads = threads), list(...)))
+                          c(list(family = .fastglm_parsnip_family_call(family), method = method,
+                                 firth = firth, threads = threads), list(...)))
+}
+
+# A family of stats as a short call (stats::binomial(link = "probit")), so the
+# stored call, and the Call line of a printed workflow, does not hold the
+# family object (parsnip's "glm" engine stores `family = stats::binomial`).
+# Other family objects are kept as they are.
+.fastglm_parsnip_family_call <- function(family) {
+    if (!inherits(family, "family")) return(family)
+    name <- family$family
+    if (!name %in% c("binomial", "gaussian", "poisson", "Gamma", "inverse.gaussian",
+                     "quasibinomial", "quasipoisson"))
+        return(family)
+    cl <- call("::", quote(stats), as.name(name))
+    cl <- as.call(c(list(cl), list(link = family$link)))
+    rebuilt <- tryCatch(eval(cl), error = function(e) NULL)
+    if (is.null(rebuilt) || !identical(rebuilt$family, family$family) || !identical(rebuilt$link, family$link))
+        return(family)
+    cl
 }
 
 #' @rdname fastglm-parsnip
@@ -144,22 +171,31 @@ fastglm_parsnip_ordinal <- function(formula, data, weights = NULL, link = "logis
     args
 }
 
-# Evaluate a formula fit with the data and weights bound to symbols, so the
-# stored call reads `fun(formula, data = data, weights = ..weights..)` rather
-# than holding the data, and the weights are found by model.frame() through
-# the environment of the formula, as for a call made at top level.
+# Evaluate a formula fit with `data` bound in a private environment that the
+# stored call refers to directly: the call reads
+# `fun(formula = y ~ x + z, data = <environment>$data, ...)`, which evaluates
+# to the training data from any frame, so update(), step(), and
+# anova(update(fit), fit) work (a call `fun(formula, data = data)` would find
+# utils::data in the caller's frame). The formula keeps its own environment,
+# so, as for a fit made at top level with `data = d`, predict() with new data
+# that lack a predictor stops with "object 'x' not found" instead of finding
+# the training column. Case weights are a column of the data. A `.` in the
+# formula is expanded against the data first.
 .fastglm_parsnip_eval <- function(fun, formula, data, weights, args) {
-    parent <- environment(formula)
-    if (is.null(parent)) parent <- globalenv()
-    env <- new.env(parent = parent)
-    environment(formula) <- env
-    env$data <- data
-    cl <- c(list(fun, formula, data = quote(data)), args)
+    if ("." %in% all.vars(formula))
+        formula <- stats::formula(stats::terms(formula, data = data))
+    data <- as.data.frame(data)
+    cl <- c(list(fun, formula = formula), args)
     if (!is.null(weights)) {
-        env$..weights.. <- as.numeric(weights)
+        data[["..weights.."]] <- as.numeric(weights)
         cl$weights <- quote(..weights..)
     }
-    eval(as.call(cl), env)
+    holder <- new.env(parent = emptyenv())
+    holder$data <- data
+    cl$data <- as.call(list(as.name("$"), holder, as.name("data")))
+    parent <- environment(formula)
+    if (is.null(parent)) parent <- globalenv()
+    eval(as.call(cl), parent)
 }
 
 # Prediction post-processing.

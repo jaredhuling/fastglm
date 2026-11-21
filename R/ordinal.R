@@ -119,7 +119,9 @@
 fastglm_ordinal <- function(x, ...) {
     # S3 dispatch is on the first argument, so a call that names the formula
     # (fastglm_ordinal(formula = y ~ x, ...)) is rewritten with it as x.
-    if (missing(x)) {
+    # A call that also names a formula next to x (as stats::step() writes it)
+    # uses that formula.
+    if (missing(x) || !is.null(match.call(expand.dots = TRUE)$formula)) {
         mc <- match.call(expand.dots = TRUE)
         if (is.null(mc$formula))
             stop("supply a design matrix or model formula", call. = FALSE)
@@ -261,7 +263,12 @@ fastglm_ordinal.formula <- function(x,data,weights,offset,subset,na.action,
 #' @param evaluate evaluate the updated call or return it for inspection.
 #' @exportS3Method update fastglm_ordinal
 update.fastglm_ordinal <- function(object,formula.,...,evaluate=TRUE) {
-    if(inherits(object,"fastglm_ordinal_stream") && !missing(formula.))
+    # A streamed fit with a formula source is refitted on the source rebuilt
+    # with the changed formula (stats::update() of the source), as for the
+    # other streamed fits.
+    stream.source <- inherits(object,"fastglm_ordinal_stream") && !is.null(object$source) &&
+        !is.null(.fastglm_source_formula(object$source))
+    if(inherits(object,"fastglm_ordinal_stream") && !missing(formula.) && !stream.source)
         stop("formula changes require rebuilding the ordinal source schema with fastglm_source() and refitting",call.=FALSE)
     if(!is.null(object$batch.response))
         stop("update is unavailable for ordinal batch fits; refit the response with fastglm_ordinal(prepared, y, ...)",call.=FALSE)
@@ -271,7 +278,11 @@ update.fastglm_ordinal <- function(object,formula.,...,evaluate=TRUE) {
     # stats::step() stores the terms as call$formula; the formula is the
     # first argument (x) of fastglm_ordinal().
     call$formula <- NULL
-    if(!missing(formula.)) {
+    if(!missing(formula.) && stream.source) {
+        if(is.null(call$source)) names(call)[2L] <- "source"
+        call$source <- as.call(list(quote(stats::update),call$source,
+            stats::update.formula(.fastglm_source_formula(object$source),formula.)))
+    } else if(!missing(formula.)) {
         if(is.null(object$terms)) stop("formula updates require an ordinal formula fit",call.=FALSE)
         call$x <- update.formula(formula(object$terms),formula.)
     }

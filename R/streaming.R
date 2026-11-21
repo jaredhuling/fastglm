@@ -63,6 +63,9 @@
 #'   seconds), `FALSE` for none, or `NULL` (default) for
 #'   `getOption("fastglm.trace")`, which defaults to `TRUE` in an interactive
 #'   session and `FALSE` otherwise (in scripts, knitr, and tests).
+#' @param formula a model formula that replaces the formula of a formula
+#'   source (the source is rebuilt with it, as [update()] of the source does);
+#'   calls written by [stats::step()] name the model formula this way.
 #'
 #' @returns An object with classes `"fastglm_stream"` and `"fastglm"` containing
 #'   coefficient estimates and model summaries as in
@@ -146,7 +149,8 @@ fastglm_streaming <- function(chunk_callback, n_chunks = NULL,
                               tol = 1e-8, maxit = 100L, firth = FALSE,
                               covariance = c("estimate", "previous"),
                               y = NULL, weights = NULL, offset = NULL, block.size = 100000L,
-                              threads = NULL, trace = NULL) {
+                              threads = NULL, trace = NULL, formula = NULL) {
+    if (!is.null(formula)) chunk_callback <- .fastglm_formula_source(chunk_callback, formula)
     method.supplied <- !missing(method)
     threads <- .fastglm_resolve_threads(threads)
     restore.threads <- .fastglm_with_threads(threads)

@@ -14,7 +14,8 @@ fastglm_ordinal_streaming(
   maxit = 200L,
   block.size = 2048L,
   control = list(),
-  nonparallel = NULL
+  nonparallel = NULL,
+  formula = NULL
 )
 }
 \arguments{
@@ -40,6 +41,10 @@ Each source block is read on one thread; with \code{control$threads} (see
 Select complete model terms with a one-sided formula for a formula source,
 or columns by name or index for a matrix source. All declared categories
 must have positive total frequency for these models.}
+
+\item{formula}{a model formula that replaces the formula of a formula
+source (the source is rebuilt with it, as \code{\link[=update]{update()}} of the source does);
+calls written by \code{\link[stats:step]{stats::step()}} name the model formula this way.}
 }
 \value{
 A \code{fastglm_ordinal_stream} object inheriting from

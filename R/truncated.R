@@ -28,6 +28,10 @@
 #'   `NULL` (default) for `getOption("fastglm.trace")`, which defaults to
 #'   `TRUE` for a [fastglm_source()] in an interactive session and `FALSE`
 #'   otherwise.
+#' @param formula the model formula, as an alternative to giving it as `x`;
+#'   when given, it is used in place of a formula `x`, and a
+#'   [fastglm_source()] `x` is rebuilt with it (as [update()] of the source
+#'   does). Calls written by [stats::step()] name the formula this way.
 #' @returns A `fastglm_truncated` model with joint covariance when theta is
 #'   estimated. Its element `threads` records the thread setting of the fit.
 #' @export
@@ -35,7 +39,18 @@ fastglm_truncated <- function(x, y = NULL, data = NULL, dist = c("poisson", "neg
                               weights = NULL, offset = NULL, theta = NULL,
                               start = NULL, tol = 1e-8, maxit = 100L,
                               outer.tol = 1e-8, outer.maxit = 100L, threads = NULL,
-                              trace = NULL) {
+                              trace = NULL, formula = NULL) {
+    # A call naming the formula (as stats::step() writes it, next to the
+    # original `x`) is evaluated with that formula as x.
+    if (!is.null(formula)) {
+        if (!missing(x) && !inherits(x, "formula")) {
+            x <- .fastglm_formula_source(x, formula)
+        } else {
+            mc <- match.call()
+            mc$x <- mc$formula; mc$formula <- NULL
+            return(eval(mc, parent.frame()))
+        }
+    }
     cl <- match.call(); dist <- match.arg(dist)
     scope <- .fastglm_scope_threads(threads)
     on.exit(scope$restore(), add = TRUE)
@@ -120,6 +135,16 @@ logLik.fastglm_truncated <- function(object, ...) {
 }
 #' @export
 nobs.fastglm_truncated <- nobs.fastglm
+
+# The terms of a fit: stored for formula fits, and those of the source's
+# formula for a streamed fit (so that stats::step() can run on it).
+#' @exportS3Method stats::terms
+terms.fastglm_truncated <- function(x, ...) {
+    tt <- x$terms
+    if (is.null(tt) && !is.null(x$source) && inherits(x$source$schema$terms, "terms")) tt <- x$source$schema$terms
+    if (is.null(tt)) stop("no terms component nor attribute", call. = FALSE)
+    tt
+}
 #' @export
 model.matrix.fastglm_truncated <- model.matrix.fastglm
 #' @exportS3Method print fastglm_truncated

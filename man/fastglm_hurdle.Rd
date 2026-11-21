@@ -36,7 +36,10 @@ fastglm_hurdle(
 \item{formula}{a numeric matrix, `dgCMatrix`, `big.matrix`, [fastglm_source()], or a
 [Formula::Formula] of the form `y ~ x1 + x2 | z1 + z2`
 where the right-hand side after `|` specifies the zero-model design.
-If `|` is absent, the same RHS is used for both parts.}
+If `|` is absent, the same RHS is used for both parts.
+A list with elements `count` and `zero` (formulas, as [stats::step()]
+writes the terms of the model into its call) is taken as the formula
+`y ~ count terms | zero terms`.}
 
 \item{data}{optional data frame / environment from which to draw model
 matrix variables.}

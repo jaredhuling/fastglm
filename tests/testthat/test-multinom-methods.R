@@ -261,3 +261,51 @@ test_that("predict handles zero-row newdata", {
     expect_identical(dim(predict(fit, df[0L, ], type = "link", se.fit = TRUE)$se.fit), c(0L, 3L))
     expect_identical(length(predict(fit, df[0L, ], type = "class")), 0L)
 })
+
+test_that("nobs() is the total frequency, as for ordinal and MASS::polr fits", {
+    skip_if_not_installed("MASS")
+    h <- as.data.frame(MASS::housing)
+    ord <- fastglm_ordinal(Sat ~ Infl + Type + Cont, weights = Freq, data = h)
+    mn <- fastglm_multinom(factor(Sat, ordered = FALSE) ~ Infl + Type + Cont, weights = Freq, data = h)
+    polr <- MASS::polr(Sat ~ Infl + Type + Cont, weights = Freq, data = h)
+    expect_identical(nobs(mn), 1681L)
+    expect_equal(nobs(mn), nobs(ord))
+    expect_equal(nobs(mn), nobs(polr))
+    expect_identical(attr(logLik(mn), "nobs"), 1681L)
+    expect_equal(BIC(mn), -2 * as.numeric(logLik(mn)) + log(1681) * attr(logLik(mn), "df"))
+    # The rows with positive weight still give the residual degrees of freedom.
+    expect_identical(mn$nobs, 72L)
+    expect_identical(mn$df.residual, 72L * 2L - mn$rank)
+    expect_silent(AIC(ord, mn))
+    # The same data as individual rows: the same nobs().
+    ind <- h[rep(seq_len(nrow(h)), h$Freq), ]
+    expect_identical(nobs(fastglm_multinom(factor(Sat, ordered = FALSE) ~ Infl + Type + Cont, data = ind)), 1681L)
+    # A count-matrix response counts its row totals.
+    w <- reshape(h[, c("Infl", "Type", "Cont", "Sat", "Freq")], idvar = c("Infl", "Type", "Cont"),
+                 timevar = "Sat", direction = "wide")
+    counts <- as.matrix(w[, c("Freq.Low", "Freq.Medium", "Freq.High")])
+    colnames(counts) <- c("Low", "Medium", "High")
+    g <- fastglm_multinom(counts ~ Infl + Type + Cont, data = w)
+    expect_identical(nobs(g), 1681L)
+    expect_equal(as.numeric(logLik(g)), as.numeric(logLik(mn)), tolerance = 1e-8)
+    # Without the response, individual data give the sum of the weights, and
+    # grouped data the number of rows with positive weight.
+    m2 <- mn; m2$y <- NULL; m2$fingerprint.response <- NULL
+    expect_equal(nobs(m2), 1681)
+    g2 <- g; g2$y <- NULL; g2$fingerprint.response <- NULL
+    expect_identical(nobs(g2), g$nobs)
+})
+
+test_that("model = FALSE leaves out the model frame of a formula fit", {
+    df <- data.frame(x = rnorm(300), g = factor(sample(c("a", "b", "c"), 300, TRUE)))
+    df$y <- factor(sample(c("u", "v", "w"), 300, TRUE))
+    full <- fastglm_multinom(y ~ x + g, data = df)
+    lean <- fastglm_multinom(y ~ x + g, data = df, model = FALSE)
+    expect_false(is.null(full$model))
+    expect_null(lean$model)
+    expect_lt(as.numeric(object.size(lean)), as.numeric(object.size(full)))
+    expect_equal(coef(lean), coef(full))
+    # drop1() refits from the stored design (no recoding is needed here).
+    expect_equal(as.matrix(drop1(lean, test = "LRT")), as.matrix(drop1(full, test = "LRT")), tolerance = 1e-8)
+    expect_error(fastglm_multinom(y ~ x, data = df, model = NA), "'model' must be TRUE or FALSE")
+})

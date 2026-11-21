@@ -68,7 +68,8 @@ Thresholds have no reported zero-null statistic or p-value.
   The same probabilities are also supplied one column per category as
   \code{.prob_<level>}, the shape used by the multinomial method
   (\code{\link{fastglm-augment}}); the matrix column \code{.fitted} keeps
-  its existing shape.
+  its existing shape. The result is a tibble when the tibble package is
+  installed, as for the other \code{augment()} methods.
   When original data are not supplied, retained model-frame or design values
   are used; covariates in omitted rows are unavailable and restored as missing.
 }

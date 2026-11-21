@@ -285,6 +285,190 @@
   kept, and a factor that loses its contrasts by dropping levels gives a
   warning, as `model.frame()` does.
 
+## Model comparison
+
+* `anova()` compares nested models of every class by likelihood ratio
+  tests: GLMs (dense, sparse, `big.matrix`, streamed, and formula fits),
+  negative binomial, truncated, zero-inflated, hurdle, two-part, ordinal
+  (including partial proportional odds), and multinomial fits. The degrees
+  of freedom are the differences in the `df` attribute of `logLik()`; GLMs
+  with a dispersion estimated by moments get the F test of
+  `stats::anova.glm()`. Calls with only formula `fastglm()` fits still go to
+  `stats::anova.glm()` unchanged.
+* Before giving a p-value, `anova()` checks that the models use the same
+  data (number of observations, sum of prior weights, response, and
+  offsets, without regard to row order), the same family and link, and that
+  they are nested: for fits held in memory with rows in the same order, by
+  the column space of the designs, so `y ~ poly(x, 2)` is nested in
+  `y ~ poly(x, 3)`; otherwise, and for streamed, `big.matrix`, and sparse
+  fits, by coefficient names, with a warning. A failed check is an error.
+  Streamed fits are compared through a fingerprint of the response recorded
+  at fit time (number of observations, sum of weights, and the weighted sums
+  of the response and of its square), so no comparison reads the source.
+* A Poisson model can be compared with a negative binomial model whose mean
+  model contains it, and likewise the Poisson and negative binomial versions
+  of truncated, hurdle, and zero-inflated models. The p-value uses the
+  boundary-corrected reference, the 50:50 mixture of chi-square(r) and
+  chi-square(r + 1) when the larger model adds r mean parameters (half the
+  chi-square(1) p-value for the same mean model), and the table says so. A
+  zero-inflated model is not compared with a model without zero inflation;
+  the error points to `AIC()`.
+* Bias-reduced (Firth) binomial-logit fits held in memory are compared by
+  the penalized likelihood ratio test of `fastglm_profile_test()` on the
+  larger model, as `logistf`'s nested `anova()`, not by the difference of
+  two penalized log likelihoods. Other bias-reduced fits have no likelihood
+  ratio comparison, and a Firth fit is never compared with a maximum
+  likelihood fit.
+* `drop1()` for every class with a formula, and for design-matrix fits
+  through groups of columns. GLM and negative binomial fits follow
+  `stats::drop1.glm()` (theta held at the full model's estimate, as for
+  `MASS::glm.nb()`); other classes refit without the term, as `drop1()` does
+  for `MASS::polr()` and `nnet::multinom()`. Models with two linear
+  predictors get one row per term per part (`count: a`, `zero: a`), and a
+  partial proportional odds model lists a nonparallel term as `a (all
+  effects)` and `a (nonparallel)`. The arguments follow `stats::drop1()`:
+  the default `test` is `"none"`, `"LRT"` (or `"Chisq"`) gives likelihood
+  ratio tests, `"Rao"` is available where `fastglm_score_test()` supports
+  the fit, and `k` and `scale` work as in `stats::drop1()`.
+* `anova()` of one model gives the sequential table for models with a
+  formula and one linear predictor.
+* Streamed and `big.matrix` fits: `drop1()` and the sequential `anova()`
+  print one line before starting that states what will be read: the number
+  of refits, each a streamed fit that makes several passes over the data
+  with the fit's `threads`, and, for a cached source, the one pass that
+  builds the cache of the call; `trace = TRUE` traces the refits.
+  `fastglm_source()` has a new argument `reusable`; a source declared with
+  `reusable = FALSE` gives an error before any refit.
+* Refits by formula of a source made with `cache` (zero-inflated, hurdle,
+  two-part, truncated, ordinal, and multinomial fits) rebuild each block from
+  the raw data, which the source's cache of built blocks does not hold. For
+  such a source, `drop1()` and `anova()` read the source once at the start
+  of the call into a block cache of the raw data in `tempdir()`, run every
+  refit from that cache, and remove it when the call ends (also on an error
+  or an interrupt), so the source's callback is read once per call rather
+  than on every pass of every refit. Sources without `cache` are read by
+  each refit as before.
+* `drop1()` and the sequential `anova()` keep only the numbers each row
+  needs (deviance, rank, log likelihood, AIC, test statistics) and discard
+  each refit before the next one, as `stats::drop1.glm()` does. For a
+  negative binomial fit with 2e5 rows and 20 terms, the peak memory of
+  `drop1()` falls from about 1.05 GB to 0.31 GB.
+* `drop1()`, the sequential `anova()`, and `step()` of a negative binomial
+  fit whose theta estimate is infinite (the Poisson limit, where
+  `fastglm_nb()` returns the Poisson fit) refit Poisson models, instead of
+  stopping with "'theta' must be a positive finite scalar".
+* In `drop1()` of `fastglm_twopart()` fits, the rows of the first part are
+  named `positive: a` (they were `count: a`), matching the coefficient names
+  and the emmeans mode; a list `scope` takes `positive` (or `count`) and
+  `zero`.
+* `extractAIC()` methods for every class, so `stats::step()` and
+  `MASS::stepAIC()` run on fits held in memory, including multinomial fits.
+  The fit `step()` returns can be evaluated again from its call and
+  updated: `fastglm_nb()` and `fastglm_truncated()` take the model formula
+  as `formula` as well as `x` (as `step()` writes it into the call), and
+  `fastglm_ordinal()` uses a `formula` given next to `x`. For streamed fits,
+  a `formula` given next to the source (a new argument of
+  `fastglm_streaming()`, `fastglm_ordinal_streaming()`, `fastglm_nb()`, and
+  `fastglm_truncated()`, and accepted by `fastglm_multinom()`) rebuilds the
+  source with that formula, `update()` of a streamed ordinal fit with a
+  formula source now refits on the rebuilt source (it was an error), and
+  streamed truncated fits have a `terms()` method, so `step()` runs on
+  streamed GLM, negative binomial, truncated, ordinal, and multinomial fits.
+  `step()` and `MASS::stepAIC()` do not select terms of zero-inflated,
+  hurdle, and two-part fits: they return the fit unchanged, now with a
+  warning that points to `drop1()` for tests of the terms of each part.
+  These fitting functions accept the list of count and zero formulas that
+  `step()` leaves in the call. `extractAIC()` counts
+  the rank, where `extractAIC()` of `glm()` and `MASS::glm.nb()` fits with
+  zero prior weights also counts the zero-weight rows; the difference is the
+  same for every model, so `step()` selects the same models.
+* `formula()` of negative binomial, truncated, zero-inflated, hurdle,
+  two-part, ordinal, multinomial, and streamed fits returns the model formula
+  (the two-part formula `y ~ x | z` for models with two linear predictors),
+  not the stored terms object with its attributes.
+* `nobs()` of multinomial fits, and the number of observations in their
+  `logLik()`, `BIC()`, `glance()`, and `summary()`, is now the total
+  frequency (the sum of the prior weights, times the row totals for a
+  count-matrix response), as for ordinal fits and `MASS::polr()` with
+  frequency weights, so `AIC()` of ordinal and multinomial fits of the same
+  weighted data no longer warns. It was the number of rows with positive
+  weight, which the element `nobs` and `df.residual` still use. Unweighted
+  individual data are unchanged; BIC of weighted or grouped multinomial fits
+  changes.
+* `fastglm_multinom()` formula fits keep their model frame (element
+  `model`, used by `drop1()`, `anova()`, and emmeans); the new argument
+  `model = FALSE` leaves it out.
+* `update()` works for `fastglm_nb()`, `fastglm_truncated()`, and streamed
+  fits (it failed with "invalid formula" for streamed fits in 0.1.4), and
+  follows `stats::update()`. A new `update()` method for sources rebuilds a
+  formula source with a new formula.
+* `logLik()`, `AIC()`, and `BIC()` of `fastglm_twopart()` fits now use the
+  Gamma shape at its maximum likelihood estimate given the fitted means, as
+  `MASS::gamma.shape()` gives it, instead of the plug-in shape (the total
+  weight over the deviance) of 0.1.4. Two-part AIC values therefore change
+  (they are lower), and differences of log likelihoods between nested
+  two-part fits are likelihood ratio statistics. AIC values built from
+  `glm()` Gamma components, which use the plug-in dispersion, no longer
+  agree with them.
+
+## Other packages: emmeans, broom, and parsnip
+
+* emmeans support (`?fastglm-emmeans`) for negative binomial, zero-inflated,
+  hurdle, two-part, truncated, cumulative-link (including threshold-specific
+  slopes), and multinomial fits, with the modes emmeans provides for
+  `MASS::glm.nb()`, `pscl`, `MASS::polr()`, and `nnet::multinom()`.
+  Ordinal standard errors use fastglm's expected-information covariance, so
+  they differ from those of `MASS::polr()` and `ordinal::clm()` (observed
+  information) by up to a few percent; another covariance can be given
+  through the `vcov.` argument of emmeans. The `"prob0"` mode of
+  zero-inflated fits and the `"zero"` mode of hurdle fits use the complete
+  delta-method derivative, which the emmeans support for `pscl` fits
+  (emmeans 1.11 and 2.0) does not, so their standard errors differ; the
+  hurdle `"response"` mode uses the derivative of the fitted binary link
+  for links other than the logit. Formula `fastglm()` fits use the `glm`
+  support of emmeans.
+* `broom::augment()` methods (`?fastglm-augment`) for every in-memory class,
+  returning a tibble. GLM and negative binomial fits get the columns of
+  `broom::augment.glm()`, including `.hat`, `.sigma`, `.cooksd`, and
+  `.std.resid` (formula fits are served by fastglm, since
+  `broom::augment.glm()` fails for them); multinomial fits get one
+  `.prob_<level>` column per category and `.class`; ordinal fits keep their
+  matrix column `.fitted` and also gain `.prob_<level>` columns. Streamed
+  and `big.matrix` fits accept `newdata`.
+* parsnip engines `"fastglm"` (`?fastglm-parsnip`) for `logistic_reg()`,
+  `linear_reg()`, `poisson_reg()`, `multinom_reg()`, and `ordinal_reg()`,
+  registered when parsnip (or poissonreg, or ordered) is loaded, with engine
+  arguments `method`, `firth`, `threads`, and `link`. An engine fit uses one
+  thread unless `threads` is given, so that resampling in several worker
+  processes does not multiply processes by threads. `predict(type =
+  "conf_int")` is available for linear and logistic models.
+* parsnip engine fits store a call whose `data` argument refers to the
+  training data through a private environment (`data = <environment>$data`),
+  so `update()`, `step()`, and `anova()` of an updated engine fit work (they
+  failed with "'data' must be a data.frame, environment, or list"). The
+  model formula keeps its own environment, so `predict()` with new data that
+  lack a predictor still stops with "object 'x' not found". A family
+  of the stats package is stored in the call as a short call such as
+  `stats::binomial(link = "logit")`, so a printed workflow no longer shows
+  the family object. A `.` in the model formula is expanded against the
+  training data.
+* `augment()` of ordinal fits returns a tibble, as the other methods do. All
+  `augment()` methods refuse a streamed fit without `newdata` with the same
+  message.
+* The emmeans error for a streamed, `big.matrix`, or matrix-interface fit
+  names the alternatives that work for it: for a streamed fit,
+  `fastglm_average()` and `fastglm_marginal_effects()` with `newdata`.
+  `fastglm_average()` of a `big.matrix` GLM fit without `newdata` now reads
+  the design in blocks of rows (it stopped with "non-numeric argument to
+  binary operator").
+* `residuals(type = "pearson")` for weighted `fastglm_hurdle()`,
+  `fastglm_zi()`, `fastglm_twopart()`, and `fastglm_truncated()` fits now
+  includes the square root of the prior weight, as `glm()` and `pscl` do;
+  unweighted fits are unchanged.
+* New vignette `ecosystem-fastglm`, "Using fastglm with emmeans, broom, and
+  tidymodels". The overview vignette has a section on comparing models, and
+  the large-data vignette shows comparisons of streamed fits.
+
 ## Other changes
 
 * `fastglm_zi()` and `fastglm_hurdle()` with `link = "log"` now start the

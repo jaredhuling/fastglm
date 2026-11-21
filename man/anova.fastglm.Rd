@@ -160,6 +160,16 @@ likelihood fit.
 a robust or clustered \code{vcov} type gets the same test. For a comparison that
 uses a robust covariance, use \code{\link[=fastglm_wald_test]{fastglm_wald_test()}}.
 
+\strong{Streamed and \code{big.matrix} fits.} Comparing fitted models reads no data:
+the statistic uses the log likelihoods (or deviances) saved at fit time,
+and the data checks use the response fingerprint, so no comparison loads a
+source into memory. \code{anova(object)} with a single streamed or \code{big.matrix}
+fit instead refits the smaller models of the nested sequence, each a full
+streamed fit (several passes over the source), after a line stating the
+number of refits; a source declared one-shot
+(\code{fastglm_source(reusable = FALSE)}) gives an error before any refit. See
+\code{\link[=drop1.fastglm]{drop1.fastglm()}}, which has the same cost.
+
 \strong{Formula fits.} Calls with only formula \code{fastglm()} fits (and other \code{glm}
 objects) are handed to \code{\link[stats:anova.glm]{stats::anova.glm()}} unchanged, with its tests
 (including \code{test = "Rao"}), results, and messages. Bias-reduced formula

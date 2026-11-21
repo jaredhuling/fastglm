@@ -75,7 +75,7 @@ test_that("source predictions and residuals agree and support block callbacks", 
     expect_equal(fastglm_po_test(fit)$reason,"empty_categories")
     expect_error(fastglm_marginal_effects(fit,"InflMedium"),"source")
     if(requireNamespace("broom",quietly=TRUE)) {
-        expect_error(broom::augment(fit),"do not retain")
+        expect_error(broom::augment(fit),"does not retain")
         expect_equal(broom::augment(fit,newdata=x[1:8,,drop=FALSE]),
             broom::augment(ref,newdata=x[1:8,,drop=FALSE]),tolerance=1e-8)
         expect_equal(broom::glance(fit),broom::glance(ref),tolerance=1e-8)
@@ -94,7 +94,15 @@ test_that("ordinal formula sources preserve columns, offsets, and category order
     expect_equal(predict(fit,d[1:8,]),predict(ref,d[1:8,]),tolerance=1e-8)
     expect_equal(fit$design.columns,ref$design.columns)
     expect_equal(fit$design.assign,ref$design.assign)
-    expect_error(update(fit,.~.-Type),"source schema")
+    # A formula change refits on the source rebuilt with the new formula.
+    reduced <- update(fit,.~.-Type)
+    expect_equal(coef(reduced),coef(update(ref,.~.-Type)),tolerance=1e-8)
+    # A source without a formula (design matrices) cannot be refitted with a
+    # changed formula.
+    X <- model.matrix(~Infl+Type,d)[,-1]
+    plain <- fastglm_ordinal_streaming(function(k) list(X=X[rows[[k]],,drop=FALSE],y=d$Sat[rows[[k]]],
+        weights=d$Freq[rows[[k]]]),length(rows),levels=levels(d$Sat))
+    expect_error(update(plain,.~.-Type),"source schema")
     updated <- update(fit,link="cloglog")
     expect_equal(coef(updated),coef(update(ref,link="cloglog")),tolerance=1e-8)
     expect_error(fastglm_marginal_effects(fit,"off"),"supply 'newdata'")

@@ -19,7 +19,8 @@ fastglm_streaming(
   offset = NULL,
   block.size = 100000L,
   threads = NULL,
-  trace = NULL
+  trace = NULL,
+  formula = NULL
 )
 }
 \arguments{
@@ -92,6 +93,10 @@ pass, the deviance, the step halvings of the iteration, and the elapsed
 seconds), \code{FALSE} for none, or \code{NULL} (default) for
 \code{getOption("fastglm.trace")}, which defaults to \code{TRUE} in an interactive
 session and \code{FALSE} otherwise (in scripts, knitr, and tests).}
+
+\item{formula}{a model formula that replaces the formula of a formula
+source (the source is rebuilt with it, as \code{\link[=update]{update()}} of the source does);
+calls written by \code{\link[stats:step]{stats::step()}} name the model formula this way.}
 }
 \value{
 An object with classes \code{"fastglm_stream"} and \code{"fastglm"} containing

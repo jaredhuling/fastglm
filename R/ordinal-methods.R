@@ -247,7 +247,8 @@ glance.fastglm_ordinal <- function(x,...) {
 #'   The same probabilities are also supplied one column per category as
 #'   \code{.prob_<level>}, the shape used by the multinomial method
 #'   (\code{\link{fastglm-augment}}); the matrix column \code{.fitted} keeps
-#'   its existing shape.
+#'   its existing shape. The result is a tibble when the tibble package is
+#'   installed, as for the other \code{augment()} methods.
 #'   When original data are not supplied, retained model-frame or design values
 #'   are used; covariates in omitted rows are unavailable and restored as missing.
 #' @exportS3Method broom::augment fastglm_ordinal
@@ -255,7 +256,7 @@ glance.fastglm_ordinal <- function(x,...) {
 augment.fastglm_ordinal <- function(x,data=NULL,newdata=NULL,se_fit=FALSE,...) {
     if(length(list(...))) stop("unused ordinal augment arguments",call.=FALSE)
     if(inherits(x,"fastglm_ordinal_stream") && is.null(data) && is.null(newdata))
-        stop("ordinal source fits do not retain observations; supply explicit data or newdata for augmentation",call.=FALSE)
+        .augment_streamed_error()
     if(!is.null(data) && !is.null(newdata)) stop("supply either data or newdata",call.=FALSE)
     if(!is.logical(se_fit) || length(se_fit)!=1L || is.na(se_fit))
         stop("'se_fit' must be TRUE or FALSE",call.=FALSE)
@@ -285,5 +286,6 @@ augment.fastglm_ordinal <- function(x,data=NULL,newdata=NULL,se_fit=FALSE,...) {
     # The same probabilities, one column per category as in the multinomial
     # method (see fastglm-augment); the matrix column .fitted is unchanged.
     for(j in seq_along(x$levels)) frame[[probcols[j]]] <- unname(probability[,j])
-    frame
+    # A tibble, as the other augment() methods (when tibble is installed).
+    .augment_finish(frame)
 }

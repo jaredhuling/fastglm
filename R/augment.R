@@ -1,13 +1,18 @@
 # broom augment() methods for in-memory fits. Streamed and big.matrix fits do
 # not retain their rows, so they are refused with a pointer to predict().
 
+# The one message of every augment() method that refuses a streamed or
+# big.matrix fit without new data.
+.augment_streamed_error <- function()
+    stop("augment() needs the rows of the data, which a streamed or big.matrix fit does not retain; ",
+         "supply 'newdata' (augmenting new data never reads the source) or use predict() and residuals()",
+         call. = FALSE)
+
 .augment_refuse_streamed <- function(x, newdata = NULL) {
     if (!is.null(newdata)) return(invisible(x))
     streamed <- inherits(x, "fastglm_stream") || inherits(x$x, "big.matrix") ||
         (!is.null(x$source) && (is.function(x$fetch) || inherits(x, "fastglm_vglm")))
-    if (streamed)
-        stop("augment() needs the rows of the data, which a streamed or big.matrix fit does not retain; ",
-             "supply 'newdata' (augmenting new data never reads the source) or use predict() and residuals()", call. = FALSE)
+    if (streamed) .augment_streamed_error()
     invisible(x)
 }
 
@@ -198,6 +203,7 @@
 #' }
 #' @exportS3Method broom::augment fastglm
 #' @name fastglm-augment
+#' @md
 augment.fastglm <- function(x, data = NULL, newdata = NULL,
                             type.predict = c("link", "response", "terms"),
                             type.residuals = c("deviance", "pearson", "working", "response"),
@@ -234,9 +240,7 @@ augment.fastglm <- function(x, data = NULL, newdata = NULL,
 augment.fastglmFit <- augment.fastglm
 
 .augment_count_refuse <- function(x, newdata = NULL) {
-    if (is.null(newdata) && !is.null(x$source) && is.function(x$fetch))
-        stop("augment() needs the rows of the data, which a streamed fit does not retain; ",
-             "supply 'newdata' or use predict() instead", call. = FALSE)
+    if (is.null(newdata) && !is.null(x$source) && is.function(x$fetch)) .augment_streamed_error()
 }
 
 #' @exportS3Method broom::augment fastglm_hurdle

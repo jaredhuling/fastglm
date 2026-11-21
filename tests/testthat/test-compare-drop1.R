@@ -68,10 +68,10 @@ test_that("negative binomial drop1() and anova() match MASS (theta held fixed)",
     # A streamed NB fit gives the same tables.
     s <- fastglm_nb(drop1_source(d, ynb ~ a + b + c), tol = 1e-12, theta.tol = 1e-12, outer.tol = 1e-12)
     r <- with_messages(drop1(s, test = "LRT"))
-    expect_identical(r$messages, "drop1: 3 refits, each a full streamed fit (a full pass over the source or its cache)\n")
+    expect_identical(r$messages, "drop1: 3 refits, each a streamed fit making several passes over the source\n")
     expect_equal(as.matrix(r$value), as.matrix(ref), tolerance = 1e-8)
     r <- with_messages(anova(s))
-    expect_identical(r$messages, "anova: 2 refits, each a full streamed fit (a full pass over the source or its cache)\n")
+    expect_identical(r$messages, "anova: 2 refits, each a streamed fit making several passes over the source\n")
     expect_equal(as.matrix(r$value), as.matrix(aref), tolerance = 1e-8)
 })
 
@@ -92,7 +92,7 @@ test_that("GLM drop1() follows stats::drop1.glm (matrix, streamed, Rao)", {
     expect_named(drop1(f), c("Df", "Deviance", "AIC"))
     # Sequential table of a streamed fit, as anova.glm of the dense fit.
     r <- with_messages(anova(s))
-    expect_identical(r$messages, "anova: 2 refits, each a full streamed fit (a full pass over the source or its cache)\n")
+    expect_identical(r$messages, "anova: 2 refits, each a streamed fit making several passes over the source\n")
     aref <- anova(glm(yp ~ a + b + c, poisson, d), test = "Chisq")
     expect_identical(dimnames(r$value), dimnames(aref))
     expect_equal(as.matrix(r$value), as.matrix(aref), tolerance = 1e-8)
@@ -147,7 +147,7 @@ test_that("drop1() respects marginality (y ~ b * e offers only b:e)", {
     expect_identical(rownames(ref), c("<none>", "b:e"))
     s <- fastglm_streaming(drop1_source(d, yp ~ b * e), family = poisson())
     r <- with_messages(drop1(s, test = "LRT"))
-    expect_identical(r$messages, "drop1: 1 refit, a full streamed fit (a full pass over the source or its cache)\n")
+    expect_identical(r$messages, "drop1: 1 refit, a streamed fit making several passes over the source\n")
     expect_equal(as.matrix(r$value), as.matrix(ref), tolerance = 1e-8)
     nb <- fastglm_nb(ynb ~ b * e, data = d)
     expect_identical(rownames(drop1(nb)), c("<none>", "b:e"))
@@ -183,7 +183,7 @@ test_that("ordinal drop1() and anova() match MASS::polr", {
     # Streamed: the same table.
     s <- fastglm_ordinal_streaming(drop1_source(d, yo ~ a + b + c))
     r <- with_messages(drop1(s, test = "LRT"))
-    expect_identical(r$messages, "drop1: 3 refits, each a full streamed fit (a full pass over the source or its cache)\n")
+    expect_identical(r$messages, "drop1: 3 refits, each a streamed fit making several passes over the source\n")
     expect_equal(as.matrix(r$value), as.matrix(ref), tolerance = 1e-6)
     expect_error(drop1(s, test = "Rao"), "available tests: \"none\", \"LRT\", \"Chisq\"(\\.|$)")
 })
@@ -245,14 +245,14 @@ test_that("models with two linear predictors get one row per term per part", {
     expect_error(anova(h), "more than one linear predictor")
     tp <- fastglm_twopart(yg ~ a + b | a, data = d)
     tt <- drop1(tp, test = "LRT")
-    expect_identical(rownames(tt), c("<none>", "count: a", "count: b", "zero: a"))
+    expect_identical(rownames(tt), c("<none>", "positive: a", "positive: b", "zero: a"))
     # The statistic uses the profile likelihood over the Gamma shape, as anova().
     tp0 <- fastglm_twopart(yg ~ a | a, data = d)
-    expect_equal(tt["count: b", "LRT"], anova(tp0, tp)$Chisq[2], tolerance = 1e-10)
+    expect_equal(tt["positive: b", "LRT"], anova(tp0, tp)$Chisq[2], tolerance = 1e-10)
     # A streamed zero-inflated fit gives the same rows.
     zs <- fastglm_zi(drop1_source(d, yzi ~ a + b | a))
     r <- with_messages(drop1(zs, test = "LRT"))
-    expect_identical(r$messages, "drop1: 3 refits, each a full streamed fit (a full pass over the source or its cache)\n")
+    expect_identical(r$messages, "drop1: 3 refits, each a streamed fit making several passes over the source\n")
     expect_equal(as.matrix(r$value), as.matrix(tab), tolerance = 1e-6)
 })
 
@@ -306,7 +306,7 @@ test_that("big.matrix drop1() takes column groups", {
     m <- fastglm(X, d$yp, family = poisson())
     r <- with_messages(drop1(bm, test = "LRT"))
     expect_identical(r$messages,
-                     "drop1: 4 refits, each a full streamed fit reading the big.matrix design in blocks of rows\n")
+                     "drop1: 4 refits, each a streamed fit making several passes over the big.matrix design in blocks of rows\n")
     expect_identical(rownames(r$value), c("<none>", "a", "bq", "br", "c"))
     expect_equal(as.matrix(r$value), as.matrix(drop1(m, test = "LRT")), tolerance = 1e-8)
     r <- with_messages(drop1(bm, scope = list(g = c(2, 3)), test = "LRT"))
@@ -327,7 +327,7 @@ test_that("streamed refits: one announcement, one-shot sources refused first, tr
     s <- fastglm_streaming(drop1_source(d, yp ~ a + b + c, counter = counter), family = poisson())
     counter$reads <- 0L
     r <- with_messages(drop1(s, scope = c("a", "b")))
-    expect_identical(r$messages, "drop1: 2 refits, each a full streamed fit (a full pass over the source or its cache)\n")
+    expect_identical(r$messages, "drop1: 2 refits, each a streamed fit making several passes over the source\n")
     expect_gt(counter$reads, 0L)
     # Rao names the available tests, before any refit.
     counter$reads <- 0L
@@ -538,4 +538,264 @@ test_that("the Firth formula path matches arguments positionally and defaults to
     expect_named(drop1(ff, ~ a, 0, "LRT"), c("Df", "Penalized LRT", "Pr(>Chi)"))
     expect_identical(rownames(drop1(ff, ~ a, 0, "LRT")), c("<none>", "a"))
     expect_error(drop1(ff, test = "F"), "available tests")
+})
+
+test_that("drop1() and anova() keep a few numbers of each refit, not the refit", {
+    d <- drop1_data()
+    nb <- fastglm_nb(ynb ~ a + b + c, data = d)
+    # The runner reduces each refit before the next one starts.
+    sizes <- numeric()
+    out <- fastglm:::.fastglm_drop1_run(3L, function(i)
+        fastglm:::.fastglm_refit(nb, drop_columns = i + 1L, columns = TRUE, nb_theta_fixed = TRUE),
+        c("a", "bq", "br"), "drop1", FALSE, function(fit, i) {
+            sizes[i] <<- as.numeric(object.size(fit))
+            fastglm:::.fastglm_drop1_keep_glm(fit, i)
+        })
+    expect_length(out, 3L)
+    for (o in out) {
+        expect_lt(as.numeric(object.size(o)), 1e4)
+        expect_named(o, c("deviance", "rank", "df.residual"))
+    }
+    expect_true(all(sizes > 1e5))
+    o <- fastglm_ordinal(yo ~ a + b + c, data = d)
+    keep <- fastglm:::.fastglm_drop1_keep_loglik(2)(fastglm_ordinal(yo ~ a + c, data = d), 1L)
+    expect_lt(as.numeric(object.size(keep)), 1e4)
+    expect_named(keep, c("npar", "loglik", "aic"))
+    # The tables are unchanged: they equal refits made by hand.
+    tab <- drop1(o, test = "LRT")
+    expect_equal(tab["b", "LRT"], 2 * (ll(o) - ll(fastglm_ordinal(yo ~ a + c, data = d))), tolerance = 1e-8)
+    expect_equal(tab["b", "AIC"], AIC(fastglm_ordinal(yo ~ a + c, data = d)), tolerance = 1e-8)
+})
+
+test_that("drop1() and anova() of a cached formula source read the callback once per call", {
+    d <- drop1_data(n = 400L)
+    counter <- new.env(); counter$reads <- 0L
+    zs <- fastglm_zi(drop1_source(d, yzi ~ a + b | a, counter = counter, cache = TRUE))
+    ref <- drop1(fastglm_zi(yzi ~ a + b | a, data = d), test = "LRT")
+    tmp <- function() sort(list.files(tempdir(), all.files = TRUE, no.. = TRUE))
+    before <- tmp()
+    counter$reads <- 0L
+    r <- with_messages(drop1(zs, test = "LRT"))
+    # One pass over the 4 blocks builds the cache of the call; the 3 refits
+    # read the cache, which is removed when drop1() returns.
+    expect_identical(counter$reads, 4L)
+    expect_identical(tmp(), before)
+    expect_identical(r$messages, paste0("drop1: one pass over the source to cache its blocks for this call ",
+                                        "(removed when it ends), then 3 refits, each a streamed fit making ",
+                                        "several passes over the cached blocks\n"))
+    expect_equal(as.matrix(r$value), as.matrix(ref), tolerance = 1e-6)
+    # The sequential table of a cached ordinal source.
+    os <- fastglm_ordinal_streaming(drop1_source(d, yo ~ a + b + c, counter = counter, cache = TRUE))
+    before <- tmp()
+    counter$reads <- 0L
+    r <- with_messages(anova(os))
+    expect_identical(counter$reads, 4L)
+    expect_identical(tmp(), before)
+    expect_equal(r$value$LogLik, anova(fastglm_ordinal(yo ~ a + b + c, data = d))$LogLik, tolerance = 1e-6)
+    # Without a cache, each refit reads the source on every pass, and
+    # nothing is written.
+    zu <- fastglm_zi(drop1_source(d, yzi ~ a + b | a, counter = counter))
+    before <- tmp()
+    counter$reads <- 0L
+    r <- with_messages(drop1(zu, test = "LRT"))
+    expect_gt(counter$reads, 3L * 4L)
+    expect_identical(tmp(), before)
+    expect_identical(r$messages, "drop1: 3 refits, each a streamed fit making several passes over the source\n")
+    # Column refits of a cached GLM source read the source's own cache.
+    gs <- fastglm_streaming(drop1_source(d, yp ~ a + b + c, counter = counter, cache = TRUE), family = poisson())
+    counter$reads <- 0L
+    r <- with_messages(drop1(gs, test = "LRT"))
+    expect_identical(counter$reads, 0L)
+    expect_identical(r$messages,
+                     "drop1: 3 refits, each a streamed fit making several passes over the block cache of the source\n")
+    # An error while the cache is built (here, the third block) leaves no
+    # files behind.
+    failing <- fastglm_source(function(k) {
+        counter$reads <- counter$reads + 1L
+        if (isTRUE(counter$broken) && k == 3L) stop("block 3 is unavailable")
+        d[seq(k, nrow(d), by = 4L), , drop = FALSE]
+    }, 4L, formula = yzi ~ a + b | a, prototype = d, cache = TRUE)
+    zf <- fastglm_zi(failing)
+    counter$broken <- TRUE
+    before <- tmp()
+    expect_error(suppressMessages(drop1(zf, test = "LRT")), "block 3 is unavailable")
+    expect_identical(tmp(), before)
+})
+
+test_that("negative binomial fits at the Poisson limit: drop1(), anova(), and step() use Poisson refits", {
+    d <- drop1_data()
+    set.seed(3)
+    d$yu <- rbinom(nrow(d), 4, plogis(0.3 * d$a))
+    nb <- suppressWarnings(fastglm_nb(yu ~ a + b + c, data = d))
+    expect_identical(nb$theta, Inf)
+    pg <- glm(yu ~ a + b + c, poisson, d)
+    tab <- drop1(nb, test = "LRT")
+    ref <- drop1(pg, test = "LRT")
+    expect_equal(tab$Deviance, ref$Deviance, tolerance = 1e-8)
+    expect_equal(tab$LRT, ref$LRT, tolerance = 1e-6)
+    expect_match(paste(attr(tab, "heading"), collapse = ""), "Poisson limit")
+    at <- anova(nb)
+    expect_equal(at$Deviance, anova(pg, test = "Chisq")$Deviance, tolerance = 1e-8)
+    s <- suppressWarnings(step(nb, trace = 0))
+    expect_s3_class(s, "fastglm_nb")
+    expect_setequal(attr(terms(s), "term.labels"), attr(terms(step(pg, trace = 0)), "term.labels"))
+})
+
+test_that("the fit returned by step() can be evaluated again from its call and updated", {
+    skip_if_not_installed("MASS")
+    d <- drop1_data()
+    d$o <- d$yo
+    # A noise term (z) that step() removes, and fits where it removes nothing.
+    set.seed(9); d$z <- rnorm(nrow(d))
+    same <- function(a, b) expect_equal(unlist(coef(a)), unlist(coef(b)), tolerance = 1e-8)
+    fits <- list(
+        nb = fastglm_nb(ynb ~ a + b + z, data = d),
+        nb0 = fastglm_nb(ynb ~ a, data = d),
+        trunc = fastglm_truncated(yt ~ a + b + z, data = d),
+        trunc0 = fastglm_truncated(yt ~ a, data = d),
+        ordinal = fastglm_ordinal(yo ~ a + b + z, data = d),
+        ordinal0 = fastglm_ordinal(yo ~ a, data = d),
+        multinom = fastglm_multinom(ym ~ a + b + z, data = d),
+        multinom0 = fastglm_multinom(ym ~ a, data = d),
+        zi = fastglm_zi(yzi ~ a + b + z | a, data = d),
+        hurdle = fastglm_hurdle(yzi ~ a + b | a, data = d),
+        twopart = fastglm_twopart(yg ~ a + b | a, data = d))
+    for (nm in names(fits)) {
+        f <- fits[[nm]]
+        s <- suppressWarnings(step(f, trace = 0))
+        expect_true(is.call(s$call), info = nm)
+        same(eval(s$call), s)
+        same(update(s, . ~ .), s)
+        expect_false(inherits(formula(s), "terms"), info = nm)
+        expect_null(attr(formula(s), "factors"))
+        # step() stopped where no deletion lowers the AIC.
+        if (!nm %in% c("zi", "hurdle", "twopart")) {
+            tab <- drop1(s)
+            expect_identical(rownames(tab)[which.min(tab$AIC)], "<none>", info = nm)
+        }
+    }
+    expect_setequal(attr(terms(step(fits$nb, trace = 0)), "term.labels"),
+                    attr(terms(MASS::stepAIC(MASS::glm.nb(ynb ~ a + b + z, data = d), trace = 0)), "term.labels"))
+    # Models with two linear predictors: step() returns the fit unchanged.
+    expect_warning(sz <- step(fits$zi, trace = 0), "does not select terms")
+    same(sz, fits$zi)
+    expect_identical(format(formula(sz)), format(formula(fits$zi)))
+})
+
+test_that("formula() of every class is a formula without terms attributes", {
+    d <- drop1_data()
+    fits <- list(fastglm_nb(ynb ~ a + b, data = d), fastglm_truncated(yt ~ a + b, data = d),
+                 fastglm_zi(yzi ~ a + b | a, data = d), fastglm_hurdle(yzi ~ a + b | a, data = d),
+                 fastglm_twopart(yg ~ a + b | a, data = d), fastglm_ordinal(yo ~ a + b, data = d),
+                 fastglm_multinom(ym ~ a + b, data = d),
+                 fastglm_streaming(drop1_source(d, yp ~ a + b), family = poisson()))
+    for (f in fits) {
+        fo <- formula(f)
+        expect_true(inherits(fo, "formula"), info = class(f)[1L])
+        expect_false(inherits(fo, "terms"), info = class(f)[1L])
+        expect_null(attr(fo, "factors"))
+    }
+    expect_identical(deparse(formula(fits[[1L]])), "ynb ~ a + b")
+    expect_identical(deparse(formula(fits[[3L]])), "yzi ~ a + b | a")
+    expect_error(formula(fastglm_nb(model.matrix(~ a, d), d$ynb)), "no formula")
+})
+
+test_that("two-part drop1() names the positive part", {
+    d <- drop1_data()
+    tp <- fastglm_twopart(yg ~ a + b | a, data = d)
+    tt <- drop1(tp, test = "LRT")
+    expect_identical(rownames(tt), c("<none>", "positive: a", "positive: b", "zero: a"))
+    expect_equal(tt["positive: b", "LRT"],
+                 2 * (ll(tp) - ll(fastglm_twopart(yg ~ a | a, data = d))), tolerance = 1e-8)
+    # `count` is accepted for `positive` in a list scope.
+    expect_identical(rownames(drop1(tp, scope = list(count = "b"))), c("<none>", "positive: b"))
+    expect_identical(rownames(drop1(tp, scope = list(positive = "b", zero = "a"))),
+                     c("<none>", "positive: b", "zero: a"))
+})
+
+test_that("extractAIC() counts the rank; with zero weights step() selects what MASS selects", {
+    skip_if_not_installed("MASS")
+    d <- drop1_data()
+    set.seed(12); d$z <- rnorm(nrow(d))
+    d$w <- rep(c(1, 1, 1, 0), length.out = nrow(d))
+    k <- log(sum(d$w > 0))
+    nb <- fastglm_nb(ynb ~ a + b + c + z, data = d, weights = w)
+    ref <- MASS::glm.nb(ynb ~ a + b + c + z, data = d, weights = w)
+    s <- step(nb, trace = 0, k = k)
+    r <- MASS::stepAIC(ref, trace = 0, k = k)
+    expect_setequal(attr(terms(s), "term.labels"), attr(terms(r), "term.labels"))
+    # MASS counts n - df.residual (the rank plus the zero-weight rows): the
+    # values differ by the same constant for every model.
+    nzero <- sum(d$w == 0)
+    expect_equal(extractAIC(nb, k = k)[1L], nb$rank)
+    expect_equal(extractAIC(ref, k = k)[2L] - extractAIC(nb, k = k)[2L], k * nzero, tolerance = 1e-6)
+    expect_equal(extractAIC(r, k = k)[2L] - extractAIC(s, k = k)[2L], k * nzero, tolerance = 1e-6)
+})
+
+test_that("step() of streamed fits returns a fit whose call can be evaluated and updated", {
+    d <- drop1_data(n = 400L)
+    set.seed(9); d$z <- rnorm(nrow(d))
+    same <- function(a, b, info) expect_equal(unlist(coef(a)), unlist(coef(b)), tolerance = 1e-8, info = info)
+    fits <- list(
+        glm = fastglm_streaming(drop1_source(d, yp ~ a + b + z), family = poisson()),
+        glm0 = fastglm_streaming(drop1_source(d, yp ~ a), family = poisson()),
+        nb = fastglm_nb(drop1_source(d, ynb ~ a + b + z)),
+        nb0 = fastglm_nb(drop1_source(d, ynb ~ a)),
+        trunc = fastglm_truncated(drop1_source(d, yt ~ a + b + z)),
+        ordinal = fastglm_ordinal_streaming(drop1_source(d, yo ~ a + b + z)),
+        ordinal0 = fastglm_ordinal_streaming(drop1_source(d, yo ~ a)),
+        multinom = fastglm_multinom(drop1_source(d, ym ~ a + z)))
+    for (nm in names(fits)) {
+        s <- suppressMessages(step(fits[[nm]], trace = 0))
+        same(eval(s$call), s, nm)
+        same(suppressMessages(update(s, . ~ .)), s, nm)
+        tab <- suppressMessages(drop1(s))
+        expect_identical(rownames(tab)[which.min(tab$AIC)], "<none>", info = nm)
+    }
+    # The selected models are those of the same fits held in memory.
+    expect_identical(attr(terms(formula(suppressMessages(step(fits$nb, trace = 0)))), "term.labels"),
+                     attr(terms(step(fastglm_nb(ynb ~ a + b + z, data = d), trace = 0)), "term.labels"))
+    expect_identical(attr(terms(formula(suppressMessages(step(fits$ordinal, trace = 0)))), "term.labels"),
+                     attr(terms(formula(step(fastglm_ordinal(yo ~ a + b + z, data = d), trace = 0))), "term.labels"))
+    # A formula with a design matrix is an error.
+    expect_error(fastglm_nb(model.matrix(~ a, d), d$ynb, formula = ynb ~ a), "not with a design matrix")
+})
+
+test_that("step() and stepAIC() warn once for models with two linear predictors; direct use does not warn", {
+    skip_if_not_installed("MASS")
+    d <- drop1_data()
+    set.seed(9); d$noise <- rnorm(nrow(d))
+    fits <- list(zi = fastglm_zi(yzi ~ a + b + noise | a + noise, data = d),
+                 hurdle = fastglm_hurdle(yzi ~ a + b | a, data = d),
+                 twopart = fastglm_twopart(yg ~ a + b | a, data = d))
+    count <- function(expr) {
+        n <- 0L
+        value <- withCallingHandlers(expr, warning = function(w) {
+            if (grepl("does not select terms", conditionMessage(w))) n <<- n + 1L
+            invokeRestart("muffleWarning")
+        })
+        list(n = n, value = value)
+    }
+    for (nm in names(fits)) {
+        f <- fits[[nm]]
+        r <- count(step(f, trace = 0))
+        expect_identical(r$n, 1L, info = nm)
+        expect_equal(unlist(coef(r$value)), unlist(coef(f)), info = nm)
+        r <- count(MASS::stepAIC(f, trace = 0))
+        expect_identical(r$n, 1L, info = nm)
+        expect_identical(count(MASS::stepAIC(f, trace = 0, k = log(nobs(f))))$n, 1L, info = nm)
+        # Direct use never warns.
+        expect_no_warning(extractAIC(f))
+        expect_no_warning(extractAIC(f, k = 3))
+        expect_no_warning(AIC(f))
+        expect_no_warning(BIC(f))
+        expect_no_warning(drop1(f, test = "LRT"))
+        expect_no_warning(stats::extractAIC(f))
+    }
+    # Other classes do not warn under step().
+    expect_no_warning(step(fastglm_nb(ynb ~ a + b, data = d), trace = 0))
+    expect_no_warning(MASS::stepAIC(fastglm_ordinal(yo ~ a + b, data = d), trace = 0))
+    # A wrapper that calls step() still warns (the caller of extractAIC() is step()).
+    wrap <- function(m) step(m, trace = 0)
+    expect_identical(count(wrap(fits$zi))$n, 1L)
 })

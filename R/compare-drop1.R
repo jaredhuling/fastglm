@@ -18,9 +18,10 @@
 #'   respecting marginality ([stats::drop.scope()]), so for `y ~ a * b` only
 #'   `a:b`. For a model with two linear predictors (zero-inflated, hurdle,
 #'   two-part) or a partial proportional odds model, a list with elements
-#'   named by part (`count`, `zero`; `location`, `nominal`) gives the scope of
-#'   each part, and a vector or formula applies to every part that has the
-#'   term. For a fit to a design matrix (including `big.matrix` and streamed
+#'   named by part (`count`, `zero`; `positive`, `zero` for two-part fits,
+#'   where `count` is accepted for `positive`; `location`, `nominal`) gives
+#'   the scope of each part, and a vector or formula applies to every part
+#'   that has the term. For a fit to a design matrix (including `big.matrix` and streamed
 #'   design matrices): a list of column groups, each a vector of column
 #'   indices or names dropped together (for example `list(g = c(2, 3))`), or a
 #'   vector of columns dropped one at a time; the default drops each
@@ -59,7 +60,9 @@
 #' binomial fits theta is held at the full model's estimate in every refit,
 #' as `drop1()` does for a `MASS::glm.nb()` fit (through
 #' [stats::drop1.glm()]); the AIC column then counts the coefficients only,
-#' as `MASS`'s `extractAIC()` does, so it differs from [AIC()] by 2.
+#' as `MASS`'s `extractAIC()` does, so it differs from [AIC()] by 2. When the
+#' estimate of theta is infinite (the Poisson limit, where [fastglm_nb()]
+#' returns the Poisson fit), every refit is a Poisson fit.
 #'
 #' **Other models** (truncated, zero-inflated, hurdle, two-part, ordinal, and
 #' multinomial) are refitted without the term, as [stats::drop1()] does
@@ -70,8 +73,9 @@
 #' Gamma shape (see [fastglm_twopart()]).
 #'
 #' **Models with two linear predictors** get one row per term per part,
-#' named by part (for example `count: a` and `zero: a`); each refit drops
-#' the term from that part only. A partial proportional odds model with a
+#' named by part (for example `count: a` and `zero: a`, or `positive: a` and
+#' `zero: a` for a two-part fit, whose first part models the positive
+#' outcomes); each refit drops the term from that part only. A partial proportional odds model with a
 #' term `a` that has cutpoint-specific effects lists it twice: `a (all
 #' effects)` removes the term (its test has the degrees of freedom of all of
 #' its cutpoint-specific coefficients), and `a (nonparallel)` replaces its
@@ -92,19 +96,49 @@
 #' each model of the sequence.
 #'
 #' **Streamed and `big.matrix` fits** are refitted by reading the source
-#' (or its cache, or the `big.matrix` in blocks of rows) again, so each refit
-#' is a full streamed fit. Before the first refit one line says how many
-#' refits will be run. The refits are not traced unless `trace = TRUE`. A
-#' source declared one-shot (`fastglm_source(reusable = FALSE)`) gives an
-#' error before any refit.
+#' (or its block cache, or the `big.matrix` in blocks of rows) again, so
+#' each refit is a streamed fit, which makes several passes over the data
+#' (one or more per iteration). Before the first refit one line says what
+#' will be read: the number of refits, and, for a source made with `cache`,
+#' the one pass that builds the block cache of the call. A refit by formula
+#' (the classes other than generalized linear and negative binomial models)
+#' rebuilds each block from the raw data with the reduced formula, so it
+#' cannot use the source's cache of built blocks; for a source made with
+#' `cache`, `drop1()` and `anova()` therefore read the source once at the
+#' start of the call into a block cache of the raw data in [tempdir()],
+#' every refit reads that cache, and the cache is removed when the call ends
+#' (also on an error or an interrupt). The source's callback is thus read
+#' once per call, as the original fit's cache intends. Without `cache`, each
+#' refit reads the source on every pass. The per-call cache holds the raw
+#' blocks uncompressed, so while the call runs it needs disk space in
+#' [tempdir()] about equal to the uncompressed raw data, in addition to the
+#' source's own cache. Refits by columns (generalized linear and negative
+#' binomial models) read the source's own cache. On a cached streamed fit,
+#' each model that `step()` moves to is a new fit with its own source cache,
+#' removed when that fit is garbage collected. The refits are not traced unless `trace = TRUE`. A source declared one-shot
+#' (`fastglm_source(reusable = FALSE)`) gives an error before any refit.
 #'
 #' **Model selection.** `extractAIC()` methods for these classes return the
 #' number of parameters and the AIC with penalty `k` (the coefficients for
 #' generalized linear and negative binomial models, as `extractAIC()` of
 #' `glm()` and `MASS::glm.nb()` fits; every parameter of [logLik()]
 #' otherwise), the values of the AIC column. With [update()], this lets
-#' [stats::step()] and `MASS::stepAIC()` run on fits held in memory. On a
-#' streamed fit each `drop1()` call that `step()` makes announces its refits.
+#' [stats::step()] and `MASS::stepAIC()` run on fits held in memory, and the
+#' fit that `step()` returns can be evaluated again from its call and
+#' updated. On a streamed fit each `drop1()` call that `step()` makes
+#' announces its refits (and, for a cached source, builds its own block
+#' cache), and each model that `step()` moves to is a new streamed fit.
+#' `step()` and `MASS::stepAIC()` do not select terms of models with two
+#' linear predictors (zero-inflated, hurdle, and two-part), whose terms
+#' belong to a part: they return the fit unchanged, with a warning (from
+#' `extractAIC()`, which they call) pointing to `drop1()`, which gives the
+#' tests for each part.
+#' For fits with zero prior weights, the number of parameters is the rank,
+#' while `extractAIC()` of `glm()` and `MASS::glm.nb()` fits counts
+#' `n - df.residual`, which adds the number of rows with zero weight. The
+#' difference is the same for every model of the same data, so `step()`
+#' selects the same models and the AIC values differ by a constant (for
+#' `glm()` fits, only when `k != 2`).
 #'
 #' **Sequential tables.** `anova(object)` for a model with a formula and one
 #' linear predictor refits the nested sequence: for generalized linear and
@@ -147,9 +181,12 @@ NULL
     "glm"
 }
 
-## The parts of a model: count and zero; location and nominal; or main.
+## The parts of a model: count and zero (positive and zero for two-part
+## fits, whose first part models the positive outcomes); location and
+## nominal; or main.
 .fastglm_drop1_parts <- function(object)
 {
+    if (inherits(object, "fastglm_twopart")) return(c("positive", "zero"))
     if (.fastglm_two_part(object)) return(c("count", "zero"))
     if (inherits(object, "fastglm_ordinal_partial")) return(c("location", "nominal"))
     "main"
@@ -170,7 +207,7 @@ NULL
     }
     if (.fastglm_two_part(object)) {
         if (!is.list(tt) || !inherits(tt$count, "terms") || !inherits(tt$zero, "terms")) return(NULL)
-        return(list(count = tt$count, zero = tt$zero))
+        return(stats::setNames(list(tt$count, tt$zero), .fastglm_drop1_parts(object)))
     }
     if (!inherits(tt, "terms")) return(NULL)
     if (inherits(object, "fastglm_ordinal_partial")) {
@@ -205,7 +242,7 @@ NULL
 ## The design column names of a part of a fit without a formula.
 .fastglm_drop1_colnames <- function(object, part)
 {
-    if (.fastglm_two_part(object)) return(names(object$coefficients[[part]]))
+    if (.fastglm_two_part(object)) return(names(object$coefficients[[.fastglm_part_internal(part)]]))
     if (inherits(object, "fastglm_ordinal")) {
         cn <- object$design.columns
         if (is.null(cn)) cn <- object$state$columns
@@ -227,7 +264,8 @@ NULL
     is.int <- cn %in% "(Intercept)"
     if (inherits(object, "fastglm_ordinal")) return(is.int)
     x <- if (.fastglm_two_part(object)) {
-        if (is.null(object$source)) tryCatch(.count_design(object)$x[[part]], error = function(e) NULL)
+        if (is.null(object$source)) tryCatch(.count_design(object)$x[[.fastglm_part_internal(part)]],
+                                             error = function(e) NULL)
     } else object$x
     if (!is.null(x) && (is.matrix(x) || inherits(x, c("dgCMatrix", "big.matrix"))) && ncol(x) == length(cn)) {
         is.int <- is.int | as.logical(.intercept_columns(x))
@@ -296,6 +334,9 @@ NULL
 {
     parts <- .fastglm_drop1_parts(object)
     tts <- .fastglm_drop1_terms(object)
+    # Two-part fits: a list scope may name the positive part `count`.
+    if (inherits(object, "fastglm_twopart") && is.list(scope) && !is.null(names(scope)))
+        names(scope)[names(scope) == "count"] <- "positive"
     # A partial proportional odds fit to a design matrix: column groups of
     # the location design only (a column refit removes its effects).
     if (is.null(tts) && inherits(object, "fastglm_ordinal_partial")) parts <- "main"
@@ -403,14 +444,37 @@ NULL
     .fastglm_refit(object, drop_columns = row$columns, part = row$part, trace = trace)
 }
 
-## Runs the refits, fun(i) for i in 1..k. With trace = TRUE each refit is
-## traced and preceded by a header line naming it ("drop1 refit 2/6: - b").
-.fastglm_drop1_run <- function(k, fun, headers, what, trace)
+## Runs the refits, fun(i) for i in 1..k, and keeps only what the table
+## needs: keep(fit, i) reduces each refit to a few numbers (deviance, rank,
+## log likelihood, AIC, a test statistic) before the next refit starts, so at
+## most one refit is held in memory at a time (as stats::drop1.glm() keeps
+## scalars only). With trace = TRUE each refit is traced and preceded by a
+## header line naming it ("drop1 refit 2/6: - b").
+.fastglm_drop1_run <- function(k, fun, headers, what, trace, keep)
 {
-    lapply(seq_len(k), function(i) {
+    out <- vector("list", k)
+    for (i in seq_len(k)) {
         if (trace) cat(sprintf("%s refit %d/%d: %s\n", what, i, k, headers[i]))
-        fun(i)
-    })
+        fit <- fun(i)
+        out[[i]] <- keep(fit, i)
+        rm(fit)
+    }
+    out
+}
+
+## What the tables keep of a refit.
+.fastglm_drop1_keep_glm <- function(fit, i)
+    list(deviance = as.numeric(fit$deviance), rank = as.numeric(fit$rank),
+         df.residual = as.numeric(fit$df.residual))
+
+.fastglm_drop1_keep_loglik <- function(k = 2)
+{
+    force(k)
+    function(fit, i) {
+        rec <- .fastglm_cmp_record(fit)
+        list(npar = as.numeric(.fastglm_cmp_npar(rec)), loglik = .fastglm_drop1_loglik(fit, rec),
+             aic = as.numeric(stats::extractAIC(fit, k = k)[2L]))
+    }
 }
 
 ## TRUE only for an explicit trace = TRUE (stats::step() passes trace = 1,
@@ -418,8 +482,13 @@ NULL
 .fastglm_drop1_trace <- function(trace) isTRUE(trace)
 
 ## Announces the refits of a streamed or big.matrix fit (one line), after
-## checking that the source can be read again.
-.fastglm_drop1_announce <- function(object, k, what)
+## checking that the source can be read again. The line states what is read:
+## with cache = TRUE (a cached formula source refitted by formula), one pass
+## over the source to build the per-call block cache, then the refits, each
+## making several passes over the cached blocks; otherwise the refits, each
+## making several passes over the source (or the fit's own block cache, or
+## the big.matrix in blocks of rows).
+.fastglm_drop1_announce <- function(object, k, what, cache = FALSE, columns = FALSE)
 {
     streamed <- !is.null(object$source)
     big <- .fastglm_drop1_big(object)
@@ -427,12 +496,55 @@ NULL
     if (streamed && isFALSE(object$source$reusable))
         stop(sprintf(paste0("%s() refits the model by reading its source again, but the source was declared ",
                             "one-shot (fastglm_source(reusable = FALSE)); no refit was run"), what), call. = FALSE)
-    if (k > 0L)
-        message(sprintf("%s: %d refit%s, %s full %s", what, k, if (k == 1L) "" else "s",
-                        if (k == 1L) "a" else "each a",
-                        if (streamed) "streamed fit (a full pass over the source or its cache)"
-                        else "streamed fit reading the big.matrix design in blocks of rows"))
+    if (k > 0L) {
+        refits <- sprintf("%d refit%s", k, if (k == 1L) "" else "s")
+        each <- if (k == 1L) "a streamed fit" else "each a streamed fit"
+        msg <- if (cache)
+            sprintf(paste0("%s: one pass over the source to cache its blocks for this call (removed when it ends), ",
+                           "then %s, %s making several passes over the cached blocks"), what, refits, each)
+        else if (!streamed)
+            sprintf("%s: %s, %s making several passes over the big.matrix design in blocks of rows", what, refits, each)
+        else if (!is.null(object$source$cache) && (columns || is.null(object$source$spec)))
+            sprintf("%s: %s, %s making several passes over the block cache of the source", what, refits, each)
+        else
+            sprintf("%s: %s, %s making several passes over the source", what, refits, each)
+        message(msg)
+    }
     invisible(TRUE)
+}
+
+## ---- Per-call block cache of a cached formula source -------------------------
+
+## TRUE when refits by formula of this fit would read the raw callback of a
+## source made with cache = TRUE. A formula refit rebuilds each block from the
+## raw data with the new formula, so it cannot use the fit's own cache (which
+## holds the blocks built with the original formula).
+.fastglm_refit_cache_needed <- function(object)
+{
+    src <- object$source
+    !is.null(src) && !isFALSE(src$reusable) && !is.null(src$spec) && isTRUE(src$spec$cache)
+}
+
+## Reads the raw blocks of the fit's source once (calling reset first, as a
+## pass does) into files in directory `dir`, and returns the fit with its
+## source specification reading those files, so every formula refit of the
+## call reads the cache instead of the callback. The caller creates `dir`
+## with tempfile() and removes it with on.exit(), which also runs on an error
+## or an interrupt.
+.fastglm_refit_cache_build <- function(object, dir)
+{
+    src <- object$source
+    sp <- src$spec
+    n <- src$n_chunks
+    if (!dir.create(dir, showWarnings = FALSE) && !dir.exists(dir))
+        stop("cannot create a directory for the block cache of the refits", call. = FALSE)
+    files <- file.path(dir, sprintf("block-%07d.rds", seq_len(n)))
+    if (!is.null(sp$reset)) sp$reset()
+    for (k in seq_len(n)) saveRDS(sp$callback(k), files[k], compress = FALSE)
+    sp$callback <- function(k, ...) readRDS(files[k])
+    sp$reset <- NULL
+    object$source$spec <- sp
+    object
 }
 
 ## ---- drop1() -------------------------------------------------------------------
@@ -460,10 +572,21 @@ NULL
     heading <- c("Single term deletions", "\nModel:", .fastglm_cmp_describe(object, label),
                  if (scale > 0) paste("\nscale: ", format(scale), "\n"))
     if (rec$lr_method == "profile") return(.fastglm_drop1_firth(object, rows, test, heading))
-    .fastglm_drop1_announce(object, length(rows), "drop1")
+    # Refits by formula of a cached formula source read one per-call cache of
+    # the raw blocks (removed on exit); column refits (GLM and negative
+    # binomial) read the fit's own block cache.
+    by.formula <- kind != "glm" && any(vapply(rows, function(r) !is.null(r$term), NA))
+    cache <- by.formula && .fastglm_refit_cache_needed(object)
+    .fastglm_drop1_announce(object, length(rows), "drop1", cache = cache, columns = !by.formula)
+    if (cache) {
+        dir <- tempfile("fastglm-refit-cache-")
+        on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+        object <- .fastglm_refit_cache_build(object, dir)
+    }
     labels <- vapply(rows, `[[`, "", "label")
+    keep <- if (kind == "glm") .fastglm_drop1_keep_glm else .fastglm_drop1_keep_loglik(k)
     fits <- .fastglm_drop1_run(length(rows), function(i) .fastglm_drop1_refit(object, rows[[i]], kind, trace),
-                               paste("-", labels), "drop1", trace)
+                               paste("-", labels), "drop1", trace, keep)
     if (kind == "glm") return(.fastglm_drop1_glm_table(object, rows, fits, labels, test, heading, scale, k))
     .fastglm_drop1_loglik_table(object, rec, rows, fits, labels, test, heading, k)
 }
@@ -475,6 +598,18 @@ NULL
     if (inherits(object, "fastglm_nb")) return(-2 * as.numeric(logLik(object)) + k * object$rank)
     if (inherits(object, "glm")) return(stats::extractAIC(object, k = k)[2L])
     if (is.null(object$aic)) NA_real_ else as.numeric(object$aic) + (k - 2) * object$rank
+}
+
+## The line of a negative binomial table saying how theta is treated in the
+## refits: held at the full model's estimate, or, when that estimate is
+## infinite (the Poisson limit), every refit is a Poisson fit.
+.fastglm_nb_theta_note <- function(object, as)
+{
+    if (!is.finite(object$theta))
+        return(paste0("\nTheta is infinite (the Poisson limit, where fastglm_nb() returns the Poisson fit), ",
+                      "so every refit is a Poisson fit"))
+    paste0("\nTheta is held at the full model's estimate (", format(object$theta, digits = 6),
+           ") in every refit, as ", as)
 }
 
 ## The dispersion that scales deviance differences, as summary.glm(): fixed
@@ -506,8 +641,8 @@ NULL
             unname(st$statistic) * .fastglm_drop1_dispersion(object)
         }, numeric(1))
     }
-    dev <- c(as.numeric(object$deviance), vapply(fits, function(f) as.numeric(f$deviance), numeric(1)))
-    dfs <- c(object$rank, vapply(fits, function(f) as.numeric(f$rank), numeric(1)))
+    dev <- c(as.numeric(object$deviance), vapply(fits, `[[`, numeric(1), "deviance"))
+    dfs <- c(object$rank, vapply(fits, `[[`, numeric(1), "rank"))
     # As drop1.glm(): scale > 0 replaces the dispersion.
     dispersion <- if (scale > 0) scale else .fastglm_drop1_dispersion(object)
     fam <- object$family$family
@@ -548,8 +683,7 @@ NULL
         aod[, c("F value", "Pr(>F)")] <- list(Fs, P)
     }
     if (inherits(object, "fastglm_nb"))
-        heading <- c(heading, paste0("\nTheta is held at the full model's estimate (", format(object$theta, digits = 6),
-                                     ") in every refit, as drop1() of a MASS::glm.nb() fit;",
+        heading <- c(heading, paste0(.fastglm_nb_theta_note(object, "drop1() of a MASS::glm.nb() fit"), ";",
                                      "\nAIC counts the coefficients only (as MASS's extractAIC()), 2 less than AIC()."))
     structure(aod, heading = heading, class = c("anova", "data.frame"))
 }
@@ -615,15 +749,14 @@ NULL
 ## Other models: Df, AIC, and the likelihood ratio (or score) statistic.
 .fastglm_drop1_loglik_table <- function(object, rec, rows, fits, labels, test, heading, k = 2)
 {
-    recs <- lapply(fits, .fastglm_cmp_record)
-    npar <- c(.fastglm_cmp_npar(rec), vapply(recs, .fastglm_cmp_npar, numeric(1)))
-    aic <- c(stats::extractAIC(object, k = k)[2L], vapply(fits, function(f) stats::extractAIC(f, k = k)[2L], numeric(1)))
+    npar <- c(.fastglm_cmp_npar(rec), vapply(fits, `[[`, numeric(1), "npar"))
+    aic <- c(stats::extractAIC(object, k = k)[2L], vapply(fits, `[[`, numeric(1), "aic"))
     dfs <- npar[1L] - npar
     dfs[1L] <- NA
     aod <- data.frame(Df = dfs, AIC = aic, row.names = c("<none>", labels), check.names = FALSE)
     if (test == "Chisq") {
         l1 <- .fastglm_drop1_loglik(object, rec)
-        l0 <- vapply(seq_along(fits), function(i) .fastglm_drop1_loglik(fits[[i]], recs[[i]]), numeric(1))
+        l0 <- vapply(fits, `[[`, numeric(1), "loglik")
         stat <- c(NA, .fastglm_drop1_lr(l1, l0, labels))
         p <- stat
         nas <- !is.na(stat)
@@ -717,6 +850,10 @@ drop1.fastglm_vglm <- .fastglm_drop1_method
 ## parameter of logLik() (as MASS's extractAIC() of a polr() fit).
 .fastglm_extract_aic <- function(fit, scale = 0, k = 2, ...)
 {
+    if (.fastglm_two_part(fit) && .fastglm_called_by_step(sys.function(sys.parent())))
+        warning(paste0("step() does not select terms of models with two linear predictors (zero-inflated, ",
+                       "hurdle, and two-part); the fit is returned unchanged. Use drop1() for tests of the ",
+                       "terms of each part"), call. = FALSE)
     if (inherits(fit, c("fastglm_nb"))) {
         edf <- fit$rank
         return(c(edf, -2 * as.numeric(logLik(fit)) + k * edf))
@@ -728,6 +865,17 @@ drop1.fastglm_vglm <- .fastglm_drop1_method
     ll <- logLik(fit)
     edf <- attr(ll, "df")
     c(edf, -2 * as.numeric(ll) + k * edf)
+}
+
+## TRUE when fun is stats::step() or MASS::stepAIC(): the function that
+## called the extractAIC() generic. Both call extractAIC() directly from
+## their own frame; drop1(), anova(), and AIC() never come through here with
+## either of them as the caller.
+.fastglm_called_by_step <- function(fun)
+{
+    if (!is.function(fun)) return(FALSE)
+    if (identical(fun, stats::step)) return(TRUE)
+    isNamespaceLoaded("MASS") && identical(fun, getExportedValue("MASS", "stepAIC"))
 }
 
 #' @rdname drop1.fastglm
@@ -812,12 +960,12 @@ extractAIC.fastglm_vglm <- .fastglm_extract_aic
     tl <- attr(tt, "term.labels")
     nb <- inherits(object, "fastglm_nb")
     k <- max(nvars - 1L, 0L)
-    .fastglm_drop1_announce(object, k, "anova")
+    .fastglm_drop1_announce(object, k, "anova", columns = TRUE)
     fits <- .fastglm_drop1_run(k, function(i)
         .fastglm_refit(object, drop_columns = which(assign > i), columns = TRUE, nb_theta_fixed = nb, trace = trace),
-        paste("terms up to", tl[seq_len(k)]), "anova", trace)
-    resdev <- vapply(fits, function(f) as.numeric(f$deviance), numeric(1))
-    resdf <- vapply(fits, function(f) as.numeric(f$df.residual), numeric(1))
+        paste("terms up to", tl[seq_len(k)]), "anova", trace, .fastglm_drop1_keep_glm)
+    resdev <- vapply(fits, `[[`, numeric(1), "deviance")
+    resdf <- vapply(fits, `[[`, numeric(1), "df.residual")
     resdf <- c(as.numeric(object$df.null), resdf, as.numeric(object$df.residual))
     resdev <- c(as.numeric(object$null.deviance), resdev, as.numeric(object$deviance))
     table <- data.frame(c(NA, -diff(resdf)), c(NA, pmax(0, -diff(resdev))), resdf, resdev)
@@ -827,8 +975,8 @@ extractAIC.fastglm_vglm <- .fastglm_extract_aic
     title <- paste0("Analysis of Deviance Table", "\n\nModel: ", fam$family, ", link: ", fam$link,
                     "\n\nResponse: ", .fastglm_anova_response(tt),
                     "\n\nTerms added sequentially (first to last)\n\n")
-    if (nb) title <- paste0(title, "Theta is held at the full model's estimate in every refit, as anova() of ",
-                            "one MASS::glm.nb() fit.\n")
+    if (nb) title <- paste0(title, sub("^\n", "", .fastglm_nb_theta_note(object, "anova() of one MASS::glm.nb() fit")),
+                            ".\n")
     if (isFALSE(test)) return(structure(table, heading = title, class = c("anova", "data.frame")))
     moment <- !nb && (is.na(.fixed_dispersion(fam)) || startsWith(fam$family, "quasi"))
     if (is.null(test)) test <- if (!is.null(dispersion)) "Chisq" else if (moment) "F" else "Chisq"
@@ -863,14 +1011,20 @@ extractAIC.fastglm_vglm <- .fastglm_extract_aic
 .fastglm_anova_seq_loglik <- function(object, rec, tl, label = "object", test = NULL, trace = FALSE)
 {
     nv <- length(tl)
-    .fastglm_drop1_announce(object, nv, "anova")
+    cache <- nv > 0L && .fastglm_refit_cache_needed(object)
+    .fastglm_drop1_announce(object, nv, "anova", cache = cache)
+    if (cache) {
+        dir <- tempfile("fastglm-refit-cache-")
+        on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+        object <- .fastglm_refit_cache_build(object, dir)
+    }
     fits <- .fastglm_drop1_run(nv, function(i)
         .fastglm_refit(object, formula = stats::as.formula(paste("~ . -", paste(tl[i:nv], collapse = " - "))),
                        trace = trace),
-        c("NULL", if (nv > 1L) paste("terms up to", tl[seq_len(nv - 1L)]))[seq_len(nv)], "anova", trace)
-    recs <- c(lapply(fits, .fastglm_cmp_record), list(rec))
-    ll <- vapply(recs, function(r) as.numeric(r$loglik), numeric(1))
-    npar <- vapply(recs, .fastglm_cmp_npar, numeric(1))
+        c("NULL", if (nv > 1L) paste("terms up to", tl[seq_len(nv - 1L)]))[seq_len(nv)], "anova", trace,
+        .fastglm_drop1_keep_loglik())
+    ll <- c(vapply(fits, `[[`, numeric(1), "loglik"), .fastglm_drop1_loglik(object, rec))
+    npar <- c(vapply(fits, `[[`, numeric(1), "npar"), .fastglm_cmp_npar(rec))
     dfs <- c(NA, diff(npar))
     stat <- c(NA, .fastglm_drop1_lr(ll[-1L], ll[-length(ll)], tl))
     p <- stat
@@ -891,19 +1045,19 @@ extractAIC.fastglm_vglm <- .fastglm_extract_aic
 {
     assign <- .fastglm_drop1_assign(object)
     nvars <- max(0L, assign)
-    fits <- .fastglm_drop1_run(max(nvars - 1L, 0L), function(i)
-        .fastglm_refit(object, drop_columns = which(assign > i), columns = TRUE, trace = trace),
-        paste("terms up to", tl[seq_len(max(nvars - 1L, 0L))]), "anova", trace)
-    stat <- dfs <- rep(NA_real_, nvars)
-    for (i in seq_len(nvars)) {
-        fit <- if (i < nvars) fits[[i]] else object
-        a <- assign[assign <= i]
-        cols <- which(a == i)
-        dfs[i] <- length(cols)
-        if (!length(cols) || isFALSE(test)) next
-        pt <- fastglm_profile_test(fit, parm = cols)
-        stat[i] <- unname(pt$statistic)
+    # Model i (the terms up to i) tests term i: the statistic is computed
+    # from each refit as it is made, and the refit is then discarded.
+    profile <- function(fit, i) {
+        cols <- which(assign[assign <= i] == i)
+        if (!length(cols) || isFALSE(test)) return(NA_real_)
+        unname(fastglm_profile_test(fit, parm = cols)$statistic)
     }
+    stat <- unlist(.fastglm_drop1_run(max(nvars - 1L, 0L), function(i)
+        .fastglm_refit(object, drop_columns = which(assign > i), columns = TRUE, trace = trace),
+        paste("terms up to", tl[seq_len(max(nvars - 1L, 0L))]), "anova", trace, profile))
+    if (nvars > 0L) stat <- c(stat, profile(object, nvars))
+    stat <- as.numeric(stat)
+    dfs <- vapply(seq_len(nvars), function(i) as.numeric(sum(assign == i)), numeric(1))
     p <- stats::pchisq(stat, dfs, lower.tail = FALSE)
     table <- data.frame(c(NA, dfs), c(NA, stat), c(NA, p))
     dimnames(table) <- list(c("NULL", tl), c("Df", "Penalized LRT", "Pr(>Chi)"))
